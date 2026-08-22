@@ -8,6 +8,8 @@
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Victoria Pew Pew</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -23,22 +25,18 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Victoria Kill Zone uses the rear camera to detect the opposing player and render the live duel view.</string>
+	<string>Victoria Pew Pew uses the rear camera to detect the opposing player and render the live duel view.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Victoria Kill Zone uses the microphone only when you opt in to Voice Fire and listen for the phrase “pew pew.”</string>
+	<string>Victoria Pew Pew uses the microphone only when you opt in to Voice Fire and listen for the phrase “pew pew.” Audio and transcripts are not stored.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Victoria Kill Zone uses speech recognition only when you opt in to Voice Fire and recognize the phrase “pew pew.”</string>
+	<string>Victoria Pew Pew uses speech recognition only when you opt in to Voice Fire and recognize the phrase “pew pew.”</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Victoria Kill Zone uses your foreground location to confirm that both players remain inside the active arena.</string>
+	<string>Victoria Pew Pew uses your foreground location to confirm that both players remain inside the active arena.</string>
 	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
 	<dict>
 		<key>VictoriaKillZoneArena</key>
 		<string>Precise location is used during an active duel to evaluate the arena boundary.</string>
 	</dict>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>When you turn on Voice Fire, Victoria Kill Zone uses the microphone to listen for the phrase “pew pew.” Audio and transcripts are not stored by Victoria Kill Zone.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>When you turn on Voice Fire, Victoria Kill Zone uses speech recognition to recognize “pew pew” as an optional alternate trigger.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIRequiresFullScreen</key>

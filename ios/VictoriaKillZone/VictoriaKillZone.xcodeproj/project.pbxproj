@@ -479,6 +479,7 @@
 		BC0100000000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CONVEX_DEPLOYMENT_URL = "https://brave-crow-277.convex.cloud";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VictoriaKillZone/Info.plist;
@@ -500,6 +501,7 @@
 		BC0100000000000000000002 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CONVEX_DEPLOYMENT_URL = "https://brave-crow-277.convex.cloud";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VictoriaKillZone/Info.plist;
