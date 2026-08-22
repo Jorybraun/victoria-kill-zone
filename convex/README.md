@@ -1,41 +1,60 @@
 # @vkz/backend
 
-Authoritative Convex backend for Victoria Pew Pew. This package owns `convex/**`
-only and implements the frozen G2 contract in [`docs/interface-contracts.md`](../docs/interface-contracts.md).
+Authoritative Convex backend for Victoria Kill Zone. This package owns `convex/**` only.
 
-## Layers
+## Layout
 
-The G2 slice ships as a stack:
+```text
+convex/
+  convex.json        Convex CLI configuration (functions live in functions/)
+  domain/            Pure, dependency-free game rules and deterministic tests target
+  functions/         Convex schema, mutations, and queries (thin adapters over domain/)
+  tests/             Deterministic unit tests for the domain rules
+```
 
-1. **Lobby authority** (this layer): schema, match-scoped sessions, and
-   `matches:create`, `matches:join`, `matches:setReady`, `matches:start` with the
-   server-timed countdown.
-2. **Fire and snapshots**: `shots:debugFire`, `queries:matchSnapshot`, and
-   `queries:spectatorSnapshot`.
+`domain/**` imports nothing but `@noble/hashes`, so every rule is unit-testable without a
+deployment, network access, or the Convex runtime. `functions/**` loads documents, calls a
+domain planner, and applies the returned patches.
 
-## Authority rules
+## Slice scope
 
-- The server owns match codes, session secrets, time, health, ammunition, phase
-  transitions, and damage. Clients never send damage or timing.
-- Phases are `lobby → countdown → running → finished | cancelled`. The
-  countdown → running and running → finished edges resolve from server time, so
-  a stale record can never gate a rule.
-- Session secrets are generated server side, returned once to their owner, and
-  stored only as a SHA-256 digest. No digest, secret, or device identifier is
-  readable through any function result.
-- Rejections cross the wire as `ConvexError({ code })` using the frozen
-  `ErrorCode` union. Raw messages never reach a client.
+This first vertical slice implements the authoritative create → join → start → debug fire →
+sanitized spectator path:
 
-## Structure
+| Function | Type | Purpose |
+|---|---|---|
+| `matches:createMatch` | mutation | Create the duel and host player atomically |
+| `matches:joinMatch` | mutation | Join by code as the guest, enforcing the two-player limit |
+| `matches:startMatch` | mutation | Host-only start; stamps the server-owned duel window |
+| `shots:debugFire` | mutation | Idempotent, server-resolved hit claim |
+| `queries:spectatorSnapshot` | query | Read-only, sanitized spectator projection |
 
-- `domain/` — pure, deterministic rules with no database or clock access.
-- `functions/` — Convex mutations and queries that read/write documents and
-  delegate every decision to `domain/`.
-- `tests/` — deterministic unit tests over `domain/`.
+Not yet implemented (later slices): `setReady`, `heartbeat`, `startReload`, host `end`, the
+phone `matchSnapshot` query, and the scheduled internal mutations for reload completion,
+respawn, and finish. Duel expiry and respawn readiness are currently derived from
+`endsAt`/`respawnAt` on read, so a delayed scheduled job can never show a live duel that
+should have ended.
 
-`functions/_generated/` is produced by the Convex CLI against a deployment and is
-not committed; `functions/lib/server.ts` derives the typed data model from the
-committed schema instead.
+## Match state
+
+The explicit duel state machine is `setup → waiting → active → ended`:
+
+- `setup`: created by the host, no opponent yet, joinable.
+- `waiting`: two players present, awaiting the host start.
+- `active`: running until the server-owned `endsAt`.
+- `ended`: terminal; no gameplay accepted.
+
+Snapshots also carry the specification's frozen `MatchPhase` projection
+(`lobby | countdown | running | finished | cancelled`) so iOS and spectator work can consume
+either vocabulary.
+
+## Sessions
+
+Each phone generates a random device ID and a random match-scoped session secret, and sends
+only their SHA-256 digests to `createMatch`/`joinMatch`. Gameplay mutations send the raw
+secret, which is hashed with a deterministic pure-JavaScript SHA-256 (`@noble/hashes`) and
+compared against the stored digest for that exact player, so one player's secret can never
+drive the opponent. No query returns a session secret, session digest, or device identifier.
 
 ## Scripts
 
@@ -46,9 +65,8 @@ pnpm --filter @vkz/backend test
 pnpm --filter @vkz/backend build
 ```
 
-`pnpm verify` at the repository root remains canonical.
+`pnpm verify` at the repository root runs all four across the workspace.
 
-## Out of scope
-
-Targeting, geofence enforcement, radar, K/D, respawn, reload, winner
-calculation, and permanent identity are later gates and are deliberately absent.
+`functions/_generated/` is produced by the Convex CLI against a deployment and is not
+committed; the function builders in `functions/lib/server.ts` derive their types from the
+committed schema so the package typechecks without a deployment.

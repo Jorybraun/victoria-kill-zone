@@ -2,11 +2,12 @@ import {
   MAX_HEALTH,
   type SpectatorPlayerSnapshot,
 } from "../domain/spectator";
-import { clamp } from "../lib/format";
+import { clamp, formatCountdown } from "../lib/format";
 
 export interface PlayerCardProps {
   player: SpectatorPlayerSnapshot | undefined;
   slot: "A" | "B";
+  serverNow: number;
 }
 
 function StatusItem({
@@ -24,7 +25,39 @@ function StatusItem({
   );
 }
 
-export function PlayerCard({ player, slot }: PlayerCardProps) {
+function hasCombatScore(
+  player: SpectatorPlayerSnapshot,
+): player is SpectatorPlayerSnapshot & { kills: number; deaths: number } {
+  return player.kills !== undefined && player.deaths !== undefined;
+}
+
+function lifeStateCopy(
+  player: SpectatorPlayerSnapshot,
+  serverNow: number,
+): string | null {
+  switch (player.lifeState) {
+    case undefined:
+      return null;
+    case "alive":
+      return "ALIVE";
+    case "dead":
+      return "ELIMINATED";
+    case "disconnected":
+      return "DISCONNECTED";
+    case "respawning": {
+      if (player.respawnAt === undefined) {
+        return "RESPAWNING";
+      }
+
+      const seconds = formatCountdown(player.respawnAt - serverNow);
+      return seconds === "0" ? "RESPAWNING" : `RESPAWNING IN ${seconds}S`;
+    }
+  }
+
+  return null;
+}
+
+export function PlayerCard({ player, slot, serverNow }: PlayerCardProps) {
   if (player === undefined) {
     return (
       <article
@@ -44,10 +77,13 @@ export function PlayerCard({ player, slot }: PlayerCardProps) {
   }
 
   const health = clamp(player.health, 0, MAX_HEALTH);
+  const lifeCopy = lifeStateCopy(player, serverNow);
+  const lifeStateClass =
+    player.lifeState === undefined ? "" : ` player-card--${player.lifeState}`;
 
   return (
     <article
-      className="player-card"
+      className={`player-card${lifeStateClass}`}
       aria-labelledby={`player-${slot}-name`}
       data-testid={`player-card-${player.id}`}
     >
@@ -70,6 +106,18 @@ export function PlayerCard({ player, slot }: PlayerCardProps) {
         </div>
       </div>
 
+      {lifeCopy === null ? null : (
+        <p
+          className={`life-state life-state--${player.lifeState}`}
+          aria-label={`${player.displayName} life state, ${player.lifeState}`}
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <span className="life-state__shape" aria-hidden="true" />
+          {lifeCopy}
+        </p>
+      )}
+
       <section className="health-block" aria-label={`${player.displayName} health`}>
         <div className="health-heading">
           <span>HEALTH</span>
@@ -84,6 +132,19 @@ export function PlayerCard({ player, slot }: PlayerCardProps) {
           {health} / {MAX_HEALTH}
         </progress>
       </section>
+
+      {hasCombatScore(player) ? (
+        <dl className="combat-score" aria-label={`${player.displayName} combat score`}>
+          <div>
+            <dt>KILLS</dt>
+            <dd>{player.kills}</dd>
+          </div>
+          <div>
+            <dt>DEATHS</dt>
+            <dd>{player.deaths}</dd>
+          </div>
+        </dl>
+      ) : null}
     </article>
   );
 }

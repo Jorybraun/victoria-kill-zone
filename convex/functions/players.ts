@@ -1,48 +1,81 @@
 import { v } from "convex/values";
-import { shouldExpirePresence } from "../domain/presence.js";
+import { planRespawn } from "../domain/respawn.js";
 import { internalMutation, mutation } from "./lib/server.js";
-import { authenticatePlayer, schedulePresenceExpiry } from "./lib/store.js";
+import {
+  appendEvent,
+  authenticatePlayer,
+  toMatchState,
+  toPlayerState,
+} from "./lib/state.js";
 
-/**
- * `players:heartbeat` — renews the caller's own presence.
- *
- * Presence is a server fact rather than a client claim: the phone may only say
- * "still here", and the server records its own receipt time. Health, score, and
- * readiness are untouched, so a reconnecting player resumes exactly where the
- * authoritative state left them.
- */
+const locationSample = v.object({
+  latitude: v.number(),
+  longitude: v.number(),
+  accuracyMeters: v.number(),
+  capturedAtClient: v.number(),
+  headingDegrees: v.optional(v.number()),
+});
+
+/** Presence heartbeat; location is accepted for forward compatibility only. */
 export const heartbeat = mutation({
-  args: { matchId: v.string(), playerId: v.string(), sessionSecret: v.string() },
-  handler: async (ctx, args): Promise<null> => {
+  args: {
+    matchId: v.id("matches"),
+    playerId: v.id("players"),
+    sessionSecret: v.string(),
+    location: v.optional(locationSample),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const player = await authenticatePlayer(ctx, args.matchId, args.playerId, args.sessionSecret);
     const now = Date.now();
-    const { player } = await authenticatePlayer(ctx, args);
-
-    await ctx.db.patch(player._id, { connected: true, lastSeenAt: now });
-    await schedulePresenceExpiry(ctx, player._id, now);
-
+    await ctx.db.patch(player._id, {
+      connected: true,
+      lastSeenAt: now,
+      ...(player.lifeState === "disconnected" && player.health > 0 ? { lifeState: "alive" as const } : {}),
+    });
     return null;
   },
 });
 
-/**
- * `internal.players:expirePresence` — fires 15 seconds after the heartbeat it
- * was armed for.
- *
- * Guarded by that heartbeat, so a renewal supersedes its pending job and a
- * duplicate or early run writes nothing.
- */
-export const expirePresence = internalMutation({
-  args: { playerId: v.id("players"), expectedLastSeenAt: v.number() },
-  handler: async (ctx, args): Promise<null> => {
+/** Restore a killed player exactly once after the server-owned delay. */
+export const respawn = internalMutation({
+  args: {
+    playerId: v.id("players"),
+    expectedRespawnAt: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
     const player = await ctx.db.get(args.playerId);
     if (player === null) {
       return null;
     }
-
-    if (shouldExpirePresence(player, args.expectedLastSeenAt, Date.now())) {
-      await ctx.db.patch(player._id, { connected: false });
+    const match = await ctx.db.get(player.matchId);
+    if (match === null) {
+      return null;
     }
 
+    const now = Date.now();
+    const patch = planRespawn(
+      toMatchState(match).phase,
+      toPlayerState(player),
+      args.expectedRespawnAt,
+      now,
+    );
+    if (patch === null) {
+      return null;
+    }
+
+    await ctx.db.patch(player._id, patch);
+    await appendEvent(ctx, {
+      matchId: match._id,
+      type: "respawned",
+      actorPlayerId: player._id,
+      targetPlayerId: null,
+      zone: null,
+      damage: null,
+      message: `${player.displayName} RESPAWNED`,
+      createdAt: now,
+    });
     return null;
   },
 });

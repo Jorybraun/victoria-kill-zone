@@ -3,7 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { createDemoSnapshot, DEMO_NOW } from "../data/demoFixtures";
-import type { SpectatorViewState } from "../domain/spectator";
+import type {
+  SpectatorSnapshot,
+  SpectatorViewState,
+} from "../domain/spectator";
 import { SpectatorShell } from "./SpectatorShell";
 
 function renderShell(state: SpectatorViewState) {
@@ -141,6 +144,110 @@ describe("SpectatorShell G2 contract", () => {
     expect(
       screen.queryByRole("button", { name: /fire|ready|start|end|reload/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows additive Phase 0 life state, K/D, and elimination evidence", () => {
+    const g2Snapshot = createDemoSnapshot("KO0001", "active");
+    const phase0Snapshot: SpectatorSnapshot = {
+      ...g2Snapshot,
+      players: [
+        {
+          ...g2Snapshot.players[0]!,
+          kills: 3,
+          deaths: 1,
+          lifeState: "alive",
+        },
+        {
+          ...g2Snapshot.players[1]!,
+          health: 0,
+          kills: 1,
+          deaths: 3,
+          lifeState: "dead",
+        },
+      ],
+      events: [
+        {
+          id: "event-elimination",
+          type: "eliminated",
+          actorPlayerId: "player-rook",
+          targetPlayerId: "player-vale",
+          zone: "head",
+          damage: 66,
+          message: "ROOK ELIMINATED VALE • HEAD −66",
+          createdAt: DEMO_NOW,
+        },
+        ...g2Snapshot.events,
+      ],
+    };
+
+    renderShell({
+      kind: "active",
+      code: "KO0001",
+      source: "convex",
+      snapshot: phase0Snapshot,
+    });
+
+    expect(screen.getByLabelText("ROOK combat score")).toHaveTextContent(
+      "KILLS3DEATHS1",
+    );
+    expect(screen.getByLabelText("VALE combat score")).toHaveTextContent(
+      "KILLS1DEATHS3",
+    );
+    expect(screen.getByLabelText("VALE life state, dead")).toHaveTextContent(
+      "ELIMINATED",
+    );
+    expect(screen.getByTestId("player-card-player-vale")).toHaveClass(
+      "player-card--dead",
+    );
+    expect(
+      screen.getByRole("progressbar", { name: "VALE health, 0 of 100" }),
+    ).toHaveValue(0);
+    expect(screen.getByText("ELIMINATION")).toBeInTheDocument();
+    expect(screen.getByText("ROOK ELIMINATED VALE • HEAD −66")).toBeInTheDocument();
+  });
+
+  it("makes an authoritative respawn window visible without inventing it for G2", () => {
+    const g2Snapshot = createDemoSnapshot("BACK02", "active");
+    const phase0Snapshot: SpectatorSnapshot = {
+      ...g2Snapshot,
+      players: [
+        g2Snapshot.players[0]!,
+        {
+          ...g2Snapshot.players[1]!,
+          health: 0,
+          kills: 0,
+          deaths: 1,
+          lifeState: "respawning",
+          respawnAt: DEMO_NOW + 4_200,
+        },
+      ],
+      events: [
+        {
+          id: "event-respawned",
+          type: "respawned",
+          actorPlayerId: "player-vale",
+          message: "VALE RETURNED TO THE DUEL",
+          createdAt: DEMO_NOW - 8_000,
+        },
+        ...g2Snapshot.events,
+      ],
+    };
+
+    renderShell({
+      kind: "active",
+      code: "BACK02",
+      source: "convex",
+      snapshot: phase0Snapshot,
+    });
+
+    expect(
+      screen.getByLabelText("VALE life state, respawning"),
+    ).toHaveTextContent("RESPAWNING IN 5S");
+    expect(screen.getByTestId("player-card-player-vale")).toHaveClass(
+      "player-card--respawning",
+    );
+    expect(screen.getByText("RESPAWN")).toBeInTheDocument();
+    expect(screen.getByText("VALE RETURNED TO THE DUEL")).toBeInTheDocument();
   });
 
   it("keeps server order and de-duplicates replayed event identities", () => {

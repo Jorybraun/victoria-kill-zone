@@ -22,6 +22,13 @@ enum DebugShotState: Equatable, Sendable {
   case confirmed(damage: Int)
 }
 
+enum MarkerlessShotState: Equatable, Sendable {
+  case idle
+  case pending(zone: HitZone)
+  case confirmed(outcome: FireShotOutcome, zone: HitZone, damage: Int)
+  case failed(reason: FireRejectReason?)
+}
+
 @MainActor
 final class LobbyStore: ObservableObject {
   @Published private(set) var route: LobbyRoute
@@ -37,6 +44,8 @@ final class LobbyStore: ObservableObject {
   @Published private(set) var syncStatus: LobbySyncStatus
   @Published private(set) var lastSyncAt: Date?
   @Published private(set) var debugShotState = DebugShotState.idle
+  @Published private(set) var markerlessShotState = MarkerlessShotState.idle
+  @Published private(set) var targetingSnapshot: TargetingSnapshot
 
   let environment: AppEnvironment
 
@@ -45,10 +54,12 @@ final class LobbyStore: ObservableObject {
   private var latestSnapshot: MatchSnapshot?
   private var pendingShotId: String?
   private var pendingShotResult: DebugFireResult?
+  private var pendingMarkerlessRequest: FireShotRequest?
   private var actionTask: Task<Void, Never>?
   private var snapshotTask: Task<Void, Never>?
   private var connectionTask: Task<Void, Never>?
   private var recoveryTask: Task<Void, Never>?
+  private var targetingTask: Task<Void, Never>?
   private var transportState = GameSessionConnectionState.connecting
   private let now: @Sendable () -> Date
   private let makeShotId: @Sendable () -> String
@@ -65,6 +76,7 @@ final class LobbyStore: ObservableObject {
     self.stateMachine = stateMachine
     route = stateMachine.route
     syncStatus = environment.gameSessionClient.availability == .available ? .connecting : .shell
+    targetingSnapshot = environment.targetingSession.currentSnapshot
     startConnectionMonitoring()
   }
 
@@ -73,6 +85,7 @@ final class LobbyStore: ObservableObject {
     snapshotTask?.cancel()
     connectionTask?.cancel()
     recoveryTask?.cancel()
+    targetingTask?.cancel()
   }
 
   var networkingStatus: String {
@@ -86,10 +99,7 @@ final class LobbyStore: ObservableObject {
   }
 
   var targetingStatus: String {
-    switch environment.targetingSession.availability {
-    case .available: "BODY LOCK"
-    case .notConfigured: "TARGETING SHELL"
-    }
+    targetingSnapshot.state.displayText
   }
 
   var isLiveNetworking: Bool {
@@ -128,9 +138,43 @@ final class LobbyStore: ObservableObject {
     }
   }
 
-  func isNetworkFresh(at date: Date) -> Bool {
-    guard let lastSyncAt, date >= lastSyncAt else { return false }
-    return !isMatchInputLocked && (syncStatus == .connected || syncStatus == .restored)
+  var canFireMarkerless: Bool {
+    guard isLiveNetworking, !isMatchInputLocked, operation == nil,
+      let session, let snapshot = latestSnapshot,
+      snapshot.match.phase == .running,
+      snapshot.localPlayerId == session.playerId,
+      let localPlayer = snapshot.players.first(where: { $0.id == session.playerId }),
+      let opponent = snapshot.players.first(where: { $0.id != session.playerId }),
+      localPlayer.lifeState == .alive, localPlayer.ammo > 0,
+      opponent.lifeState == .alive
+    else {
+      return false
+    }
+
+    if case .pending = markerlessShotState { return false }
+    if case .failed(reason: nil) = markerlessShotState,
+      pendingMarkerlessRequest != nil
+    {
+      return true
+    }
+
+    guard let targetZone = targetingSnapshot.hitZone,
+      targetingSnapshot.isPoseFresh(at: now())
+    else {
+      return false
+    }
+    let minimumConfidence = targetZone == .head ? 0.60 : 0.45
+    guard targetingSnapshot.hitConfidence >= minimumConfidence else { return false }
+    return true
+  }
+
+  var markerlessAimZone: HitZone? {
+    guard targetingSnapshot.isPoseFresh(at: now()),
+      let zone = targetingSnapshot.hitZone
+    else {
+      return nil
+    }
+    return HitZone(rawValue: zone.rawValue)
   }
 
   func showJoin() {
@@ -178,18 +222,61 @@ final class LobbyStore: ObservableObject {
     schedule { store in await store.performDebugFire() }
   }
 
+  func fireMarkerless() {
+    schedule { store in await store.performMarkerlessFire() }
+  }
+
+  func startTargeting() async {
+    guard environment.targetingSession.availability == .available else {
+      targetingSnapshot = .unavailable()
+      return
+    }
+    guard targetingTask == nil else { return }
+
+    let targetingSession = environment.targetingSession
+    targetingTask = Task { [weak self] in
+      for await snapshot in targetingSession.snapshots() {
+        guard !Task.isCancelled else { return }
+        self?.targetingSnapshot = snapshot
+      }
+    }
+
+    do {
+      try await targetingSession.start()
+    } catch TargetingSessionError.cameraPermissionDenied {
+      errorMessage = "CAMERA ACCESS IS REQUIRED"
+    } catch {
+      errorMessage = "TARGETING UNAVAILABLE"
+    }
+  }
+
+  func stopTargeting() async {
+    targetingTask?.cancel()
+    targetingTask = nil
+    await environment.targetingSession.stop()
+    targetingSnapshot = environment.targetingSession.currentSnapshot
+  }
+
   func leave() {
     actionTask?.cancel()
     snapshotTask?.cancel()
     recoveryTask?.cancel()
+    targetingTask?.cancel()
+    targetingTask = nil
+    let targetingSession = environment.targetingSession
+    Task { await targetingSession.stop() }
     session = nil
     latestSnapshot = nil
     pendingShotId = nil
     pendingShotResult = nil
+    pendingMarkerlessRequest = nil
     operation = nil
     debugShotState = .idle
+    markerlessShotState = .idle
+    targetingSnapshot = .unavailable()
     lastSyncAt = nil
-    syncStatus = isLiveNetworking
+    syncStatus =
+      isLiveNetworking
       ? (transportState == .connected ? .connected : .connecting)
       : .shell
     stateMachine = LobbyStateMachine()
@@ -349,6 +436,8 @@ final class LobbyStore: ObservableObject {
         throw GameSessionClientError.invalidSnapshot
       }
       guard result.accepted, result.outcome == .hit else {
+        pendingShotId = nil
+        pendingShotResult = nil
         debugShotState = .failed
         if let reason = result.rejectReason {
           present(GameSessionClientError.backend(reason))
@@ -366,6 +455,73 @@ final class LobbyStore: ObservableObject {
     }
   }
 
+  func performMarkerlessFire() async {
+    guard isLiveNetworking, let session, let snapshot = latestSnapshot else { return }
+    guard !isMatchInputLocked else {
+      errorMessage = "SHOT LOCKED WHILE RECONNECTING"
+      return
+    }
+    guard snapshot.match.phase == .running,
+      let opponent = snapshot.players.first(where: { $0.id != session.playerId }),
+      opponent.lifeState == .alive
+    else {
+      errorMessage = "PUT THE CROSSHAIR ON YOUR OPPONENT"
+      return
+    }
+    guard canFireMarkerless else { return }
+
+    let request: FireShotRequest
+    let zone: HitZone
+    if let retryRequest = pendingMarkerlessRequest,
+      case .failed(reason: nil) = markerlessShotState,
+      let retryZone = retryRequest.zone
+    {
+      request = retryRequest
+      zone = retryZone
+    } else {
+      guard let freshZone = markerlessAimZone else { return }
+      zone = freshZone
+      let ray = targetingSnapshot.cameraRay
+      request = FireShotRequest(
+        clientShotId: makeShotId(),
+        targetId: opponent.id,
+        zone: zone,
+        poseConfidence: targetingSnapshot.hitConfidence,
+        origin: ray.map { [$0.origin.x, $0.origin.y, $0.origin.z] },
+        direction: ray.map { [$0.direction.x, $0.direction.y, $0.direction.z] },
+        firedAtClient: now().timeIntervalSince1970 * 1_000
+      )
+      pendingMarkerlessRequest = request
+    }
+    markerlessShotState = .pending(zone: zone)
+    errorMessage = nil
+
+    do {
+      let result = try await environment.gameSessionClient.fire(session: session, request: request)
+      guard !Task.isCancelled else { return }
+      guard result.clientShotId == request.clientShotId else {
+        throw GameSessionClientError.invalidSnapshot
+      }
+      guard result.accepted, result.outcome != .rejected else {
+        pendingMarkerlessRequest = nil
+        markerlessShotState = .failed(reason: result.rejectReason)
+        errorMessage = Self.message(for: result.rejectReason)
+        return
+      }
+
+      pendingMarkerlessRequest = nil
+      markerlessShotState = .confirmed(
+        outcome: result.outcome,
+        zone: zone,
+        damage: result.damage
+      )
+    } catch {
+      guard !Task.isCancelled else { return }
+      markerlessShotState = .failed(reason: nil)
+      present(error)
+    }
+  }
+
   private func beginSession(_ newSession: PlayerSession) {
     snapshotTask?.cancel()
     recoveryTask?.cancel()
@@ -374,7 +530,9 @@ final class LobbyStore: ObservableObject {
     lastSyncAt = nil
     pendingShotId = nil
     pendingShotResult = nil
+    pendingMarkerlessRequest = nil
     debugShotState = .idle
+    markerlessShotState = .idle
     syncStatus = .connecting
 
     let client = environment.gameSessionClient
@@ -514,6 +672,23 @@ final class LobbyStore: ObservableObject {
       errorMessage = transitionError.localizedDescription
     } else {
       errorMessage = "SOMETHING WENT WRONG"
+    }
+  }
+
+  private static func message(for reason: FireRejectReason?) -> String {
+    switch reason {
+    case .matchNotRunning: "SHOT LOCKED UNTIL DUEL STARTS"
+    case .connectionStale: "SHOT LOCKED WHILE RECONNECTING"
+    case .shooterNotAlive: "WAITING TO RESPAWN"
+    case .reloading: "RELOADING"
+    case .outOfArena: "RETURN TO THE ARENA"
+    case .locationStale: "LOCATION IS NOT READY"
+    case .outOfAmmo: "OUT OF AMMO"
+    case .fireCooldown: "STEADY — FIRE AGAIN"
+    case .idempotencyConflict: "SHOT COULD NOT BE VERIFIED"
+    case .invalidTarget: "TARGET LOST"
+    case .targetNotAlive: "OPPONENT IS RESPAWNING"
+    case nil: "SHOT REJECTED"
     }
   }
 

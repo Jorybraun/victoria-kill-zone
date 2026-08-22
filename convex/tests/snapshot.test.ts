@@ -1,168 +1,120 @@
 import { describe, expect, it } from "vitest";
-import { COUNTDOWN_MS } from "../domain/contract.js";
+import { GAMEPLAY } from "../domain/config.js";
 import {
   buildMatchSnapshot,
   buildSpectatorSnapshot,
-  type StoredEvent,
-  type StoredMatch,
-  type StoredPlayer,
+  type SnapshotMatch,
 } from "../domain/snapshot.js";
+import { hashSecret } from "../domain/session.js";
+import { match, player, T0 } from "./factories.js";
 
-const T0 = 1_760_000_000_000;
+const SESSION_SECRET = "c".repeat(64);
 
-const match: StoredMatch = {
-  id: "match-1",
-  code: "ABC123",
-  phase: "countdown",
-  durationMs: 300_000,
-  startsAt: T0 + COUNTDOWN_MS,
-  endsAt: T0 + COUNTDOWN_MS + 300_000,
-};
+function snapshotMatch(overrides: Partial<SnapshotMatch> = {}): SnapshotMatch {
+  return {
+    ...match(),
+    id: "match-1",
+    code: "AB12CD",
+    centerLatitude: 48.4284,
+    centerLongitude: -123.3656,
+    ...overrides,
+  };
+}
 
-const players: StoredPlayer[] = [
+const events = [
   {
-    id: "guest",
-    displayName: "JORY",
-    role: "guest",
-    ready: true,
-    connected: true,
-    health: 66,
-    ammo: 8,
-  },
-  { id: "host", displayName: "VIC", role: "host", ready: true, connected: true, health: 100, ammo: 7 },
-];
-
-const events: StoredEvent[] = [
-  { id: "event-1", type: "joined", message: "VIC JOINED", createdAt: T0 - 20 },
-  {
-    id: "event-2",
+    id: "event-1",
     type: "hit",
-    message: "VIC HIT JORY • TORSO \u221234",
-    createdAt: T0,
     actorPlayerId: "host",
     targetPlayerId: "guest",
-    zone: "torso",
+    zone: "torso" as const,
     damage: 34,
+    message: "Host hit Challenger",
+    createdAt: T0 + 500,
   },
 ];
 
-describe("buildMatchSnapshot", () => {
-  it("returns server time, host-first players, and newest-first events", () => {
-    const snapshot = buildMatchSnapshot({ match, localPlayerId: "guest", players, events, now: T0 });
+describe("contract snapshots", () => {
+  it("projects the authenticated phone shape with synchronized authority state", () => {
+    const now = T0 + 30_000;
+    const snapshot = buildMatchSnapshot(
+      snapshotMatch(),
+      "host",
+      [player("guest", { health: 66 }), player("host", { kills: 1, damageDealt: 100 })],
+      events,
+      now,
+    );
 
-    expect(snapshot.serverNow).toBe(T0);
-    expect(snapshot.localPlayerId).toBe("guest");
-    expect(snapshot.match).toEqual({
-      id: "match-1",
-      code: "ABC123",
-      phase: "countdown",
-      durationMs: 300_000,
-      startsAt: T0 + COUNTDOWN_MS,
-      endsAt: T0 + COUNTDOWN_MS + 300_000,
+    expect(snapshot).toMatchObject({
+      serverNow: now,
+      match: {
+        id: "match-1",
+        code: "AB12CD",
+        phase: "running",
+        durationMs: GAMEPLAY.matchDurationMs,
+      },
+      arena: { latitude: 48.4284, longitude: -123.3656, radiusMeters: 30 },
+      localPlayerId: "host",
     });
-    expect(snapshot.players.map((player) => player.role)).toEqual(["host", "guest"]);
-    expect(snapshot.events.map((event) => event.id)).toEqual(["event-2", "event-1"]);
+    expect(snapshot.players.map((entry) => entry.id)).toEqual(["host", "guest"]);
+    expect(snapshot.players.map((entry) => entry.health)).toEqual([100, 66]);
+    expect(snapshot.events[0]).toMatchObject({ actorPlayerId: "host", targetPlayerId: "guest" });
   });
 
-  it("retires a match whose end time has passed but never promotes a countdown", () => {
-    // A read may retire a duel whose `endsAt` has passed — treating it as
-    // playable would be worse than showing it early — but only the scheduled
-    // activation issues `running`, so a read that outran the job still waits.
-    const pastStart = buildMatchSnapshot({
-      match,
-      localPlayerId: "host",
-      players,
-      events,
-      now: T0 + COUNTDOWN_MS + 1,
-    });
-    const finished = buildMatchSnapshot({
-      match,
-      localPlayerId: "host",
-      players,
-      events,
-      now: (match.endsAt ?? 0) + 1,
-    });
+  it("derives finished once the authoritative running window expires", () => {
+    const snapshot = buildSpectatorSnapshot(
+      snapshotMatch(),
+      [player("host"), player("guest")],
+      [],
+      T0 + GAMEPLAY.matchDurationMs,
+    );
 
-    expect(pastStart.match.phase).toBe("countdown");
-    expect(finished.match.phase).toBe("finished");
+    expect(snapshot.match.phase).toBe("finished");
+    expect(snapshot.match.endsAt).toBe(T0 + GAMEPLAY.matchDurationMs);
   });
 
-  it("breaks equal event timestamps by ascending id", () => {
-    const tied: StoredEvent[] = [
-      { id: "event-b", type: "ready", message: "JORY READY", createdAt: T0 },
-      { id: "event-a", type: "ready", message: "VIC READY", createdAt: T0 },
-      { id: "event-c", type: "joined", message: "VIC JOINED", createdAt: T0 - 1 },
+  it("projects respawn state and server-owned timestamp on both player views", () => {
+    const respawnAt = T0 + 5_000;
+    const snapshot = buildSpectatorSnapshot(
+      snapshotMatch(),
+      [player("host"), player("guest", { lifeState: "respawning", health: 0, respawnAt })],
+      [],
+      T0 + 1_000,
+    );
+
+    expect(snapshot.players[1]).toMatchObject({
+      lifeState: "respawning",
+      health: 0,
+      respawnAt,
+    });
+  });
+
+  it("sanitizes phone and spectator projections field by field", () => {
+    const contaminated = [
+      {
+        ...player("host"),
+        sessionHash: hashSecret(SESSION_SECRET),
+        deviceIdHash: hashSecret("device-a"),
+      },
+      {
+        ...player("guest"),
+        sessionHash: hashSecret("guest-secret"),
+        deviceIdHash: hashSecret("device-b"),
+      },
     ];
 
-    const feed = (
-      snapshot: { events: readonly { id: string }[] },
-    ): string[] => snapshot.events.map((event) => event.id);
+    const phone = JSON.stringify(
+      buildMatchSnapshot(snapshotMatch(), "host", contaminated, events, T0 + 1_000),
+    );
+    const spectator = JSON.stringify(
+      buildSpectatorSnapshot(snapshotMatch(), contaminated, events, T0 + 1_000),
+    );
 
-    expect(
-      feed(buildMatchSnapshot({ match, localPlayerId: "host", players, events: tied, now: T0 })),
-    ).toEqual(["event-a", "event-b", "event-c"]);
-    expect(feed(buildSpectatorSnapshot({ match, players, events: tied, now: T0 }))).toEqual([
-      "event-a",
-      "event-b",
-      "event-c",
-    ]);
-  });
-
-  it("omits absent countdown timings instead of emitting nulls", () => {
-    const snapshot = buildMatchSnapshot({
-      match: { id: "match-2", code: "ZZZ999", phase: "lobby", durationMs: 300_000 },
-      localPlayerId: "host",
-      players,
-      events: [],
-      now: T0,
-    });
-
-    expect("startsAt" in snapshot.match).toBe(false);
-    expect("endsAt" in snapshot.match).toBe(false);
-  });
-});
-
-describe("buildSpectatorSnapshot", () => {
-  it("projects an allow-list with no local player and no arena geometry", () => {
-    const snapshot = buildSpectatorSnapshot({ match, players, events, now: T0 });
-
-    expect(Object.keys(snapshot).sort()).toEqual(["events", "match", "players", "serverNow"]);
-    expect("localPlayerId" in snapshot).toBe(false);
-    expect(Object.keys(snapshot.match).sort()).toEqual([
-      "code",
-      "durationMs",
-      "endsAt",
-      "id",
-      "phase",
-      "startsAt",
-    ]);
-    for (const player of snapshot.players) {
-      expect(Object.keys(player).sort()).toEqual([
-        "ammo",
-        "connected",
-        "displayName",
-        "health",
-        "id",
-        "ready",
-        "role",
-      ]);
+    for (const serialized of [phone, spectator]) {
+      expect(serialized).not.toContain(SESSION_SECRET);
+      expect(serialized).not.toMatch(/sessionHash|deviceIdHash|sessionSecret/);
     }
-  });
-
-  it("cannot surface a stored field outside the allow-list", () => {
-    const contaminated = [
-      { ...players[1]!, sessionHash: "deadbeef", deviceId: "iphone-15" },
-    ] as unknown as StoredPlayer[];
-
-    const snapshot = buildSpectatorSnapshot({
-      match: { ...match, arenaRadiusMeters: 30 } as unknown as StoredMatch,
-      players: contaminated,
-      events,
-      now: T0,
-    });
-
-    expect(JSON.stringify(snapshot)).not.toContain("deadbeef");
-    expect(JSON.stringify(snapshot)).not.toContain("iphone-15");
-    expect(JSON.stringify(snapshot)).not.toContain("arenaRadiusMeters");
+    expect(spectator).not.toMatch(/centerLatitude|centerLongitude|latitude|longitude|lastSeenAt/);
+    expect(phone).toContain("lastSeenAt");
   });
 });

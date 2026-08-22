@@ -1,22 +1,22 @@
-import type { EventType, HitZone, MatchPhase, PlayerRole } from "./contract.js";
-import { resolvePhase, type MatchTiming } from "./lifecycle.js";
+import { hasExpired } from "./lifecycle.js";
+import type {
+  ArenaState,
+  HitZone,
+  MatchPhase,
+  MatchState,
+  PlayerLifeState,
+  PlayerRole,
+  PlayerState,
+} from "./types.js";
 
-/**
- * Snapshot projections for `queries:matchSnapshot` and the deliberately public
- * `queries:spectatorSnapshot`.
- *
- * Both projections are allow-lists built field by field: a session digest,
- * device identifier, location, or targeting record cannot leak by adding a
- * stored column.
- */
-
-export interface MatchSummary {
+export interface MatchSummarySnapshot {
   id: string;
   code: string;
   phase: MatchPhase;
   durationMs: number;
   startsAt?: number;
   endsAt?: number;
+  winnerPlayerId?: string;
 }
 
 export interface PlayerSnapshot {
@@ -27,11 +27,24 @@ export interface PlayerSnapshot {
   connected: boolean;
   health: number;
   ammo: number;
+  kills: number;
+  deaths: number;
+  damageDealt: number;
+  shotsFired: number;
+  shotsHit: number;
+  headshots: number;
+  lifeState: PlayerLifeState;
+  arenaState: ArenaState;
+  lastSeenAt: number;
+  lastShotAt?: number;
+  respawnAt?: number;
 }
+
+export type SpectatorPlayerSnapshot = Omit<PlayerSnapshot, "lastSeenAt">;
 
 export interface EventSnapshot {
   id: string;
-  type: EventType;
+  type: string;
   message: string;
   createdAt: number;
   actorPlayerId?: string;
@@ -42,7 +55,8 @@ export interface EventSnapshot {
 
 export interface MatchSnapshot {
   serverNow: number;
-  match: MatchSummary;
+  match: MatchSummarySnapshot;
+  arena: { latitude: number; longitude: number; radiusMeters: number };
   localPlayerId: string;
   players: PlayerSnapshot[];
   events: EventSnapshot[];
@@ -50,55 +64,82 @@ export interface MatchSnapshot {
 
 export interface SpectatorSnapshot {
   serverNow: number;
-  match: MatchSummary;
-  players: PlayerSnapshot[];
+  match: MatchSummarySnapshot;
+  arena: { radiusMeters: number };
+  players: SpectatorPlayerSnapshot[];
   events: EventSnapshot[];
 }
 
-/** Stored shapes the projections read; only these fields are ever consulted. */
-export interface StoredMatch extends MatchTiming {
-  readonly id: string;
-  readonly code: string;
-  readonly durationMs: number;
+export interface SnapshotMatch extends MatchState {
+  id: string;
+  code: string;
+  centerLatitude: number;
+  centerLongitude: number;
 }
 
-export interface StoredPlayer {
-  readonly id: string;
-  readonly displayName: string;
-  readonly role: PlayerRole;
-  readonly ready: boolean;
-  readonly connected: boolean;
-  readonly health: number;
-  readonly ammo: number;
+export interface SnapshotEvent {
+  id: string;
+  type: string;
+  actorPlayerId: string | null;
+  targetPlayerId: string | null;
+  zone: HitZone | null;
+  damage: number | null;
+  message: string;
+  createdAt: number;
 }
 
-export interface StoredEvent {
-  readonly id: string;
-  readonly type: EventType;
-  readonly message: string;
-  readonly createdAt: number;
-  readonly actorPlayerId?: string;
-  readonly targetPlayerId?: string;
-  readonly zone?: HitZone;
-  readonly damage?: number;
+/** Authenticated phone projection: additive phase0 fields retain every G2 field. */
+export function buildMatchSnapshot(
+  match: SnapshotMatch,
+  localPlayerId: string,
+  players: readonly PlayerState[],
+  events: readonly SnapshotEvent[],
+  now: number,
+): MatchSnapshot {
+  return {
+    serverNow: now,
+    match: projectMatch(match, now),
+    arena: {
+      latitude: match.centerLatitude,
+      longitude: match.centerLongitude,
+      radiusMeters: match.radiusMeters,
+    },
+    localPlayerId,
+    players: orderedPlayers(players).map(projectPlayer),
+    events: orderedEvents(events).map(projectEvent),
+  };
 }
 
-export function matchSummary(match: StoredMatch, now: number): MatchSummary {
-  const summary: MatchSummary = {
+/** Public spectator projection never contains capability or precise arena data. */
+export function buildSpectatorSnapshot(
+  match: SnapshotMatch,
+  players: readonly PlayerState[],
+  events: readonly SnapshotEvent[],
+  now: number,
+): SpectatorSnapshot {
+  return {
+    serverNow: now,
+    match: projectMatch(match, now),
+    arena: { radiusMeters: match.radiusMeters },
+    players: orderedPlayers(players).map(projectSpectatorPlayer),
+    events: orderedEvents(events).map(projectEvent),
+  };
+}
+
+function projectMatch(match: SnapshotMatch, now: number): MatchSummarySnapshot {
+  const phase = hasExpired(match, now) ? "finished" : match.phase;
+  return {
     id: match.id,
     code: match.code,
-    phase: resolvePhase(match, now),
+    phase,
     durationMs: match.durationMs,
-  };
-
-  return {
-    ...summary,
-    ...(match.startsAt === undefined ? {} : { startsAt: match.startsAt }),
-    ...(match.endsAt === undefined ? {} : { endsAt: match.endsAt }),
+    ...(match.startsAt === null ? {} : { startsAt: match.startsAt }),
+    ...(match.endsAt === null ? {} : { endsAt: match.endsAt }),
+    ...(match.winnerPlayerId === null ? {} : { winnerPlayerId: match.winnerPlayerId }),
   };
 }
 
-function playerSnapshot(player: StoredPlayer): PlayerSnapshot {
+function projectPlayer(player: PlayerState): PlayerSnapshot {
   return {
     id: player.id,
     displayName: player.displayName,
@@ -107,75 +148,66 @@ function playerSnapshot(player: StoredPlayer): PlayerSnapshot {
     connected: player.connected,
     health: player.health,
     ammo: player.ammo,
+    kills: player.kills,
+    deaths: player.deaths,
+    damageDealt: player.damageDealt,
+    shotsFired: player.shotsFired,
+    shotsHit: player.shotsHit,
+    headshots: player.headshots,
+    lifeState: player.lifeState,
+    arenaState: player.arenaState,
+    lastSeenAt: player.lastSeenAt,
+    ...(player.lastShotAt === null ? {} : { lastShotAt: player.lastShotAt }),
+    ...(player.respawnAt === null ? {} : { respawnAt: player.respawnAt }),
   };
 }
 
-function eventSnapshot(event: StoredEvent): EventSnapshot {
+function projectSpectatorPlayer(player: PlayerState): SpectatorPlayerSnapshot {
+  return {
+    id: player.id,
+    displayName: player.displayName,
+    role: player.role,
+    ready: player.ready,
+    connected: player.connected,
+    health: player.health,
+    ammo: player.ammo,
+    kills: player.kills,
+    deaths: player.deaths,
+    damageDealt: player.damageDealt,
+    shotsFired: player.shotsFired,
+    shotsHit: player.shotsHit,
+    headshots: player.headshots,
+    lifeState: player.lifeState,
+    arenaState: player.arenaState,
+    ...(player.lastShotAt === null ? {} : { lastShotAt: player.lastShotAt }),
+    ...(player.respawnAt === null ? {} : { respawnAt: player.respawnAt }),
+  };
+}
+
+function projectEvent(event: SnapshotEvent): EventSnapshot {
   return {
     id: event.id,
     type: event.type,
     message: event.message,
     createdAt: event.createdAt,
-    ...(event.actorPlayerId === undefined ? {} : { actorPlayerId: event.actorPlayerId }),
-    ...(event.targetPlayerId === undefined ? {} : { targetPlayerId: event.targetPlayerId }),
-    ...(event.zone === undefined ? {} : { zone: event.zone }),
-    ...(event.damage === undefined ? {} : { damage: event.damage }),
+    ...(event.actorPlayerId === null ? {} : { actorPlayerId: event.actorPlayerId }),
+    ...(event.targetPlayerId === null ? {} : { targetPlayerId: event.targetPlayerId }),
+    ...(event.zone === null ? {} : { zone: event.zone }),
+    ...(event.damage === null ? {} : { damage: event.damage }),
   };
 }
 
-/**
- * Newest-first by `createdAt`, then ascending by `id` for equal timestamps.
- *
- * Two writes inside one mutation share a server timestamp, so the id tiebreak is
- * what makes the feed a total order: every subscriber sees the same sequence and
- * can de-duplicate a replayed page by id.
- */
-function eventFeed(events: readonly StoredEvent[]): EventSnapshot[] {
-  return [...events]
-    .sort((left, right) =>
-      left.createdAt === right.createdAt
-        ? left.id < right.id
-          ? -1
-          : left.id > right.id
-            ? 1
-            : 0
-        : right.createdAt - left.createdAt,
-    )
-    .map((event) => eventSnapshot(event));
+function orderedPlayers(players: readonly PlayerState[]): PlayerState[] {
+  return [...players].sort(
+    (left, right) =>
+      Number(left.role === "guest") - Number(right.role === "guest") ||
+      left.joinedAt - right.joinedAt ||
+      left.id.localeCompare(right.id),
+  );
 }
 
-function playerFeed(players: readonly StoredPlayer[]): PlayerSnapshot[] {
-  return [...players]
-    .sort((left, right) => (left.role === right.role ? 0 : left.role === "host" ? -1 : 1))
-    .map((player) => playerSnapshot(player));
-}
-
-export function buildMatchSnapshot(input: {
-  readonly match: StoredMatch;
-  readonly localPlayerId: string;
-  readonly players: readonly StoredPlayer[];
-  readonly events: readonly StoredEvent[];
-  readonly now: number;
-}): MatchSnapshot {
-  return {
-    serverNow: input.now,
-    match: matchSummary(input.match, input.now),
-    localPlayerId: input.localPlayerId,
-    players: playerFeed(input.players),
-    events: eventFeed(input.events),
-  };
-}
-
-export function buildSpectatorSnapshot(input: {
-  readonly match: StoredMatch;
-  readonly players: readonly StoredPlayer[];
-  readonly events: readonly StoredEvent[];
-  readonly now: number;
-}): SpectatorSnapshot {
-  return {
-    serverNow: input.now,
-    match: matchSummary(input.match, input.now),
-    players: playerFeed(input.players),
-    events: eventFeed(input.events),
-  };
+function orderedEvents(events: readonly SnapshotEvent[]): SnapshotEvent[] {
+  return [...events].sort(
+    (left, right) => right.createdAt - left.createdAt || left.id.localeCompare(right.id),
+  );
 }

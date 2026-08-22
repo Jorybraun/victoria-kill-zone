@@ -1,173 +1,192 @@
+import { randomBytes } from "@noble/hashes/utils.js";
+import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
-import type { PlayerSession } from "../domain/contract.js";
-import { planActivation, resolvePhase, shouldFinish } from "../domain/lifecycle.js";
 import {
-  isFiniteArenaRadius,
-  isValidMatchCode,
+  GAMEPLAY,
+  isValidDisplayName,
+  normalizeMatchCode,
+} from "../domain/config.js";
+import {
   matchCodeFromBytes,
+  planActivateMatch,
   planCreateMatch,
   planJoinMatch,
-  planSetReady,
   planStartMatch,
 } from "../domain/match.js";
-import { scheduled } from "./lib/scheduled.js";
-import { issueSessionSecret, matchCodeBytes } from "./lib/session.js";
+import { resolveWinner } from "../domain/lifecycle.js";
+import { hashSecret, sessionSecretFromBytes } from "../domain/session.js";
 import { internalMutation, mutation, type Id, type MutationCtx } from "./lib/server.js";
 import {
-  advancePhase,
+  appendEvent,
   authenticatePlayer,
   fail,
-  hostPlayer,
   listPlayers,
-  matchByCode,
-  schedulePresenceExpiry,
-  toLobbyPlayer,
-} from "./lib/store.js";
+  loadMatchByCode,
+  toMatchState,
+  toPlayerState,
+} from "./lib/state.js";
 
-const authenticatedArgs = {
-  matchId: v.string(),
-  playerId: v.string(),
+const CODE_ATTEMPTS = 8;
+
+const playerSession = v.object({
+  matchId: v.id("matches"),
+  code: v.string(),
+  playerId: v.id("players"),
   sessionSecret: v.string(),
-};
+});
 
-const CODE_ALLOCATION_ATTEMPTS = 8;
+const activateReference = makeFunctionReference<
+  "mutation",
+  { matchId: Id<"matches">; expectedStartsAt: number },
+  null
+>("matches:activate");
 
-async function allocateMatchCode(ctx: MutationCtx): Promise<string> {
-  for (let attempt = 0; attempt < CODE_ALLOCATION_ATTEMPTS; attempt += 1) {
-    const code = matchCodeFromBytes(matchCodeBytes());
-    if ((await matchByCode(ctx, code)) === null) {
-      return code;
-    }
-  }
+const finishReference = makeFunctionReference<
+  "mutation",
+  { matchId: Id<"matches">; expectedEndsAt: number },
+  null
+>("matches:finish");
 
-  return fail("INVALID_CODE");
-}
-
-/** `matches:create` — opens a lobby and returns the host's match-scoped session. */
+/** Create the duel and issue the host capability exactly once. */
 export const create = mutation({
-  args: { displayName: v.string(), arenaRadiusMeters: v.number() },
-  handler: async (ctx, args): Promise<PlayerSession> => {
+  args: {
+    displayName: v.string(),
+    arenaRadiusMeters: v.number(),
+  },
+  returns: playerSession,
+  handler: async (ctx, args) => {
+    const displayName = displayNameOrFail(args.displayName);
     const now = Date.now();
-    // Checked before the code is even allocated: the sanitized error carries
-    // only the frozen code, never the rejected value, and no match, player, or
-    // event exists for a duel whose arena was never a measurement.
-    if (!isFiniteArenaRadius(args.arenaRadiusMeters)) {
-      fail("INVALID_ARENA_RADIUS");
-    }
+    const code = await allocateMatchCode(ctx);
+    const sessionSecret = sessionSecretFromBytes(randomBytes(32));
+    const plan = planCreateMatch(
+      {
+        displayName,
+        // G2 has no center argument. Zero is an internal demo origin and is never
+        // exposed by the public spectator projection.
+        centerLatitude: 0,
+        centerLongitude: 0,
+        radiusMeters: args.arenaRadiusMeters,
+        now,
+      },
+      code,
+    );
 
-    const plan = planCreateMatch({
-      displayName: args.displayName,
-      arenaRadiusMeters: args.arenaRadiusMeters,
-      code: await allocateMatchCode(ctx),
-      now,
+    const matchId = await ctx.db.insert("matches", {
+      ...plan.match,
+      startedAt: null,
+      hostPlayerId: null,
     });
-
-    if (!plan.ok) {
-      fail(plan.code);
-    }
-
-    const session = issueSessionSecret();
-    const matchId = await ctx.db.insert("matches", plan.value.match);
     const playerId = await ctx.db.insert("players", {
-      ...plan.value.host,
+      ...plan.host,
       matchId,
-      sessionHash: session.hash,
+      sessionHash: hashSecret(sessionSecret),
     });
-
-    await ctx.db.insert("events", {
+    await ctx.db.patch(matchId, { hostPlayerId: playerId, updatedAt: now });
+    await appendEvent(ctx, {
       matchId,
       type: "joined",
-      message: plan.value.message,
       actorPlayerId: playerId,
+      targetPlayerId: null,
+      zone: null,
+      damage: null,
+      message: `${displayName} JOINED`,
       createdAt: now,
     });
-    await schedulePresenceExpiry(ctx, playerId, now);
 
-    return {
-      matchId,
-      code: plan.value.match.code,
-      playerId,
-      sessionSecret: session.secret,
-    };
+    return { matchId, code, playerId, sessionSecret };
   },
 });
 
-/** `matches:join` — adds the second player to a lobby by duel code. */
+/** Join the only open slot and issue the guest capability exactly once. */
 export const join = mutation({
-  args: { displayName: v.string(), code: v.string() },
-  handler: async (ctx, args): Promise<PlayerSession> => {
-    const now = Date.now();
-    if (!isValidMatchCode(args.code)) {
+  args: {
+    displayName: v.string(),
+    code: v.string(),
+  },
+  returns: playerSession,
+  handler: async (ctx, args) => {
+    const displayName = displayNameOrFail(args.displayName);
+    const normalizedCode = normalizeMatchCode(args.code);
+    if (normalizedCode === null) {
       fail("INVALID_CODE");
     }
 
-    const found = await matchByCode(ctx, args.code);
-    if (found === null) {
+    const match = await loadMatchByCode(ctx, normalizedCode);
+    if (match === null) {
       fail("MATCH_NOT_FOUND");
     }
-
-    const match = await advancePhase(ctx, found, now);
-    const players = await listPlayers(ctx, match._id);
-    const plan = planJoinMatch({
-      displayName: args.displayName,
-      code: args.code,
-      phase: resolvePhase(match, now),
-      players: players.map(toLobbyPlayer),
-      now,
-    });
-
-    if (!plan.ok) {
-      fail(plan.code);
+    if (toMatchState(match).phase !== "lobby") {
+      fail("MATCH_ALREADY_STARTED");
     }
 
-    const session = issueSessionSecret();
+    const now = Date.now();
+    const players = await listPlayers(ctx, match._id);
+    const plan = planJoinMatch(match, players.length, { displayName, now });
+    if (!plan.ok) {
+      fail(plan.reason);
+    }
+
+    const sessionSecret = sessionSecretFromBytes(randomBytes(32));
     const playerId = await ctx.db.insert("players", {
       ...plan.value.guest,
       matchId: match._id,
-      sessionHash: session.hash,
+      sessionHash: hashSecret(sessionSecret),
     });
-
-    await ctx.db.insert("events", {
+    await ctx.db.patch(match._id, {
+      ...plan.value.matchPatch,
+      phase: "lobby",
+    });
+    await appendEvent(ctx, {
       matchId: match._id,
       type: "joined",
-      message: plan.value.message,
       actorPlayerId: playerId,
+      targetPlayerId: null,
+      zone: null,
+      damage: null,
+      message: `${displayName} JOINED`,
       createdAt: now,
     });
-    await schedulePresenceExpiry(ctx, playerId, now);
 
-    return {
-      matchId: match._id,
-      code: match.code,
-      playerId,
-      sessionSecret: session.secret,
-    };
+    return { matchId: match._id, code: match.code, playerId, sessionSecret };
   },
 });
 
-/** `matches:setReady` — records the caller's own readiness while in the lobby. */
 export const setReady = mutation({
-  args: { ...authenticatedArgs, isReady: v.boolean() },
-  handler: async (ctx, args): Promise<null> => {
-    const now = Date.now();
-    const { match, player } = await authenticatePlayer(ctx, args);
-    const plan = planSetReady({
-      phase: resolvePhase(match, now),
-      displayName: player.displayName,
-      isReady: args.isReady,
-    });
-
-    if (!plan.ok) {
-      fail(plan.code);
+  args: {
+    matchId: v.id("matches"),
+    playerId: v.id("players"),
+    sessionSecret: v.string(),
+    isReady: v.boolean(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const player = await authenticatePlayer(ctx, args.matchId, args.playerId, args.sessionSecret);
+    const match = await ctx.db.get(args.matchId);
+    if (match === null) {
+      fail("MATCH_NOT_FOUND");
     }
 
-    if (player.ready !== plan.value.ready) {
-      await ctx.db.patch(player._id, { ready: plan.value.ready });
-      await ctx.db.insert("events", {
+    const phase = toMatchState(match).phase;
+    if (phase !== "lobby") {
+      fail("MATCH_ALREADY_STARTED");
+    }
+
+    const now = Date.now();
+    if ((player.ready ?? false) !== args.isReady) {
+      await ctx.db.patch(player._id, {
+        ready: args.isReady,
+        connected: true,
+        lastSeenAt: now,
+      });
+      await appendEvent(ctx, {
         matchId: match._id,
         type: "ready",
-        message: plan.value.message,
         actorPlayerId: player._id,
+        targetPlayerId: null,
+        zone: null,
+        damage: null,
+        message: `${player.displayName} ${args.isReady ? "READY" : "NOT READY"}`,
         createdAt: now,
       });
     }
@@ -176,98 +195,145 @@ export const setReady = mutation({
   },
 });
 
-/** `matches:start` — host-only; starts the server-timed countdown. */
+/** Host-only start enters countdown; a guarded job activates the duel. */
 export const start = mutation({
-  args: authenticatedArgs,
-  handler: async (ctx, args): Promise<null> => {
-    const now = Date.now();
-    const { match, player } = await authenticatePlayer(ctx, args);
-    const players = await listPlayers(ctx, match._id);
-    const plan = planStartMatch({
-      phase: resolvePhase(match, now),
-      actorRole: player.role,
-      players: players.map(toLobbyPlayer),
-      now,
-    });
-
-    if (!plan.ok) {
-      fail(plan.code);
+  args: {
+    matchId: v.id("matches"),
+    playerId: v.id("players"),
+    sessionSecret: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const requester = await authenticatePlayer(ctx, args.matchId, args.playerId, args.sessionSecret);
+    const match = await ctx.db.get(args.matchId);
+    if (match === null) {
+      fail("MATCH_NOT_FOUND");
     }
 
-    await ctx.db.patch(match._id, {
-      phase: plan.value.phase,
-      startsAt: plan.value.startsAt,
-    });
+    const players = await listPlayers(ctx, match._id);
+    const now = Date.now();
+    const plan = planStartMatch(
+      toMatchState(match),
+      players.map(toPlayerState),
+      requester._id,
+      now,
+    );
+    if (!plan.ok) {
+      fail(plan.reason);
+    }
 
-    // Subscriptions only rerun on a write, so the countdown boundary is
-    // persisted by scheduled work rather than left for the next client call to
-    // notice. The duel's end time belongs to that activation, not to the
-    // countdown, so a running match always carries an `endsAt`.
-    await ctx.scheduler.runAt(plan.value.startsAt, scheduled.activate, {
+    await ctx.db.patch(match._id, plan.value.matchPatch);
+    await ctx.scheduler.runAt(plan.value.matchPatch.startsAt, activateReference, {
       matchId: match._id,
-      expectedStartsAt: plan.value.startsAt,
+      expectedStartsAt: plan.value.matchPatch.startsAt,
     });
-
     return null;
   },
 });
 
-/**
- * `internal.matches:activate` — fires at `startsAt`.
- *
- * The single writer of `endsAt` and of the `started` event: the duel becomes
- * playable at the server-owned boundary, and the guard makes an early,
- * duplicated, or superseded run a no-op.
- */
+/** Guarded countdown activation. */
 export const activate = internalMutation({
-  args: { matchId: v.id("matches"), expectedStartsAt: v.number() },
-  handler: async (ctx, args): Promise<null> => {
-    const now = Date.now();
+  args: {
+    matchId: v.id("matches"),
+    expectedStartsAt: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
     const match = await ctx.db.get(args.matchId);
     if (match === null) {
       return null;
     }
 
-    const plan = planActivation(match, args.expectedStartsAt, now);
+    const now = Date.now();
+    const plan = planActivateMatch(toMatchState(match), args.expectedStartsAt, now);
     if (plan === null) {
       return null;
     }
 
-    await ctx.db.patch(match._id, { phase: plan.phase, endsAt: plan.endsAt });
-    await ctx.db.insert("events", {
+    const players = await listPlayers(ctx, match._id);
+    await ctx.db.patch(match._id, {
+      ...plan.matchPatch,
+      startedAt: args.expectedStartsAt,
+    });
+    for (const player of players) {
+      await ctx.db.patch(player._id, plan.playerResetPatch);
+    }
+    await appendEvent(ctx, {
       matchId: match._id,
       type: "started",
-      message: plan.message,
-      ...hostActor(await hostPlayer(ctx, match._id)),
+      actorPlayerId: match.hostPlayerId,
+      targetPlayerId: null,
+      zone: null,
+      damage: null,
+      message: "DUEL STARTED",
       createdAt: now,
     });
-
-    await ctx.scheduler.runAt(plan.endsAt, scheduled.finish, {
+    await ctx.scheduler.runAt(plan.matchPatch.endsAt, finishReference, {
       matchId: match._id,
-      expectedEndsAt: plan.endsAt,
+      expectedEndsAt: plan.matchPatch.endsAt,
     });
-
     return null;
   },
 });
 
-function hostActor(host: { _id: Id<"players"> } | null): { actorPlayerId?: Id<"players"> } {
-  return host === null ? {} : { actorPlayerId: host._id };
-}
-
-/** `internal.matches:finish` — fires at the `endsAt` it was scheduled for. */
+/** Guarded duration finish and deterministic winner calculation. */
 export const finish = internalMutation({
-  args: { matchId: v.id("matches"), expectedEndsAt: v.number() },
-  handler: async (ctx, args): Promise<null> => {
+  args: {
+    matchId: v.id("matches"),
+    expectedEndsAt: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
     const match = await ctx.db.get(args.matchId);
     if (match === null) {
       return null;
     }
 
-    if (shouldFinish(match, args.expectedEndsAt, Date.now())) {
-      await ctx.db.patch(match._id, { phase: "finished" });
+    const now = Date.now();
+    const state = toMatchState(match);
+    if (state.phase !== "running" || state.endsAt !== args.expectedEndsAt || now < args.expectedEndsAt) {
+      return null;
     }
 
+    const players = await listPlayers(ctx, match._id);
+    const winnerPlayerId = resolveWinner(players.map(toPlayerState));
+    await ctx.db.patch(match._id, {
+      status: "ended",
+      phase: "finished",
+      winnerPlayerId: winnerPlayerId === null ? null : (winnerPlayerId as Id<"players">),
+      endReason: "duration_elapsed",
+      updatedAt: now,
+    });
+    const winner = players.find((player) => player._id === winnerPlayerId);
+    await appendEvent(ctx, {
+      matchId: match._id,
+      type: "finished",
+      actorPlayerId: winner?._id ?? null,
+      targetPlayerId: null,
+      zone: null,
+      damage: null,
+      message: winner === undefined ? "DUEL DRAW" : `${winner.displayName} WINS`,
+      createdAt: now,
+    });
     return null;
   },
 });
+
+function displayNameOrFail(value: string): string {
+  const trimmed = value.trim();
+  if (!isValidDisplayName(trimmed)) {
+    fail("INVALID_DISPLAY_NAME");
+  }
+  return trimmed;
+}
+
+async function allocateMatchCode(ctx: MutationCtx): Promise<string> {
+  for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt += 1) {
+    const code = matchCodeFromBytes(randomBytes(GAMEPLAY.matchCodeLength));
+    if ((await loadMatchByCode(ctx, code)) === null) {
+      return code;
+    }
+  }
+
+  return fail("MATCH_NOT_FOUND");
+}

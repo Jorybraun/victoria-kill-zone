@@ -1,130 +1,57 @@
 import { describe, expect, it } from "vitest";
-import { COUNTDOWN_MS, MATCH_DURATION_MS } from "../domain/contract.js";
-import {
-  countdownRemainingMs,
-  isJoinable,
-  isTerminal,
-  planActivation,
-  resolvePhase,
-  shouldFinish,
-} from "../domain/lifecycle.js";
+import { canTransition, hasExpired, isJoinable, phaseForStatus, resolveWinner } from "../domain/lifecycle.js";
+import { match, player, T0 } from "./factories.js";
 
-const T0 = 1_760_000_000_000;
-
-describe("resolvePhase", () => {
-  it("keeps a lobby in the lobby", () => {
-    expect(resolvePhase({ phase: "lobby" }, T0)).toBe("lobby");
+describe("duel state machine", () => {
+  it("allows only the documented transitions", () => {
+    expect(canTransition("setup", "waiting")).toBe(true);
+    expect(canTransition("waiting", "active")).toBe(true);
+    expect(canTransition("active", "ended")).toBe(true);
+    expect(canTransition("setup", "active")).toBe(false);
+    expect(canTransition("ended", "active")).toBe(false);
+    expect(canTransition("active", "waiting")).toBe(false);
   });
 
-  it("holds countdown until the server start time", () => {
-    const match = { phase: "countdown", startsAt: T0 + COUNTDOWN_MS } as const;
-
-    expect(resolvePhase(match, T0)).toBe("countdown");
-    expect(resolvePhase(match, T0 + COUNTDOWN_MS - 1)).toBe("countdown");
+  it("projects each status onto the frozen phase vocabulary", () => {
+    expect(phaseForStatus({ status: "setup", endReason: null })).toBe("lobby");
+    expect(phaseForStatus({ status: "waiting", endReason: null })).toBe("lobby");
+    expect(phaseForStatus({ status: "active", endReason: null })).toBe("running");
+    expect(phaseForStatus({ status: "ended", endReason: "duration_elapsed" })).toBe("finished");
+    expect(phaseForStatus({ status: "ended", endReason: "abandoned" })).toBe("cancelled");
   });
 
-  it("never resolves running on read, because only activation may issue endsAt", () => {
-    const match = { phase: "countdown", startsAt: T0 + COUNTDOWN_MS } as const;
-
-    expect(resolvePhase(match, T0 + COUNTDOWN_MS)).toBe("countdown");
+  it("only treats a duel in setup below the player limit as joinable", () => {
+    expect(isJoinable({ status: "setup" }, 1, 2)).toBe(true);
+    expect(isJoinable({ status: "setup" }, 2, 2)).toBe(false);
+    expect(isJoinable({ status: "waiting" }, 1, 2)).toBe(false);
+    expect(isJoinable({ status: "active" }, 1, 2)).toBe(false);
   });
 
-  it("becomes finished at the end time", () => {
-    const startsAt = T0 + COUNTDOWN_MS;
-    const match = { phase: "running", startsAt, endsAt: startsAt + MATCH_DURATION_MS } as const;
-
-    expect(resolvePhase(match, startsAt + MATCH_DURATION_MS - 1)).toBe("running");
-    expect(resolvePhase(match, startsAt + MATCH_DURATION_MS)).toBe("finished");
-  });
-
-  it("never leaves a terminal phase", () => {
-    expect(resolvePhase({ phase: "finished", endsAt: T0 - 1 }, T0)).toBe("finished");
-    expect(resolvePhase({ phase: "cancelled", endsAt: T0 - 1 }, T0)).toBe("cancelled");
+  it("reports an active duel past endsAt as expired", () => {
+    const active = match();
+    expect(hasExpired(active, T0)).toBe(false);
+    expect(hasExpired(active, T0 + active.durationMs - 1)).toBe(false);
+    expect(hasExpired(active, T0 + active.durationMs)).toBe(true);
+    expect(hasExpired(match({ status: "waiting", endsAt: null }), T0)).toBe(false);
   });
 });
 
-describe("phase predicates", () => {
-  it("treats only finished and cancelled as terminal", () => {
-    expect(isTerminal("finished")).toBe(true);
-    expect(isTerminal("cancelled")).toBe(true);
-    expect(isTerminal("lobby")).toBe(false);
-    expect(isTerminal("countdown")).toBe(false);
-    expect(isTerminal("running")).toBe(false);
+describe("winner resolution", () => {
+  it("ranks by kills, then fewest deaths, then damage dealt", () => {
+    expect(resolveWinner([player("a", { kills: 3 }), player("b", { kills: 2 })])).toBe("a");
+    expect(
+      resolveWinner([player("a", { kills: 2, deaths: 3 }), player("b", { kills: 2, deaths: 1 })]),
+    ).toBe("b");
+    expect(
+      resolveWinner([
+        player("a", { kills: 1, deaths: 1, damageDealt: 120 }),
+        player("b", { kills: 1, deaths: 1, damageDealt: 300 }),
+      ]),
+    ).toBe("b");
   });
 
-  it("allows joining only during the lobby", () => {
-    expect(isJoinable("lobby")).toBe(true);
-    for (const phase of ["countdown", "running", "finished", "cancelled"] as const) {
-      expect(isJoinable(phase)).toBe(false);
-    }
-  });
-});
-
-describe("planActivation", () => {
-  const startsAt = T0 + COUNTDOWN_MS;
-  const countdown = { phase: "countdown", startsAt, durationMs: MATCH_DURATION_MS } as const;
-
-  it("issues the end time from the activation itself", () => {
-    expect(planActivation(countdown, startsAt, startsAt)).toEqual({
-      phase: "running",
-      endsAt: startsAt + MATCH_DURATION_MS,
-      message: "DUEL STARTED",
-    });
-  });
-
-  it("gives a delayed job a full-length duel", () => {
-    const late = startsAt + 900;
-
-    expect(planActivation(countdown, startsAt, late)?.endsAt).toBe(late + MATCH_DURATION_MS);
-  });
-
-  it("writes nothing before its own boundary", () => {
-    expect(planActivation(countdown, startsAt, startsAt - 1)).toBeNull();
-  });
-
-  it("writes nothing for a superseded countdown or an already running duel", () => {
-    expect(planActivation(countdown, startsAt - 1_000, startsAt)).toBeNull();
-    expect(planActivation({ ...countdown, phase: "running" }, startsAt, startsAt)).toBeNull();
-  });
-
-  it("never reopens a terminal match", () => {
-    expect(planActivation({ ...countdown, phase: "finished" }, startsAt, startsAt)).toBeNull();
-    expect(planActivation({ ...countdown, phase: "cancelled" }, startsAt, startsAt)).toBeNull();
-  });
-});
-
-describe("shouldFinish", () => {
-  const startsAt = T0 + COUNTDOWN_MS;
-  const endsAt = startsAt + MATCH_DURATION_MS;
-  const running = { phase: "running", startsAt, endsAt } as const;
-
-  it("finishes only once its own end time has arrived", () => {
-    expect(shouldFinish(running, endsAt, endsAt - 1)).toBe(false);
-    expect(shouldFinish(running, endsAt, endsAt)).toBe(true);
-  });
-
-  it("ignores a job scheduled for a different end time", () => {
-    expect(shouldFinish(running, endsAt - 1_000, endsAt)).toBe(false);
-  });
-
-  it("is idempotent and never regresses a terminal match", () => {
-    expect(shouldFinish({ ...running, phase: "finished" }, endsAt, endsAt)).toBe(false);
-    expect(shouldFinish({ ...running, phase: "cancelled" }, endsAt, endsAt)).toBe(false);
-  });
-});
-
-describe("countdownRemainingMs", () => {
-  it("counts down from the authoritative start time", () => {
-    const match = { phase: "countdown", startsAt: T0 + COUNTDOWN_MS } as const;
-
-    expect(countdownRemainingMs(match, T0)).toBe(COUNTDOWN_MS);
-    expect(countdownRemainingMs(match, T0 + 1_000)).toBe(COUNTDOWN_MS - 1_000);
-  });
-
-  it("is zero once the duel is running or still in the lobby", () => {
-    const match = { phase: "countdown", startsAt: T0 + COUNTDOWN_MS } as const;
-
-    expect(countdownRemainingMs(match, T0 + COUNTDOWN_MS)).toBe(0);
-    expect(countdownRemainingMs({ phase: "lobby" }, T0)).toBe(0);
+  it("returns null for a fully tied duel or an incomplete duel", () => {
+    expect(resolveWinner([player("a"), player("b")])).toBeNull();
+    expect(resolveWinner([player("a", { kills: 5 })])).toBeNull();
   });
 });

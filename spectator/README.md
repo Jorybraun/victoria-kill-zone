@@ -1,10 +1,10 @@
-# Victoria Pew Pew G2 spectator
+# VKZ spectator
 
-Read-only browser view for the frozen create/join/start/debug-fire network slice.
+Read-only browser view for the frozen create/join/start/debug-fire network slice and its additive Phase 0 combat telemetry.
 
 ## User job
 
-A spectator enters one six-character duel code, then sees the authoritative phase, two equal player health cards, each player's ready/connection text, and the server-ordered event feed. The G2 route intentionally makes no radar, location, ammunition, K/D, winner, or rematch claim.
+A spectator enters one six-character duel code, then sees the authoritative phase, two equal player health cards, each player's ready/connection text, and the server-ordered event feed. When the additive Phase 0 fields are present, the same cards also show life state, kills, deaths, and a respawn window; elimination and respawn events receive explicit feed labels. G2 snapshots omit that telemetry and continue to render without invented values.
 
 ## Presentation contract
 
@@ -22,7 +22,7 @@ The component does not fetch, route, authenticate, or call Convex. `SpectatorSna
 | `no-selection` | Frozen no-duel copy, persistent code label, and `WATCH DUEL` |
 | `loading` | `CONNECTING TO DUEL…` with the selected code retained |
 | `waiting` | Lobby/countdown phase, both slots, ready/connected text, and `OPEN SLOT` when needed |
-| `active` | `LIVE DUEL`, two equal health cards, and authoritative events |
+| `active` | `LIVE DUEL`, two equal health cards, optional Phase 0 life/K/D telemetry, and authoritative events |
 | `ended` | `DUEL COMPLETE` or `DUEL CANCELLED`, last authoritative values, and `WATCH ANOTHER DUEL` |
 | `degraded` | Dimmed last snapshot, `LIVE FEED INTERRUPTED`, last-sync time, and query retry |
 | `error` | Editable retained code, mapped safe copy, and `TRY AGAIN` |
@@ -37,7 +37,7 @@ Without `VITE_CONVEX_URL`, any valid `?match=` code uses demo data. The optional
 ## Accessibility and responsive behavior
 
 - Native input and button semantics keep selection and retry keyboard reachable with a white focus ring.
-- Ready, connection, health, interruption, and recovery all use visible text in addition to shape/color.
+- Ready, connection, health, life state, K/D, interruption, and recovery all use visible text in addition to shape/color.
 - Status and events use polite live regions; interruption is a status rather than a blocking alert.
 - The two-card desktop row stacks before truncation, keeping code, phase, both health values, and recovery controls usable at 200% zoom.
 - Decorative loading motion is disabled under `prefers-reduced-motion`.

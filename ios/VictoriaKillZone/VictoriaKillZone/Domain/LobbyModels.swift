@@ -13,6 +13,10 @@ struct LobbyPlayer: Identifiable, Equatable, Sendable {
   var isConnected: Bool
   var health: Int
   var ammo: Int
+  var kills: Int
+  var deaths: Int
+  var lifeState: PlayerLifeState
+  var respawnAt: Double?
 
   init(
     id: String,
@@ -21,7 +25,11 @@ struct LobbyPlayer: Identifiable, Equatable, Sendable {
     isReady: Bool,
     isConnected: Bool = true,
     health: Int = 100,
-    ammo: Int = 8
+    ammo: Int = 8,
+    kills: Int = 0,
+    deaths: Int = 0,
+    lifeState: PlayerLifeState = .alive,
+    respawnAt: Double? = nil
   ) {
     self.id = id
     self.displayName = displayName
@@ -30,6 +38,10 @@ struct LobbyPlayer: Identifiable, Equatable, Sendable {
     self.isConnected = isConnected
     self.health = health
     self.ammo = ammo
+    self.kills = kills
+    self.deaths = deaths
+    self.lifeState = lifeState
+    self.respawnAt = respawnAt
   }
 
   init(snapshot: PlayerSnapshot) {
@@ -40,7 +52,11 @@ struct LobbyPlayer: Identifiable, Equatable, Sendable {
       isReady: snapshot.ready,
       isConnected: snapshot.connected,
       health: snapshot.health,
-      ammo: snapshot.ammo
+      ammo: snapshot.ammo,
+      kills: snapshot.kills,
+      deaths: snapshot.deaths,
+      lifeState: snapshot.lifeState,
+      respawnAt: snapshot.respawnAt
     )
   }
 }

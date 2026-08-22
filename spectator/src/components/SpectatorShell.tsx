@@ -263,8 +263,8 @@ function DashboardView({
         aria-label={isDegraded ? "Last verified duel snapshot" : undefined}
       >
         <section className="player-grid" aria-label="Duel players">
-          <PlayerCard player={playerA} slot="A" />
-          <PlayerCard player={playerB} slot="B" />
+          <PlayerCard player={playerA} slot="A" serverNow={snapshot.serverNow} />
+          <PlayerCard player={playerB} slot="B" serverNow={snapshot.serverNow} />
         </section>
         <EventFeed events={snapshot.events} />
 

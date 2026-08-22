@@ -1,96 +1,69 @@
-import type { MatchPhase } from "./contract.js";
+import type { MatchPhase, MatchState, MatchStatus, PlayerState } from "./types.js";
 
-/**
- * Authoritative phase resolution.
- *
- * The stored phase advances on write. `endsAt` is the one boundary a read may
- * resolve on its own, because a match whose end time has passed must never be
- * treated as playable even if its scheduled finish has not landed yet. The
- * countdown → running edge is deliberately *not* resolved on read: `running`
- * requires an `endsAt`, and only {@link planActivation} may issue one.
- */
-export interface MatchTiming {
-  readonly phase: MatchPhase;
-  readonly startsAt?: number;
-  readonly endsAt?: number;
-}
+/** Legal transitions of the explicit duel state machine. */
+const TRANSITIONS: Readonly<Record<MatchStatus, readonly MatchStatus[]>> = {
+  setup: ["waiting", "ended"],
+  waiting: ["setup", "active", "ended"],
+  active: ["ended"],
+  ended: [],
+};
 
-const TERMINAL_PHASES: readonly MatchPhase[] = ["finished", "cancelled"];
-
-export function isTerminal(phase: MatchPhase): boolean {
-  return TERMINAL_PHASES.includes(phase);
-}
-
-export function resolvePhase(match: MatchTiming, now: number): MatchPhase {
-  if (isTerminal(match.phase)) {
-    return match.phase;
-  }
-
-  if (match.endsAt !== undefined && now >= match.endsAt) {
-    return "finished";
-  }
-
-  return match.phase;
-}
-
-export interface ActivationPlan {
-  readonly phase: "running";
-  readonly endsAt: number;
-  readonly message: string;
+export function canTransition(from: MatchStatus, to: MatchStatus): boolean {
+  return TRANSITIONS[from].includes(to);
 }
 
 /**
- * What a scheduled activation may persist, or `null` when it must do nothing.
- *
- * The job carries the countdown it was scheduled for, so a duplicate run, a run
- * against a restarted or terminal match, or an early run writes nothing. The
- * duel length is measured from the activation itself, so a delayed job still
- * yields a full-length match.
+ * Project the explicit status onto the frozen cross-workstream `MatchPhase`.
+ * `setup` and `waiting` are both lobby states; a cancelled duel is an `ended`
+ * match without a winner.
  */
-export function planActivation(
-  match: MatchTiming & { readonly durationMs: number },
-  expectedStartsAt: number,
-  now: number,
-): ActivationPlan | null {
-  if (match.phase !== "countdown" || match.startsAt !== expectedStartsAt) {
+export function phaseForStatus(match: Pick<MatchState, "status" | "endReason">): MatchPhase {
+  switch (match.status) {
+    case "setup":
+    case "waiting":
+      return "lobby";
+    case "active":
+      return "running";
+    case "ended":
+      return match.endReason === "abandoned" ? "cancelled" : "finished";
+  }
+}
+
+/** A duel is joinable only while it is in `setup` and below the player limit. */
+export function isJoinable(match: Pick<MatchState, "status">, playerCount: number, maxPlayers: number): boolean {
+  return match.status === "setup" && playerCount < maxPlayers;
+}
+
+/**
+ * True when an active duel has run past `endsAt`. Gameplay mutations use this to
+ * reject late actions even if the scheduled finish job is delayed.
+ */
+export function hasExpired(match: Pick<MatchState, "status" | "endsAt">, now: number): boolean {
+  return match.status === "active" && match.endsAt !== null && now >= match.endsAt;
+}
+
+/**
+ * Winner resolution: most kills, then fewest deaths, then most damage dealt.
+ * Returns `null` for a fully tied duel or a duel without two players.
+ */
+export function resolveWinner(players: readonly PlayerState[]): string | null {
+  if (players.length < 2) {
     return null;
   }
 
-  if (now < expectedStartsAt) {
+  const ranked = [...players].sort(
+    (a, b) => b.kills - a.kills || a.deaths - b.deaths || b.damageDealt - a.damageDealt,
+  );
+
+  const [leader, runnerUp] = ranked;
+  if (leader === undefined || runnerUp === undefined) {
     return null;
   }
 
-  return { phase: "running", endsAt: now + match.durationMs, message: "DUEL STARTED" };
-}
+  const tied =
+    leader.kills === runnerUp.kills &&
+    leader.deaths === runnerUp.deaths &&
+    leader.damageDealt === runnerUp.damageDealt;
 
-/**
- * Whether a scheduled finish may persist `finished`.
- *
- * Guarded by the `endsAt` the job was scheduled for, so a stale job from an
- * earlier end time, a terminal match, or an early run writes nothing.
- */
-export function shouldFinish(
-  match: MatchTiming,
-  expectedEndsAt: number,
-  now: number,
-): boolean {
-  if (isTerminal(match.phase) || match.endsAt !== expectedEndsAt) {
-    return false;
-  }
-
-  return now >= expectedEndsAt;
-}
-
-/** Only a `lobby` match accepts a second player. */
-export function isJoinable(phase: MatchPhase): boolean {
-  return phase === "lobby";
-}
-
-/** Countdown remaining in milliseconds; zero once the duel is running. */
-export function countdownRemainingMs(match: MatchTiming, now: number): number {
-  if (match.startsAt === undefined || resolvePhase(match, now) !== "countdown") {
-    return 0;
-  }
-
-  return Math.max(0, match.startsAt - now);
+  return tied ? null : leader.id;
 }

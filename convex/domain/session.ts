@@ -2,17 +2,29 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 
 /**
- * Match-scoped session handling (ADR 0002).
+ * Match-scoped session handling.
  *
- * The *server* generates a random 256-bit secret, returns it exactly once from a
- * successful create or join, and stores only its SHA-256 digest. The phone keeps
- * the secret in the Keychain and sends it with every player-controlled mutation.
- * No secret, digest, or device identifier is ever returned by a query or event.
+ * The client generates a random secret, keeps it in the Keychain, and sends it
+ * with every player-controlled mutation. Only its hash is stored, and no hash,
+ * secret, or device identifier is ever returned by a public query.
  */
 
 /** Deterministic, Convex-runtime-safe SHA-256 (no Node `crypto` dependency). */
 export function hashSecret(secret: string): string {
   return bytesToHex(sha256(utf8ToBytes(secret)));
+}
+
+/** Format exactly 32 random bytes as the accepted 256-bit bearer capability. */
+export function sessionSecretFromBytes(bytes: Uint8Array): string {
+  if (bytes.length !== 32) {
+    throw new Error("A session capability requires exactly 32 random bytes");
+  }
+
+  return bytesToHex(bytes);
+}
+
+export function isValidSessionSecret(secret: string): boolean {
+  return /^[0-9a-f]{64}$/.test(secret);
 }
 
 /** Length-safe, constant-time comparison of two lowercase hex digests. */

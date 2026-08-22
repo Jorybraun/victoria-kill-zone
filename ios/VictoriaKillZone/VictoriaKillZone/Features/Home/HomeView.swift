@@ -8,10 +8,10 @@ struct HomeView: View {
       Spacer()
 
       VStack(alignment: .leading, spacing: 8) {
-        Text("VKZ")
+        Text("VPP")
           .font(.system(size: 64, weight: .black, design: .rounded))
           .foregroundStyle(VKZPalette.text)
-        Text("VICTORIA KILL ZONE")
+        Text("VICTORIA PEW PEW")
           .font(.headline.monospaced())
           .foregroundStyle(VKZPalette.telemetry)
         Text("MARKERLESS 1V1 DUEL")

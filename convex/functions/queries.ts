@@ -1,45 +1,99 @@
 import { v } from "convex/values";
-import type { MatchSnapshot, SpectatorSnapshot } from "../domain/snapshot.js";
-import { buildMatchSnapshot, buildSpectatorSnapshot } from "../domain/snapshot.js";
-import { query } from "./lib/server.js";
-import { authenticatePlayer, listEvents, listPlayers, matchByCode, toStoredEvent, toStoredMatch, toStoredPlayer } from "./lib/store.js";
+import {
+  buildMatchSnapshot,
+  buildSpectatorSnapshot,
+  type MatchSnapshot,
+  type SnapshotEvent,
+  type SnapshotMatch,
+  type SpectatorSnapshot,
+} from "../domain/snapshot.js";
+import { query, type Doc, type QueryCtx } from "./lib/server.js";
+import {
+  authenticatePlayer,
+  fail,
+  listPlayers,
+  loadMatchByCode,
+  toMatchState,
+  toPlayerState,
+} from "./lib/state.js";
 
-/** `queries:matchSnapshot` — authenticated, player-scoped authoritative state. */
+const RECENT_EVENT_LIMIT = 40;
+
+/** Authenticated phone projection used by both live players. */
 export const matchSnapshot = query({
-  args: { matchId: v.string(), playerId: v.string(), sessionSecret: v.string() },
+  args: {
+    matchId: v.id("matches"),
+    playerId: v.id("players"),
+    sessionSecret: v.string(),
+  },
   handler: async (ctx, args): Promise<MatchSnapshot> => {
-    const now = Date.now();
-    const { match, player } = await authenticatePlayer(ctx, args);
+    const localPlayer = await authenticatePlayer(ctx, args.matchId, args.playerId, args.sessionSecret);
+    const match = await ctx.db.get(args.matchId);
+    if (match === null) {
+      fail("MATCH_NOT_FOUND");
+    }
 
-    return buildMatchSnapshot({
-      match: toStoredMatch(match),
-      localPlayerId: player._id,
-      players: (await listPlayers(ctx, match._id)).map(toStoredPlayer),
-      events: (await listEvents(ctx, match._id)).map(toStoredEvent),
-      now,
-    });
+    const [players, events] = await Promise.all([
+      listPlayers(ctx, match._id),
+      recentEvents(ctx, match._id),
+    ]);
+    return buildMatchSnapshot(
+      snapshotMatch(match),
+      localPlayer._id,
+      players.map(toPlayerState),
+      events,
+      Date.now(),
+    );
   },
 });
 
-/**
- * `queries:spectatorSnapshot` — deliberately public and sanitized. It exposes no
- * session material, device identity, location, targeting evidence, or mutation
- * capability, and returns `null` for an unknown code.
- */
+/** Public, read-only projection with no session or precise location material. */
 export const spectatorSnapshot = query({
   args: { code: v.string() },
   handler: async (ctx, args): Promise<SpectatorSnapshot | null> => {
-    const now = Date.now();
-    const match = await matchByCode(ctx, args.code);
+    const match = await loadMatchByCode(ctx, args.code);
     if (match === null) {
       return null;
     }
 
-    return buildSpectatorSnapshot({
-      match: toStoredMatch(match),
-      players: (await listPlayers(ctx, match._id)).map(toStoredPlayer),
-      events: (await listEvents(ctx, match._id)).map(toStoredEvent),
-      now,
-    });
+    const [players, events] = await Promise.all([
+      listPlayers(ctx, match._id),
+      recentEvents(ctx, match._id),
+    ]);
+    return buildSpectatorSnapshot(
+      snapshotMatch(match),
+      players.map(toPlayerState),
+      events,
+      Date.now(),
+    );
   },
 });
+
+function snapshotMatch(match: Doc<"matches">): SnapshotMatch {
+  return {
+    ...toMatchState(match),
+    id: match._id,
+    code: match.code,
+    centerLatitude: match.centerLatitude,
+    centerLongitude: match.centerLongitude,
+  };
+}
+
+async function recentEvents(ctx: QueryCtx, matchId: Doc<"matches">["_id"]): Promise<SnapshotEvent[]> {
+  const events = await ctx.db
+    .query("events")
+    .withIndex("by_match_and_created_at", (q) => q.eq("matchId", matchId))
+    .order("desc")
+    .take(RECENT_EVENT_LIMIT);
+
+  return events.map((event) => ({
+    id: event._id,
+    type: event.type,
+    actorPlayerId: event.actorPlayerId,
+    targetPlayerId: event.targetPlayerId,
+    zone: event.zone,
+    damage: event.damage,
+    message: event.message,
+    createdAt: event.createdAt,
+  }));
+}

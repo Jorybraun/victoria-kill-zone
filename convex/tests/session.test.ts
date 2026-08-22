@@ -1,41 +1,49 @@
 import { describe, expect, it } from "vitest";
-import { authenticates, digestsMatch, hashSecret } from "../domain/session.js";
+import {
+  authenticates,
+  digestsMatch,
+  hashSecret,
+  isValidSessionSecret,
+  sessionSecretFromBytes,
+} from "../domain/session.js";
 
-const SECRET = "d3adbeefd3adbeefd3adbeefd3adbeef";
+const SECRET_A = "a".repeat(64);
+const SECRET_B = "b".repeat(64);
 
-describe("hashSecret", () => {
-  it("is deterministic and never contains the plaintext secret", () => {
-    const digest = hashSecret(SECRET);
-
-    expect(digest).toBe(hashSecret(SECRET));
-    expect(digest).toHaveLength(64);
-    expect(digest).not.toContain(SECRET);
+describe("match-scoped sessions", () => {
+  it("issues exactly 256 bits as lowercase hexadecimal", () => {
+    const secret = sessionSecretFromBytes(new Uint8Array(32).fill(171));
+    expect(secret).toHaveLength(64);
+    expect(secret).toMatch(/^[0-9a-f]{64}$/);
+    expect(isValidSessionSecret(secret)).toBe(true);
+    expect(() => sessionSecretFromBytes(new Uint8Array(31))).toThrow();
   });
 
-  it("separates two secrets", () => {
-    expect(hashSecret(SECRET)).not.toBe(hashSecret(`${SECRET}0`));
-  });
-});
-
-describe("authenticates", () => {
-  it("accepts only the owning player's secret", () => {
-    const hostHash = hashSecret(SECRET);
-    const guestHash = hashSecret("0123456789abcdef0123456789abcdef");
-
-    expect(authenticates(SECRET, hostHash)).toBe(true);
-    expect(authenticates(SECRET, guestHash)).toBe(false);
+  it("hashes deterministically with a stable hex digest", () => {
+    expect(hashSecret(SECRET_A)).toBe(hashSecret(SECRET_A));
+    expect(hashSecret(SECRET_A)).toMatch(/^[0-9a-f]{64}$/);
+    expect(hashSecret("abc")).toBe(
+      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    );
   });
 
-  it("rejects empty input on either side", () => {
-    expect(authenticates("", hashSecret(SECRET))).toBe(false);
-    expect(authenticates(SECRET, "")).toBe(false);
-  });
-});
+  it("authenticates only the player that owns the secret", () => {
+    const hostHash = hashSecret(SECRET_A);
+    const guestHash = hashSecret(SECRET_B);
 
-describe("digestsMatch", () => {
-  it("compares equal-length digests only", () => {
-    expect(digestsMatch("abc", "abc")).toBe(true);
-    expect(digestsMatch("abc", "abd")).toBe(false);
-    expect(digestsMatch("abc", "ab")).toBe(false);
+    expect(authenticates(SECRET_A, hostHash)).toBe(true);
+    expect(authenticates(SECRET_A, guestHash)).toBe(false);
+    expect(authenticates(SECRET_B, hostHash)).toBe(false);
+  });
+
+  it("rejects empty secrets, empty digests, and length mismatches", () => {
+    expect(authenticates("", hashSecret(SECRET_A))).toBe(false);
+    expect(authenticates(SECRET_A, "")).toBe(false);
+    expect(digestsMatch(hashSecret(SECRET_A), hashSecret(SECRET_A).slice(0, 32))).toBe(false);
+    expect(digestsMatch(hashSecret(SECRET_A), hashSecret(SECRET_A))).toBe(true);
+  });
+
+  it("never exposes the secret through its digest", () => {
+    expect(hashSecret(SECRET_A)).not.toContain(SECRET_A);
   });
 });
