@@ -1,11 +1,13 @@
 import {
+  ARENA_RADIUS_DEFAULT_METERS,
   ARENA_RADIUS_MAX_METERS,
   ARENA_RADIUS_MIN_METERS,
   COUNTDOWN_MS,
-  DISPLAY_NAME_MAX_LENGTH,
+  DISPLAY_NAME_MAX_SCALARS,
   INITIAL_AMMO,
   INITIAL_HEALTH,
   MATCH_CODE_ALPHABET,
+  MATCH_CODE_INPUT_ALPHABET,
   MATCH_CODE_LENGTH,
   MATCH_DURATION_MS,
   PLAYER_CAPACITY,
@@ -13,6 +15,7 @@ import {
   type PlayerRole,
 } from "./contract.js";
 import { isJoinable, isTerminal } from "./lifecycle.js";
+import { isPresent } from "./presence.js";
 import { ok, rejected, type DomainResult } from "./result.js";
 
 /** Lobby view of a stored player: the only player fields lifecycle rules read. */
@@ -21,6 +24,7 @@ export interface LobbyPlayer {
   readonly role: PlayerRole;
   readonly ready: boolean;
   readonly connected: boolean;
+  readonly lastSeenAt: number;
 }
 
 export interface MatchDraft {
@@ -38,6 +42,7 @@ export interface PlayerDraft {
   readonly connected: boolean;
   readonly health: number;
   readonly ammo: number;
+  readonly lastSeenAt: number;
   readonly joinedAt: number;
 }
 
@@ -55,36 +60,65 @@ export interface JoinMatchPlan {
 export interface StartMatchPlan {
   readonly phase: "countdown";
   readonly startsAt: number;
-  readonly endsAt: number;
-  readonly message: string;
-}
-
-export function normalizeDisplayName(value: string): string {
-  return value.trim().replace(/\s+/g, " ").slice(0, DISPLAY_NAME_MAX_LENGTH);
-}
-
-export function isValidDisplayName(value: string): boolean {
-  return normalizeDisplayName(value).length > 0;
 }
 
 /**
- * Uppercase and drop separators without truncating.
+ * Trim surrounding Unicode whitespace and change nothing else.
  *
- * Length is a validation concern, not a normalization one: truncating here would
- * silently accept an overlong code and resolve it to a different duel.
+ * Internal characters — including runs of spaces, emoji, and combining marks —
+ * are preserved, and an overlong name is rejected rather than truncated, so a
+ * player never sees a silently different name than the one they typed.
+ */
+export function normalizeDisplayName(value: string): string {
+  return value.trim();
+}
+
+/** Unicode scalar values, so an emoji or surrogate pair counts once. */
+export function displayNameLength(value: string): number {
+  return [...normalizeDisplayName(value)].length;
+}
+
+export function isValidDisplayName(value: string): boolean {
+  const length = displayNameLength(value);
+  return length >= 1 && length <= DISPLAY_NAME_MAX_SCALARS;
+}
+
+/**
+ * Uppercase and drop the separators a human types, without truncating.
+ *
+ * Only ASCII whitespace and hyphens are separators. Any other character is
+ * malformed input, and length is a validation concern rather than a
+ * normalization one: truncating would silently resolve a different duel.
  */
 export function normalizeMatchCode(value: string): string {
-  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return value.toUpperCase().replace(/[ \t\n\v\f\r-]/g, "");
 }
 
-/** True only for exactly {@link MATCH_CODE_LENGTH} normalized characters. */
+/** True only for exactly {@link MATCH_CODE_LENGTH} typed-alphabet characters. */
 export function isValidMatchCode(value: string): boolean {
-  return normalizeMatchCode(value).length === MATCH_CODE_LENGTH;
+  const normalized = normalizeMatchCode(value);
+  if (normalized.length !== MATCH_CODE_LENGTH) {
+    return false;
+  }
+
+  return [...normalized].every((character) => MATCH_CODE_INPUT_ALPHABET.includes(character));
 }
 
+/** A radius is a finite measurement; NaN and infinity are malformed shape. */
+export function isFiniteArenaRadius(meters: number): boolean {
+  return Number.isFinite(meters);
+}
+
+/**
+ * Round to the nearest whole metre and clamp to the playable range.
+ *
+ * Only finite input has a meaning to round, so a non-finite request is rejected
+ * as malformed rather than coerced into a playable arena the caller never asked
+ * for. Callers guard with {@link isFiniteArenaRadius} first.
+ */
 export function normalizeArenaRadius(meters: number): number {
-  if (!Number.isFinite(meters)) {
-    return ARENA_RADIUS_MIN_METERS;
+  if (!isFiniteArenaRadius(meters)) {
+    return ARENA_RADIUS_DEFAULT_METERS;
   }
 
   return Math.min(
@@ -116,6 +150,7 @@ function newPlayer(
     connected: true,
     health: INITIAL_HEALTH,
     ammo: INITIAL_AMMO,
+    lastSeenAt: now,
     joinedAt: now,
   };
 }
@@ -189,19 +224,19 @@ export function planSetReady(request: {
 
   return ok({
     ready: request.isReady,
-    message: `${request.displayName} IS ${request.isReady ? "READY" : "NOT READY"}`,
+    message: `${request.displayName} ${request.isReady ? "READY" : "NOT READY"}`,
   });
 }
 
 /**
- * Host-only start. The duel begins only with exactly two ready, connected
- * players, and the server alone owns the countdown and end timestamps.
+ * Host-only start. The duel begins only with exactly two ready players whose
+ * presence is still fresh, and the server alone owns the countdown timestamp.
+ * `endsAt` belongs to activation, not to the countdown.
  */
 export function planStartMatch(request: {
   readonly phase: MatchPhase;
   readonly actorRole: PlayerRole;
   readonly players: readonly LobbyPlayer[];
-  readonly durationMs: number;
   readonly now: number;
 }): DomainResult<StartMatchPlan> {
   if (request.actorRole !== "host") {
@@ -216,7 +251,7 @@ export function planStartMatch(request: {
     return rejected("PLAYERS_NOT_READY");
   }
 
-  if (request.players.some((player) => !player.connected)) {
+  if (request.players.some((player) => !isPresent(player, request.now))) {
     return rejected("PLAYERS_NOT_CONNECTED");
   }
 
@@ -224,12 +259,8 @@ export function planStartMatch(request: {
     return rejected("PLAYERS_NOT_READY");
   }
 
-  const startsAt = request.now + COUNTDOWN_MS;
-
   return ok({
     phase: "countdown",
-    startsAt,
-    endsAt: startsAt + request.durationMs,
-    message: "DUEL STARTED",
+    startsAt: request.now + COUNTDOWN_MS,
   });
 }

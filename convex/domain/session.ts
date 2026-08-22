@@ -2,11 +2,12 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 
 /**
- * Match-scoped session handling.
+ * Match-scoped session handling (ADR 0002).
  *
- * The client generates a random secret, keeps it in the Keychain, and sends it
- * with every player-controlled mutation. Only its hash is stored, and no hash,
- * secret, or device identifier is ever returned by a public query.
+ * The *server* generates a random 256-bit secret, returns it exactly once from a
+ * successful create or join, and stores only its SHA-256 digest. The phone keeps
+ * the secret in the Keychain and sends it with every player-controlled mutation.
+ * No secret, digest, or device identifier is ever returned by a query or event.
  */
 
 /** Deterministic, Convex-runtime-safe SHA-256 (no Node `crypto` dependency). */

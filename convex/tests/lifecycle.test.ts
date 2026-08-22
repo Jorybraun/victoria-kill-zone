@@ -4,8 +4,9 @@ import {
   countdownRemainingMs,
   isJoinable,
   isTerminal,
+  planActivation,
   resolvePhase,
-  scheduledTransition,
+  shouldFinish,
 } from "../domain/lifecycle.js";
 
 const T0 = 1_760_000_000_000;
@@ -16,16 +17,16 @@ describe("resolvePhase", () => {
   });
 
   it("holds countdown until the server start time", () => {
-    const match = { phase: "countdown", startsAt: T0 + COUNTDOWN_MS, endsAt: T0 + 1_000_000 } as const;
+    const match = { phase: "countdown", startsAt: T0 + COUNTDOWN_MS } as const;
 
     expect(resolvePhase(match, T0)).toBe("countdown");
     expect(resolvePhase(match, T0 + COUNTDOWN_MS - 1)).toBe("countdown");
   });
 
-  it("becomes running at the start time without a write", () => {
-    const match = { phase: "countdown", startsAt: T0 + COUNTDOWN_MS, endsAt: T0 + 1_000_000 } as const;
+  it("never resolves running on read, because only activation may issue endsAt", () => {
+    const match = { phase: "countdown", startsAt: T0 + COUNTDOWN_MS } as const;
 
-    expect(resolvePhase(match, T0 + COUNTDOWN_MS)).toBe("running");
+    expect(resolvePhase(match, T0 + COUNTDOWN_MS)).toBe("countdown");
   });
 
   it("becomes finished at the end time", () => {
@@ -59,34 +60,56 @@ describe("phase predicates", () => {
   });
 });
 
-describe("scheduledTransition", () => {
+describe("planActivation", () => {
   const startsAt = T0 + COUNTDOWN_MS;
-  const endsAt = startsAt + MATCH_DURATION_MS;
-  const countdown = { phase: "countdown", startsAt, endsAt } as const;
+  const countdown = { phase: "countdown", startsAt, durationMs: MATCH_DURATION_MS } as const;
 
-  it("writes running only once the start time has arrived", () => {
-    expect(scheduledTransition(countdown, "running", startsAt - 1)).toBeNull();
-    expect(scheduledTransition(countdown, "running", startsAt)).toBe("running");
+  it("issues the end time from the activation itself", () => {
+    expect(planActivation(countdown, startsAt, startsAt)).toEqual({
+      phase: "running",
+      endsAt: startsAt + MATCH_DURATION_MS,
+      message: "DUEL STARTED",
+    });
   });
 
-  it("writes finished only once the end time has arrived", () => {
-    const running = { ...countdown, phase: "running" } as const;
+  it("gives a delayed job a full-length duel", () => {
+    const late = startsAt + 900;
 
-    expect(scheduledTransition(running, "finished", endsAt - 1)).toBeNull();
-    expect(scheduledTransition(running, "finished", endsAt)).toBe("finished");
+    expect(planActivation(countdown, startsAt, late)?.endsAt).toBe(late + MATCH_DURATION_MS);
   });
 
-  it("is a no-op when the record already says the target", () => {
-    expect(scheduledTransition({ ...countdown, phase: "running" }, "running", endsAt - 1)).toBeNull();
+  it("writes nothing before its own boundary", () => {
+    expect(planActivation(countdown, startsAt, startsAt - 1)).toBeNull();
+  });
+
+  it("writes nothing for a superseded countdown or an already running duel", () => {
+    expect(planActivation(countdown, startsAt - 1_000, startsAt)).toBeNull();
+    expect(planActivation({ ...countdown, phase: "running" }, startsAt, startsAt)).toBeNull();
   });
 
   it("never reopens a terminal match", () => {
-    expect(scheduledTransition({ ...countdown, phase: "finished" }, "running", startsAt)).toBeNull();
-    expect(scheduledTransition({ ...countdown, phase: "cancelled" }, "finished", endsAt)).toBeNull();
+    expect(planActivation({ ...countdown, phase: "finished" }, startsAt, startsAt)).toBeNull();
+    expect(planActivation({ ...countdown, phase: "cancelled" }, startsAt, startsAt)).toBeNull();
+  });
+});
+
+describe("shouldFinish", () => {
+  const startsAt = T0 + COUNTDOWN_MS;
+  const endsAt = startsAt + MATCH_DURATION_MS;
+  const running = { phase: "running", startsAt, endsAt } as const;
+
+  it("finishes only once its own end time has arrived", () => {
+    expect(shouldFinish(running, endsAt, endsAt - 1)).toBe(false);
+    expect(shouldFinish(running, endsAt, endsAt)).toBe(true);
   });
 
-  it("still lands finished when the running transition never ran", () => {
-    expect(scheduledTransition(countdown, "finished", endsAt)).toBe("finished");
+  it("ignores a job scheduled for a different end time", () => {
+    expect(shouldFinish(running, endsAt - 1_000, endsAt)).toBe(false);
+  });
+
+  it("is idempotent and never regresses a terminal match", () => {
+    expect(shouldFinish({ ...running, phase: "finished" }, endsAt, endsAt)).toBe(false);
+    expect(shouldFinish({ ...running, phase: "cancelled" }, endsAt, endsAt)).toBe(false);
   });
 });
 
