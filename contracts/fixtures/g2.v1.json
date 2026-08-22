@@ -1,0 +1,419 @@
+{
+  "fixtureFormatVersion": 1,
+  "contractVersion": "g2.v1",
+  "enums": {
+    "matchPhase": ["lobby", "countdown", "running", "finished", "cancelled"],
+    "playerRole": ["host", "guest"],
+    "eventType": ["joined", "ready", "started", "hit"],
+    "debugFireOutcome": ["hit", "rejected"],
+    "errorCode": [
+      "INVALID_DISPLAY_NAME",
+      "INVALID_CODE",
+      "MATCH_NOT_FOUND",
+      "MATCH_FULL",
+      "MATCH_ALREADY_STARTED",
+      "INVALID_SESSION",
+      "PLAYERS_NOT_READY",
+      "PLAYERS_NOT_CONNECTED",
+      "HOST_ONLY",
+      "MATCH_NOT_RUNNING",
+      "CONNECTION_STALE"
+    ]
+  },
+  "snapshots": [
+    {
+      "id": "g2.snapshot.lobby-one-player",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 1000000,
+        "match": {
+          "id": "match_g2_001",
+          "code": "VKZ001",
+          "phase": "lobby",
+          "durationMs": 180000
+        },
+        "localPlayerId": "player_host",
+        "players": [
+          {
+            "id": "player_host",
+            "displayName": "HOST",
+            "role": "host",
+            "ready": false,
+            "connected": true,
+            "health": 100,
+            "ammo": 8
+          }
+        ],
+        "events": [
+          {
+            "id": "event_001",
+            "type": "joined",
+            "message": "HOST JOINED",
+            "createdAt": 999000,
+            "actorPlayerId": "player_host"
+          }
+        ]
+      }
+    },
+    {
+      "id": "g2.snapshot.lobby-two-ready",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 1010000,
+        "match": {
+          "id": "match_g2_001",
+          "code": "VKZ001",
+          "phase": "lobby",
+          "durationMs": 180000
+        },
+        "localPlayerId": "player_host",
+        "players": [
+          {
+            "id": "player_host",
+            "displayName": "HOST",
+            "role": "host",
+            "ready": true,
+            "connected": true,
+            "health": 100,
+            "ammo": 8
+          },
+          {
+            "id": "player_guest",
+            "displayName": "GUEST",
+            "role": "guest",
+            "ready": true,
+            "connected": true,
+            "health": 100,
+            "ammo": 8
+          }
+        ],
+        "events": [
+          {
+            "id": "event_004",
+            "type": "ready",
+            "message": "GUEST READY",
+            "createdAt": 1009000,
+            "actorPlayerId": "player_guest"
+          },
+          {
+            "id": "event_003",
+            "type": "ready",
+            "message": "HOST READY",
+            "createdAt": 1008000,
+            "actorPlayerId": "player_host"
+          },
+          {
+            "id": "event_002",
+            "type": "joined",
+            "message": "GUEST JOINED",
+            "createdAt": 1007000,
+            "actorPlayerId": "player_guest"
+          },
+          {
+            "id": "event_001",
+            "type": "joined",
+            "message": "HOST JOINED",
+            "createdAt": 999000,
+            "actorPlayerId": "player_host"
+          }
+        ]
+      }
+    },
+    {
+      "id": "g2.snapshot.countdown",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 1020000,
+        "match": {
+          "id": "match_g2_001",
+          "code": "VKZ001",
+          "phase": "countdown",
+          "durationMs": 180000,
+          "startsAt": 1023000
+        },
+        "localPlayerId": "player_host",
+        "players": [
+          {
+            "id": "player_host",
+            "displayName": "HOST",
+            "role": "host",
+            "ready": true,
+            "connected": true,
+            "health": 100,
+            "ammo": 8
+          },
+          {
+            "id": "player_guest",
+            "displayName": "GUEST",
+            "role": "guest",
+            "ready": true,
+            "connected": true,
+            "health": 100,
+            "ammo": 8
+          }
+        ],
+        "events": [
+          {
+            "id": "event_004",
+            "type": "ready",
+            "message": "GUEST READY",
+            "createdAt": 1009000,
+            "actorPlayerId": "player_guest"
+          },
+          {
+            "id": "event_003",
+            "type": "ready",
+            "message": "HOST READY",
+            "createdAt": 1008000,
+            "actorPlayerId": "player_host"
+          }
+        ]
+      }
+    },
+    {
+      "id": "g2.snapshot.running",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 1023000,
+        "match": {
+          "id": "match_g2_001",
+          "code": "VKZ001",
+          "phase": "running",
+          "durationMs": 180000,
+          "startsAt": 1023000,
+          "endsAt": 1203000
+        },
+        "localPlayerId": "player_host",
+        "players": [
+          {
+            "id": "player_host",
+            "displayName": "HOST",
+            "role": "host",
+            "ready": true,
+            "connected": true,
+            "health": 100,
+            "ammo": 8
+          },
+          {
+            "id": "player_guest",
+            "displayName": "GUEST",
+            "role": "guest",
+            "ready": true,
+            "connected": true,
+            "health": 100,
+            "ammo": 8
+          }
+        ],
+        "events": [
+          {
+            "id": "event_005",
+            "type": "started",
+            "message": "DUEL STARTED",
+            "createdAt": 1023000,
+            "actorPlayerId": "player_host"
+          },
+          {
+            "id": "event_004",
+            "type": "ready",
+            "message": "GUEST READY",
+            "createdAt": 1009000,
+            "actorPlayerId": "player_guest"
+          }
+        ]
+      }
+    },
+    {
+      "id": "g2.snapshot.after-debug-hit",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 1024000,
+        "match": {
+          "id": "match_g2_001",
+          "code": "VKZ001",
+          "phase": "running",
+          "durationMs": 180000,
+          "startsAt": 1023000,
+          "endsAt": 1203000
+        },
+        "localPlayerId": "player_host",
+        "players": [
+          {
+            "id": "player_host",
+            "displayName": "HOST",
+            "role": "host",
+            "ready": true,
+            "connected": true,
+            "health": 100,
+            "ammo": 7
+          },
+          {
+            "id": "player_guest",
+            "displayName": "GUEST",
+            "role": "guest",
+            "ready": true,
+            "connected": true,
+            "health": 66,
+            "ammo": 8
+          }
+        ],
+        "events": [
+          {
+            "id": "event_006",
+            "type": "hit",
+            "message": "HOST HIT GUEST • TORSO −34",
+            "createdAt": 1023900,
+            "actorPlayerId": "player_host",
+            "targetPlayerId": "player_guest",
+            "zone": "torso",
+            "damage": 34
+          },
+          {
+            "id": "event_005",
+            "type": "started",
+            "message": "DUEL STARTED",
+            "createdAt": 1023000,
+            "actorPlayerId": "player_host"
+          }
+        ]
+      }
+    },
+    {
+      "id": "g2.snapshot.finished",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 1203000,
+        "match": {
+          "id": "match_g2_001",
+          "code": "VKZ001",
+          "phase": "finished",
+          "durationMs": 180000,
+          "startsAt": 1023000,
+          "endsAt": 1203000
+        },
+        "localPlayerId": "player_host",
+        "players": [
+          {
+            "id": "player_host",
+            "displayName": "HOST",
+            "role": "host",
+            "ready": true,
+            "connected": true,
+            "health": 100,
+            "ammo": 7
+          },
+          {
+            "id": "player_guest",
+            "displayName": "GUEST",
+            "role": "guest",
+            "ready": true,
+            "connected": true,
+            "health": 66,
+            "ammo": 8
+          }
+        ],
+        "events": [
+          {
+            "id": "event_006",
+            "type": "hit",
+            "message": "HOST HIT GUEST • TORSO −34",
+            "createdAt": 1023900,
+            "actorPlayerId": "player_host",
+            "targetPlayerId": "player_guest",
+            "zone": "torso",
+            "damage": 34
+          }
+        ]
+      }
+    }
+  ],
+  "mutationResults": [
+    {
+      "id": "g2.debug-fire.accepted",
+      "wireName": "shots:debugFire",
+      "payload": {
+        "accepted": true,
+        "outcome": "hit",
+        "clientShotId": "shot_g2_001",
+        "replayed": false,
+        "damage": 34,
+        "shooterAmmo": 7,
+        "targetHealth": 66,
+        "eventId": "event_006"
+      }
+    },
+    {
+      "id": "g2.debug-fire.rejected",
+      "wireName": "shots:debugFire",
+      "payload": {
+        "accepted": false,
+        "outcome": "rejected",
+        "clientShotId": "shot_g2_002",
+        "replayed": false,
+        "damage": 0,
+        "shooterAmmo": 8,
+        "targetHealth": 100,
+        "rejectReason": "MATCH_NOT_RUNNING"
+      }
+    },
+    {
+      "id": "g2.debug-fire.replayed",
+      "wireName": "shots:debugFire",
+      "payload": {
+        "accepted": true,
+        "outcome": "hit",
+        "clientShotId": "shot_g2_001",
+        "replayed": true,
+        "damage": 34,
+        "shooterAmmo": 7,
+        "targetHealth": 66,
+        "eventId": "event_006"
+      }
+    }
+  ],
+  "connectionScenarios": [
+    {
+      "id": "g2.connection.stale-and-restored",
+      "wireName": "local:connection",
+      "payload": {
+        "steps": [
+          {
+            "event": "freshSnapshot",
+            "snapshotId": "g2.snapshot.running",
+            "transport": "connected",
+            "mutationsLocked": false
+          },
+          {
+            "event": "transportChanged",
+            "transport": "connecting",
+            "mutationsLocked": true
+          },
+          {
+            "event": "transportChanged",
+            "transport": "connected",
+            "mutationsLocked": true
+          },
+          {
+            "event": "freshSnapshot",
+            "snapshotId": "g2.snapshot.after-debug-hit",
+            "transport": "connected",
+            "mutationsLocked": false,
+            "deduplicateEventIds": true
+          }
+        ]
+      }
+    }
+  ],
+  "errors": [
+    {"id": "g2.error.invalid-display-name", "wireName": "error:ConvexError", "payload": {"code": "INVALID_DISPLAY_NAME"}},
+    {"id": "g2.error.invalid-code", "wireName": "error:ConvexError", "payload": {"code": "INVALID_CODE"}},
+    {"id": "g2.error.match-not-found", "wireName": "error:ConvexError", "payload": {"code": "MATCH_NOT_FOUND"}},
+    {"id": "g2.error.match-full", "wireName": "error:ConvexError", "payload": {"code": "MATCH_FULL"}},
+    {"id": "g2.error.match-already-started", "wireName": "error:ConvexError", "payload": {"code": "MATCH_ALREADY_STARTED"}},
+    {"id": "g2.error.invalid-session", "wireName": "error:ConvexError", "payload": {"code": "INVALID_SESSION"}},
+    {"id": "g2.error.players-not-ready", "wireName": "error:ConvexError", "payload": {"code": "PLAYERS_NOT_READY"}},
+    {"id": "g2.error.players-not-connected", "wireName": "error:ConvexError", "payload": {"code": "PLAYERS_NOT_CONNECTED"}},
+    {"id": "g2.error.host-only", "wireName": "error:ConvexError", "payload": {"code": "HOST_ONLY"}},
+    {"id": "g2.error.match-not-running", "wireName": "error:ConvexError", "payload": {"code": "MATCH_NOT_RUNNING"}},
+    {"id": "g2.error.connection-stale", "wireName": "error:ConvexError", "payload": {"code": "CONNECTION_STALE"}}
+  ]
+}
