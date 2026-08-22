@@ -3,6 +3,30 @@ import XCTest
 @testable import VictoriaKillZone
 
 final class ActiveDuelViewStateTests: XCTestCase {
+  func testManualFireRemainsAvailableWithoutAStableTarget() {
+    let state = ManualFireControlState(
+      duelIsRunning: true,
+      localIsHost: true,
+      storeCanDebugFire: true
+    )
+
+    XCTAssertTrue(state.isVisible)
+    XCTAssertTrue(state.isEnabled)
+  }
+
+  func testManualFireIsHiddenForGuestAndDisabledWhileShotIsPending() {
+    XCTAssertFalse(ManualFireControlState(
+      duelIsRunning: true,
+      localIsHost: false,
+      storeCanDebugFire: true
+    ).isVisible)
+    XCTAssertFalse(ManualFireControlState(
+      duelIsRunning: true,
+      localIsHost: true,
+      storeCanDebugFire: false
+    ).isEnabled)
+  }
+
   func testVoiceEligibilityRequiresEverySafetyGate() {
     let eligible = VoiceFireEligibility(
       duelIsRunning: true,

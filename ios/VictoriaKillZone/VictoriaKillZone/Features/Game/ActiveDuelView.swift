@@ -17,6 +17,20 @@ struct VoiceFireEligibility: Equatable, Sendable {
   }
 }
 
+struct ManualFireControlState: Equatable, Sendable {
+  let duelIsRunning: Bool
+  let localIsHost: Bool
+  let storeCanDebugFire: Bool
+
+  var isVisible: Bool {
+    duelIsRunning && localIsHost
+  }
+
+  var isEnabled: Bool {
+    isVisible && storeCanDebugFire
+  }
+}
+
 struct LaserPoint: Equatable, Sendable {
   let x: Double
   let y: Double
@@ -266,14 +280,37 @@ struct ActiveDuelView: View {
       .background(.black.opacity(0.65), in: Capsule())
   }
 
+  @ViewBuilder
   private var crosshair: some View {
+    if manualFireControlState.isVisible {
+      Button(action: performManualFire) {
+        VStack(spacing: 8) {
+          crosshairShape
+          Text(manualFireControlState.isEnabled ? "FIRE" : debugButtonLabel)
+            .font(.caption.weight(.bold).monospaced())
+        }
+        .foregroundStyle(.white)
+        .frame(width: 112, height: 112)
+        .background(.black.opacity(0.58), in: Circle())
+        .overlay(Circle().stroke(VKZPalette.telemetry, lineWidth: 3))
+      }
+      .buttonStyle(.plain)
+      .disabled(!manualFireControlState.isEnabled)
+      .opacity(manualFireControlState.isEnabled ? 1 : 0.58)
+      .accessibilityLabel("Fire test shot")
+    } else {
+      crosshairShape.accessibilityHidden(true)
+    }
+  }
+
+  private var crosshairShape: some View {
     ZStack {
       Circle().stroke(.white.opacity(0.9), lineWidth: 2).frame(width: 34, height: 34)
       Rectangle().fill(.white).frame(width: 2, height: 48)
       Rectangle().fill(.white).frame(width: 48, height: 2)
     }
+    .frame(width: 52, height: 52)
     .shadow(color: .cyan, radius: 5)
-    .accessibilityHidden(true)
   }
 
   @ViewBuilder
@@ -282,9 +319,9 @@ struct ActiveDuelView: View {
     case .countdown:
       Text("DUEL STARTS IN").font(.headline.monospaced()).foregroundStyle(VKZPalette.pending)
     case .running where duel.localRole == .host:
-      Button(debugButtonLabel) { store.debugFire() }
+      Button(debugButtonLabel, action: performManualFire)
         .buttonStyle(VKZPrimaryButtonStyle())
-        .disabled(!store.canDebugFire)
+        .disabled(!manualFireControlState.isEnabled)
         .accessibilityLabel("Debug fire, torso test, 34 damage")
     case .running:
       Text("AWAITING TEST SHOT").font(.headline.monospaced()).foregroundStyle(VKZPalette.textMuted)
@@ -399,6 +436,14 @@ struct ActiveDuelView: View {
     .accessibilityHidden(true)
   }
 
+  private var manualFireControlState: ManualFireControlState {
+    ManualFireControlState(
+      duelIsRunning: duel.phase == .running,
+      localIsHost: duel.localRole == .host,
+      storeCanDebugFire: store.canDebugFire
+    )
+  }
+
   private var voiceEligibility: VoiceFireEligibility {
     VoiceFireEligibility(
       duelIsRunning: duel.phase == .running,
@@ -411,6 +456,14 @@ struct ActiveDuelView: View {
 
   private func refreshVoiceEligibility() {
     voiceFire.setFireEligible(voiceEligibility.isEligible)
+  }
+
+  private func performManualFire() {
+    guard manualFireControlState.isEnabled else { return }
+    effects.triggerOutgoing(target: outlinedTargetPoint ?? LaserPoint(x: 0.5, y: 0.5), at: Date())
+    feedback.playOutgoing()
+    store.debugFire()
+    refreshVoiceEligibility()
   }
 
   private func performVoiceFire() {
