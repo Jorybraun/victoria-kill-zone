@@ -113,7 +113,7 @@ describe("matches:create", () => {
     }
   });
 
-  it("rejects a non-finite radius instead of coercing it to a playable arena", async () => {
+  it("rejects a non-finite radius with the stable code and writes nothing", async () => {
     const t = testBackend();
 
     for (const arenaRadiusMeters of [
@@ -121,12 +121,29 @@ describe("matches:create", () => {
       Number.POSITIVE_INFINITY,
       Number.NEGATIVE_INFINITY,
     ]) {
-      await expect(
-        t.mutation(api.matches.create, { displayName: "Host", arenaRadiusMeters }),
-      ).rejects.toThrow(/finite/);
+      const rejection = t.mutation(api.matches.create, {
+        displayName: "Host",
+        arenaRadiusMeters,
+      });
+
+      await expect(rejection).rejects.toThrow(/INVALID_ARENA_RADIUS/);
+      // The public error data is the bare code: the rejected value and the
+      // internal validation text never cross the wire.
+      await expect(rejection).rejects.toMatchObject({
+        data: { code: "INVALID_ARENA_RADIUS" },
+      });
+      await expect(rejection).rejects.not.toThrow(String(arenaRadiusMeters));
     }
 
-    expect(await t.run((ctx) => ctx.db.query("matches").collect())).toEqual([]);
+    // No match, player, event, or scheduled job exists for a rejected create.
+    const stored = await t.run(async (ctx) => ({
+      matches: await ctx.db.query("matches").collect(),
+      players: await ctx.db.query("players").collect(),
+      events: await ctx.db.query("events").collect(),
+      jobs: await ctx.db.system.query("_scheduled_functions").collect(),
+    }));
+
+    expect(stored).toEqual({ matches: [], players: [], events: [], jobs: [] });
   });
 
   it("rejects a blank or overlong display name through the validator path", async () => {

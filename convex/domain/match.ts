@@ -1,5 +1,4 @@
 import {
-  ARENA_RADIUS_DEFAULT_METERS,
   ARENA_RADIUS_MAX_METERS,
   ARENA_RADIUS_MIN_METERS,
   COUNTDOWN_MS,
@@ -127,17 +126,16 @@ export function isFiniteArenaRadius(meters: number): boolean {
  * Round to the nearest whole metre and clamp to the playable range.
  *
  * Only finite input has a meaning to round, so a non-finite request is rejected
- * as malformed rather than coerced into a playable arena the caller never asked
- * for. Callers guard with {@link isFiniteArenaRadius} first.
+ * rather than coerced into a playable arena the caller never asked for: a duel
+ * fought inside a silently invented geofence is worse than a failed create.
  */
-export function normalizeArenaRadius(meters: number): number {
+export function normalizeArenaRadius(meters: number): DomainResult<number> {
   if (!isFiniteArenaRadius(meters)) {
-    return ARENA_RADIUS_DEFAULT_METERS;
+    return rejected("INVALID_ARENA_RADIUS");
   }
 
-  return Math.min(
-    ARENA_RADIUS_MAX_METERS,
-    Math.max(ARENA_RADIUS_MIN_METERS, Math.round(meters)),
+  return ok(
+    Math.min(ARENA_RADIUS_MAX_METERS, Math.max(ARENA_RADIUS_MIN_METERS, Math.round(meters))),
   );
 }
 
@@ -179,11 +177,16 @@ export function planCreateMatch(request: {
     return rejected("INVALID_DISPLAY_NAME");
   }
 
+  const arenaRadiusMeters = normalizeArenaRadius(request.arenaRadiusMeters);
+  if (!arenaRadiusMeters.ok) {
+    return rejected(arenaRadiusMeters.code);
+  }
+
   return ok({
     match: {
       code: request.code,
       phase: "lobby",
-      arenaRadiusMeters: normalizeArenaRadius(request.arenaRadiusMeters),
+      arenaRadiusMeters: arenaRadiusMeters.value,
       durationMs: MATCH_DURATION_MS,
       createdAt: request.now,
     },

@@ -98,17 +98,21 @@ describe("duel codes", () => {
 
 describe("arena radius", () => {
   it("rounds and clamps to the playable range", () => {
-    expect(normalizeArenaRadius(5)).toBe(ARENA_RADIUS_MIN_METERS);
-    expect(normalizeArenaRadius(500)).toBe(ARENA_RADIUS_MAX_METERS);
-    expect(normalizeArenaRadius(30.4)).toBe(30);
-    expect(normalizeArenaRadius(30.5)).toBe(31);
+    expect(normalizeArenaRadius(5)).toEqual({ ok: true, value: ARENA_RADIUS_MIN_METERS });
+    expect(normalizeArenaRadius(500)).toEqual({ ok: true, value: ARENA_RADIUS_MAX_METERS });
+    expect(normalizeArenaRadius(30.4)).toEqual({ ok: true, value: 30 });
+    expect(normalizeArenaRadius(30.5)).toEqual({ ok: true, value: 31 });
   });
 
-  it("treats a non-finite radius as malformed rather than a playable arena", () => {
+  it("rejects a non-finite radius instead of defaulting it", () => {
     expect(isFiniteArenaRadius(ARENA_RADIUS_DEFAULT_METERS)).toBe(true);
-    expect(isFiniteArenaRadius(Number.NaN)).toBe(false);
-    expect(isFiniteArenaRadius(Number.POSITIVE_INFINITY)).toBe(false);
-    expect(isFiniteArenaRadius(Number.NEGATIVE_INFINITY)).toBe(false);
+    for (const meters of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(isFiniteArenaRadius(meters)).toBe(false);
+      // A defaulted radius would silently invent a geofence the caller never
+      // asked for, so the rejection carries the stable code instead.
+      expect(normalizeArenaRadius(meters)).toEqual({ ok: false, code: "INVALID_ARENA_RADIUS" });
+      expect(create("Vic", meters)).toEqual({ ok: false, code: "INVALID_ARENA_RADIUS" });
+    }
   });
 });
 

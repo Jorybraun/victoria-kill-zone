@@ -180,6 +180,7 @@ describe("g2.v1 enums", () => {
       unionCases<ErrorCode>({
         INVALID_DISPLAY_NAME: true,
         INVALID_CODE: true,
+        INVALID_ARENA_RADIUS: true,
         MATCH_NOT_FOUND: true,
         MATCH_FULL: true,
         MATCH_ALREADY_STARTED: true,
@@ -191,6 +192,17 @@ describe("g2.v1 enums", () => {
         CONNECTION_STALE: true,
       }),
     );
+  });
+
+  it("throws g2.error.invalid-arena-radius exactly as the fixture declares it", async () => {
+    const t = testBackend();
+    const fixture = fixtureCase(fixtures.errors, "g2.error.invalid-arena-radius");
+
+    await expect(
+      t.mutation(api.matches.create, { displayName: "HOST", arenaRadiusMeters: Number.NaN }),
+    ).rejects.toMatchObject({ data: fixture.payload });
+
+    expect(await t.run((ctx) => ctx.db.query("matches").collect())).toEqual([]);
   });
 
   it("declares every error as a bare stable code, with no raw message", () => {

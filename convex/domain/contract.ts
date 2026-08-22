@@ -48,6 +48,7 @@ export type HitZone = "torso";
 export type ErrorCode =
   | "INVALID_DISPLAY_NAME"
   | "INVALID_CODE"
+  | "INVALID_ARENA_RADIUS"
   | "MATCH_NOT_FOUND"
   | "MATCH_FULL"
   | "MATCH_ALREADY_STARTED"

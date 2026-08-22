@@ -48,11 +48,11 @@ export const create = mutation({
   args: { displayName: v.string(), arenaRadiusMeters: v.number() },
   handler: async (ctx, args): Promise<PlayerSession> => {
     const now = Date.now();
-    // A non-finite radius is malformed shape rather than a rejected game rule,
-    // so it fails like any other argument-validator violation: the frozen G2
-    // error enum has no code for it and inventing one would widen the wire.
+    // Checked before the code is even allocated: the sanitized error carries
+    // only the frozen code, never the rejected value, and no match, player, or
+    // event exists for a duel whose arena was never a measurement.
     if (!isFiniteArenaRadius(args.arenaRadiusMeters)) {
-      throw new Error("arenaRadiusMeters must be a finite number");
+      fail("INVALID_ARENA_RADIUS");
     }
 
     const plan = planCreateMatch({
