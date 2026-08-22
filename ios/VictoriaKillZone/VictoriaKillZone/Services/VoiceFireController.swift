@@ -149,7 +149,6 @@ final class VoiceFireController: ObservableObject {
 
   private var isViewVisible = false
   private var isSceneActive = false
-  private var isFireEligible = false
   private var permissionsReady = false
   private var authorizationGeneration: UInt64 = 0
   private var recognitionGeneration: UInt64 = 0
@@ -204,11 +203,6 @@ final class VoiceFireController: ObservableObject {
 
   func setSceneActive(_ isActive: Bool) {
     isSceneActive = isActive
-    refreshListeningState()
-  }
-
-  func setFireEligible(_ isEligible: Bool) {
-    isFireEligible = isEligible
     refreshListeningState()
   }
 
@@ -281,7 +275,7 @@ final class VoiceFireController: ObservableObject {
       return
     }
     guard permissionsReady else { return }
-    guard isViewVisible, isSceneActive, isFireEligible else {
+    guard isViewVisible, isSceneActive else {
       stopListening()
       status = .enabled
       return
@@ -366,7 +360,7 @@ final class VoiceFireController: ObservableObject {
     didFail: Bool,
     generation: UInt64
   ) {
-    guard generation == recognitionGeneration, isEnabled, isFireEligible else { return }
+    guard generation == recognitionGeneration, isEnabled else { return }
 
     if let transcript,
       phraseGate.shouldFire(

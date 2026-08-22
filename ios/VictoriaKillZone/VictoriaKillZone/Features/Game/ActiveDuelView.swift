@@ -66,7 +66,6 @@ struct ActiveDuelView: View {
     .onAppear {
       voiceFire.setViewVisible(true)
       voiceFire.setSceneActive(scenePhase == .active)
-      refreshVoiceEligibility()
     }
     .task {
       await store.startTargeting()
@@ -78,9 +77,6 @@ struct ActiveDuelView: View {
     }
     .onChange(of: scenePhase) { phase in
       voiceFire.setSceneActive(phase == .active)
-    }
-    .onChange(of: duel.phase) { _ in
-      refreshVoiceEligibility()
     }
     .onChange(of: voiceFire.fireRequestSequence) { _ in
       fireShot()
@@ -265,10 +261,6 @@ struct ActiveDuelView: View {
     .padding(12)
     .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 12))
     .accessibilityLabel("Voice Fire")
-  }
-
-  private func refreshVoiceEligibility() {
-    voiceFire.setFireEligible(duel.phase == .running)
   }
 
   private func fireShot() {

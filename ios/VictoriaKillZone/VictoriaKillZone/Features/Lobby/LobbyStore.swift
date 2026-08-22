@@ -57,6 +57,7 @@ final class LobbyStore: ObservableObject {
   private var pendingMarkerlessRequest: FireShotRequest?
   private var actionTask: Task<Void, Never>?
   private var snapshotTask: Task<Void, Never>?
+  private var snapshotRetryTask: Task<Void, Never>?
   private var connectionTask: Task<Void, Never>?
   private var recoveryTask: Task<Void, Never>?
   private var targetingTask: Task<Void, Never>?
@@ -83,6 +84,7 @@ final class LobbyStore: ObservableObject {
   deinit {
     actionTask?.cancel()
     snapshotTask?.cancel()
+    snapshotRetryTask?.cancel()
     connectionTask?.cancel()
     recoveryTask?.cancel()
     targetingTask?.cancel()
@@ -260,6 +262,7 @@ final class LobbyStore: ObservableObject {
   func leave() {
     actionTask?.cancel()
     snapshotTask?.cancel()
+    snapshotRetryTask?.cancel()
     recoveryTask?.cancel()
     targetingTask?.cancel()
     targetingTask = nil
@@ -524,6 +527,7 @@ final class LobbyStore: ObservableObject {
 
   private func beginSession(_ newSession: PlayerSession) {
     snapshotTask?.cancel()
+    snapshotRetryTask?.cancel()
     recoveryTask?.cancel()
     session = newSession
     latestSnapshot = nil
@@ -535,16 +539,20 @@ final class LobbyStore: ObservableObject {
     markerlessShotState = .idle
     syncStatus = .connecting
 
+    startSnapshotSubscription(for: newSession)
+  }
+
+  private func startSnapshotSubscription(for expectedSession: PlayerSession) {
     let client = environment.gameSessionClient
     snapshotTask = Task { [weak self] in
       do {
-        for try await snapshot in client.snapshots(for: newSession) {
+        for try await snapshot in client.snapshots(for: expectedSession) {
           guard !Task.isCancelled else { return }
-          self?.receive(snapshot, for: newSession)
+          self?.receive(snapshot, for: expectedSession)
         }
       } catch {
         guard !Task.isCancelled else { return }
-        self?.subscriptionFailed(error, for: newSession)
+        self?.subscriptionFailed(error, for: expectedSession)
       }
     }
   }
@@ -567,6 +575,8 @@ final class LobbyStore: ObservableObject {
 
     let receivedAt = now()
     let wasStale = syncStatus == .stale
+    snapshotRetryTask?.cancel()
+    snapshotRetryTask = nil
     latestSnapshot = snapshot
     lastSyncAt = receivedAt
     route = Self.route(for: snapshot, receivedAt: receivedAt)
@@ -595,6 +605,15 @@ final class LobbyStore: ObservableObject {
       present(error)
     } else {
       syncStatus = .stale
+    }
+    snapshotRetryTask?.cancel()
+    snapshotRetryTask = Task { [weak self] in
+      try? await Task.sleep(for: .seconds(1))
+      guard !Task.isCancelled, let self, self.session == expectedSession else {
+        return
+      }
+      self.snapshotRetryTask = nil
+      self.startSnapshotSubscription(for: expectedSession)
     }
   }
 
