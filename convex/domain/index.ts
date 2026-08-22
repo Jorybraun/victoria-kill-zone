@@ -2,6 +2,7 @@ export * from "./config.js";
 export * from "./fire.js";
 export * from "./lifecycle.js";
 export * from "./match.js";
+export * from "./respawn.js";
 export * from "./result.js";
 export * from "./session.js";
 export * from "./snapshot.js";

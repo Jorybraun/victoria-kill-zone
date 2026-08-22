@@ -1,6 +1,7 @@
 import { ConvexError } from "convex/values";
+import { normalizeMatchCode } from "../../domain/config.js";
 import { authenticates } from "../../domain/session.js";
-import type { MatchState, PlayerState, RejectReason } from "../../domain/types.js";
+import type { MatchPhase, MatchState, PlayerState, RejectReason } from "../../domain/types.js";
 import type { Doc, Id, MutationCtx, QueryCtx } from "./server.js";
 
 /**
@@ -12,8 +13,10 @@ export function toPlayerState(player: Doc<"players">): PlayerState {
     id: player._id,
     displayName: player.displayName,
     role: player.role,
+    ready: player.ready ?? false,
     connected: player.connected,
     lifeState: player.lifeState,
+    arenaState: player.arenaState ?? "inside",
     health: player.health,
     ammo: player.ammo,
     kills: player.kills,
@@ -32,29 +35,82 @@ export function toPlayerState(player: Doc<"players">): PlayerState {
 export function toMatchState(match: Doc<"matches">): MatchState {
   return {
     status: match.status,
+    phase: match.phase ?? phaseFromLegacyStatus(match.status),
     hostPlayerId: match.hostPlayerId,
     radiusMeters: match.radiusMeters,
     durationMs: match.durationMs,
-    startedAt: match.startedAt,
+    startsAt: match.startsAt ?? match.startedAt,
     endsAt: match.endsAt,
     winnerPlayerId: match.winnerPlayerId,
     endReason: match.endReason,
   };
 }
 
-/** Domain rejections surface as `ConvexError` with the stable reason string. */
-export function fail(reason: RejectReason): never {
-  throw new ConvexError(reason satisfies RejectReason);
+export type BackendErrorCode =
+  | "INVALID_DISPLAY_NAME"
+  | "INVALID_CODE"
+  | "MATCH_NOT_FOUND"
+  | "MATCH_FULL"
+  | "MATCH_ALREADY_STARTED"
+  | "INVALID_SESSION"
+  | "PLAYERS_NOT_READY"
+  | "PLAYERS_NOT_CONNECTED"
+  | "HOST_ONLY"
+  | "MATCH_NOT_RUNNING"
+  | "CONNECTION_STALE"
+  | "SHOOTER_NOT_ALIVE"
+  | "OUT_OF_AMMO"
+  | "FIRE_COOLDOWN"
+  | "INVALID_TARGET"
+  | "TARGET_NOT_ALIVE"
+  | "IDEMPOTENCY_CONFLICT";
+
+const ERROR_BY_REJECT_REASON: Record<RejectReason, BackendErrorCode> = {
+  match_not_found: "MATCH_NOT_FOUND",
+  match_not_active: "MATCH_NOT_RUNNING",
+  match_expired: "MATCH_NOT_RUNNING",
+  match_full: "MATCH_FULL",
+  match_already_started: "MATCH_ALREADY_STARTED",
+  not_a_member: "INVALID_SESSION",
+  not_host: "HOST_ONLY",
+  opponent_missing: "PLAYERS_NOT_CONNECTED",
+  players_not_ready: "PLAYERS_NOT_READY",
+  players_not_connected: "PLAYERS_NOT_CONNECTED",
+  invalid_session: "INVALID_SESSION",
+  shooter_not_alive: "SHOOTER_NOT_ALIVE",
+  shooter_disconnected: "CONNECTION_STALE",
+  out_of_ammo: "OUT_OF_AMMO",
+  cooldown_active: "FIRE_COOLDOWN",
+  invalid_target: "INVALID_TARGET",
+  target_not_alive: "TARGET_NOT_ALIVE",
+  duplicate_shot: "IDEMPOTENCY_CONFLICT",
+};
+
+/** Thrown contract errors always carry the accepted `{ code }` payload. */
+export function fail(reason: BackendErrorCode | RejectReason): never {
+  const code = reason in ERROR_BY_REJECT_REASON ? ERROR_BY_REJECT_REASON[reason as RejectReason] : reason;
+  throw new ConvexError({ code });
+}
+
+export function errorCodeForRejectReason(reason: RejectReason): BackendErrorCode {
+  return ERROR_BY_REJECT_REASON[reason];
 }
 
 export async function listPlayers(
   ctx: MutationCtx | QueryCtx,
   matchId: Id<"matches">,
 ): Promise<Doc<"players">[]> {
-  return await ctx.db
+  const players = await ctx.db
     .query("players")
     .withIndex("by_match", (q) => q.eq("matchId", matchId))
     .collect();
+
+  return players.sort(
+    (left, right) =>
+      Number(left.role === "guest") - Number(right.role === "guest") ||
+      left.joinedAt - right.joinedAt ||
+      String(left._id).localeCompare(String(right._id)),
+  );
 }
 
 /**
@@ -63,7 +119,7 @@ export async function listPlayers(
  * player's secret therefore cannot control the opponent.
  */
 export async function authenticatePlayer(
-  ctx: MutationCtx,
+  ctx: MutationCtx | QueryCtx,
   matchId: Id<"matches">,
   playerId: Id<"players">,
   sessionSecret: string,
@@ -84,8 +140,32 @@ export async function loadMatchByCode(
   ctx: MutationCtx | QueryCtx,
   code: string,
 ): Promise<Doc<"matches"> | null> {
+  const normalized = normalizeMatchCode(code);
+  if (normalized === null) {
+    return null;
+  }
+
   return await ctx.db
     .query("matches")
-    .withIndex("by_code", (q) => q.eq("code", code.trim().toUpperCase()))
+    .withIndex("by_code", (q) => q.eq("code", normalized))
     .unique();
+}
+
+export async function appendEvent(
+  ctx: MutationCtx,
+  event: Omit<Doc<"events">, "_id" | "_creationTime">,
+): Promise<Id<"events">> {
+  return await ctx.db.insert("events", event);
+}
+
+function phaseFromLegacyStatus(status: MatchState["status"]): MatchPhase {
+  switch (status) {
+    case "setup":
+    case "waiting":
+      return "lobby";
+    case "active":
+      return "running";
+    case "ended":
+      return "finished";
+  }
 }

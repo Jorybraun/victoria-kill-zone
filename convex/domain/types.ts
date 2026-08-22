@@ -27,6 +27,8 @@ export type PlayerRole = "host" | "guest";
 
 export type PlayerLifeState = "alive" | "dead" | "respawning" | "disconnected";
 
+export type ArenaState = "inside" | "warning" | "uncertain" | "outside";
+
 export type HitZone = "head" | "torso" | "limbs";
 
 export type ShotOutcome = "miss" | "hit" | "kill" | "rejected";
@@ -46,6 +48,8 @@ export type RejectReason =
   | "not_a_member"
   | "not_host"
   | "opponent_missing"
+  | "players_not_ready"
+  | "players_not_connected"
   | "invalid_session"
   | "shooter_not_alive"
   | "shooter_disconnected"
@@ -58,10 +62,11 @@ export type RejectReason =
 /** Server-owned match record fields the domain rules read. */
 export interface MatchState {
   status: MatchStatus;
+  phase: MatchPhase;
   hostPlayerId: string | null;
   radiusMeters: number;
   durationMs: number;
-  startedAt: number | null;
+  startsAt: number | null;
   endsAt: number | null;
   winnerPlayerId: string | null;
   endReason: EndReason | null;
@@ -72,8 +77,10 @@ export interface PlayerState {
   id: string;
   displayName: string;
   role: PlayerRole;
+  ready: boolean;
   connected: boolean;
   lifeState: PlayerLifeState;
+  arenaState: ArenaState;
   health: number;
   ammo: number;
   kills: number;

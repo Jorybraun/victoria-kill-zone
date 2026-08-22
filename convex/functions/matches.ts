@@ -1,222 +1,339 @@
 import { randomBytes } from "@noble/hashes/utils.js";
+import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
-import { GAMEPLAY } from "../domain/config.js";
-import { matchCodeFromBytes, planCreateMatch, planJoinMatch, planStartMatch } from "../domain/match.js";
-import { digestsMatch } from "../domain/session.js";
-import { mutation, type Doc, type Id, type MutationCtx } from "./lib/server.js";
-import { authenticatePlayer, fail, listPlayers, loadMatchByCode, toPlayerState } from "./lib/state.js";
+import {
+  GAMEPLAY,
+  isValidDisplayName,
+  normalizeMatchCode,
+} from "../domain/config.js";
+import {
+  matchCodeFromBytes,
+  planActivateMatch,
+  planCreateMatch,
+  planJoinMatch,
+  planStartMatch,
+} from "../domain/match.js";
+import { resolveWinner } from "../domain/lifecycle.js";
+import { hashSecret, sessionSecretFromBytes } from "../domain/session.js";
+import { internalMutation, mutation, type Id, type MutationCtx } from "./lib/server.js";
+import {
+  appendEvent,
+  authenticatePlayer,
+  fail,
+  listPlayers,
+  loadMatchByCode,
+  toMatchState,
+  toPlayerState,
+} from "./lib/state.js";
 
-const DIGEST_LENGTH = 64;
 const CODE_ATTEMPTS = 8;
 
-const digest = v.string();
+const playerSession = v.object({
+  matchId: v.id("matches"),
+  code: v.string(),
+  playerId: v.id("players"),
+  sessionSecret: v.string(),
+});
 
-/**
- * Create a duel and its host player atomically.
- *
- * The client generates a random match-scoped session secret and sends only its
- * SHA-256 digest; the raw secret never reaches the backend at creation time.
- */
-export const createMatch = mutation({
+const activateReference = makeFunctionReference<
+  "mutation",
+  { matchId: Id<"matches">; expectedStartsAt: number },
+  null
+>("matches:activate");
+
+const finishReference = makeFunctionReference<
+  "mutation",
+  { matchId: Id<"matches">; expectedEndsAt: number },
+  null
+>("matches:finish");
+
+/** Create the duel and issue the host capability exactly once. */
+export const create = mutation({
   args: {
     displayName: v.string(),
-    deviceIdHash: digest,
-    sessionHash: digest,
-    centerLatitude: v.number(),
-    centerLongitude: v.number(),
-    radiusMeters: v.optional(v.number()),
+    arenaRadiusMeters: v.number(),
   },
-  returns: v.object({
-    matchId: v.id("matches"),
-    playerId: v.id("players"),
-    code: v.string(),
-    status: v.literal("setup"),
-  }),
+  returns: playerSession,
   handler: async (ctx, args) => {
-    assertDigest(args.deviceIdHash);
-    assertDigest(args.sessionHash);
-
+    const displayName = displayNameOrFail(args.displayName);
     const now = Date.now();
     const code = await allocateMatchCode(ctx);
+    const sessionSecret = sessionSecretFromBytes(randomBytes(32));
     const plan = planCreateMatch(
       {
-        displayName: args.displayName,
-        centerLatitude: args.centerLatitude,
-        centerLongitude: args.centerLongitude,
-        ...(args.radiusMeters === undefined ? {} : { radiusMeters: args.radiusMeters }),
+        displayName,
+        // G2 has no center argument. Zero is an internal demo origin and is never
+        // exposed by the public spectator projection.
+        centerLatitude: 0,
+        centerLongitude: 0,
+        radiusMeters: args.arenaRadiusMeters,
         now,
       },
       code,
     );
 
-    const matchId = await ctx.db.insert("matches", { ...plan.match, hostPlayerId: null });
+    const matchId = await ctx.db.insert("matches", {
+      ...plan.match,
+      startedAt: null,
+      hostPlayerId: null,
+    });
     const playerId = await ctx.db.insert("players", {
       ...plan.host,
       matchId,
-      deviceIdHash: args.deviceIdHash,
-      sessionHash: args.sessionHash,
+      sessionHash: hashSecret(sessionSecret),
     });
     await ctx.db.patch(matchId, { hostPlayerId: playerId, updatedAt: now });
-    await appendEvent(ctx, matchId, {
+    await appendEvent(ctx, {
+      matchId,
       type: "joined",
       actorPlayerId: playerId,
-      message: `${plan.host.displayName} opened the arena`,
+      targetPlayerId: null,
+      zone: null,
+      damage: null,
+      message: `${displayName} JOINED`,
       createdAt: now,
     });
 
-    return { matchId, playerId, code, status: "setup" as const };
+    return { matchId, code, playerId, sessionSecret };
   },
 });
 
-/**
- * Join an open duel as the guest. The two-player limit and the
- * `setup -> waiting` transition are server-owned. Re-joining from the same
- * device with the same session digest returns the existing player instead of
- * creating a duplicate.
- */
-export const joinMatch = mutation({
+/** Join the only open slot and issue the guest capability exactly once. */
+export const join = mutation({
   args: {
-    code: v.string(),
     displayName: v.string(),
-    deviceIdHash: digest,
-    sessionHash: digest,
+    code: v.string(),
   },
-  returns: v.object({
-    matchId: v.id("matches"),
-    playerId: v.id("players"),
-    status: v.union(v.literal("setup"), v.literal("waiting")),
-  }),
+  returns: playerSession,
   handler: async (ctx, args) => {
-    assertDigest(args.deviceIdHash);
-    assertDigest(args.sessionHash);
+    const displayName = displayNameOrFail(args.displayName);
+    const normalizedCode = normalizeMatchCode(args.code);
+    if (normalizedCode === null) {
+      fail("INVALID_CODE");
+    }
 
-    const match = await loadMatchByCode(ctx, args.code);
+    const match = await loadMatchByCode(ctx, normalizedCode);
     if (match === null) {
-      fail("match_not_found");
+      fail("MATCH_NOT_FOUND");
+    }
+    if (toMatchState(match).phase !== "lobby") {
+      fail("MATCH_ALREADY_STARTED");
     }
 
     const now = Date.now();
     const players = await listPlayers(ctx, match._id);
-
-    const existing = players.find((player) => player.deviceIdHash === args.deviceIdHash);
-    if (existing !== undefined) {
-      if (!digestsMatch(existing.sessionHash, args.sessionHash)) {
-        fail("invalid_session");
-      }
-
-      await ctx.db.patch(existing._id, { connected: true, lastSeenAt: now });
-      return {
-        matchId: match._id,
-        playerId: existing._id,
-        status: match.status === "setup" ? ("setup" as const) : ("waiting" as const),
-      };
-    }
-
-    const plan = planJoinMatch(match, players.length, { displayName: args.displayName, now });
+    const plan = planJoinMatch(match, players.length, { displayName, now });
     if (!plan.ok) {
       fail(plan.reason);
     }
 
+    const sessionSecret = sessionSecretFromBytes(randomBytes(32));
     const playerId = await ctx.db.insert("players", {
       ...plan.value.guest,
       matchId: match._id,
-      deviceIdHash: args.deviceIdHash,
-      sessionHash: args.sessionHash,
+      sessionHash: hashSecret(sessionSecret),
     });
-    await ctx.db.patch(match._id, plan.value.matchPatch);
-    await appendEvent(ctx, match._id, {
+    await ctx.db.patch(match._id, {
+      ...plan.value.matchPatch,
+      phase: "lobby",
+    });
+    await appendEvent(ctx, {
+      matchId: match._id,
       type: "joined",
       actorPlayerId: playerId,
-      message: `${plan.value.guest.displayName} joined the duel`,
+      targetPlayerId: null,
+      zone: null,
+      damage: null,
+      message: `${displayName} JOINED`,
       createdAt: now,
     });
 
-    return { matchId: match._id, playerId, status: "waiting" as const };
+    return { matchId: match._id, code: match.code, playerId, sessionSecret };
   },
 });
 
-/**
- * Host-only start. Requires two connected players, resets server-owned health
- * and ammunition, and stamps the authoritative `startedAt`/`endsAt` window.
- */
-export const startMatch = mutation({
+export const setReady = mutation({
+  args: {
+    matchId: v.id("matches"),
+    playerId: v.id("players"),
+    sessionSecret: v.string(),
+    isReady: v.boolean(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const player = await authenticatePlayer(ctx, args.matchId, args.playerId, args.sessionSecret);
+    const match = await ctx.db.get(args.matchId);
+    if (match === null) {
+      fail("MATCH_NOT_FOUND");
+    }
+
+    const phase = toMatchState(match).phase;
+    if (phase !== "lobby") {
+      fail("MATCH_ALREADY_STARTED");
+    }
+
+    const now = Date.now();
+    if ((player.ready ?? false) !== args.isReady) {
+      await ctx.db.patch(player._id, {
+        ready: args.isReady,
+        connected: true,
+        lastSeenAt: now,
+      });
+      await appendEvent(ctx, {
+        matchId: match._id,
+        type: "ready",
+        actorPlayerId: player._id,
+        targetPlayerId: null,
+        zone: null,
+        damage: null,
+        message: `${player.displayName} ${args.isReady ? "READY" : "NOT READY"}`,
+        createdAt: now,
+      });
+    }
+
+    return null;
+  },
+});
+
+/** Host-only start enters countdown; a guarded job activates the duel. */
+export const start = mutation({
   args: {
     matchId: v.id("matches"),
     playerId: v.id("players"),
     sessionSecret: v.string(),
   },
-  returns: v.object({
-    status: v.literal("active"),
-    startedAt: v.number(),
-    endsAt: v.number(),
-  }),
+  returns: v.null(),
   handler: async (ctx, args) => {
     const requester = await authenticatePlayer(ctx, args.matchId, args.playerId, args.sessionSecret);
     const match = await ctx.db.get(args.matchId);
     if (match === null) {
-      fail("match_not_found");
+      fail("MATCH_NOT_FOUND");
     }
 
-    const now = Date.now();
     const players = await listPlayers(ctx, match._id);
-    const plan = planStartMatch(match, players.map(toPlayerState), requester._id, now);
+    const now = Date.now();
+    const plan = planStartMatch(
+      toMatchState(match),
+      players.map(toPlayerState),
+      requester._id,
+      now,
+    );
     if (!plan.ok) {
       fail(plan.reason);
     }
 
     await ctx.db.patch(match._id, plan.value.matchPatch);
-    for (const player of players) {
-      await ctx.db.patch(player._id, plan.value.playerResetPatch);
-    }
-    await appendEvent(ctx, match._id, {
-      type: "started",
-      actorPlayerId: requester._id,
-      message: `${requester.displayName} started the duel`,
-      createdAt: now,
+    await ctx.scheduler.runAt(plan.value.matchPatch.startsAt, activateReference, {
+      matchId: match._id,
+      expectedStartsAt: plan.value.matchPatch.startsAt,
     });
-
-    return {
-      status: "active" as const,
-      startedAt: now,
-      endsAt: now + match.durationMs,
-    };
+    return null;
   },
 });
 
-function assertDigest(value: string): void {
-  if (value.length !== DIGEST_LENGTH || !/^[0-9a-f]+$/.test(value)) {
-    fail("invalid_session");
+/** Guarded countdown activation. */
+export const activate = internalMutation({
+  args: {
+    matchId: v.id("matches"),
+    expectedStartsAt: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const match = await ctx.db.get(args.matchId);
+    if (match === null) {
+      return null;
+    }
+
+    const now = Date.now();
+    const plan = planActivateMatch(toMatchState(match), args.expectedStartsAt, now);
+    if (plan === null) {
+      return null;
+    }
+
+    const players = await listPlayers(ctx, match._id);
+    await ctx.db.patch(match._id, {
+      ...plan.matchPatch,
+      startedAt: args.expectedStartsAt,
+    });
+    for (const player of players) {
+      await ctx.db.patch(player._id, plan.playerResetPatch);
+    }
+    await appendEvent(ctx, {
+      matchId: match._id,
+      type: "started",
+      actorPlayerId: match.hostPlayerId,
+      targetPlayerId: null,
+      zone: null,
+      damage: null,
+      message: "DUEL STARTED",
+      createdAt: now,
+    });
+    await ctx.scheduler.runAt(plan.matchPatch.endsAt, finishReference, {
+      matchId: match._id,
+      expectedEndsAt: plan.matchPatch.endsAt,
+    });
+    return null;
+  },
+});
+
+/** Guarded duration finish and deterministic winner calculation. */
+export const finish = internalMutation({
+  args: {
+    matchId: v.id("matches"),
+    expectedEndsAt: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const match = await ctx.db.get(args.matchId);
+    if (match === null) {
+      return null;
+    }
+
+    const now = Date.now();
+    const state = toMatchState(match);
+    if (state.phase !== "running" || state.endsAt !== args.expectedEndsAt || now < args.expectedEndsAt) {
+      return null;
+    }
+
+    const players = await listPlayers(ctx, match._id);
+    const winnerPlayerId = resolveWinner(players.map(toPlayerState));
+    await ctx.db.patch(match._id, {
+      status: "ended",
+      phase: "finished",
+      winnerPlayerId: winnerPlayerId === null ? null : (winnerPlayerId as Id<"players">),
+      endReason: "duration_elapsed",
+      updatedAt: now,
+    });
+    const winner = players.find((player) => player._id === winnerPlayerId);
+    await appendEvent(ctx, {
+      matchId: match._id,
+      type: "finished",
+      actorPlayerId: winner?._id ?? null,
+      targetPlayerId: null,
+      zone: null,
+      damage: null,
+      message: winner === undefined ? "DUEL DRAW" : `${winner.displayName} WINS`,
+      createdAt: now,
+    });
+    return null;
+  },
+});
+
+function displayNameOrFail(value: string): string {
+  const trimmed = value.trim();
+  if (!isValidDisplayName(trimmed)) {
+    fail("INVALID_DISPLAY_NAME");
   }
+  return trimmed;
 }
 
-/** Random match codes come from the runtime CSPRNG; formatting is pure domain. */
 async function allocateMatchCode(ctx: MutationCtx): Promise<string> {
   for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt += 1) {
     const code = matchCodeFromBytes(randomBytes(GAMEPLAY.matchCodeLength));
-    const clash = await loadMatchByCode(ctx, code);
-    if (clash === null) {
+    if ((await loadMatchByCode(ctx, code)) === null) {
       return code;
     }
   }
 
-  return fail("match_not_found");
-}
-
-async function appendEvent(
-  ctx: MutationCtx,
-  matchId: Id<"matches">,
-  event: Pick<Doc<"events">, "type" | "message" | "createdAt"> & {
-    actorPlayerId?: Id<"players">;
-  },
-): Promise<void> {
-  await ctx.db.insert("events", {
-    matchId,
-    type: event.type,
-    actorPlayerId: event.actorPlayerId ?? null,
-    targetPlayerId: null,
-    zone: null,
-    damage: null,
-    message: event.message,
-    createdAt: event.createdAt,
-  });
+  return fail("MATCH_NOT_FOUND");
 }

@@ -8,6 +8,8 @@
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Victoria Pew Pew</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -23,9 +25,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Victoria Kill Zone uses the rear camera to detect the opposing player and render the live duel view.</string>
+	<string>Victoria Pew Pew uses the rear camera to detect the opposing player and render the live duel view.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Victoria Kill Zone uses your foreground location to confirm that both players remain inside the active arena.</string>
+	<string>Victoria Pew Pew uses your foreground location to confirm that both players remain inside the active arena.</string>
 	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
 	<dict>
 		<key>VictoriaKillZoneArena</key>

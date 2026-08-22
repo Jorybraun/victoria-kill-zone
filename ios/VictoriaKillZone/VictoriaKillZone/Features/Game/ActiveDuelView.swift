@@ -5,35 +5,69 @@ struct ActiveDuelView: View {
   @ObservedObject var store: LobbyStore
 
   var body: some View {
-    ZStack {
-      LinearGradient(
-        colors: [VKZPalette.background, VKZPalette.surfaceRaised],
-        startPoint: .top,
-        endPoint: .bottom
-      )
-      .ignoresSafeArea()
+    TimelineView(.periodic(from: .now, by: 0.2)) { context in
+      ZStack {
+        cameraSurface
+          .ignoresSafeArea()
 
-      TimelineView(.periodic(from: .now, by: 0.2)) { context in
-        ScrollView {
-          VStack(spacing: 24) {
-            topTelemetry(at: context.date)
-            connectionBanner
-            opponentPanel
-            Spacer(minLength: 48)
-            debugControl
-            latestEvent
-            Button("LEAVE DUEL", role: .destructive) {
-              store.leave()
-            }
-            .buttonStyle(VKZSecondaryButtonStyle())
+        LinearGradient(
+          colors: [.black.opacity(0.72), .clear, .black.opacity(0.82)],
+          startPoint: .top,
+          endPoint: .bottom
+        )
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+
+        VStack(spacing: 14) {
+          topTelemetry(at: context.date)
+          connectionBanner
+          Spacer(minLength: 12)
+          reticle
+          targetReadout
+          Spacer(minLength: 12)
+          opponentPanel
+          shotControl
+          latestEvent
+          Button("LEAVE DUEL", role: .destructive) {
+            store.leave()
           }
-          .padding(20)
-          .frame(maxWidth: 600)
-          .frame(maxWidth: .infinity)
-          .opacity(store.isMatchInputLocked ? 0.58 : 1)
+          .font(.caption.bold().monospaced())
+        }
+        .padding(18)
+        .opacity(store.isMatchInputLocked ? 0.58 : 1)
+
+        if isLocalRespawning {
+          deathOverlay(at: context.date)
         }
       }
     }
+    .task {
+      await store.startTargeting()
+    }
+    .onDisappear {
+      Task { await store.stopTargeting() }
+    }
+  }
+
+  @ViewBuilder
+  private var cameraSurface: some View {
+    #if os(iOS) && canImport(ARKit) && canImport(AVFoundation) && canImport(Vision)
+      if let targeting = store.environment.targetingSession as? ARVisionTargetingSession {
+        ARCameraPreview(session: targeting.arSession)
+      } else {
+        fallbackCameraSurface
+      }
+    #else
+      fallbackCameraSurface
+    #endif
+  }
+
+  private var fallbackCameraSurface: some View {
+    LinearGradient(
+      colors: [VKZPalette.background, VKZPalette.surfaceRaised],
+      startPoint: .top,
+      endPoint: .bottom
+    )
   }
 
   private func topTelemetry(at date: Date) -> some View {
@@ -41,17 +75,20 @@ struct ActiveDuelView: View {
       telemetryBlock(
         label: "HEALTH",
         value: String(duel.localPlayer?.health ?? 0),
-        color: VKZPalette.ready
+        color: localHealthColor
       )
       Spacer()
-      VStack(spacing: 4) {
+      VStack(spacing: 3) {
         Text(phaseTitle)
           .font(.caption.weight(.bold).monospaced())
           .foregroundStyle(VKZPalette.telemetry)
         if duel.phase == .countdown {
           Text(String(countdownValue(at: date)))
-            .font(.system(size: 38, weight: .bold, design: .monospaced))
+            .font(.system(size: 38, weight: .black, design: .monospaced))
             .accessibilityLabel("Duel starts in \(countdownValue(at: date))")
+        } else {
+          Text("\(duel.localPlayer?.kills ?? 0)–\(duel.localPlayer?.deaths ?? 0)")
+            .font(.title3.bold().monospacedDigit())
         }
       }
       Spacer()
@@ -66,69 +103,96 @@ struct ActiveDuelView: View {
   @ViewBuilder
   private var connectionBanner: some View {
     if store.isMatchInputLocked {
-      VKZPanel {
-        VStack(spacing: 4) {
-          Text("RECONNECTING — INPUT LOCKED")
-            .font(.headline.monospaced())
-            .foregroundStyle(VKZPalette.pending)
-          if let lastSyncAt = store.lastSyncAt {
-            Text("LAST SYNC \(lastSyncAt.formatted(date: .omitted, time: .standard))")
-              .font(.caption.monospaced())
-              .foregroundStyle(VKZPalette.textMuted)
-          }
-        }
-        .frame(maxWidth: .infinity)
-      }
+      Text("RECONNECTING — INPUT LOCKED")
+        .font(.caption.bold().monospaced())
+        .foregroundStyle(VKZPalette.pending)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(.black.opacity(0.7), in: Capsule())
     } else if store.syncStatus == .restored {
       VKZStatusPill(label: "STATE VERIFIED", color: VKZPalette.ready)
     }
   }
 
-  private var opponentPanel: some View {
-    VKZPanel {
-      VStack(spacing: 12) {
-        Text(duel.opponent?.displayName.uppercased() ?? "OPPONENT")
-          .font(.headline.monospaced())
-        Text("\(duel.opponent?.health ?? 0) / 100")
-          .font(.system(size: 42, weight: .bold, design: .monospaced))
-          .foregroundStyle(VKZPalette.danger)
-        ProgressView(value: Double(duel.opponent?.health ?? 0), total: 100)
-          .tint(VKZPalette.danger)
-        Text("OPPONENT HEALTH")
-          .font(.caption.monospaced())
-          .foregroundStyle(VKZPalette.textMuted)
+  private var reticle: some View {
+    ZStack {
+      Circle()
+        .stroke(reticleColor.opacity(0.9), lineWidth: 3)
+        .frame(width: 74, height: 74)
+      Rectangle()
+        .fill(reticleColor)
+        .frame(width: 24, height: 2)
+      Rectangle()
+        .fill(reticleColor)
+        .frame(width: 2, height: 24)
+      Circle()
+        .fill(reticleColor)
+        .frame(width: 6, height: 6)
+    }
+    .shadow(color: .black.opacity(0.8), radius: 3)
+    .accessibilityLabel(store.markerlessAimZone == nil ? "No target lock" : "Target locked")
+  }
+
+  private var targetReadout: some View {
+    HStack(spacing: 8) {
+      VKZStatusPill(label: store.targetingStatus, color: reticleColor)
+      if let zone = store.markerlessAimZone {
+        VKZStatusPill(label: zone.rawValue.uppercased(), color: reticleColor)
       }
-      .frame(maxWidth: .infinity)
-      .accessibilityElement(children: .combine)
-      .accessibilityLabel(
-        "Opponent health, \(duel.opponent?.health ?? 0) of 100"
-      )
     }
   }
 
+  private var opponentPanel: some View {
+    HStack {
+      VStack(alignment: .leading, spacing: 3) {
+        Text(duel.opponent?.displayName.uppercased() ?? "OPPONENT")
+          .font(.caption.bold().monospaced())
+        Text(opponentStateText)
+          .font(.caption2.monospaced())
+          .foregroundStyle(VKZPalette.textMuted)
+      }
+      Spacer()
+      Text("\(duel.opponent?.health ?? 0)")
+        .font(.system(size: 36, weight: .black, design: .monospaced))
+        .foregroundStyle(VKZPalette.danger)
+      Text("HP")
+        .font(.caption.bold().monospaced())
+        .foregroundStyle(VKZPalette.textMuted)
+    }
+    .padding(14)
+    .background(.black.opacity(0.62), in: RoundedRectangle(cornerRadius: 14))
+    .overlay {
+      RoundedRectangle(cornerRadius: 14)
+        .stroke(.white.opacity(0.14), lineWidth: 1)
+    }
+    .accessibilityElement(children: .combine)
+  }
+
   @ViewBuilder
-  private var debugControl: some View {
+  private var shotControl: some View {
     switch duel.phase {
     case .countdown:
       Text("DUEL STARTS IN")
         .font(.headline.monospaced())
         .foregroundStyle(VKZPalette.pending)
-    case .running where duel.localRole == .host:
+    case .running:
       VStack(spacing: 8) {
-        Button(debugButtonLabel) {
-          store.debugFire()
+        Button(shotButtonLabel) {
+          store.fireMarkerless()
         }
         .buttonStyle(VKZPrimaryButtonStyle())
-        .disabled(!store.canDebugFire)
-        .accessibilityLabel("Debug fire, torso test, 34 damage")
-        Text(debugHelper)
-          .font(.caption.weight(.semibold).monospaced())
+        .disabled(!store.canFireMarkerless)
+        .accessibilityLabel("Fire markerless shot")
+
+        if duel.localRole == .host {
+          Button("DEBUG TORSO FALLBACK") {
+            store.debugFire()
+          }
+          .font(.caption2.bold().monospaced())
           .foregroundStyle(VKZPalette.textMuted)
+          .disabled(!store.canDebugFire)
+        }
       }
-    case .running:
-      Text("AWAITING TEST SHOT")
-        .font(.headline.monospaced())
-        .foregroundStyle(VKZPalette.textMuted)
     case .finished:
       Text("DUEL COMPLETE")
         .font(.title.bold())
@@ -144,33 +208,79 @@ struct ActiveDuelView: View {
   private var latestEvent: some View {
     if let event = duel.events.first {
       Text(event.message)
-        .font(.callout.monospaced())
-        .foregroundStyle(VKZPalette.textMuted)
+        .font(.caption.monospaced())
+        .foregroundStyle(VKZPalette.text)
         .multilineTextAlignment(.center)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.black.opacity(0.55), in: Capsule())
         .accessibilityAddTraits(.updatesFrequently)
     }
   }
 
-  private var debugButtonLabel: String {
-    switch store.debugShotState {
-    case .pending: "SHOT PENDING…"
-    case .confirmed(let damage): "HIT CONFIRMED • \(damage)"
-    case .idle, .failed: "DEBUG FIRE"
+  private func deathOverlay(at date: Date) -> some View {
+    ZStack {
+      Color.black.opacity(0.88).ignoresSafeArea()
+      VStack(spacing: 14) {
+        Text("ELIMINATED")
+          .font(.system(size: 42, weight: .black, design: .rounded))
+          .foregroundStyle(VKZPalette.danger)
+        Text("RESPAWN IN \(respawnSeconds(at: date))")
+          .font(.title2.bold().monospacedDigit())
+        Text("HEALTH AND AMMO RESTORE AUTOMATICALLY")
+          .font(.caption.monospaced())
+          .foregroundStyle(VKZPalette.textMuted)
+      }
+    }
+    .accessibilityElement(children: .combine)
+  }
+
+  private var shotButtonLabel: String {
+    if isLocalRespawning { return "RESPAWNING…" }
+    if duel.opponent?.lifeState == .respawning || duel.opponent?.health == 0 {
+      return "OPPONENT RESPAWNING"
+    }
+    switch store.markerlessShotState {
+    case .idle: return store.markerlessAimZone == nil ? "ACQUIRE TARGET" : "FIRE"
+    case .pending(let zone): return "\(zone.rawValue.uppercased()) SHOT…"
+    case .confirmed(.kill, _, _): return "ELIMINATION CONFIRMED"
+    case .confirmed(_, let zone, let damage):
+      return "\(zone.rawValue.uppercased()) HIT • \(damage)"
+    case .failed: return "RETRY SHOT"
     }
   }
 
-  private var debugHelper: String {
-    switch store.debugShotState {
-    case .confirmed: "STATE VERIFIED"
-    case .idle, .pending, .failed: "TORSO TEST • 34 DAMAGE"
+  private var opponentStateText: String {
+    guard let opponent = duel.opponent else { return "SEARCHING" }
+    switch opponent.lifeState {
+    case .alive: return "K/D \(opponent.kills)/\(opponent.deaths)"
+    case .dead, .respawning: return "RESPAWNING"
+    case .disconnected: return "DISCONNECTED"
     }
+  }
+
+  private var isLocalRespawning: Bool {
+    guard let player = duel.localPlayer else { return false }
+    return player.health == 0 || player.lifeState == .dead || player.lifeState == .respawning
+  }
+
+  private var reticleColor: Color {
+    switch store.markerlessAimZone {
+    case .head: VKZPalette.danger
+    case .torso, .limbs: VKZPalette.ready
+    case nil: .white
+    }
+  }
+
+  private var localHealthColor: Color {
+    (duel.localPlayer?.health ?? 0) <= 34 ? VKZPalette.danger : VKZPalette.ready
   }
 
   private var phaseTitle: String {
     switch duel.phase {
     case .lobby: "WAITING"
     case .countdown: "DUEL STARTS IN"
-    case .running: "NETWORK TEST"
+    case .running: "LIVE DUEL"
     case .finished: "DUEL COMPLETE"
     case .cancelled: "DUEL CANCELLED"
     }
@@ -178,9 +288,16 @@ struct ActiveDuelView: View {
 
   private func countdownValue(at date: Date) -> Int {
     guard let startsAt = duel.startsAt else { return 0 }
-    let elapsedMilliseconds = max(0, date.timeIntervalSince(duel.syncedAt) * 1_000)
-    let estimatedServerNow = duel.serverNow + elapsedMilliseconds
-    return max(0, Int(ceil((startsAt - estimatedServerNow) / 1_000)))
+    return max(0, Int(ceil((startsAt - estimatedServerNow(at: date)) / 1_000)))
+  }
+
+  private func respawnSeconds(at date: Date) -> Int {
+    guard let respawnAt = duel.localPlayer?.respawnAt else { return 0 }
+    return max(0, Int(ceil((respawnAt - estimatedServerNow(at: date)) / 1_000)))
+  }
+
+  private func estimatedServerNow(at date: Date) -> Double {
+    duel.serverNow + max(0, date.timeIntervalSince(duel.syncedAt) * 1_000)
   }
 
   private func telemetryBlock(label: String, value: String, color: Color) -> some View {

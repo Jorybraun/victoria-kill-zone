@@ -22,9 +22,16 @@ protocol GameSessionClient: Sendable {
   func joinDuel(_ request: JoinDuelRequest) async throws -> PlayerSession
   func setReady(session: PlayerSession, isReady: Bool) async throws
   func startDuel(session: PlayerSession) async throws
+  func fire(session: PlayerSession, request: FireShotRequest) async throws -> FireShotResult
   func debugFire(session: PlayerSession, clientShotId: String) async throws -> DebugFireResult
   func snapshots(for session: PlayerSession) -> AsyncThrowingStream<MatchSnapshot, Error>
   func connectionStates() -> AsyncStream<GameSessionConnectionState>
+}
+
+extension GameSessionClient {
+  func fire(session: PlayerSession, request: FireShotRequest) async throws -> FireShotResult {
+    throw GameSessionClientError.notConfigured
+  }
 }
 
 enum GameSessionClientError: Error, Equatable, Sendable {
@@ -56,6 +63,16 @@ extension GameSessionClientError: LocalizedError {
       "SHOT LOCKED UNTIL DUEL STARTS"
     case .backend(.connectionStale):
       "SHOT LOCKED WHILE RECONNECTING"
+    case .backend(.playerNotAlive):
+      "WAITING TO RESPAWN"
+    case .backend(.invalidLocation), .backend(.invalidArena):
+      "LOCATION IS NOT READY"
+    case .backend(.matchAlreadyFinished):
+      "DUEL COMPLETE"
+    case .backend(.magazineFull):
+      "MAGAZINE FULL"
+    case .backend(.alreadyReloading):
+      "RELOADING"
     case .backend(.hostOnly), .backend(.invalidSession), .invalidSnapshot, .unknown:
       "SOMETHING WENT WRONG"
     case .networkUnavailable:
@@ -80,6 +97,10 @@ struct UnavailableGameSessionClient: GameSessionClient {
   }
 
   func startDuel(session: PlayerSession) async throws {
+    throw GameSessionClientError.notConfigured
+  }
+
+  func fire(session: PlayerSession, request: FireShotRequest) async throws -> FireShotResult {
     throw GameSessionClientError.notConfigured
   }
 

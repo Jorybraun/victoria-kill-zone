@@ -11,6 +11,12 @@ export type MatchPhase =
 
 export type HitZone = "head" | "torso" | "limbs";
 
+export type PlayerLifeState =
+  | "alive"
+  | "dead"
+  | "respawning"
+  | "disconnected";
+
 export type SpectatorEventType =
   | "joined"
   | "ready"
@@ -24,7 +30,7 @@ export type SpectatorEventType =
 
 /**
  * G2-safe match data returned by `queries:spectatorSnapshot({ code })`.
- * Later-gate fields deliberately do not participate in this presentation model.
+ * Additive combat telemetry lives on players and events, leaving this base intact.
  */
 export interface SpectatorMatchSnapshot {
   id: string;
@@ -40,6 +46,11 @@ export interface SpectatorPlayerSnapshot {
   ready: boolean;
   connected: boolean;
   health: number;
+  /** Additive phase0.v1 combat fields. Omitted by a G2 snapshot. */
+  kills?: number;
+  deaths?: number;
+  lifeState?: PlayerLifeState;
+  respawnAt?: number;
 }
 
 export interface SpectatorEventSnapshot {

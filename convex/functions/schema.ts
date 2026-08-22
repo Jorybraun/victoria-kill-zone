@@ -8,6 +8,14 @@ const matchStatus = v.union(
   v.literal("ended"),
 );
 
+const matchPhase = v.union(
+  v.literal("lobby"),
+  v.literal("countdown"),
+  v.literal("running"),
+  v.literal("finished"),
+  v.literal("cancelled"),
+);
+
 const lifeState = v.union(
   v.literal("alive"),
   v.literal("dead"),
@@ -16,6 +24,13 @@ const lifeState = v.union(
 );
 
 const hitZone = v.union(v.literal("head"), v.literal("torso"), v.literal("limbs"));
+
+const arenaState = v.union(
+  v.literal("inside"),
+  v.literal("warning"),
+  v.literal("uncertain"),
+  v.literal("outside"),
+);
 
 const shotOutcome = v.union(
   v.literal("miss"),
@@ -35,12 +50,15 @@ export default defineSchema({
   matches: defineTable({
     code: v.string(),
     status: matchStatus,
+    // Optional only for a safe rollout over any pre-contract development rows.
+    phase: v.optional(matchPhase),
     hostPlayerId: v.union(v.id("players"), v.null()),
     centerLatitude: v.number(),
     centerLongitude: v.number(),
     radiusMeters: v.number(),
     maxPlayers: v.number(),
     durationMs: v.number(),
+    startsAt: v.optional(nullableNumber),
     startedAt: nullableNumber,
     endsAt: nullableNumber,
     winnerPlayerId: v.union(v.id("players"), v.null()),
@@ -60,11 +78,13 @@ export default defineSchema({
     matchId: v.id("matches"),
     displayName: v.string(),
     // Digests only. Raw device identifiers and session secrets are never stored.
-    deviceIdHash: v.string(),
+    deviceIdHash: v.optional(v.string()),
     sessionHash: v.string(),
     role: v.union(v.literal("host"), v.literal("guest")),
+    ready: v.optional(v.boolean()),
     connected: v.boolean(),
     lifeState,
+    arenaState: v.optional(arenaState),
     health: v.number(),
     ammo: v.number(),
     kills: v.number(),
@@ -92,6 +112,12 @@ export default defineSchema({
     rejectReason: v.union(v.string(), v.null()),
     poseConfidence: nullableNumber,
     firedAtClient: v.number(),
+    mode: v.optional(v.union(v.literal("debug"), v.literal("fire"))),
+    claimFingerprint: v.optional(v.string()),
+    shooterAmmo: v.optional(v.number()),
+    targetHealth: v.optional(nullableNumber),
+    targetLifeState: v.optional(v.union(lifeState, v.null())),
+    eventId: v.optional(v.union(v.id("events"), v.null())),
     createdAt: v.number(),
   })
     .index("by_match_and_created_at", ["matchId", "createdAt"])
@@ -101,11 +127,13 @@ export default defineSchema({
     matchId: v.id("matches"),
     type: v.union(
       v.literal("joined"),
+      v.literal("ready"),
       v.literal("started"),
       v.literal("shot"),
       v.literal("hit"),
       v.literal("eliminated"),
       v.literal("respawned"),
+      v.literal("out_of_zone"),
       v.literal("finished"),
     ),
     actorPlayerId: v.union(v.id("players"), v.null()),

@@ -13,11 +13,29 @@ enum PlayerRole: String, Codable, Equatable, Sendable {
   case guest
 }
 
+enum PlayerLifeState: String, Codable, Equatable, Sendable {
+  case alive
+  case dead
+  case respawning
+  case disconnected
+}
+
+enum HitZone: String, Codable, Equatable, Sendable {
+  case head
+  case torso
+  case limbs
+}
+
 enum MatchEventType: String, Codable, Equatable, Sendable {
   case joined
   case ready
   case started
+  case shot
   case hit
+  case eliminated
+  case respawned
+  case outOfZone = "out_of_zone"
+  case finished
 }
 
 struct MatchSummary: Codable, Equatable, Sendable {
@@ -27,6 +45,25 @@ struct MatchSummary: Codable, Equatable, Sendable {
   let durationMs: Int
   let startsAt: Double?
   let endsAt: Double?
+  let winnerPlayerId: String?
+
+  init(
+    id: String,
+    code: String,
+    phase: MatchPhase,
+    durationMs: Int,
+    startsAt: Double?,
+    endsAt: Double?,
+    winnerPlayerId: String? = nil
+  ) {
+    self.id = id
+    self.code = code
+    self.phase = phase
+    self.durationMs = durationMs
+    self.startsAt = startsAt
+    self.endsAt = endsAt
+    self.winnerPlayerId = winnerPlayerId
+  }
 }
 
 struct PlayerSnapshot: Codable, Identifiable, Equatable, Sendable {
@@ -37,6 +74,36 @@ struct PlayerSnapshot: Codable, Identifiable, Equatable, Sendable {
   let connected: Bool
   let health: Int
   let ammo: Int
+  let kills: Int
+  let deaths: Int
+  let lifeState: PlayerLifeState
+  let respawnAt: Double?
+
+  init(
+    id: String,
+    displayName: String,
+    role: PlayerRole,
+    ready: Bool,
+    connected: Bool,
+    health: Int,
+    ammo: Int,
+    kills: Int = 0,
+    deaths: Int = 0,
+    lifeState: PlayerLifeState = .alive,
+    respawnAt: Double? = nil
+  ) {
+    self.id = id
+    self.displayName = displayName
+    self.role = role
+    self.ready = ready
+    self.connected = connected
+    self.health = health
+    self.ammo = ammo
+    self.kills = kills
+    self.deaths = deaths
+    self.lifeState = lifeState
+    self.respawnAt = respawnAt
+  }
 }
 
 struct EventSnapshot: Codable, Identifiable, Equatable, Sendable {
@@ -94,6 +161,50 @@ struct DebugFireResult: Codable, Equatable, Sendable {
   let rejectReason: BackendErrorCode?
 }
 
+enum FireShotOutcome: String, Codable, Equatable, Sendable {
+  case miss
+  case hit
+  case kill
+  case rejected
+}
+
+enum FireRejectReason: String, Codable, Equatable, Sendable {
+  case matchNotRunning = "MATCH_NOT_RUNNING"
+  case connectionStale = "CONNECTION_STALE"
+  case shooterNotAlive = "SHOOTER_NOT_ALIVE"
+  case reloading = "RELOADING"
+  case outOfArena = "OUT_OF_ARENA"
+  case locationStale = "LOCATION_STALE"
+  case outOfAmmo = "OUT_OF_AMMO"
+  case fireCooldown = "FIRE_COOLDOWN"
+  case idempotencyConflict = "IDEMPOTENCY_CONFLICT"
+  case invalidTarget = "INVALID_TARGET"
+  case targetNotAlive = "TARGET_NOT_ALIVE"
+}
+
+struct FireShotRequest: Equatable, Sendable {
+  let clientShotId: String
+  let targetId: String?
+  let zone: HitZone?
+  let poseConfidence: Double?
+  let origin: [Double]?
+  let direction: [Double]?
+  let firedAtClient: Double
+}
+
+struct FireShotResult: Codable, Equatable, Sendable {
+  let accepted: Bool
+  let outcome: FireShotOutcome
+  let clientShotId: String
+  let replayed: Bool
+  let damage: Int
+  let shooterAmmo: Int
+  let targetHealth: Int?
+  let targetLifeState: PlayerLifeState?
+  let eventId: String?
+  let rejectReason: FireRejectReason?
+}
+
 enum BackendErrorCode: String, Codable, Equatable, Sendable {
   case invalidDisplayName = "INVALID_DISPLAY_NAME"
   case invalidCode = "INVALID_CODE"
@@ -106,6 +217,12 @@ enum BackendErrorCode: String, Codable, Equatable, Sendable {
   case hostOnly = "HOST_ONLY"
   case matchNotRunning = "MATCH_NOT_RUNNING"
   case connectionStale = "CONNECTION_STALE"
+  case invalidArena = "INVALID_ARENA"
+  case invalidLocation = "INVALID_LOCATION"
+  case matchAlreadyFinished = "MATCH_ALREADY_FINISHED"
+  case playerNotAlive = "PLAYER_NOT_ALIVE"
+  case magazineFull = "MAGAZINE_FULL"
+  case alreadyReloading = "ALREADY_RELOADING"
 }
 
 enum GameSessionConnectionState: Equatable, Sendable {

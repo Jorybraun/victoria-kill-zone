@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { GAMEPLAY, ZONE_DAMAGE } from "../domain/config.js";
-import { replayResult, resolveDebugFire, type FireRequest } from "../domain/fire.js";
+import {
+  fireClaimFingerprint,
+  replayResult,
+  resolveFire,
+  type FireRequest,
+} from "../domain/fire.js";
 import type { PlayerState } from "../domain/types.js";
 import { match, player, T0 } from "./factories.js";
 
@@ -13,6 +18,7 @@ function request(overrides: RequestOverrides = {}): FireRequest {
     clientShotId: "shot-1",
     targetId: "guest",
     zone: "torso",
+    poseConfidence: 0.9,
     firedAtClient: T0,
     ...overrides,
   };
@@ -37,7 +43,7 @@ function fire(
 ) {
   const shooter = player("host", overrides.shooter);
   const target = player("guest", overrides.target);
-  return resolveDebugFire(
+  return resolveFire(
     match(overrides.matchOverrides),
     shooter,
     target,
@@ -67,7 +73,7 @@ describe("debugFire authority", () => {
   });
 
   it("charges ammunition and stamps the cooldown for a miss", () => {
-    const plan = fire({ request: { targetId: undefined, zone: undefined } });
+    const plan = fire({ request: { targetId: undefined, zone: undefined, poseConfidence: undefined } });
 
     expect(plan.result).toEqual({
       accepted: true,
@@ -118,7 +124,7 @@ describe("debugFire authority", () => {
     expect(fire({ request: { targetId: "host" } }).result.rejectReason).toBe("invalid_target");
     expect(fire({ target: { lifeState: "dead" } }).result.rejectReason).toBe("target_not_alive");
     expect(
-      resolveDebugFire(match(), player("host"), null, request(), T0 + 1_000).result.rejectReason,
+      resolveFire(match(), player("host"), null, request(), T0 + 1_000).result.rejectReason,
     ).toBe("invalid_target");
   });
 
@@ -131,7 +137,7 @@ describe("debugFire authority", () => {
       outcome: "kill",
       damage: 40,
       targetHealth: 0,
-      targetLifeState: "dead",
+      targetLifeState: "respawning",
     });
     expect(plan.shooterPatch).toMatchObject({
       kills: 1,
@@ -142,12 +148,12 @@ describe("debugFire authority", () => {
     });
     expect(plan.targetPatch).toEqual({
       health: 0,
-      lifeState: "dead",
+      lifeState: "respawning",
       deaths: 2,
       respawnAt: now + GAMEPLAY.respawnDelayMs,
     });
     expect(plan.respawnAt).toBe(now + GAMEPLAY.respawnDelayMs);
-    expect(plan.events.map((event) => event.type)).toEqual(["hit", "eliminated"]);
+    expect(plan.events.map((event) => event.type)).toEqual(["eliminated"]);
     expect(plan.shot).toMatchObject({ outcome: "kill", zone: "head", damage: 40 });
   });
 
@@ -171,17 +177,15 @@ describe("debugFire authority", () => {
     });
   });
 
-  it("replays a duplicate clientShotId without applying damage twice", () => {
+  it("identifies an exact retry and preserves the original result", () => {
     const first = fire();
-    const replay = replayResult(first.shot, GAMEPLAY.magazineSize - 1);
+    const replay = replayResult(first.result);
 
-    expect(replay).toEqual({
-      accepted: true,
-      outcome: "hit",
-      rejectReason: "duplicate_shot",
-      damage: ZONE_DAMAGE.torso,
-      shooterAmmo: GAMEPLAY.magazineSize - 1,
-    });
+    expect(replay).toEqual(first.result);
+    expect(fireClaimFingerprint(request())).toBe(fireClaimFingerprint(request()));
+    expect(fireClaimFingerprint(request())).not.toBe(
+      fireClaimFingerprint(request({ zone: "head" })),
+    );
   });
 
   it("drains a magazine to exactly zero over eight accepted shots", () => {
@@ -190,7 +194,7 @@ describe("debugFire authority", () => {
     let now = T0;
 
     for (let round = 0; round < GAMEPLAY.magazineSize; round += 1) {
-      const plan = resolveDebugFire(
+      const plan = resolveFire(
         match(),
         shooter,
         target,
@@ -207,7 +211,7 @@ describe("debugFire authority", () => {
     expect(shooter.shotsFired).toBe(GAMEPLAY.magazineSize);
     expect(target.health).toBe(10_000 - GAMEPLAY.magazineSize * ZONE_DAMAGE.torso);
 
-    const dry = resolveDebugFire(match(), shooter, target, request({ clientShotId: "shot-9" }), now);
+    const dry = resolveFire(match(), shooter, target, request({ clientShotId: "shot-9" }), now);
     expect(dry.result.rejectReason).toBe("out_of_ammo");
   });
 });

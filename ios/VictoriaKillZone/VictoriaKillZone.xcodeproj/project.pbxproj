@@ -452,6 +452,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = UGMA3967M2;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VictoriaKillZone/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -473,6 +474,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = UGMA3967M2;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VictoriaKillZone/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -494,6 +496,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				DEVELOPMENT_TEAM = UGMA3967M2;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -513,6 +516,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				DEVELOPMENT_TEAM = UGMA3967M2;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

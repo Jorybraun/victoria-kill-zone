@@ -1,19 +1,130 @@
+import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
-import { replayResult, resolveDebugFire, type FireRequest } from "../domain/fire.js";
-import { mutation } from "./lib/server.js";
-import { authenticatePlayer, fail, listPlayers, toPlayerState } from "./lib/state.js";
+import {
+  fireClaimFingerprint,
+  resolveDebugFire,
+  resolveFire,
+  type FirePlan,
+  type FireRequest,
+} from "../domain/fire.js";
+import { mutation, type Doc, type Id, type MutationCtx } from "./lib/server.js";
+import {
+  appendEvent,
+  authenticatePlayer,
+  errorCodeForRejectReason,
+  fail,
+  listPlayers,
+  toMatchState,
+  toPlayerState,
+  type BackendErrorCode,
+} from "./lib/state.js";
 
 const hitZone = v.union(v.literal("head"), v.literal("torso"), v.literal("limbs"));
+const shotOutcome = v.union(
+  v.literal("miss"),
+  v.literal("hit"),
+  v.literal("kill"),
+  v.literal("rejected"),
+);
+const playerLifeState = v.union(
+  v.literal("alive"),
+  v.literal("dead"),
+  v.literal("respawning"),
+  v.literal("disconnected"),
+);
 
-/**
- * Debug-fire network path: the shooter submits a hit claim and the server
- * resolves it authoritatively.
- *
- * Client-supplied damage does not exist in the argument shape; damage comes from
- * server-owned zone configuration. Shots are idempotent per
- * `{ shooterId, clientShotId }`, so a retried request never applies damage twice.
- */
+const respawnReference = makeFunctionReference<
+  "mutation",
+  { playerId: Id<"players">; expectedRespawnAt: number },
+  null
+>("players:respawn");
+
+interface FireWireResult {
+  accepted: boolean;
+  outcome: "miss" | "hit" | "kill" | "rejected";
+  clientShotId: string;
+  replayed: boolean;
+  damage: number;
+  shooterAmmo: number;
+  targetHealth?: number;
+  targetLifeState?: "alive" | "dead" | "respawning" | "disconnected";
+  eventId?: Id<"events">;
+  rejectReason?: BackendErrorCode;
+}
+
+interface DebugWireResult {
+  accepted: boolean;
+  outcome: "hit" | "rejected";
+  clientShotId: string;
+  replayed: boolean;
+  damage: number;
+  shooterAmmo: number;
+  targetHealth: number;
+  eventId?: Id<"events">;
+  rejectReason?: BackendErrorCode;
+}
+
+/** G2-compatible trusted torso hit retained until physical markerless evidence. */
 export const debugFire = mutation({
+  args: {
+    matchId: v.id("matches"),
+    playerId: v.id("players"),
+    sessionSecret: v.string(),
+    clientShotId: v.string(),
+  },
+  returns: v.object({
+    accepted: v.boolean(),
+    outcome: v.union(v.literal("hit"), v.literal("rejected")),
+    clientShotId: v.string(),
+    replayed: v.boolean(),
+    damage: v.number(),
+    shooterAmmo: v.number(),
+    targetHealth: v.number(),
+    eventId: v.optional(v.id("events")),
+    rejectReason: v.optional(v.string()),
+  }),
+  handler: async (ctx, args): Promise<DebugWireResult> => {
+    if (args.clientShotId.trim().length === 0) {
+      fail("INVALID_SESSION");
+    }
+
+    const shooter = await authenticatePlayer(ctx, args.matchId, args.playerId, args.sessionSecret);
+    const match = await ctx.db.get(args.matchId);
+    if (match === null) {
+      fail("MATCH_NOT_FOUND");
+    }
+    const players = await listPlayers(ctx, match._id);
+    const opponent = players.find((player) => player._id !== shooter._id) ?? null;
+
+    const existing = await loadShot(ctx, shooter._id, args.clientShotId);
+    if (existing !== null) {
+      return debugResultFromStored(existing, opponent?.health ?? 100);
+    }
+
+    const now = Date.now();
+    const request: FireRequest = {
+      shooterId: shooter._id,
+      clientShotId: args.clientShotId,
+      ...(opponent === null ? {} : { targetId: opponent._id }),
+      zone: "torso",
+      poseConfidence: 1,
+      firedAtClient: now,
+    };
+    const plan = resolveDebugFire(
+      toMatchState(match),
+      toPlayerState(shooter),
+      opponent === null ? null : toPlayerState(opponent),
+      request,
+      now,
+    );
+
+    const eventId = await persistPlan(ctx, match, shooter, opponent, request, plan, "debug", "debug", true);
+    return debugResult(plan, args.clientShotId, opponent?.health ?? 100, eventId);
+  },
+});
+
+/** Phase0 markerless claim with authoritative zone damage and idempotency. */
+export const fire = mutation({
   args: {
     matchId: v.id("matches"),
     shooterId: v.id("players"),
@@ -28,43 +139,30 @@ export const debugFire = mutation({
   },
   returns: v.object({
     accepted: v.boolean(),
-    outcome: v.union(
-      v.literal("miss"),
-      v.literal("hit"),
-      v.literal("kill"),
-      v.literal("rejected"),
-    ),
-    rejectReason: v.optional(v.string()),
+    outcome: shotOutcome,
+    clientShotId: v.string(),
+    replayed: v.boolean(),
     damage: v.number(),
     shooterAmmo: v.number(),
     targetHealth: v.optional(v.number()),
-    targetLifeState: v.optional(
-      v.union(v.literal("alive"), v.literal("dead"), v.literal("respawning")),
-    ),
+    targetLifeState: v.optional(playerLifeState),
+    eventId: v.optional(v.id("events")),
+    rejectReason: v.optional(v.string()),
   }),
-  handler: async (ctx, args) => {
-    if (args.clientShotId.trim().length === 0) {
-      fail("duplicate_shot");
-    }
-
+  handler: async (ctx, args): Promise<FireWireResult> => {
     const shooter = await authenticatePlayer(ctx, args.matchId, args.shooterId, args.sessionSecret);
     const match = await ctx.db.get(args.matchId);
     if (match === null) {
-      fail("match_not_found");
+      fail("MATCH_NOT_FOUND");
     }
 
-    const alreadyResolved = await ctx.db
-      .query("shots")
-      .withIndex("by_shooter_and_client_shot_id", (q) =>
-        q.eq("shooterId", shooter._id).eq("clientShotId", args.clientShotId),
-      )
-      .unique();
-    if (alreadyResolved !== null) {
-      return replayResult(alreadyResolved, shooter.ammo);
+    if (
+      args.clientShotId.trim().length === 0 ||
+      !validVector(args.origin) ||
+      !validVector(args.direction)
+    ) {
+      return conflictResult(args.clientShotId, shooter.ammo);
     }
-
-    const players = await listPlayers(ctx, match._id);
-    const opponent = players.find((player) => player._id !== shooter._id) ?? null;
 
     const request: FireRequest = {
       shooterId: shooter._id,
@@ -73,62 +171,214 @@ export const debugFire = mutation({
       ...(args.targetId === undefined ? {} : { targetId: args.targetId }),
       ...(args.zone === undefined ? {} : { zone: args.zone }),
       ...(args.poseConfidence === undefined ? {} : { poseConfidence: args.poseConfidence }),
+      ...(args.origin === undefined ? {} : { origin: args.origin }),
+      ...(args.direction === undefined ? {} : { direction: args.direction }),
     };
+    const fingerprint = fireClaimFingerprint(request);
+    const existing = await loadShot(ctx, shooter._id, args.clientShotId);
+    if (existing !== null) {
+      if (existing.mode === "fire" && existing.claimFingerprint === fingerprint) {
+        return fireResultFromStored(existing);
+      }
+      return conflictResult(args.clientShotId, shooter.ammo);
+    }
 
+    const players = await listPlayers(ctx, match._id);
+    const opponent = players.find((player) => player._id !== shooter._id) ?? null;
     const now = Date.now();
-    const plan = resolveDebugFire(
-      match,
+    const plan = resolveFire(
+      toMatchState(match),
       toPlayerState(shooter),
       opponent === null ? null : toPlayerState(opponent),
       request,
       now,
     );
-
-    if (plan.shooterPatch !== null) {
-      await ctx.db.patch(shooter._id, plan.shooterPatch);
-    }
-
-    if (plan.targetPatch !== null && opponent !== null) {
-      await ctx.db.patch(opponent._id, plan.targetPatch);
-    }
-
-    await ctx.db.insert("shots", {
-      matchId: match._id,
-      shooterId: shooter._id,
-      targetId: plan.shot.targetId === null ? null : (opponent?._id ?? null),
-      clientShotId: plan.shot.clientShotId,
-      zone: plan.shot.zone,
-      damage: plan.shot.damage,
-      outcome: plan.shot.outcome,
-      rejectReason: plan.shot.rejectReason,
-      poseConfidence: plan.shot.poseConfidence,
-      firedAtClient: plan.shot.firedAtClient,
-      createdAt: now,
-    });
-
-    for (const event of plan.events) {
-      await ctx.db.insert("events", {
-        matchId: match._id,
-        type: event.type === "finished" ? "finished" : event.type,
-        actorPlayerId: event.actorPlayerId === null ? null : shooter._id,
-        targetPlayerId: event.targetPlayerId === null ? null : (opponent?._id ?? null),
-        zone: event.zone,
-        damage: event.damage,
-        message: event.message,
-        createdAt: now,
-      });
-    }
-
-    return {
-      accepted: plan.result.accepted,
-      outcome: plan.result.outcome,
-      damage: plan.result.damage,
-      shooterAmmo: plan.result.shooterAmmo,
-      ...(plan.result.rejectReason === undefined ? {} : { rejectReason: plan.result.rejectReason }),
-      ...(plan.result.targetHealth === undefined ? {} : { targetHealth: plan.result.targetHealth }),
-      ...(plan.result.targetLifeState === undefined
-        ? {}
-        : { targetLifeState: plan.result.targetLifeState }),
-    };
+    const eventId = await persistPlan(ctx, match, shooter, opponent, request, plan, "fire", fingerprint, false);
+    return fireResult(plan, args.clientShotId, eventId);
   },
 });
+
+async function persistPlan(
+  ctx: MutationCtx,
+  match: Doc<"matches">,
+  shooter: Doc<"players">,
+  opponent: Doc<"players"> | null,
+  request: FireRequest,
+  plan: FirePlan,
+  mode: "debug" | "fire",
+  claimFingerprint: string,
+  forceG2HitEvent: boolean,
+): Promise<Id<"events"> | null> {
+  if (plan.shooterPatch !== null) {
+    await ctx.db.patch(shooter._id, plan.shooterPatch);
+  }
+  if (plan.targetPatch !== null && opponent !== null) {
+    await ctx.db.patch(opponent._id, plan.targetPatch);
+  }
+
+  let eventId: Id<"events"> | null = null;
+  const event = plan.events[0];
+  if (event !== undefined) {
+    eventId = await appendEvent(ctx, {
+      matchId: match._id,
+      type: forceG2HitEvent ? "hit" : event.type,
+      actorPlayerId: shooter._id,
+      targetPlayerId: event.targetPlayerId === null ? null : (opponent?._id ?? null),
+      zone: event.zone,
+      damage: event.damage,
+      message:
+        forceG2HitEvent && opponent !== null
+          ? `${shooter.displayName} HIT ${opponent.displayName} • TORSO −${event.damage ?? 0}`
+          : event.message,
+      createdAt: Date.now(),
+    });
+  }
+
+  const rejectReason =
+    plan.result.rejectReason === undefined
+      ? null
+      : mode === "debug"
+        ? debugErrorCode(plan.result.rejectReason)
+        : errorCodeForRejectReason(plan.result.rejectReason);
+  await ctx.db.insert("shots", {
+    matchId: match._id,
+    shooterId: shooter._id,
+    targetId: plan.shot.targetId === null ? null : (opponent?._id ?? null),
+    clientShotId: request.clientShotId,
+    zone: plan.shot.zone,
+    damage: plan.shot.damage,
+    outcome: plan.shot.outcome,
+    rejectReason,
+    poseConfidence: plan.shot.poseConfidence,
+    firedAtClient: plan.shot.firedAtClient,
+    mode,
+    claimFingerprint,
+    shooterAmmo: plan.result.shooterAmmo,
+    targetHealth: plan.result.targetHealth ?? null,
+    targetLifeState: plan.result.targetLifeState ?? null,
+    eventId,
+    createdAt: Date.now(),
+  });
+
+  if (plan.respawnAt !== null && opponent !== null) {
+    await ctx.scheduler.runAt(plan.respawnAt, respawnReference, {
+      playerId: opponent._id,
+      expectedRespawnAt: plan.respawnAt,
+    });
+  }
+  return eventId;
+}
+
+async function loadShot(
+  ctx: MutationCtx,
+  shooterId: Id<"players">,
+  clientShotId: string,
+): Promise<Doc<"shots"> | null> {
+  return await ctx.db
+    .query("shots")
+    .withIndex("by_shooter_and_client_shot_id", (q) =>
+      q.eq("shooterId", shooterId).eq("clientShotId", clientShotId),
+    )
+    .unique();
+}
+
+function fireResult(
+  plan: FirePlan,
+  clientShotId: string,
+  eventId: Id<"events"> | null,
+): FireWireResult {
+  return {
+    accepted: plan.result.accepted,
+    outcome: plan.result.outcome,
+    clientShotId,
+    replayed: false,
+    damage: plan.result.damage,
+    shooterAmmo: plan.result.shooterAmmo,
+    ...(plan.result.targetHealth === undefined ? {} : { targetHealth: plan.result.targetHealth }),
+    ...(plan.result.targetLifeState === undefined
+      ? {}
+      : { targetLifeState: plan.result.targetLifeState }),
+    ...(eventId === null ? {} : { eventId }),
+    ...(plan.result.rejectReason === undefined
+      ? {}
+      : { rejectReason: errorCodeForRejectReason(plan.result.rejectReason) }),
+  };
+}
+
+function debugResult(
+  plan: FirePlan,
+  clientShotId: string,
+  fallbackTargetHealth: number,
+  eventId: Id<"events"> | null,
+): DebugWireResult {
+  return {
+    accepted: plan.result.accepted,
+    outcome: plan.result.accepted ? "hit" : "rejected",
+    clientShotId,
+    replayed: false,
+    damage: plan.result.damage,
+    shooterAmmo: plan.result.shooterAmmo,
+    targetHealth: plan.result.targetHealth ?? fallbackTargetHealth,
+    ...(eventId === null ? {} : { eventId }),
+    ...(plan.result.rejectReason === undefined
+      ? {}
+      : { rejectReason: debugErrorCode(plan.result.rejectReason) }),
+  };
+}
+
+function fireResultFromStored(shot: Doc<"shots">): FireWireResult {
+  return {
+    accepted: shot.outcome !== "rejected",
+    outcome: shot.outcome,
+    clientShotId: shot.clientShotId,
+    replayed: true,
+    damage: shot.damage,
+    shooterAmmo: shot.shooterAmmo ?? 0,
+    ...(shot.targetHealth === undefined || shot.targetHealth === null
+      ? {}
+      : { targetHealth: shot.targetHealth }),
+    ...(shot.targetLifeState === undefined || shot.targetLifeState === null
+      ? {}
+      : { targetLifeState: shot.targetLifeState }),
+    ...(shot.eventId === undefined || shot.eventId === null ? {} : { eventId: shot.eventId }),
+    ...(shot.rejectReason === undefined || shot.rejectReason === null
+      ? {}
+      : { rejectReason: shot.rejectReason as BackendErrorCode }),
+  };
+}
+
+function debugResultFromStored(shot: Doc<"shots">, fallbackTargetHealth: number): DebugWireResult {
+  return {
+    accepted: shot.outcome !== "rejected",
+    outcome: shot.outcome === "rejected" ? "rejected" : "hit",
+    clientShotId: shot.clientShotId,
+    replayed: true,
+    damage: shot.damage,
+    shooterAmmo: shot.shooterAmmo ?? 0,
+    targetHealth: shot.targetHealth ?? fallbackTargetHealth,
+    ...(shot.eventId === undefined || shot.eventId === null ? {} : { eventId: shot.eventId }),
+    ...(shot.rejectReason === undefined || shot.rejectReason === null
+      ? {}
+      : { rejectReason: shot.rejectReason as BackendErrorCode }),
+  };
+}
+
+function conflictResult(clientShotId: string, shooterAmmo: number): FireWireResult {
+  return {
+    accepted: false,
+    outcome: "rejected",
+    clientShotId,
+    replayed: false,
+    damage: 0,
+    shooterAmmo,
+    rejectReason: "IDEMPOTENCY_CONFLICT",
+  };
+}
+
+function debugErrorCode(reason: NonNullable<FirePlan["result"]["rejectReason"]>): BackendErrorCode {
+  return reason === "shooter_disconnected" ? "CONNECTION_STALE" : "MATCH_NOT_RUNNING";
+}
+
+function validVector(vector: number[] | undefined): boolean {
+  return vector === undefined || (vector.length === 3 && vector.every(Number.isFinite));
+}

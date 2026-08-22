@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { GAMEPLAY, normalizeArenaRadius, normalizeDisplayName } from "../domain/config.js";
-import { matchCodeFromBytes, planCreateMatch, planJoinMatch, planStartMatch } from "../domain/match.js";
+import {
+  GAMEPLAY,
+  isValidDisplayName,
+  normalizeArenaRadius,
+  normalizeDisplayName,
+  normalizeMatchCode,
+} from "../domain/config.js";
+import {
+  matchCodeFromBytes,
+  planActivateMatch,
+  planCreateMatch,
+  planJoinMatch,
+  planStartMatch,
+} from "../domain/match.js";
 import { match, player, T0 } from "./factories.js";
 
 const createInput = {
@@ -18,7 +30,7 @@ describe("createMatch planning", () => {
     expect(plan.match.code).toBe("AB12CD");
     expect(plan.match.maxPlayers).toBe(GAMEPLAY.maxPlayers);
     expect(plan.match.durationMs).toBe(GAMEPLAY.matchDurationMs);
-    expect(plan.match.startedAt).toBeNull();
+    expect(plan.match.startsAt).toBeNull();
     expect(plan.match.endsAt).toBeNull();
     expect(plan.host).toMatchObject({
       role: "host",
@@ -36,7 +48,11 @@ describe("createMatch planning", () => {
     expect(normalizeArenaRadius(400)).toBe(GAMEPLAY.maxArenaRadiusMeters);
     expect(normalizeArenaRadius(42.4)).toBe(42);
     expect(normalizeDisplayName("   ", "Host")).toBe("Host");
-    expect(normalizeDisplayName("x".repeat(80), "Host")).toHaveLength(GAMEPLAY.maxDisplayNameLength);
+    expect(normalizeDisplayName("x".repeat(80), "Host")).toBe("Host");
+    expect(isValidDisplayName("x".repeat(20))).toBe(true);
+    expect(isValidDisplayName("x".repeat(21))).toBe(false);
+    expect(normalizeMatchCode(" ab-12 cd ")).toBe("AB12CD");
+    expect(normalizeMatchCode("bad")).toBeNull();
   });
 
   it("derives match codes deterministically from supplied random bytes", () => {
@@ -85,10 +101,10 @@ describe("joinMatch planning", () => {
 });
 
 describe("startMatch planning", () => {
-  const waiting = match({ status: "waiting", startedAt: null, endsAt: null });
-  const players = [player("host"), player("guest")];
+  const waiting = match({ status: "waiting", phase: "lobby", startsAt: null, endsAt: null });
+  const players = [player("host", { ready: true }), player("guest", { ready: true })];
 
-  it("starts a waiting duel for the host and stamps the server-owned window", () => {
+  it("starts a waiting duel for the host and stamps the countdown", () => {
     const plan = planStartMatch(waiting, players, "host", T0);
 
     expect(plan.ok).toBe(true);
@@ -97,17 +113,11 @@ describe("startMatch planning", () => {
     }
 
     expect(plan.value.matchPatch).toEqual({
-      status: "active",
-      startedAt: T0,
-      endsAt: T0 + GAMEPLAY.matchDurationMs,
+      status: "waiting",
+      phase: "countdown",
+      startsAt: T0 + GAMEPLAY.countdownMs,
+      endsAt: null,
       updatedAt: T0,
-    });
-    expect(plan.value.playerResetPatch).toEqual({
-      lifeState: "alive",
-      health: GAMEPLAY.startingHealth,
-      ammo: GAMEPLAY.magazineSize,
-      lastShotAt: null,
-      respawnAt: null,
     });
   });
 
@@ -121,18 +131,40 @@ describe("startMatch planning", () => {
       reason: "opponent_missing",
     });
     expect(
-      planStartMatch(waiting, [player("host"), player("guest", { connected: false })], "host", T0),
-    ).toEqual({ ok: false, reason: "opponent_missing" });
+      planStartMatch(
+        waiting,
+        [player("host", { ready: true }), player("guest", { ready: true, connected: false })],
+        "host",
+        T0,
+      ),
+    ).toEqual({ ok: false, reason: "players_not_connected" });
+  });
+
+  it("rejects a start until both players are ready", () => {
+    expect(planStartMatch(waiting, [player("host"), player("guest")], "host", T0)).toEqual({
+      ok: false,
+      reason: "players_not_ready",
+    });
   });
 
   it("rejects starting a duel twice", () => {
-    expect(planStartMatch(match({ status: "active" }), players, "host", T0)).toEqual({
+    expect(planStartMatch(match({ status: "active", phase: "running" }), players, "host", T0)).toEqual({
       ok: false,
       reason: "match_already_started",
     });
-    expect(planStartMatch(match({ status: "ended" }), players, "host", T0)).toEqual({
+    expect(planStartMatch(match({ status: "ended", phase: "finished" }), players, "host", T0)).toEqual({
       ok: false,
       reason: "match_already_started",
+    });
+  });
+
+  it("activates only the matching countdown at or after startsAt", () => {
+    const startsAt = T0 + GAMEPLAY.countdownMs;
+    const countdown = match({ status: "waiting", phase: "countdown", startsAt, endsAt: null });
+    expect(planActivateMatch(countdown, startsAt, startsAt - 1)).toBeNull();
+    expect(planActivateMatch(countdown, startsAt + 1, startsAt)).toBeNull();
+    expect(planActivateMatch(countdown, startsAt, startsAt)).toMatchObject({
+      matchPatch: { status: "active", phase: "running", endsAt: startsAt + GAMEPLAY.matchDurationMs },
     });
   });
 });

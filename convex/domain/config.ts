@@ -8,6 +8,7 @@ export const GAMEPLAY = {
   maxPlayers: 2,
   startingHealth: 100,
   magazineSize: 8,
+  countdownMs: 3_000,
   fireCooldownMs: 350,
   reloadDurationMs: 1250,
   respawnDelayMs: 5000,
@@ -16,7 +17,7 @@ export const GAMEPLAY = {
   minArenaRadiusMeters: 20,
   maxArenaRadiusMeters: 60,
   matchCodeLength: 6,
-  maxDisplayNameLength: 24,
+  maxDisplayNameLength: 20,
 } as const;
 
 export const ZONE_DAMAGE: Readonly<Record<HitZone, number>> = {
@@ -44,6 +45,19 @@ export function normalizeArenaRadius(radiusMeters: number | undefined): number {
 
 /** Trim a display name to a safe length, falling back to a neutral label. */
 export function normalizeDisplayName(displayName: string, fallback: string): string {
-  const trimmed = displayName.trim().slice(0, GAMEPLAY.maxDisplayNameLength);
-  return trimmed.length > 0 ? trimmed : fallback;
+  const trimmed = displayName.trim();
+  return isValidDisplayName(trimmed) ? trimmed : fallback;
+}
+
+/** G2 display names are 1-20 Unicode scalar values after trimming. */
+export function isValidDisplayName(displayName: string): boolean {
+  const trimmed = displayName.trim();
+  const scalarCount = Array.from(trimmed).length;
+  return scalarCount >= 1 && scalarCount <= GAMEPLAY.maxDisplayNameLength;
+}
+
+/** Normalize typed/pasted G2 match codes while rejecting malformed input. */
+export function normalizeMatchCode(code: string): string | null {
+  const normalized = code.replace(/[-\t\n\r ]/g, "").toUpperCase();
+  return /^[A-Z0-9]{6}$/.test(normalized) ? normalized : null;
 }

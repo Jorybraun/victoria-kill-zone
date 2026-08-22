@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+
 @testable import VictoriaKillZone
 
 final class TargetingStateMachineTests: XCTestCase {
@@ -47,11 +48,18 @@ final class TargetingStateMachineTests: XCTestCase {
       observation(at: 0.05, bodyConfidence: 0.78, torsoConfidence: 0.66),
       evaluatedAt: time(0.06)
     )
+    XCTAssertNil(machine.snapshot.aimClaim, "One Vision result must not authorize a shot")
+    machine.ingest(
+      observation(at: 0.1, bodyConfidence: 0.8, torsoConfidence: 0.7),
+      evaluatedAt: time(0.11)
+    )
 
     XCTAssertEqual(machine.snapshot.state, .torsoLock)
     XCTAssertTrue(machine.snapshot.bodyDetected)
     XCTAssertTrue(machine.snapshot.torsoDetected)
     XCTAssertEqual(machine.snapshot.hitZone, .torso)
+    XCTAssertEqual(machine.snapshot.hitConfidence, 0.66, accuracy: 0.0001)
+    XCTAssertEqual(machine.snapshot.aimClaim?.capturedAt, time(0.1))
     XCTAssertEqual(machine.snapshot.torsoBounds, torsoBounds)
   }
 
@@ -61,6 +69,7 @@ final class TargetingStateMachineTests: XCTestCase {
       observation(
         at: 0.05,
         bodyConfidence: 0.84,
+        headConfidence: 0.72,
         torsoConfidence: 0.7,
         headRegion: NormalizedTargetingEllipse(
           centerX: 0.5,
@@ -71,9 +80,25 @@ final class TargetingStateMachineTests: XCTestCase {
       ),
       evaluatedAt: time(0.06)
     )
+    machine.ingest(
+      observation(
+        at: 0.1,
+        bodyConfidence: 0.86,
+        headConfidence: 0.75,
+        torsoConfidence: 0.72,
+        headRegion: NormalizedTargetingEllipse(
+          centerX: 0.5,
+          centerY: 0.5,
+          radiusX: 0.08,
+          radiusY: 0.1
+        )
+      ),
+      evaluatedAt: time(0.11)
+    )
 
     XCTAssertEqual(machine.snapshot.state, .bodyLock)
     XCTAssertEqual(machine.snapshot.hitZone, .head)
+    XCTAssertEqual(machine.snapshot.hitConfidence, 0.72, accuracy: 0.0001)
   }
 
   func testTorsoOffCrosshairKeepsBodyLockWithoutAimSolution() {
@@ -94,6 +119,124 @@ final class TargetingStateMachineTests: XCTestCase {
     XCTAssertEqual(machine.snapshot.state, .bodyLock)
     XCTAssertTrue(machine.snapshot.torsoDetected)
     XCTAssertNil(machine.snapshot.hitZone)
+  }
+
+  func testLowConfidenceHeadFallsThroughToStableTorsoClaim() {
+    var machine = readyMachine()
+    let headRegion = NormalizedTargetingEllipse(
+      centerX: 0.5,
+      centerY: 0.5,
+      radiusX: 0.08,
+      radiusY: 0.1
+    )
+
+    machine.ingest(
+      observation(
+        at: 0.05,
+        bodyConfidence: 0.82,
+        headConfidence: 0.59,
+        torsoConfidence: 0.68,
+        headRegion: headRegion
+      ),
+      evaluatedAt: time(0.06)
+    )
+    machine.ingest(
+      observation(
+        at: 0.1,
+        bodyConfidence: 0.84,
+        headConfidence: 0.59,
+        torsoConfidence: 0.7,
+        headRegion: headRegion
+      ),
+      evaluatedAt: time(0.11)
+    )
+
+    XCTAssertEqual(machine.snapshot.hitZone, .torso)
+    XCTAssertEqual(machine.snapshot.hitConfidence, 0.68, accuracy: 0.0001)
+  }
+
+  func testChangingAimZoneRequiresASecondStableObservation() {
+    var machine = readyMachine()
+    let headRegion = NormalizedTargetingEllipse(
+      centerX: 0.5,
+      centerY: 0.5,
+      radiusX: 0.08,
+      radiusY: 0.1
+    )
+
+    machine.ingest(
+      observation(at: 0.05, bodyConfidence: 0.8, torsoConfidence: 0.7),
+      evaluatedAt: time(0.06)
+    )
+    machine.ingest(
+      observation(at: 0.1, bodyConfidence: 0.82, torsoConfidence: 0.72),
+      evaluatedAt: time(0.11)
+    )
+    XCTAssertEqual(machine.snapshot.hitZone, .torso)
+
+    machine.ingest(
+      observation(
+        at: 0.15,
+        bodyConfidence: 0.84,
+        headConfidence: 0.75,
+        torsoConfidence: 0.72,
+        headRegion: headRegion
+      ),
+      evaluatedAt: time(0.16)
+    )
+    XCTAssertNil(machine.snapshot.aimClaim)
+
+    machine.ingest(
+      observation(
+        at: 0.2,
+        bodyConfidence: 0.85,
+        headConfidence: 0.76,
+        torsoConfidence: 0.73,
+        headRegion: headRegion
+      ),
+      evaluatedAt: time(0.21)
+    )
+    XCTAssertEqual(machine.snapshot.hitZone, .head)
+  }
+
+  func testAimHoldDurationCanConfirmTwoRecentResults() {
+    let thresholds = TargetingThresholds(
+      minimumAimObservations: 3,
+      aimStabilityDuration: 0.08
+    )
+    var machine = TargetingStateMachine(thresholds: thresholds, now: t0)
+    machine.sessionStarted(at: time(0.01))
+    machine.cameraBecameReady(at: time(0.02))
+
+    machine.ingest(
+      observation(at: 0.05, bodyConfidence: 0.8, torsoConfidence: 0.7),
+      evaluatedAt: time(0.06)
+    )
+    machine.ingest(
+      observation(at: 0.14, bodyConfidence: 0.82, torsoConfidence: 0.72),
+      evaluatedAt: time(0.15)
+    )
+
+    XCTAssertEqual(machine.snapshot.hitZone, .torso)
+  }
+
+  func testAimStabilityResetsAfterAStaleObservationGap() {
+    var machine = readyMachine()
+    machine.ingest(
+      observation(at: 0.05, bodyConfidence: 0.8, torsoConfidence: 0.7),
+      evaluatedAt: time(0.06)
+    )
+    machine.ingest(
+      observation(at: 0.3, bodyConfidence: 0.82, torsoConfidence: 0.72),
+      evaluatedAt: time(0.31)
+    )
+    XCTAssertNil(machine.snapshot.aimClaim)
+
+    machine.ingest(
+      observation(at: 0.35, bodyConfidence: 0.84, torsoConfidence: 0.74),
+      evaluatedAt: time(0.36)
+    )
+    XCTAssertEqual(machine.snapshot.hitZone, .torso)
   }
 
   func testHeadFallbackUsesNeckAndShoulderScale() throws {
@@ -131,6 +274,32 @@ final class TargetingStateMachineTests: XCTestCase {
     XCTAssertEqual(region.centerY, 0.7, accuracy: 0.0001)
   }
 
+  func testHeadConfidenceUsesFaceMeanThenJointFallback() throws {
+    let faceConfidence = try XCTUnwrap(
+      TargetingRegionBuilder.headRegionConfidence(
+        facialPoints: [
+          point(0.46, 0.7, confidence: 0.7),
+          point(0.54, 0.7, confidence: 0.8),
+          point(0.9, 0.9, confidence: 0.59),
+        ],
+        neck: nil,
+        leftShoulder: point(0.3, 0.5),
+        rightShoulder: point(0.7, 0.5)
+      )
+    )
+    XCTAssertEqual(faceConfidence, 0.75, accuracy: 0.0001)
+
+    let fallbackConfidence = try XCTUnwrap(
+      TargetingRegionBuilder.headRegionConfidence(
+        facialPoints: [],
+        neck: point(0.5, 0.55, confidence: 0.74),
+        leftShoulder: point(0.3, 0.5, confidence: 0.69),
+        rightShoulder: point(0.7, 0.5, confidence: 0.72)
+      )
+    )
+    XCTAssertEqual(fallbackConfidence, 0.69, accuracy: 0.0001)
+  }
+
   func testTorsoRegionBuildsJointPolygonAroundCenter() throws {
     let region = try XCTUnwrap(
       TargetingRegionBuilder.torsoRegion(
@@ -152,11 +321,16 @@ final class TargetingStateMachineTests: XCTestCase {
       observation(at: 0.05, bodyConfidence: 0.78, torsoConfidence: 0.66),
       evaluatedAt: time(0.06)
     )
+    machine.ingest(
+      observation(at: 0.1, bodyConfidence: 0.8, torsoConfidence: 0.7),
+      evaluatedAt: time(0.11)
+    )
+    XCTAssertEqual(machine.snapshot.hitZone, .torso)
 
-    machine.tick(at: time(0.26))
+    machine.tick(at: time(0.31))
 
     XCTAssertEqual(machine.snapshot.state, .torsoLock)
-    XCTAssertFalse(machine.snapshot.isPoseFresh(at: time(0.26)))
+    XCTAssertFalse(machine.snapshot.isPoseFresh(at: time(0.31)))
     XCTAssertNil(machine.snapshot.hitZone)
   }
 
@@ -190,6 +364,14 @@ final class TargetingStateMachineTests: XCTestCase {
     )
     XCTAssertEqual(machine.snapshot.state, .targetReacquired)
     XCTAssertTrue(machine.snapshot.torsoDetected)
+    XCTAssertNil(machine.snapshot.aimClaim, "Reacquisition must rebuild aim stability")
+
+    machine.ingest(
+      observation(at: 0.48, bodyConfidence: 0.83, torsoConfidence: 0.71),
+      evaluatedAt: time(0.49)
+    )
+    XCTAssertEqual(machine.snapshot.state, .targetReacquired)
+    XCTAssertEqual(machine.snapshot.hitZone, .torso)
 
     machine.tick(at: time(0.74))
     XCTAssertEqual(machine.snapshot.state, .torsoLock)
@@ -247,6 +429,32 @@ final class TargetingStateMachineTests: XCTestCase {
     XCTAssertNil(machine.snapshot.cameraRay)
   }
 
+  func testUnavailableSessionStreamsOnceFailsClosedAndStopsIdempotently() async {
+    let session = UnavailableTargetingSession()
+    var iterator = session.snapshots().makeAsyncIterator()
+    let firstSnapshot = await iterator.next()
+    let endOfStream = await iterator.next()
+
+    XCTAssertEqual(firstSnapshot, session.currentSnapshot)
+    XCTAssertNil(endOfStream)
+    do {
+      try await session.start()
+      XCTFail("Unavailable targeting must fail closed")
+    } catch {
+      XCTAssertEqual(error as? TargetingSessionError, .notConfigured)
+    }
+
+    await session.stop()
+    await session.stop()
+    XCTAssertEqual(session.currentSnapshot.state, .targetingUnavailable)
+  }
+
+  #if !os(iOS)
+    func testFactoryFallsBackOutsideIOS() {
+      XCTAssertEqual(TargetingSessionFactory.liveOrUnavailable().availability, .notConfigured)
+    }
+  #endif
+
   private func readyMachine() -> TargetingStateMachine {
     var machine = TargetingStateMachine(now: t0)
     machine.sessionStarted(at: time(0.01))
@@ -257,21 +465,25 @@ final class TargetingStateMachineTests: XCTestCase {
   private func observation(
     at offset: TimeInterval,
     bodyConfidence: Double,
+    headConfidence: Double? = nil,
     torsoConfidence: Double? = nil,
     headRegion: NormalizedTargetingEllipse? = nil,
     torsoRegion: NormalizedTargetingPolygon? = nil
   ) -> TargetingObservation {
-    let resolvedTorsoRegion = torsoConfidence == nil
+    let resolvedTorsoRegion =
+      torsoConfidence == nil
       ? nil
-      : torsoRegion ?? NormalizedTargetingPolygon(points: [
-        point(0.33, 0.7),
-        point(0.67, 0.7),
-        point(0.67, 0.35),
-        point(0.33, 0.35),
-      ])
+      : torsoRegion
+        ?? NormalizedTargetingPolygon(points: [
+          point(0.33, 0.7),
+          point(0.67, 0.7),
+          point(0.67, 0.35),
+          point(0.33, 0.35),
+        ])
     return TargetingObservation(
       capturedAt: time(offset),
       bodyConfidence: bodyConfidence,
+      headConfidence: headConfidence,
       torsoConfidence: torsoConfidence,
       bodyBounds: bounds,
       torsoBounds: resolvedTorsoRegion?.bounds,

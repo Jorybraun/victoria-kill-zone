@@ -100,6 +100,17 @@ enum TargetingHitZone: String, Equatable, Sendable {
   var displayText: String { rawValue.uppercased() }
 }
 
+/// A zone claim that is safe for the fire path to consume.
+///
+/// Claims are emitted only after the same centre-crosshair solution has been
+/// observed across the configured stability window. `capturedAt` is the Vision
+/// frame time, rather than the later UI publication time.
+struct TargetingAimClaim: Equatable, Sendable {
+  let zone: TargetingHitZone
+  let confidence: Double
+  let capturedAt: Date
+}
+
 enum TargetingRegionBuilder {
   static func headRegion(
     facialPoints: [NormalizedTargetingPoint],
@@ -143,6 +154,26 @@ enum TargetingRegionBuilder {
     )
   }
 
+  static func headRegionConfidence(
+    facialPoints: [NormalizedTargetingPoint],
+    neck: NormalizedTargetingPoint?,
+    leftShoulder: NormalizedTargetingPoint?,
+    rightShoulder: NormalizedTargetingPoint?
+  ) -> Double? {
+    let validFacePoints = facialPoints.filter { $0.confidence >= 0.6 }
+    if validFacePoints.count >= 2 {
+      return validFacePoints.map(\.confidence).reduce(0, +) / Double(validFacePoints.count)
+    }
+
+    guard let neck = confident(neck, minimum: 0.45),
+      let leftShoulder = confident(leftShoulder, minimum: 0.45),
+      let rightShoulder = confident(rightShoulder, minimum: 0.45)
+    else {
+      return nil
+    }
+    return min(neck.confidence, min(leftShoulder.confidence, rightShoulder.confidence))
+  }
+
   static func torsoRegion(
     leftShoulder: NormalizedTargetingPoint?,
     rightShoulder: NormalizedTargetingPoint?,
@@ -167,9 +198,10 @@ enum TargetingRegionBuilder {
       ])
     }
 
-    guard let lowerAnchor = confident(root, minimum: 0.45)
-      ?? confident(leftHip, minimum: 0.45)
-      ?? confident(rightHip, minimum: 0.45)
+    guard
+      let lowerAnchor = confident(root, minimum: 0.45)
+        ?? confident(leftHip, minimum: 0.45)
+        ?? confident(rightHip, minimum: 0.45)
     else {
       return nil
     }
@@ -215,6 +247,7 @@ struct TargetingCameraRay: Equatable, Sendable {
 struct TargetingObservation: Equatable, Sendable {
   let capturedAt: Date
   let bodyConfidence: Double
+  let headConfidence: Double?
   let torsoConfidence: Double?
   let bodyBounds: NormalizedTargetingRect
   let torsoBounds: NormalizedTargetingRect?
@@ -224,6 +257,7 @@ struct TargetingObservation: Equatable, Sendable {
   init(
     capturedAt: Date,
     bodyConfidence: Double,
+    headConfidence: Double? = nil,
     torsoConfidence: Double?,
     bodyBounds: NormalizedTargetingRect,
     torsoBounds: NormalizedTargetingRect?,
@@ -232,6 +266,7 @@ struct TargetingObservation: Equatable, Sendable {
   ) {
     self.capturedAt = capturedAt
     self.bodyConfidence = bodyConfidence
+    self.headConfidence = headConfidence
     self.torsoConfidence = torsoConfidence
     self.bodyBounds = bodyBounds
     self.torsoBounds = torsoBounds
@@ -247,7 +282,10 @@ struct TargetingThresholds: Equatable, Sendable {
   let returnToSearchingAfter: TimeInterval
   let reacquiredHoldDuration: TimeInterval
   let bodyConfidence: Double
+  let headConfidence: Double
   let torsoConfidence: Double
+  let minimumAimObservations: Int
+  let aimStabilityDuration: TimeInterval
 
   init(
     visionInterval: TimeInterval = 0.1,
@@ -256,7 +294,10 @@ struct TargetingThresholds: Equatable, Sendable {
     returnToSearchingAfter: TimeInterval = 1.0,
     reacquiredHoldDuration: TimeInterval = 0.3,
     bodyConfidence: Double = 0.45,
-    torsoConfidence: Double = 0.45
+    headConfidence: Double = 0.6,
+    torsoConfidence: Double = 0.45,
+    minimumAimObservations: Int = 2,
+    aimStabilityDuration: TimeInterval = 0.08
   ) {
     precondition(visionInterval > 0)
     precondition(poseStaleAfter > 0)
@@ -264,7 +305,10 @@ struct TargetingThresholds: Equatable, Sendable {
     precondition(returnToSearchingAfter > trackingLostAfter)
     precondition(reacquiredHoldDuration >= 0)
     precondition((0...1).contains(bodyConfidence))
+    precondition((0...1).contains(headConfidence))
     precondition((0...1).contains(torsoConfidence))
+    precondition(minimumAimObservations > 0)
+    precondition(aimStabilityDuration >= 0)
 
     self.visionInterval = visionInterval
     self.poseStaleAfter = poseStaleAfter
@@ -272,7 +316,10 @@ struct TargetingThresholds: Equatable, Sendable {
     self.returnToSearchingAfter = returnToSearchingAfter
     self.reacquiredHoldDuration = reacquiredHoldDuration
     self.bodyConfidence = bodyConfidence
+    self.headConfidence = headConfidence
     self.torsoConfidence = torsoConfidence
+    self.minimumAimObservations = minimumAimObservations
+    self.aimStabilityDuration = aimStabilityDuration
   }
 
   static let phaseZero = TargetingThresholds()
@@ -289,9 +336,13 @@ struct TargetingSnapshot: Equatable, Sendable {
   let torsoBounds: NormalizedTargetingRect?
   let headRegion: NormalizedTargetingEllipse?
   let torsoRegion: NormalizedTargetingPolygon?
-  let hitZone: TargetingHitZone?
+  let aimClaim: TargetingAimClaim?
   let cameraRay: TargetingCameraRay?
   let poseStaleAfter: TimeInterval
+
+  /// Compatibility/readability conveniences for HUD and fire-path callers.
+  var hitZone: TargetingHitZone? { aimClaim?.zone }
+  var hitConfidence: Double { aimClaim?.confidence ?? 0 }
 
   init(
     state: TargetingTrackingState,
@@ -304,7 +355,7 @@ struct TargetingSnapshot: Equatable, Sendable {
     torsoBounds: NormalizedTargetingRect?,
     headRegion: NormalizedTargetingEllipse?,
     torsoRegion: NormalizedTargetingPolygon?,
-    hitZone: TargetingHitZone?,
+    aimClaim: TargetingAimClaim?,
     cameraRay: TargetingCameraRay?,
     poseStaleAfter: TimeInterval
   ) {
@@ -318,7 +369,7 @@ struct TargetingSnapshot: Equatable, Sendable {
     self.torsoBounds = torsoBounds
     self.headRegion = headRegion
     self.torsoRegion = torsoRegion
-    self.hitZone = hitZone
+    self.aimClaim = aimClaim
     self.cameraRay = cameraRay
     self.poseStaleAfter = poseStaleAfter
   }
@@ -337,7 +388,7 @@ struct TargetingSnapshot: Equatable, Sendable {
       torsoBounds: nil,
       headRegion: nil,
       torsoRegion: nil,
-      hitZone: nil,
+      aimClaim: nil,
       cameraRay: nil,
       poseStaleAfter: TargetingThresholds.phaseZero.poseStaleAfter
     )
@@ -360,7 +411,7 @@ struct TargetingSnapshot: Equatable, Sendable {
       torsoBounds: nil,
       headRegion: nil,
       torsoRegion: nil,
-      hitZone: nil,
+      aimClaim: nil,
       cameraRay: nil,
       poseStaleAfter: TargetingThresholds.phaseZero.poseStaleAfter
     )
@@ -376,7 +427,12 @@ struct TargetingStateMachine: Sendable {
   private var cameraRay: TargetingCameraRay?
   private var hasLockedTarget = false
   private var pendingLockState = TargetingTrackingState.bodyLock
-  private var pendingHitZone: TargetingHitZone?
+  private var pendingAimZone: TargetingHitZone?
+  private var pendingAimConfidence = 0.0
+  private var pendingAimStartedAt: Date?
+  private var pendingAimLastObservedAt: Date?
+  private var pendingAimObservationCount = 0
+  private var confirmedAimClaim: TargetingAimClaim?
   private var stateChangedAt: Date
 
   init(
@@ -394,7 +450,7 @@ struct TargetingStateMachine: Sendable {
     cameraRay = nil
     hasLockedTarget = false
     pendingLockState = .bodyLock
-    pendingHitZone = nil
+    resetAimTracking()
     transition(to: .cameraStarting, at: date)
   }
 
@@ -419,25 +475,29 @@ struct TargetingStateMachine: Sendable {
       return
     }
 
-    let hitZone: TargetingHitZone?
-    if observation.headRegion?.contains(x: 0.5, y: 0.5) == true {
-      hitZone = .head
+    let aimCandidate: (zone: TargetingHitZone, confidence: Double)?
+    if let headConfidence = observation.headConfidence,
+      headConfidence >= thresholds.headConfidence,
+      observation.headRegion?.contains(x: 0.5, y: 0.5) == true
+    {
+      aimCandidate = (.head, min(observation.bodyConfidence, headConfidence))
     } else if let torsoConfidence = observation.torsoConfidence,
       torsoConfidence >= thresholds.torsoConfidence,
       observation.torsoRegion?.contains(x: 0.5, y: 0.5) == true
     {
-      hitZone = .torso
+      aimCandidate = (.torso, min(observation.bodyConfidence, torsoConfidence))
     } else {
-      hitZone = nil
+      aimCandidate = nil
     }
-    let lockState: TargetingTrackingState = hitZone == .torso ? .torsoLock : .bodyLock
+    updateAimTracking(with: aimCandidate, capturedAt: observation.capturedAt)
+    let lockState: TargetingTrackingState = aimCandidate?.zone == .torso ? .torsoLock : .bodyLock
 
-    let isReacquisition = hasLockedTarget
-      && (snapshot.state == .trackingLost || snapshot.state == .searching)
+    let isReacquisition =
+      snapshot.state == .targetReacquired
+      || (hasLockedTarget && (snapshot.state == .trackingLost || snapshot.state == .searching))
     lastValidObservation = observation
     hasLockedTarget = true
     pendingLockState = lockState
-    pendingHitZone = hitZone
     transition(to: isReacquisition ? .targetReacquired : lockState, at: date)
   }
 
@@ -471,8 +531,10 @@ struct TargetingStateMachine: Sendable {
 
     let age = max(0, date.timeIntervalSince(lastValidObservation.capturedAt))
     if age > thresholds.returnToSearchingAfter {
+      resetAimTracking()
       transition(to: .searching, at: date)
     } else if age > thresholds.trackingLostAfter {
+      resetAimTracking()
       transition(to: .trackingLost, at: date)
     } else if snapshot.state == .targetReacquired,
       date.timeIntervalSince(stateChangedAt) >= thresholds.reacquiredHoldDuration
@@ -488,8 +550,61 @@ struct TargetingStateMachine: Sendable {
     lastProcessedObservationAt = nil
     cameraRay = nil
     hasLockedTarget = false
-    pendingHitZone = nil
+    resetAimTracking()
     transition(to: .targetingUnavailable, at: date)
+  }
+
+  private mutating func updateAimTracking(
+    with candidate: (zone: TargetingHitZone, confidence: Double)?,
+    capturedAt: Date
+  ) {
+    guard let candidate else {
+      resetAimTracking()
+      return
+    }
+
+    if pendingAimZone == candidate.zone, let pendingAimStartedAt,
+      let pendingAimLastObservedAt,
+      capturedAt.timeIntervalSince(pendingAimLastObservedAt) <= thresholds.poseStaleAfter
+    {
+      pendingAimObservationCount += 1
+      pendingAimConfidence = min(pendingAimConfidence, candidate.confidence)
+      self.pendingAimLastObservedAt = capturedAt
+      let heldDuration = max(0, capturedAt.timeIntervalSince(pendingAimStartedAt))
+      if pendingAimObservationCount >= thresholds.minimumAimObservations
+        || heldDuration >= thresholds.aimStabilityDuration
+      {
+        confirmedAimClaim = TargetingAimClaim(
+          zone: candidate.zone,
+          confidence: pendingAimConfidence,
+          capturedAt: capturedAt
+        )
+      }
+      return
+    }
+
+    pendingAimZone = candidate.zone
+    pendingAimConfidence = candidate.confidence
+    pendingAimStartedAt = capturedAt
+    pendingAimLastObservedAt = capturedAt
+    pendingAimObservationCount = 1
+    confirmedAimClaim =
+      thresholds.minimumAimObservations == 1
+      ? TargetingAimClaim(
+        zone: candidate.zone,
+        confidence: candidate.confidence,
+        capturedAt: capturedAt
+      )
+      : nil
+  }
+
+  private mutating func resetAimTracking() {
+    pendingAimZone = nil
+    pendingAimConfidence = 0
+    pendingAimStartedAt = nil
+    pendingAimLastObservedAt = nil
+    pendingAimObservationCount = 0
+    confirmedAimClaim = nil
   }
 
   private mutating func transition(to state: TargetingTrackingState, at date: Date) {
@@ -504,7 +619,8 @@ struct TargetingStateMachine: Sendable {
     let observation = lastValidObservation
     let reportsTorso = reportsBody && observation?.torsoRegion != nil
     let poseAge = observation.map { max(0, date.timeIntervalSince($0.capturedAt)) }
-    let reportsFreshZone = reportsBody
+    let reportsFreshAim =
+      reportsBody
       && poseAge.map { $0 <= thresholds.poseStaleAfter } == true
 
     snapshot = TargetingSnapshot(
@@ -518,7 +634,7 @@ struct TargetingStateMachine: Sendable {
       torsoBounds: observation?.torsoBounds,
       headRegion: observation?.headRegion,
       torsoRegion: observation?.torsoRegion,
-      hitZone: reportsFreshZone ? pendingHitZone : nil,
+      aimClaim: reportsFreshAim ? confirmedAimClaim : nil,
       cameraRay: cameraRay,
       poseStaleAfter: thresholds.poseStaleAfter
     )
@@ -557,6 +673,18 @@ struct UnavailableTargetingSession: TargetingSession {
   func stop() async {}
 }
 
+/// Keeps app composition cross-platform while selecting the physical-device
+/// implementation in iOS builds.
+enum TargetingSessionFactory {
+  static func liveOrUnavailable() -> any TargetingSession {
+    #if os(iOS) && canImport(ARKit) && canImport(AVFoundation) && canImport(Vision)
+      ARVisionTargetingSession()
+    #else
+      UnavailableTargetingSession()
+    #endif
+  }
+}
+
 #if os(iOS) && canImport(ARKit) && canImport(AVFoundation) && canImport(Vision)
   import ARKit
   import AVFoundation
@@ -589,10 +717,12 @@ struct UnavailableTargetingSession: TargetingSession {
     private var machine: TargetingStateMachine
     private var notificationTokens: [NSObjectProtocol] = []
     private var runRequested = false
+    private var isSessionRunning = false
     private var isBackgrounded = false
     private var visionInFlight = false
     private var lastVisionFrameTimestamp = -Double.infinity
     private var generation = 0
+    private var lifecycleGeneration = 0
 
     override init() {
       let now = Date()
@@ -624,26 +754,39 @@ struct UnavailableTargetingSession: TargetingSession {
 
     func start() async throws {
       guard availability == .available else {
-        publishUnavailable()
         throw TargetingSessionError.notConfigured
       }
+
+      // Record intent before awaiting permission. A concurrent stop invalidates
+      // this generation, so permission completion can never restart a stopped
+      // session. Repeated starts are intentionally idempotent.
+      let requestGeneration: Int? = await withCheckedContinuation { continuation in
+        sessionQueue.async { [self] in
+          guard !runRequested else {
+            continuation.resume(returning: nil)
+            return
+          }
+          runRequested = true
+          lifecycleGeneration += 1
+          continuation.resume(returning: lifecycleGeneration)
+        }
+      }
+      guard let requestGeneration else { return }
+
       guard await Self.hasCameraAccess() else {
-        publishUnavailable()
+        await failStart(requestGeneration: requestGeneration)
         throw TargetingSessionError.cameraPermissionDenied
       }
 
       await withCheckedContinuation { continuation in
-        sessionQueue.async { [weak self] in
-          guard let self else {
+        sessionQueue.async { [self] in
+          guard lifecycleGeneration == requestGeneration, runRequested else {
             continuation.resume()
             return
           }
-          runRequested = true
-          guard !isBackgrounded else {
-            continuation.resume()
-            return
+          if !isBackgrounded, !isSessionRunning {
+            startWorldTracking(resetTracking: true)
           }
-          startWorldTracking(resetTracking: true)
           continuation.resume()
         }
       }
@@ -651,14 +794,33 @@ struct UnavailableTargetingSession: TargetingSession {
 
     func stop() async {
       await withCheckedContinuation { continuation in
-        sessionQueue.async { [weak self] in
-          guard let self else {
+        sessionQueue.async { [self] in
+          lifecycleGeneration += 1
+          runRequested = false
+          generation += 1
+          visionInFlight = false
+          arSession.pause()
+          isSessionRunning = false
+          machine.sessionBecameUnavailable(at: Date())
+          publish(machine.snapshot)
+          continuation.resume()
+        }
+      }
+    }
+
+    private func failStart(requestGeneration: Int) async {
+      await withCheckedContinuation { continuation in
+        sessionQueue.async { [self] in
+          guard lifecycleGeneration == requestGeneration else {
             continuation.resume()
             return
           }
+          lifecycleGeneration += 1
           runRequested = false
           generation += 1
+          visionInFlight = false
           arSession.pause()
+          isSessionRunning = false
           machine.sessionBecameUnavailable(at: Date())
           publish(machine.snapshot)
           continuation.resume()
@@ -704,7 +866,9 @@ struct UnavailableTargetingSession: TargetingSession {
         guard let self else { return }
         isBackgrounded = true
         generation += 1
+        visionInFlight = false
         arSession.pause()
+        isSessionRunning = false
         machine.sessionBecameUnavailable(at: Date())
         publish(machine.snapshot)
       }
@@ -714,12 +878,13 @@ struct UnavailableTargetingSession: TargetingSession {
       sessionQueue.async { [weak self] in
         guard let self else { return }
         isBackgrounded = false
-        guard runRequested else { return }
+        guard runRequested, !isSessionRunning else { return }
         startWorldTracking(resetTracking: false)
       }
     }
 
     private func startWorldTracking(resetTracking: Bool) {
+      guard runRequested, !isBackgrounded, !isSessionRunning else { return }
       generation += 1
       visionInFlight = false
       lastVisionFrameTimestamp = -Double.infinity
@@ -728,18 +893,12 @@ struct UnavailableTargetingSession: TargetingSession {
 
       let configuration = ARWorldTrackingConfiguration()
       configuration.worldAlignment = .gravity
-      let options: ARSession.RunOptions = resetTracking
+      let options: ARSession.RunOptions =
+        resetTracking
         ? [.resetTracking, .removeExistingAnchors]
         : []
       arSession.run(configuration, options: options)
-    }
-
-    private func publishUnavailable() {
-      sessionQueue.async { [weak self] in
-        guard let self else { return }
-        machine.sessionBecameUnavailable(at: Date())
-        publish(machine.snapshot)
-      }
+      isSessionRunning = true
     }
 
     private func publish(_ nextSnapshot: TargetingSnapshot) {
@@ -750,13 +909,14 @@ struct UnavailableTargetingSession: TargetingSession {
     }
 
     private func process(frame: ARFrame) {
+      guard runRequested, isSessionRunning, !isBackgrounded else { return }
       let now = Date()
       machine.cameraBecameReady(at: now)
       machine.updateCameraRay(Self.cameraRay(from: frame, capturedAt: now), at: now)
       machine.tick(at: now)
       publish(machine.snapshot)
 
-      guard runRequested, !isBackgrounded, !visionInFlight else { return }
+      guard !visionInFlight else { return }
       guard frame.timestamp - lastVisionFrameTimestamp >= thresholds.visionInterval else { return }
 
       visionInFlight = true
@@ -814,7 +974,8 @@ struct UnavailableTargetingSession: TargetingSession {
       guard usablePoints.count >= 3 else { return nil }
 
       let bodyBounds = normalizedBounds(for: usablePoints)
-      let bodyConfidence = usablePoints
+      let bodyConfidence =
+        usablePoints
         .map { Double($0.confidence) }
         .reduce(0, +) / Double(usablePoints.count)
 
@@ -837,6 +998,15 @@ struct UnavailableTargetingSession: TargetingSession {
         leftShoulder: leftShoulder,
         rightShoulder: rightShoulder
       )
+      let headConfidence =
+        headRegion.map { _ in
+          TargetingRegionBuilder.headRegionConfidence(
+            facialPoints: facePoints,
+            neck: neck,
+            leftShoulder: leftShoulder,
+            rightShoulder: rightShoulder
+          )
+        } ?? nil
       let torsoRegion = TargetingRegionBuilder.torsoRegion(
         leftShoulder: leftShoulder,
         rightShoulder: rightShoulder,
@@ -850,7 +1020,8 @@ struct UnavailableTargetingSession: TargetingSession {
 
       let distanceFromCrosshair = hypot(bodyBounds.centerX - 0.5, bodyBounds.centerY - 0.5)
       let crosshairProximity = max(0, 1 - distanceFromCrosshair / 0.71)
-      let score = bodyConfidence * 0.55
+      let score =
+        bodyConfidence * 0.55
         + min(1, bodyBounds.area * 4) * 0.30
         + crosshairProximity * 0.15
 
@@ -858,6 +1029,7 @@ struct UnavailableTargetingSession: TargetingSession {
         TargetingObservation(
           capturedAt: capturedAt,
           bodyConfidence: bodyConfidence,
+          headConfidence: headConfidence,
           torsoConfidence: torsoConfidence,
           bodyBounds: bodyBounds,
           torsoBounds: torsoRegion?.bounds,
@@ -932,18 +1104,22 @@ struct UnavailableTargetingSession: TargetingSession {
 
     func session(_ session: ARSession, didFailWithError error: Error) {
       generation += 1
+      visionInFlight = false
+      isSessionRunning = false
       machine.sessionBecameUnavailable(at: Date())
       publish(machine.snapshot)
     }
 
     func sessionWasInterrupted(_ session: ARSession) {
       generation += 1
+      visionInFlight = false
+      isSessionRunning = false
       machine.sessionBecameUnavailable(at: Date())
       publish(machine.snapshot)
     }
 
     func sessionInterruptionEnded(_ session: ARSession) {
-      guard runRequested, !isBackgrounded else { return }
+      guard runRequested, !isBackgrounded, !isSessionRunning else { return }
       startWorldTracking(resetTracking: false)
     }
   }
@@ -968,6 +1144,21 @@ struct UnavailableTargetingSession: TargetingSession {
 
     static func dismantleUIView(_ view: ARSCNView, coordinator: Void) {
       view.session = ARSession()
+    }
+  }
+
+  /// Type-erased targeting preview for feature code that only owns the
+  /// `TargetingSession` existential supplied by `AppEnvironment`.
+  struct TargetingCameraPreview: View {
+    let session: any TargetingSession
+
+    @ViewBuilder
+    var body: some View {
+      if let liveSession = session as? ARVisionTargetingSession {
+        ARCameraPreview(session: liveSession.arSession)
+      } else {
+        Color.black
+      }
     }
   }
 
@@ -1010,7 +1201,9 @@ struct UnavailableTargetingSession: TargetingSession {
       current = snapshot
       let activeContinuations = Array(continuations.values)
       lock.unlock()
-      activeContinuations.forEach { $0.yield(snapshot) }
+      for continuation in activeContinuations {
+        continuation.yield(snapshot)
+      }
     }
 
     func finish() {
@@ -1018,7 +1211,9 @@ struct UnavailableTargetingSession: TargetingSession {
       let activeContinuations = Array(continuations.values)
       continuations.removeAll()
       lock.unlock()
-      activeContinuations.forEach { $0.finish() }
+      for continuation in activeContinuations {
+        continuation.finish()
+      }
     }
 
     private func removeContinuation(_ id: UUID) {

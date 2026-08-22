@@ -7,10 +7,11 @@ export const T0 = 1_700_000_000_000;
 export function match(overrides: Partial<MatchState> = {}): MatchState {
   return {
     status: "active",
+    phase: "running",
     hostPlayerId: "host",
     radiusMeters: GAMEPLAY.defaultArenaRadiusMeters,
     durationMs: GAMEPLAY.matchDurationMs,
-    startedAt: T0,
+    startsAt: T0,
     endsAt: T0 + GAMEPLAY.matchDurationMs,
     winnerPlayerId: null,
     endReason: null,

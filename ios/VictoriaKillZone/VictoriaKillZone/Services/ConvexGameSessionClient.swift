@@ -8,6 +8,7 @@ enum ConvexGameSessionContract {
   static let join = "matches:join"
   static let setReady = "matches:setReady"
   static let start = "matches:start"
+  static let fire = "shots:fire"
   static let debugFire = "shots:debugFire"
   static let matchSnapshot = "queries:matchSnapshot"
 }
@@ -66,6 +67,37 @@ final class ConvexGameSessionClient: GameSessionClient, @unchecked Sendable {
         ConvexGameSessionContract.start,
         with: authenticatedArguments(session)
       )
+    } catch {
+      throw Self.mapped(error)
+    }
+  }
+
+  func fire(session: PlayerSession, request: FireShotRequest) async throws -> FireShotResult {
+    var arguments: [String: ConvexEncodable?] = [
+      "matchId": session.matchId,
+      "shooterId": session.playerId,
+      "sessionSecret": session.sessionSecret,
+      "clientShotId": request.clientShotId,
+      "firedAtClient": request.firedAtClient,
+    ]
+    if let targetId = request.targetId { arguments["targetId"] = targetId }
+    if let zone = request.zone { arguments["zone"] = zone.rawValue }
+    if let poseConfidence = request.poseConfidence {
+      arguments["poseConfidence"] = poseConfidence
+    }
+    if let origin = request.origin {
+      arguments["origin"] = origin.map { $0 as ConvexEncodable? }
+    }
+    if let direction = request.direction {
+      arguments["direction"] = direction.map { $0 as ConvexEncodable? }
+    }
+
+    do {
+      let result: FireShotResultWire = try await client.mutation(
+        ConvexGameSessionContract.fire,
+        with: arguments
+      )
+      return try result.domainValue()
     } catch {
       throw Self.mapped(error)
     }
@@ -211,6 +243,7 @@ private struct MatchSummaryWire: Decodable {
   @ConvexFloat var durationMs: Double
   @OptionalConvexFloat var startsAt: Double?
   @OptionalConvexFloat var endsAt: Double?
+  let winnerPlayerId: String?
 
   func domainValue() throws -> MatchSummary {
     MatchSummary(
@@ -219,7 +252,8 @@ private struct MatchSummaryWire: Decodable {
       phase: phase,
       durationMs: try exactInteger(durationMs),
       startsAt: startsAt,
-      endsAt: endsAt
+      endsAt: endsAt,
+      winnerPlayerId: winnerPlayerId
     )
   }
 }
@@ -232,6 +266,10 @@ private struct PlayerSnapshotWire: Decodable {
   let connected: Bool
   @ConvexFloat var health: Double
   @ConvexFloat var ammo: Double
+  @OptionalConvexFloat var kills: Double?
+  @OptionalConvexFloat var deaths: Double?
+  let lifeState: PlayerLifeState?
+  @OptionalConvexFloat var respawnAt: Double?
 
   func domainValue() throws -> PlayerSnapshot {
     PlayerSnapshot(
@@ -241,7 +279,11 @@ private struct PlayerSnapshotWire: Decodable {
       ready: ready,
       connected: connected,
       health: try exactInteger(health),
-      ammo: try exactInteger(ammo)
+      ammo: try exactInteger(ammo),
+      kills: try kills.map(exactInteger) ?? 0,
+      deaths: try deaths.map(exactInteger) ?? 0,
+      lifeState: lifeState ?? (connected ? .alive : .disconnected),
+      respawnAt: respawnAt
     )
   }
 }
@@ -290,6 +332,34 @@ private struct DebugFireResultWire: Decodable {
       damage: try exactInteger(damage),
       shooterAmmo: try exactInteger(shooterAmmo),
       targetHealth: try exactInteger(targetHealth),
+      eventId: eventId,
+      rejectReason: rejectReason
+    )
+  }
+}
+
+private struct FireShotResultWire: Decodable {
+  let accepted: Bool
+  let outcome: FireShotOutcome
+  let clientShotId: String
+  let replayed: Bool
+  @ConvexFloat var damage: Double
+  @ConvexFloat var shooterAmmo: Double
+  @OptionalConvexFloat var targetHealth: Double?
+  let targetLifeState: PlayerLifeState?
+  let eventId: String?
+  let rejectReason: FireRejectReason?
+
+  func domainValue() throws -> FireShotResult {
+    FireShotResult(
+      accepted: accepted,
+      outcome: outcome,
+      clientShotId: clientShotId,
+      replayed: replayed,
+      damage: try exactInteger(damage),
+      shooterAmmo: try exactInteger(shooterAmmo),
+      targetHealth: try targetHealth.map(exactInteger),
+      targetLifeState: targetLifeState,
       eventId: eventId,
       rejectReason: rejectReason
     )

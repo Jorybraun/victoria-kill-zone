@@ -14,6 +14,19 @@ export function hashSecret(secret: string): string {
   return bytesToHex(sha256(utf8ToBytes(secret)));
 }
 
+/** Format exactly 32 random bytes as the accepted 256-bit bearer capability. */
+export function sessionSecretFromBytes(bytes: Uint8Array): string {
+  if (bytes.length !== 32) {
+    throw new Error("A session capability requires exactly 32 random bytes");
+  }
+
+  return bytesToHex(bytes);
+}
+
+export function isValidSessionSecret(secret: string): boolean {
+  return /^[0-9a-f]{64}$/.test(secret);
+}
+
 /** Length-safe, constant-time comparison of two lowercase hex digests. */
 export function digestsMatch(left: string, right: string): boolean {
   if (left.length !== right.length) {

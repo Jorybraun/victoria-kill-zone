@@ -1,10 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { authenticates, digestsMatch, hashSecret } from "../domain/session.js";
+import {
+  authenticates,
+  digestsMatch,
+  hashSecret,
+  isValidSessionSecret,
+  sessionSecretFromBytes,
+} from "../domain/session.js";
 
 const SECRET_A = "a".repeat(64);
 const SECRET_B = "b".repeat(64);
 
 describe("match-scoped sessions", () => {
+  it("issues exactly 256 bits as lowercase hexadecimal", () => {
+    const secret = sessionSecretFromBytes(new Uint8Array(32).fill(171));
+    expect(secret).toHaveLength(64);
+    expect(secret).toMatch(/^[0-9a-f]{64}$/);
+    expect(isValidSessionSecret(secret)).toBe(true);
+    expect(() => sessionSecretFromBytes(new Uint8Array(31))).toThrow();
+  });
+
   it("hashes deterministically with a stable hex digest", () => {
     expect(hashSecret(SECRET_A)).toBe(hashSecret(SECRET_A));
     expect(hashSecret(SECRET_A)).toMatch(/^[0-9a-f]{64}$/);

@@ -19,7 +19,7 @@ struct AppEnvironment: Sendable {
 
     return AppEnvironment(
       gameSessionClient: ConvexGameSessionClient(deploymentURL: deploymentURL),
-      targetingSession: UnavailableTargetingSession()
+      targetingSession: TargetingSessionFactory.liveOrUnavailable()
     )
   }
 
@@ -27,7 +27,7 @@ struct AppEnvironment: Sendable {
     guard let deploymentURL = validatedDeploymentURL(deploymentURL) else { return nil }
     return AppEnvironment(
       gameSessionClient: ConvexGameSessionClient(deploymentURL: deploymentURL),
-      targetingSession: UnavailableTargetingSession()
+      targetingSession: TargetingSessionFactory.liveOrUnavailable()
     )
   }
 

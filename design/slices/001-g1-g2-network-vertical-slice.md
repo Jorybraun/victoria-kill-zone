@@ -74,7 +74,7 @@ Capitalization and punctuation are frozen. Implementations may localize later bu
 
 | Element | Copy |
 |---|---|
-| Product name | `VICTORIA KILL ZONE` |
+| Product name | `VICTORIA PEW PEW` |
 | Product descriptor | `MARKERLESS 1V1 DUEL` |
 | Callsign label | `CALLSIGN` |
 | Callsign placeholder | `ENTER A NAME` |

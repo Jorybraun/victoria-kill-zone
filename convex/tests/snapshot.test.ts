@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { GAMEPLAY } from "../domain/config.js";
-import { buildSpectatorSnapshot, type SnapshotMatch } from "../domain/snapshot.js";
+import {
+  buildMatchSnapshot,
+  buildSpectatorSnapshot,
+  type SnapshotMatch,
+} from "../domain/snapshot.js";
 import { hashSecret } from "../domain/session.js";
 import { match, player, T0 } from "./factories.js";
 
@@ -25,79 +29,92 @@ const events = [
     targetPlayerId: "guest",
     zone: "torso" as const,
     damage: 34,
-    message: "Host hit Challenger (torso) for 34",
+    message: "Host hit Challenger",
     createdAt: T0 + 500,
   },
 ];
 
-describe("spectatorSnapshot", () => {
-  it("reports the arena, timer, and per-player authority state", () => {
+describe("contract snapshots", () => {
+  it("projects the authenticated phone shape with synchronized authority state", () => {
     const now = T0 + 30_000;
-    const snapshot = buildSpectatorSnapshot(
+    const snapshot = buildMatchSnapshot(
       snapshotMatch(),
-      [player("host", { kills: 1, damageDealt: 100 }), player("guest", { health: 66 })],
+      "host",
+      [player("guest", { health: 66 }), player("host", { kills: 1, damageDealt: 100 })],
       events,
       now,
     );
 
     expect(snapshot).toMatchObject({
-      matchId: "match-1",
-      code: "AB12CD",
-      status: "active",
-      phase: "running",
-      arena: { radiusMeters: GAMEPLAY.defaultArenaRadiusMeters },
-      remainingMs: GAMEPLAY.matchDurationMs - 30_000,
-      generatedAt: now,
+      serverNow: now,
+      match: {
+        id: "match-1",
+        code: "AB12CD",
+        phase: "running",
+        durationMs: GAMEPLAY.matchDurationMs,
+      },
+      arena: { latitude: 48.4284, longitude: -123.3656, radiusMeters: 30 },
+      localPlayerId: "host",
     });
+    expect(snapshot.players.map((entry) => entry.id)).toEqual(["host", "guest"]);
     expect(snapshot.players.map((entry) => entry.health)).toEqual([100, 66]);
-    expect(snapshot.events[0]).toMatchObject({
-      actorDisplayName: "Host",
-      targetDisplayName: "Challenger",
-      message: "Host hit Challenger (torso) for 34",
-    });
+    expect(snapshot.events[0]).toMatchObject({ actorPlayerId: "host", targetPlayerId: "guest" });
   });
 
-  it("reports an active duel past endsAt as ended", () => {
+  it("derives finished once the authoritative running window expires", () => {
     const snapshot = buildSpectatorSnapshot(
       snapshotMatch(),
       [player("host"), player("guest")],
       [],
-      T0 + GAMEPLAY.matchDurationMs + 1,
+      T0 + GAMEPLAY.matchDurationMs,
     );
 
-    expect(snapshot.status).toBe("ended");
-    expect(snapshot.phase).toBe("finished");
-    expect(snapshot.remainingMs).toBe(0);
+    expect(snapshot.match.phase).toBe("finished");
+    expect(snapshot.match.endsAt).toBe(T0 + GAMEPLAY.matchDurationMs);
   });
 
-  it("surfaces the remaining respawn delay instead of raw timestamps", () => {
-    const now = T0 + 1_000;
+  it("projects respawn state and server-owned timestamp on both player views", () => {
+    const respawnAt = T0 + 5_000;
     const snapshot = buildSpectatorSnapshot(
       snapshotMatch(),
-      [player("host"), player("guest", { lifeState: "dead", health: 0, respawnAt: now + 4_000 })],
+      [player("host"), player("guest", { lifeState: "respawning", health: 0, respawnAt })],
       [],
-      now,
+      T0 + 1_000,
     );
 
-    expect(snapshot.players[1]).toMatchObject({ lifeState: "dead", respawnInMs: 4_000 });
-    expect(JSON.stringify(snapshot)).not.toContain("respawnAt");
+    expect(snapshot.players[1]).toMatchObject({
+      lifeState: "respawning",
+      health: 0,
+      respawnAt,
+    });
   });
 
-  it("never exposes session digests, session secrets, or device identifiers", () => {
+  it("sanitizes phone and spectator projections field by field", () => {
     const contaminated = [
-      { ...player("host"), sessionHash: hashSecret(SESSION_SECRET), deviceIdHash: hashSecret("device-a") },
-      { ...player("guest"), sessionHash: hashSecret("guest-secret"), deviceIdHash: hashSecret("device-b") },
+      {
+        ...player("host"),
+        sessionHash: hashSecret(SESSION_SECRET),
+        deviceIdHash: hashSecret("device-a"),
+      },
+      {
+        ...player("guest"),
+        sessionHash: hashSecret("guest-secret"),
+        deviceIdHash: hashSecret("device-b"),
+      },
     ];
 
-    const serialized = JSON.stringify(
+    const phone = JSON.stringify(
+      buildMatchSnapshot(snapshotMatch(), "host", contaminated, events, T0 + 1_000),
+    );
+    const spectator = JSON.stringify(
       buildSpectatorSnapshot(snapshotMatch(), contaminated, events, T0 + 1_000),
     );
 
-    expect(serialized).not.toContain(hashSecret(SESSION_SECRET));
-    expect(serialized).not.toContain(hashSecret("guest-secret"));
-    expect(serialized).not.toContain(hashSecret("device-a"));
-    expect(serialized).not.toContain(hashSecret("device-b"));
-    expect(serialized).not.toContain(SESSION_SECRET);
-    expect(serialized).not.toMatch(/sessionHash|deviceIdHash|sessionSecret/);
+    for (const serialized of [phone, spectator]) {
+      expect(serialized).not.toContain(SESSION_SECRET);
+      expect(serialized).not.toMatch(/sessionHash|deviceIdHash|sessionSecret/);
+    }
+    expect(spectator).not.toMatch(/centerLatitude|centerLongitude|latitude|longitude|lastSeenAt/);
+    expect(phone).toContain("lastSeenAt");
   });
 });

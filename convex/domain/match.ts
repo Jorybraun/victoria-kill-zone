@@ -1,5 +1,5 @@
 import { GAMEPLAY, normalizeArenaRadius, normalizeDisplayName } from "./config.js";
-import { canTransition, isJoinable } from "./lifecycle.js";
+import { isJoinable } from "./lifecycle.js";
 import { ok, rejected, type DomainResult } from "./result.js";
 import type { MatchState, MatchStatus, PlayerRole, PlayerState, StatePatch } from "./types.js";
 
@@ -31,12 +31,13 @@ export interface NewMatch {
   match: {
     code: string;
     status: "setup";
+    phase: "lobby";
     centerLatitude: number;
     centerLongitude: number;
     radiusMeters: number;
     maxPlayers: number;
     durationMs: number;
-    startedAt: null;
+    startsAt: null;
     endsAt: null;
     winnerPlayerId: null;
     endReason: null;
@@ -52,12 +53,13 @@ export function planCreateMatch(input: CreateMatchInput, code: string): NewMatch
     match: {
       code,
       status: "setup" as const,
+      phase: "lobby" as const,
       centerLatitude: input.centerLatitude,
       centerLongitude: input.centerLongitude,
       radiusMeters: normalizeArenaRadius(input.radiusMeters),
       maxPlayers: GAMEPLAY.maxPlayers,
       durationMs: GAMEPLAY.matchDurationMs,
-      startedAt: null,
+      startsAt: null,
       endsAt: null,
       winnerPlayerId: null,
       endReason: null,
@@ -73,8 +75,12 @@ export function newPlayer(displayName: string, role: PlayerRole, now: number): O
   return {
     displayName,
     role,
+    ready: false,
     connected: true,
     lifeState: "alive",
+    // G2-compatible create/join has no location heartbeat yet. The four-mechanic
+    // demo cut treats those players as inside until the geofence slice lands.
+    arenaState: "inside",
     health: GAMEPLAY.startingHealth,
     ammo: GAMEPLAY.magazineSize,
     kills: 0,
@@ -124,16 +130,21 @@ export function planJoinMatch(
 }
 
 export interface StartPlan {
-  matchPatch: { status: "active"; startedAt: number; endsAt: number; updatedAt: number };
-  playerResetPatch: StatePatch<PlayerState>;
+  matchPatch: {
+    status: "waiting";
+    phase: "countdown";
+    startsAt: number;
+    endsAt: null;
+    updatedAt: number;
+  };
 }
 
 /**
- * Host-only start. Requires exactly two connected players and a duel that is
- * `waiting`; the server owns `startedAt`/`endsAt` so clients cannot extend a duel.
+ * Host-only start. Requires exactly two ready, connected players and enters the
+ * server-owned countdown. Activation owns the running window.
  */
 export function planStartMatch(
-  match: Pick<MatchState, "status" | "hostPlayerId" | "durationMs">,
+  match: Pick<MatchState, "status" | "phase" | "hostPlayerId" | "durationMs">,
   players: readonly PlayerState[],
   requesterId: string,
   now: number,
@@ -142,22 +153,68 @@ export function planStartMatch(
     return rejected("not_host");
   }
 
-  if (match.status === "active" || match.status === "ended") {
+  if (match.phase !== "lobby" || match.status === "active" || match.status === "ended") {
     return rejected("match_already_started");
   }
 
-  if (players.length !== GAMEPLAY.maxPlayers || players.some((player) => !player.connected)) {
+  if (players.length !== GAMEPLAY.maxPlayers) {
     return rejected("opponent_missing");
   }
 
-  if (!canTransition(match.status, "active")) {
+  if (players.some((player) => !player.connected)) {
+    return rejected("players_not_connected");
+  }
+
+  if (players.some((player) => !player.ready)) {
+    return rejected("players_not_ready");
+  }
+
+  if (match.status !== "waiting") {
     return rejected("match_not_active");
   }
 
   return ok({
     matchPatch: {
-      status: "active" as const,
-      startedAt: now,
+      status: "waiting" as const,
+      phase: "countdown" as const,
+      startsAt: now + GAMEPLAY.countdownMs,
+      endsAt: null,
+      updatedAt: now,
+    },
+  });
+}
+
+export interface ActivatePlan {
+  matchPatch: {
+    status: "active";
+    phase: "running";
+    startsAt: number;
+    endsAt: number;
+    updatedAt: number;
+  };
+  playerResetPatch: StatePatch<PlayerState>;
+}
+
+/** Guarded countdown activation; stale or early scheduled jobs are no-ops. */
+export function planActivateMatch(
+  match: Pick<MatchState, "status" | "phase" | "startsAt" | "durationMs">,
+  expectedStartsAt: number,
+  now: number,
+): ActivatePlan | null {
+  if (
+    match.status !== "waiting" ||
+    match.phase !== "countdown" ||
+    match.startsAt !== expectedStartsAt ||
+    now < expectedStartsAt
+  ) {
+    return null;
+  }
+
+  return {
+    matchPatch: {
+      status: "active",
+      phase: "running",
+      startsAt: expectedStartsAt,
       endsAt: now + match.durationMs,
       updatedAt: now,
     },
@@ -168,5 +225,5 @@ export function planStartMatch(
       lastShotAt: null,
       respawnAt: null,
     },
-  });
+  };
 }

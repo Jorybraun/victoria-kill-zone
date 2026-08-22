@@ -106,6 +106,7 @@ final class LobbyStoreTests: XCTestCase {
     XCTAssertEqual(ConvexGameSessionContract.join, "matches:join")
     XCTAssertEqual(ConvexGameSessionContract.setReady, "matches:setReady")
     XCTAssertEqual(ConvexGameSessionContract.start, "matches:start")
+    XCTAssertEqual(ConvexGameSessionContract.fire, "shots:fire")
     XCTAssertEqual(ConvexGameSessionContract.debugFire, "shots:debugFire")
     XCTAssertEqual(ConvexGameSessionContract.matchSnapshot, "queries:matchSnapshot")
   }
@@ -129,7 +130,8 @@ final class LobbyStoreTests: XCTestCase {
     store.displayName = "  Host  "
 
     await store.performCreateDuel()
-    XCTAssertEqual(client.createRequests, [CreateDuelRequest(displayName: "Host", arenaRadiusMeters: 30)])
+    XCTAssertEqual(
+      client.createRequests, [CreateDuelRequest(displayName: "Host", arenaRadiusMeters: 30)])
     XCTAssertEqual(store.operation, .creating)
 
     client.send(snapshot(phase: .lobby, hostReady: false))
@@ -146,7 +148,8 @@ final class LobbyStoreTests: XCTestCase {
     guard case .waiting(let unchangedRoom) = store.route else {
       return XCTFail("Expected waiting room while subscription catches up")
     }
-    XCTAssertFalse(unchangedRoom.localPlayer?.isReady ?? true, "Mutation must not update UI optimistically")
+    XCTAssertFalse(
+      unchangedRoom.localPlayer?.isReady ?? true, "Mutation must not update UI optimistically")
 
     client.send(snapshot(phase: .lobby, hostReady: true))
     await settle()
@@ -158,7 +161,7 @@ final class LobbyStoreTests: XCTestCase {
 
   func testDebugFireReusesIDAndWaitsForAuthoritativeHealthAndAmmo() async throws {
     let client = MockGameSessionClient()
-    let store = makeStore(client: client, shotID: "stable-shot-id")
+    let store = makeStore(client: client, shotIDs: ["stable-shot-id"])
     store.displayName = "Host"
     await store.performCreateDuel()
     client.send(snapshot(phase: .running, hostAmmo: 8, guestHealth: 100))
@@ -210,11 +213,164 @@ final class LobbyStoreTests: XCTestCase {
     await settle()
 
     XCTAssertEqual(store.debugShotState, .confirmed(damage: 34))
+    XCTAssertTrue(store.canDebugFire, "A confirmed fallback shot must allow the next shot")
     guard case .active(let reconciledDuel) = store.route else {
       return XCTFail("Expected active duel")
     }
     XCTAssertEqual(reconciledDuel.localPlayer?.ammo, 7)
     XCTAssertEqual(reconciledDuel.opponent?.health, 66)
+  }
+
+  func testDebugFireAfterConfirmationUsesNewClientShotID() async throws {
+    let client = MockGameSessionClient()
+    let store = makeStore(client: client, shotIDs: ["first-shot-id", "second-shot-id"])
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running, hostAmmo: 8, guestHealth: 100))
+    await settle()
+
+    client.debugResults = [
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "first-shot-id",
+          replayed: false,
+          damage: 34,
+          shooterAmmo: 7,
+          targetHealth: 66,
+          eventId: "event-hit",
+          rejectReason: nil
+        )
+      ),
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "second-shot-id",
+          replayed: false,
+          damage: 34,
+          shooterAmmo: 6,
+          targetHealth: 32,
+          eventId: nil,
+          rejectReason: nil
+        )
+      ),
+    ]
+
+    await store.performDebugFire()
+    client.send(
+      snapshot(
+        phase: .running,
+        hostAmmo: 7,
+        guestHealth: 66,
+        events: [hitEvent]
+      )
+    )
+    await settle()
+    XCTAssertEqual(store.debugShotState, .confirmed(damage: 34))
+
+    await store.performDebugFire()
+
+    XCTAssertEqual(client.debugShotIDs, ["first-shot-id", "second-shot-id"])
+    XCTAssertEqual(store.debugShotState, .pending)
+  }
+
+  func testDebugFireAfterDefinitiveRejectionUsesNewClientShotID() async throws {
+    let client = MockGameSessionClient()
+    let store = makeStore(client: client, shotIDs: ["rejected-shot-id", "next-shot-id"])
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running, hostAmmo: 8, guestHealth: 100))
+    await settle()
+
+    client.debugResults = [
+      .success(
+        DebugFireResult(
+          accepted: false,
+          outcome: .rejected,
+          clientShotId: "rejected-shot-id",
+          replayed: false,
+          damage: 0,
+          shooterAmmo: 8,
+          targetHealth: 100,
+          eventId: nil,
+          rejectReason: .connectionStale
+        )
+      ),
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "next-shot-id",
+          replayed: false,
+          damage: 34,
+          shooterAmmo: 7,
+          targetHealth: 66,
+          eventId: nil,
+          rejectReason: nil
+        )
+      ),
+    ]
+
+    await store.performDebugFire()
+    XCTAssertEqual(store.debugShotState, .failed)
+
+    await store.performDebugFire()
+
+    XCTAssertEqual(client.debugShotIDs, ["rejected-shot-id", "next-shot-id"])
+    XCTAssertEqual(store.debugShotState, .pending)
+  }
+
+  func testMarkerlessTransportFailureRetriesExactRequest() async throws {
+    let firedAt = Date(timeIntervalSince1970: 1_750_000_000)
+    let clock = TestClock(firedAt)
+    let client = MockGameSessionClient()
+    let targetingSession = FixedTargetingSession(snapshot: aimedSnapshot(at: firedAt))
+    let store = makeStore(
+      client: client,
+      targetingSession: targetingSession,
+      shotIDs: ["markerless-shot-id", "unexpected-new-id"],
+      now: { clock.now }
+    )
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running, hostAmmo: 8, guestHealth: 100))
+    await settle()
+
+    client.fireResults = [
+      .failure(GameSessionClientError.networkUnavailable),
+      .success(
+        FireShotResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "markerless-shot-id",
+          replayed: true,
+          damage: 34,
+          shooterAmmo: 7,
+          targetHealth: 66,
+          targetLifeState: .alive,
+          eventId: "markerless-hit",
+          rejectReason: nil
+        )
+      ),
+    ]
+
+    await store.performMarkerlessFire()
+    XCTAssertEqual(store.markerlessShotState, .failed(reason: nil))
+    XCTAssertEqual(client.fireRequests.count, 1)
+
+    clock.now = firedAt.addingTimeInterval(5)
+    await store.performMarkerlessFire()
+
+    XCTAssertEqual(client.fireRequests.count, 2)
+    XCTAssertEqual(client.fireRequests[0], client.fireRequests[1])
+    XCTAssertEqual(
+      client.fireRequests.map(\.clientShotId), ["markerless-shot-id", "markerless-shot-id"])
+    XCTAssertEqual(
+      store.markerlessShotState,
+      .confirmed(outcome: .hit, zone: .torso, damage: 34)
+    )
   }
 
   func testReconnectStaysLockedUntilFreshSnapshotReplacesState() async throws {
@@ -245,14 +401,42 @@ final class LobbyStoreTests: XCTestCase {
     XCTAssertEqual(recoveredDuel.opponent?.health, 66)
   }
 
-  private func makeStore(client: MockGameSessionClient, shotID: String = "unused-shot-id") -> LobbyStore {
-    LobbyStore(
+  private func makeStore(
+    client: MockGameSessionClient,
+    targetingSession: any TargetingSession = UnavailableTargetingSession(),
+    shotIDs: [String] = ["unused-shot-id"],
+    now: @escaping @Sendable () -> Date = { Date(timeIntervalSince1970: 1_750_000_000) }
+  ) -> LobbyStore {
+    let shotIDSequence = ShotIDSequence(shotIDs)
+    return LobbyStore(
       environment: AppEnvironment(
         gameSessionClient: client,
-        targetingSession: UnavailableTargetingSession()
+        targetingSession: targetingSession
       ),
-      now: { Date(timeIntervalSince1970: 1_750_000_000) },
-      makeShotId: { shotID }
+      now: now,
+      makeShotId: { shotIDSequence.next() }
+    )
+  }
+
+  private func aimedSnapshot(at date: Date) -> TargetingSnapshot {
+    TargetingSnapshot(
+      state: .torsoLock,
+      bodyDetected: true,
+      torsoDetected: true,
+      confidence: 0.88,
+      observedAt: date,
+      poseObservedAt: date,
+      bodyBounds: nil,
+      torsoBounds: nil,
+      headRegion: nil,
+      torsoRegion: nil,
+      aimClaim: TargetingAimClaim(zone: .torso, confidence: 0.82, capturedAt: date),
+      cameraRay: TargetingCameraRay(
+        origin: TargetingVector3(x: 1, y: 2, z: 3),
+        direction: TargetingVector3(x: 0, y: 0, z: -1),
+        capturedAt: date
+      ),
+      poseStaleAfter: 0.5
     )
   }
 
@@ -327,6 +511,8 @@ private final class MockGameSessionClient: GameSessionClient, @unchecked Sendabl
   private let connectionContinuation: AsyncStream<GameSessionConnectionState>.Continuation
   private var storedCreateRequests: [CreateDuelRequest] = []
   private var storedReadyValues: [Bool] = []
+  private var storedFireRequests: [FireShotRequest] = []
+  private var storedFireResults: [Result<FireShotResult, Error>] = []
   private var storedDebugShotIDs: [String] = []
   private var storedDebugResults: [Result<DebugFireResult, Error>] = []
 
@@ -353,6 +539,15 @@ private final class MockGameSessionClient: GameSessionClient, @unchecked Sendabl
     lock.withLock { storedDebugShotIDs }
   }
 
+  var fireRequests: [FireShotRequest] {
+    lock.withLock { storedFireRequests }
+  }
+
+  var fireResults: [Result<FireShotResult, Error>] {
+    get { lock.withLock { storedFireResults } }
+    set { lock.withLock { storedFireResults = newValue } }
+  }
+
   var debugResults: [Result<DebugFireResult, Error>] {
     get { lock.withLock { storedDebugResults } }
     set { lock.withLock { storedDebugResults = newValue } }
@@ -372,6 +567,14 @@ private final class MockGameSessionClient: GameSessionClient, @unchecked Sendabl
   }
 
   func startDuel(session: PlayerSession) async throws {}
+
+  func fire(session: PlayerSession, request: FireShotRequest) async throws -> FireShotResult {
+    try lock.withLock {
+      storedFireRequests.append(request)
+      guard !storedFireResults.isEmpty else { throw GameSessionClientError.unknown }
+      return try storedFireResults.removeFirst().get()
+    }
+  }
 
   func debugFire(session: PlayerSession, clientShotId: String) async throws -> DebugFireResult {
     try lock.withLock {
@@ -395,5 +598,55 @@ private final class MockGameSessionClient: GameSessionClient, @unchecked Sendabl
 
   func sendConnection(_ state: GameSessionConnectionState) {
     connectionContinuation.yield(state)
+  }
+}
+
+private struct FixedTargetingSession: TargetingSession {
+  let availability = TargetingAvailability.available
+  let currentSnapshot: TargetingSnapshot
+
+  init(snapshot: TargetingSnapshot) {
+    currentSnapshot = snapshot
+  }
+
+  func snapshots() -> AsyncStream<TargetingSnapshot> {
+    AsyncStream { continuation in
+      continuation.yield(currentSnapshot)
+      continuation.finish()
+    }
+  }
+
+  func start() async throws {}
+
+  func stop() async {}
+}
+
+private final class ShotIDSequence: @unchecked Sendable {
+  private let lock = NSLock()
+  private var values: [String]
+
+  init(_ values: [String]) {
+    self.values = values
+  }
+
+  func next() -> String {
+    lock.withLock {
+      guard !values.isEmpty else { return "unexpected-shot-id" }
+      return values.removeFirst()
+    }
+  }
+}
+
+private final class TestClock: @unchecked Sendable {
+  private let lock = NSLock()
+  private var storedNow: Date
+
+  init(_ now: Date) {
+    storedNow = now
+  }
+
+  var now: Date {
+    get { lock.withLock { storedNow } }
+    set { lock.withLock { storedNow = newValue } }
   }
 }

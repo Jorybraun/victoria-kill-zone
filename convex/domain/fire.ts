@@ -9,13 +9,15 @@ import type {
   StatePatch,
 } from "./types.js";
 
-/** Client-submitted hit claim. Damage is deliberately absent from the request. */
+/** Client-submitted markerless hit claim. Damage is deliberately absent. */
 export interface FireRequest {
   shooterId: string;
   clientShotId: string;
   targetId?: string;
   zone?: HitZone;
   poseConfidence?: number;
+  origin?: readonly number[];
+  direction?: readonly number[];
   firedAtClient: number;
 }
 
@@ -26,7 +28,7 @@ export interface FireResult {
   damage: number;
   shooterAmmo: number;
   targetHealth?: number;
-  targetLifeState?: "alive" | "dead" | "respawning";
+  targetLifeState?: "alive" | "respawning";
 }
 
 export interface ShotLedgerDraft {
@@ -41,7 +43,7 @@ export interface ShotLedgerDraft {
 }
 
 export interface EventDraft {
-  type: "shot" | "hit" | "eliminated" | "finished";
+  type: "shot" | "hit" | "eliminated";
   actorPlayerId: string | null;
   targetPlayerId: string | null;
   zone: HitZone | null;
@@ -59,21 +61,17 @@ export interface FirePlan {
 }
 
 /**
- * Resolve a debug-fire hit claim against server-owned state.
- *
- * Validation order follows the technical specification: phase and timing, then
- * shooter membership/liveness, then ammunition and cooldown, then target
- * validity. Session authentication and shot idempotency are enforced by the
- * function layer before this runs, and every rejection is still ledgered.
+ * Resolve one markerless fire claim against server-owned state. Authentication
+ * and the idempotency lookup happen in the Convex adapter before this planner.
  */
-export function resolveDebugFire(
-  match: Pick<MatchState, "status" | "endsAt">,
+export function resolveFire(
+  match: Pick<MatchState, "status" | "phase" | "endsAt">,
   shooter: PlayerState,
   opponent: PlayerState | null,
   request: FireRequest,
   now: number,
 ): FirePlan {
-  if (match.status !== "active") {
+  if (match.status !== "active" || match.phase !== "running") {
     return reject(shooter, request, "match_not_active");
   }
 
@@ -105,9 +103,12 @@ export function resolveDebugFire(
   };
   const shooterAmmo = shooterPatch.ammo ?? shooter.ammo;
 
-  const claimedTargetId = request.targetId;
-  const claimedZone = request.zone;
-  if (claimedTargetId === undefined || claimedZone === undefined) {
+  const hasTarget = request.targetId !== undefined;
+  const hasZone = request.zone !== undefined;
+  const hasConfidence = request.poseConfidence !== undefined;
+  const isMiss = !hasTarget && !hasZone && !hasConfidence;
+
+  if (isMiss) {
     return {
       result: { accepted: true, outcome: "miss", damage: 0, shooterAmmo },
       shooterPatch,
@@ -120,11 +121,28 @@ export function resolveDebugFire(
           targetPlayerId: null,
           zone: null,
           damage: null,
-          message: `${shooter.displayName} fired and missed`,
+          message: `${shooter.displayName} MISSED`,
         },
       ],
       respawnAt: null,
     };
+  }
+
+  if (!hasTarget || !hasZone || !hasConfidence) {
+    return reject(shooter, request, "invalid_target");
+  }
+
+  const claimedTargetId = request.targetId;
+  const zone = request.zone;
+  const poseConfidence = request.poseConfidence;
+  if (
+    claimedTargetId === undefined ||
+    zone === undefined ||
+    poseConfidence === undefined ||
+    !Number.isFinite(poseConfidence) ||
+    poseConfidence < (zone === "head" ? 0.6 : 0.45)
+  ) {
+    return reject(shooter, request, "invalid_target");
   }
 
   if (opponent === null || opponent.id !== claimedTargetId || opponent.id === shooter.id) {
@@ -135,26 +153,14 @@ export function resolveDebugFire(
     return reject(shooter, request, "target_not_alive");
   }
 
-  const zone = claimedZone;
   const damage = Math.min(damageForZone(zone), opponent.health);
   const remainingHealth = Math.max(0, opponent.health - damage);
   const eliminated = remainingHealth === 0;
   const outcome: ShotOutcome = eliminated ? "kill" : "hit";
 
-  const events: EventDraft[] = [
-    {
-      type: "hit",
-      actorPlayerId: shooter.id,
-      targetPlayerId: opponent.id,
-      zone,
-      damage,
-      message: `${shooter.displayName} hit ${opponent.displayName} (${zone}) for ${damage}`,
-    },
-  ];
-
   const targetPatch: StatePatch<PlayerState> = {
     health: remainingHealth,
-    lifeState: eliminated ? "dead" : "alive",
+    lifeState: eliminated ? "respawning" : "alive",
   };
 
   const fullShooterPatch: StatePatch<PlayerState> = {
@@ -170,15 +176,25 @@ export function resolveDebugFire(
     respawnAt = now + GAMEPLAY.respawnDelayMs;
     targetPatch.deaths = opponent.deaths + 1;
     targetPatch.respawnAt = respawnAt;
-    events.push({
-      type: "eliminated",
-      actorPlayerId: shooter.id,
-      targetPlayerId: opponent.id,
-      zone,
-      damage,
-      message: `${shooter.displayName} eliminated ${opponent.displayName}`,
-    });
   }
+
+  const event: EventDraft = eliminated
+    ? {
+        type: "eliminated",
+        actorPlayerId: shooter.id,
+        targetPlayerId: opponent.id,
+        zone,
+        damage,
+        message: `${shooter.displayName} ELIMINATED ${opponent.displayName}`,
+      }
+    : {
+        type: "hit",
+        actorPlayerId: shooter.id,
+        targetPlayerId: opponent.id,
+        zone,
+        damage,
+        message: `${shooter.displayName} HIT ${opponent.displayName}`,
+      };
 
   return {
     result: {
@@ -187,25 +203,54 @@ export function resolveDebugFire(
       damage,
       shooterAmmo,
       targetHealth: remainingHealth,
-      targetLifeState: eliminated ? "dead" : "alive",
+      targetLifeState: eliminated ? "respawning" : "alive",
     },
     shooterPatch: fullShooterPatch,
     targetPatch,
     shot: ledger(request, { targetId: opponent.id, zone, damage, outcome }),
-    events,
+    events: [event],
     respawnAt,
   };
 }
 
-/** Replay of an already-resolved `clientShotId`; never applies damage twice. */
-export function replayResult(shot: Pick<ShotLedgerDraft, "outcome" | "damage">, shooterAmmo: number): FireResult {
-  return {
-    accepted: shot.outcome !== "rejected",
-    outcome: shot.outcome,
-    rejectReason: "duplicate_shot",
-    damage: shot.damage,
-    shooterAmmo,
-  };
+/** G2 debug fire is a trusted torso claim against the only opponent. */
+export function resolveDebugFire(
+  match: Pick<MatchState, "status" | "phase" | "endsAt">,
+  shooter: PlayerState,
+  opponent: PlayerState | null,
+  request: FireRequest,
+  now: number,
+): FirePlan {
+  const targetId = opponent?.id ?? request.targetId;
+  return resolveFire(
+    match,
+    shooter,
+    opponent,
+    {
+      ...request,
+      ...(targetId === undefined ? {} : { targetId }),
+      zone: "torso",
+      poseConfidence: 1,
+    },
+    now,
+  );
+}
+
+/** Stable claim identity used to distinguish a retry from conflicting reuse. */
+export function fireClaimFingerprint(request: FireRequest): string {
+  return JSON.stringify([
+    request.targetId ?? null,
+    request.zone ?? null,
+    request.poseConfidence ?? null,
+    request.origin ?? null,
+    request.direction ?? null,
+    request.firedAtClient,
+  ]);
+}
+
+/** Replay copies the original result; callers add `replayed: true` on the wire. */
+export function replayResult(result: FireResult): FireResult {
+  return { ...result };
 }
 
 function reject(shooter: PlayerState, request: FireRequest, reason: RejectReason): FirePlan {
