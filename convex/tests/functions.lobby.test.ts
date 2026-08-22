@@ -6,10 +6,18 @@
  * writes, indexes, and session isolation rather than pure domain logic alone.
  */
 import { describe, expect, it } from "vitest";
-import { COUNTDOWN_MS, INITIAL_AMMO, INITIAL_HEALTH } from "../domain/contract.js";
+import {
+  COUNTDOWN_MS,
+  INITIAL_AMMO,
+  INITIAL_HEALTH,
+} from "../domain/contract.js";
 import { api, testBackend } from "./harness.js";
 
-function auth(session: { matchId: string; playerId: string; sessionSecret: string }) {
+function auth(session: {
+  matchId: string;
+  playerId: string;
+  sessionSecret: string;
+}) {
   return {
     matchId: session.matchId,
     playerId: session.playerId,
@@ -41,7 +49,9 @@ describe("matches:create", () => {
     expect(host.sessionSecret.length).toBeGreaterThan(0);
 
     const stored = await t.run(async (ctx) => {
-      const match = await ctx.db.get(ctx.db.normalizeId("matches", host.matchId)!);
+      const match = await ctx.db.get(
+        ctx.db.normalizeId("matches", host.matchId)!,
+      );
       const players = await ctx.db.query("players").collect();
       return { match, players };
     });
@@ -62,7 +72,10 @@ describe("matches:create", () => {
   it("rejects a blank display name through the validator path", async () => {
     const t = testBackend();
     await expect(
-      t.mutation(api.matches.create, { displayName: "   ", arenaRadiusMeters: 30 }),
+      t.mutation(api.matches.create, {
+        displayName: "   ",
+        arenaRadiusMeters: 30,
+      }),
     ).rejects.toThrow(/INVALID_DISPLAY_NAME/);
   });
 });
@@ -81,9 +94,32 @@ describe("matches:join", () => {
 
   it("rejects a malformed code before touching the index", async () => {
     const t = testBackend();
-    await expect(t.mutation(api.matches.join, { displayName: "Guest", code: "AB" })).rejects.toThrow(
-      /INVALID_CODE/,
-    );
+    await expect(
+      t.mutation(api.matches.join, { displayName: "Guest", code: "AB" }),
+    ).rejects.toThrow(/INVALID_CODE/);
+    await expect(
+      t.mutation(api.matches.join, { displayName: "Guest", code: "!!-.." }),
+    ).rejects.toThrow(/INVALID_CODE/);
+  });
+
+  it("rejects an overlong code instead of truncating it to a real duel", async () => {
+    const t = testBackend();
+    const { host } = await openLobby(t);
+
+    await expect(
+      t.mutation(api.matches.join, {
+        displayName: "Third",
+        code: `${host.code}7`,
+      }),
+    ).rejects.toThrow(/INVALID_CODE/);
+
+    // Punctuation is separator noise, so a well-formed code still resolves.
+    await expect(
+      t.mutation(api.matches.join, {
+        displayName: "Third",
+        code: host.code.replace(/^(.)/, "$1-"),
+      }),
+    ).rejects.toThrow(/MATCH_FULL/);
   });
 
   it("rejects an unknown but well-formed code", async () => {
@@ -110,7 +146,9 @@ describe("matches:setReady", () => {
     await t.mutation(api.matches.setReady, { ...auth(host), isReady: true });
 
     const players = await t.run((ctx) => ctx.db.query("players").collect());
-    const readiness = new Map(players.map((player) => [player._id as string, player.ready]));
+    const readiness = new Map(
+      players.map((player) => [player._id as string, player.ready]),
+    );
     expect(readiness.get(host.playerId)).toBe(true);
     expect(readiness.get(guest.playerId)).toBe(false);
   });
@@ -148,7 +186,9 @@ describe("matches:start", () => {
     await t.mutation(api.matches.setReady, { ...auth(host), isReady: true });
     await t.mutation(api.matches.setReady, { ...auth(guest), isReady: true });
 
-    await expect(t.mutation(api.matches.start, auth(guest))).rejects.toThrow(/HOST_ONLY/);
+    await expect(t.mutation(api.matches.start, auth(guest))).rejects.toThrow(
+      /HOST_ONLY/,
+    );
   });
 
   it("requires both players ready", async () => {
@@ -156,7 +196,9 @@ describe("matches:start", () => {
     const { host } = await openLobby(t);
     await t.mutation(api.matches.setReady, { ...auth(host), isReady: true });
 
-    await expect(t.mutation(api.matches.start, auth(host))).rejects.toThrow(/PLAYERS_NOT_READY/);
+    await expect(t.mutation(api.matches.start, auth(host))).rejects.toThrow(
+      /PLAYERS_NOT_READY/,
+    );
   });
 
   it("writes a server-owned countdown window", async () => {
@@ -175,7 +217,9 @@ describe("matches:start", () => {
 
     expect(match?.phase).toBe("countdown");
     expect(match?.startsAt ?? 0).toBeGreaterThanOrEqual(before + COUNTDOWN_MS);
-    expect(match?.endsAt ?? 0).toBe((match?.startsAt ?? 0) + (match?.durationMs ?? 0));
+    expect(match?.endsAt ?? 0).toBe(
+      (match?.startsAt ?? 0) + (match?.durationMs ?? 0),
+    );
   });
 
   it("cannot be started twice", async () => {
@@ -185,6 +229,8 @@ describe("matches:start", () => {
     await t.mutation(api.matches.setReady, { ...auth(guest), isReady: true });
     await t.mutation(api.matches.start, auth(host));
 
-    await expect(t.mutation(api.matches.start, auth(host))).rejects.toThrow(/MATCH_ALREADY_STARTED/);
+    await expect(t.mutation(api.matches.start, auth(host))).rejects.toThrow(
+      /MATCH_ALREADY_STARTED/,
+    );
   });
 });

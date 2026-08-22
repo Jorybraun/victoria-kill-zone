@@ -2,7 +2,7 @@ import { ConvexError } from "convex/values";
 import type { ErrorCode } from "../../domain/contract.js";
 import { resolvePhase } from "../../domain/lifecycle.js";
 import type { LobbyPlayer } from "../../domain/match.js";
-import { normalizeMatchCode } from "../../domain/match.js";
+import { isValidMatchCode, normalizeMatchCode } from "../../domain/match.js";
 import { authenticates } from "../../domain/session.js";
 import type { Doc, Id, MutationCtx, QueryCtx } from "./server.js";
 
@@ -39,9 +39,14 @@ export async function matchByCode(
   ctx: MutationCtx | QueryCtx,
   code: string,
 ): Promise<Doc<"matches"> | null> {
+  const normalized = normalizeMatchCode(code);
+  if (!isValidMatchCode(normalized)) {
+    return null;
+  }
+
   return await ctx.db
     .query("matches")
-    .withIndex("by_code", (q) => q.eq("code", normalizeMatchCode(code)))
+    .withIndex("by_code", (q) => q.eq("code", normalized))
     .unique();
 }
 
