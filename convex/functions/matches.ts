@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import type { PlayerSession } from "../domain/contract.js";
-import { resolvePhase } from "../domain/lifecycle.js";
+import { resolvePhase, scheduledTransition } from "../domain/lifecycle.js";
 import {
   isValidMatchCode,
   matchCodeFromBytes,
@@ -9,8 +9,9 @@ import {
   planSetReady,
   planStartMatch,
 } from "../domain/match.js";
+import { scheduled } from "./lib/scheduled.js";
 import { issueSessionSecret, matchCodeBytes } from "./lib/session.js";
-import { mutation, type MutationCtx } from "./lib/server.js";
+import { internalMutation, mutation, type Id, type MutationCtx } from "./lib/server.js";
 import {
   advancePhase,
   authenticatePlayer,
@@ -196,6 +197,52 @@ export const start = mutation({
       createdAt: now,
     });
 
+    // Subscriptions only rerun on a write, so the time-based edges out of the
+    // countdown are persisted by scheduled work rather than left for the next
+    // client call to notice.
+    await ctx.scheduler.runAt(plan.value.startsAt, scheduled.advanceToRunning, {
+      matchId: match._id,
+    });
+    await ctx.scheduler.runAt(plan.value.endsAt, scheduled.advanceToFinished, {
+      matchId: match._id,
+    });
+
     return null;
   },
+});
+
+/**
+ * Persist a scheduled phase transition at its server-owned boundary.
+ *
+ * Guarded by {@link scheduledTransition}, so an early, duplicated, or stale run
+ * against a match that already moved on writes nothing.
+ */
+async function runScheduledTransition(
+  ctx: MutationCtx,
+  matchId: Id<"matches">,
+  target: "running" | "finished",
+): Promise<null> {
+  const match = await ctx.db.get(matchId);
+  if (match === null) {
+    return null;
+  }
+
+  const phase = scheduledTransition(match, target, Date.now());
+  if (phase !== null) {
+    await ctx.db.patch(match._id, { phase });
+  }
+
+  return null;
+}
+
+/** `matches:advanceToRunning` — internal; fires at `startsAt`. */
+export const advanceToRunning = internalMutation({
+  args: { matchId: v.id("matches") },
+  handler: async (ctx, args): Promise<null> => await runScheduledTransition(ctx, args.matchId, "running"),
+});
+
+/** `matches:advanceToFinished` — internal; fires at `endsAt`. */
+export const advanceToFinished = internalMutation({
+  args: { matchId: v.id("matches") },
+  handler: async (ctx, args): Promise<null> => await runScheduledTransition(ctx, args.matchId, "finished"),
 });
