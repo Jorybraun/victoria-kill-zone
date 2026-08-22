@@ -10,16 +10,20 @@ struct AppEnvironment: Sendable {
   )
 
   static func liveOrShell(bundle: Bundle = .main) -> AppEnvironment {
+    let targetingSession = makeLiveTargetingSession()
     guard
       let rawValue = bundle.object(forInfoDictionaryKey: "CONVEX_DEPLOYMENT_URL") as? String,
       let deploymentURL = validatedDeploymentURL(rawValue)
     else {
-      return .phaseZeroShell
+      return AppEnvironment(
+        gameSessionClient: UnavailableGameSessionClient(),
+        targetingSession: targetingSession
+      )
     }
 
     return AppEnvironment(
       gameSessionClient: ConvexGameSessionClient(deploymentURL: deploymentURL),
-      targetingSession: UnavailableTargetingSession()
+      targetingSession: targetingSession
     )
   }
 
@@ -27,8 +31,16 @@ struct AppEnvironment: Sendable {
     guard let deploymentURL = validatedDeploymentURL(deploymentURL) else { return nil }
     return AppEnvironment(
       gameSessionClient: ConvexGameSessionClient(deploymentURL: deploymentURL),
-      targetingSession: UnavailableTargetingSession()
+      targetingSession: makeLiveTargetingSession()
     )
+  }
+
+  private static func makeLiveTargetingSession() -> any TargetingSession {
+    #if os(iOS) && canImport(ARKit) && canImport(AVFoundation) && canImport(Vision)
+      ARVisionTargetingSession()
+    #else
+      UnavailableTargetingSession()
+    #endif
   }
 
   private static func validatedDeploymentURL(_ value: String) -> String? {

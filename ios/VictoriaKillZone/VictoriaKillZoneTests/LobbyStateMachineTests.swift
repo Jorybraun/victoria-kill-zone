@@ -217,6 +217,86 @@ final class LobbyStoreTests: XCTestCase {
     XCTAssertEqual(reconciledDuel.opponent?.health, 66)
   }
 
+  func testConfirmedDebugFireRearmsForAnotherAuthoritativeShot() async throws {
+    let client = MockGameSessionClient()
+    let store = makeStore(client: client, shotID: "next-shot-id")
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running, hostAmmo: 8, guestHealth: 100))
+    await settle()
+
+    client.debugResults = [
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "next-shot-id",
+          replayed: false,
+          damage: 34,
+          shooterAmmo: 7,
+          targetHealth: 66,
+          eventId: "event-one",
+          rejectReason: nil
+        )
+      )
+    ]
+    await store.performDebugFire()
+    client.send(
+      snapshot(
+        phase: .running,
+        hostAmmo: 7,
+        guestHealth: 66,
+        events: [hitEvent(id: "event-one", health: 66)]
+      )
+    )
+    await settle()
+
+    XCTAssertTrue(store.canDebugFire)
+    client.debugResults = [
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "next-shot-id",
+          replayed: false,
+          damage: 34,
+          shooterAmmo: 6,
+          targetHealth: 32,
+          eventId: "event-two",
+          rejectReason: nil
+        )
+      )
+    ]
+    await store.performDebugFire()
+
+    XCTAssertEqual(client.debugShotIDs, ["next-shot-id", "next-shot-id"])
+    XCTAssertEqual(store.debugShotState, .pending)
+    client.send(
+      snapshot(
+        phase: .running,
+        hostAmmo: 6,
+        guestHealth: 32,
+        events: [hitEvent(id: "event-two", health: 32)]
+      )
+    )
+    await settle()
+    XCTAssertEqual(store.debugShotState, .confirmed(damage: 34))
+  }
+
+  func testHealthyQuietSubscriptionDoesNotExpireNetworkFreshness() async throws {
+    let client = MockGameSessionClient()
+    let store = makeStore(client: client)
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running))
+    await settle()
+
+    XCTAssertTrue(store.isNetworkFresh(at: Date(timeIntervalSince1970: 1_750_003_600)))
+    client.sendConnection(.connecting)
+    await settle()
+    XCTAssertFalse(store.isNetworkFresh(at: Date(timeIntervalSince1970: 1_750_003_600)))
+  }
+
   func testReconnectStaysLockedUntilFreshSnapshotReplacesState() async throws {
     let client = MockGameSessionClient()
     let store = makeStore(client: client)
@@ -299,10 +379,14 @@ final class LobbyStoreTests: XCTestCase {
   }
 
   private var hitEvent: EventSnapshot {
+    hitEvent(id: "event-hit", health: 66)
+  }
+
+  private func hitEvent(id: String, health: Int) -> EventSnapshot {
     EventSnapshot(
-      id: "event-hit",
+      id: id,
       type: .hit,
-      message: "Host hit Guest",
+      message: "Host hit Guest • \(health) health",
       createdAt: 1_750_000_010_000,
       actorPlayerId: "host-1",
       targetPlayerId: "guest-1",
