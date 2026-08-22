@@ -7,6 +7,7 @@ import { App } from "./App";
 describe("App route and demo integration", () => {
   it("starts with no selected duel", () => {
     render(<App />);
+    expect(screen.getByText("VICTORIA PEW PEW")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "NO DUEL SELECTED" }),
     ).toBeInTheDocument();

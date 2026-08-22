@@ -3,7 +3,9 @@ import SwiftUI
 struct ActiveDuelView: View {
   let duel: ActiveDuel
   @ObservedObject var store: LobbyStore
+  @Environment(\.scenePhase) private var scenePhase
   @StateObject private var fx = LaserFXEngine()
+  @StateObject private var voiceFire = VoiceFireController()
   @State private var muzzleFlash = false
 
   var body: some View {
@@ -61,11 +63,27 @@ struct ActiveDuelView: View {
         }
       }
     }
+    .onAppear {
+      voiceFire.setViewVisible(true)
+      voiceFire.setSceneActive(scenePhase == .active)
+      refreshVoiceEligibility()
+    }
     .task {
       await store.startTargeting()
     }
     .onDisappear {
+      voiceFire.setViewVisible(false)
+      voiceFire.setSceneActive(false)
       Task { await store.stopTargeting() }
+    }
+    .onChange(of: scenePhase) { _, phase in
+      voiceFire.setSceneActive(phase == .active)
+    }
+    .onChange(of: duel.phase) { _, _ in
+      refreshVoiceEligibility()
+    }
+    .onChange(of: voiceFire.fireRequestSequence) { _, _ in
+      fireShot()
     }
   }
 
@@ -197,22 +215,9 @@ struct ActiveDuelView: View {
         .foregroundStyle(VKZPalette.pending)
     case .running:
       VStack(spacing: 8) {
+        voiceControl
         Button(shotButtonLabel) {
-          let canFireMarkerless = store.canFireMarkerless
-          fx.fireLaser(hit: canFireMarkerless)
-          if canFireMarkerless {
-            store.fireMarkerless()
-          } else if store.canDebugFire {
-            store.debugFire()
-          }
-          withAnimation(.easeOut(duration: 0.12)) {
-            muzzleFlash = true
-          }
-          DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-            withAnimation(.easeOut(duration: 0.12)) {
-              muzzleFlash = false
-            }
-          }
+          fireShot()
         }
         .buttonStyle(VKZPrimaryButtonStyle())
         .accessibilityLabel("Fire markerless shot")
@@ -234,6 +239,63 @@ struct ActiveDuelView: View {
         .font(.title.bold())
     case .lobby:
       EmptyView()
+    }
+  }
+
+  private var voiceControl: some View {
+    Toggle(
+      isOn: Binding(
+        get: { voiceFire.isEnabled },
+        set: { $0 ? voiceFire.enable() : voiceFire.disable() }
+      )
+    ) {
+      VStack(alignment: .leading, spacing: 2) {
+        Text("VOICE FIRE")
+          .font(.caption.weight(.bold).monospaced())
+        Text(voiceFire.status.displayText)
+          .font(.caption2.weight(.semibold).monospaced())
+          .foregroundStyle(voiceStatusColor)
+        if case .listening = voiceFire.status {
+          Text("SAY “PEW PEW”")
+            .font(.caption.weight(.bold).monospaced())
+        }
+      }
+    }
+    .tint(VKZPalette.telemetry)
+    .padding(12)
+    .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 12))
+    .accessibilityLabel("Voice Fire")
+  }
+
+  private func refreshVoiceEligibility() {
+    voiceFire.setFireEligible(duel.phase == .running)
+  }
+
+  private func fireShot() {
+    let canFireMarkerless = store.canFireMarkerless
+    fx.fireLaser(hit: canFireMarkerless)
+    if canFireMarkerless {
+      store.fireMarkerless()
+    } else if store.canDebugFire {
+      store.debugFire()
+    }
+    withAnimation(.easeOut(duration: 0.12)) {
+      muzzleFlash = true
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+      withAnimation(.easeOut(duration: 0.12)) {
+        muzzleFlash = false
+      }
+    }
+  }
+
+  private var voiceStatusColor: Color {
+    switch voiceFire.status {
+    case .disabled: VKZPalette.textMuted
+    case .requestingPermission: VKZPalette.pending
+    case .enabled: VKZPalette.telemetry
+    case .listening: VKZPalette.ready
+    case .unavailable: VKZPalette.danger
     }
   }
 

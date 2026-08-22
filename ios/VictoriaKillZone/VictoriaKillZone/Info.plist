@@ -26,6 +26,10 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Victoria Pew Pew uses the rear camera to detect the opposing player and render the live duel view.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Victoria Pew Pew uses the microphone only when you opt in to Voice Fire and listen for the phrase “pew pew.” Audio and transcripts are not stored.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Victoria Pew Pew uses speech recognition only when you opt in to Voice Fire and recognize the phrase “pew pew.”</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Victoria Pew Pew uses your foreground location to confirm that both players remain inside the active arena.</string>
 	<key>NSLocationTemporaryUsageDescriptionDictionary</key>

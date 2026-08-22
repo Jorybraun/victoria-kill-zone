@@ -86,7 +86,7 @@ function CodeSelectionView({
     <main className="state-page" id="main-content">
       <section className="selection-card" aria-labelledby="selection-heading">
         <div className="brand-lockup brand-lockup--selection">
-          <p className="product-name">VICTORIA KILL ZONE</p>
+          <p className="product-name">VICTORIA PEW PEW</p>
           <p className="product-descriptor">MARKERLESS 1V1 DUEL</p>
         </div>
 
@@ -148,7 +148,7 @@ function LoadingView({ code }: { code: string }) {
     <main className="state-page" id="main-content" aria-busy="true">
       <section className="loading-card" aria-labelledby="loading-heading">
         <div className="brand-lockup brand-lockup--selection">
-          <p className="product-name">VICTORIA KILL ZONE</p>
+          <p className="product-name">VICTORIA PEW PEW</p>
           <p className="product-descriptor">MARKERLESS 1V1 DUEL</p>
         </div>
         <h1 id="loading-heading" role="status">

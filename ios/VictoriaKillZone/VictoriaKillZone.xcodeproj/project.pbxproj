@@ -25,6 +25,9 @@
 		B00100000000000000000010 /* ConvexMobile in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000001 /* ConvexMobile */; };
 		B00100000000000000000011 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000013 /* RootView.swift */; };
 		B00100000000000000000012 /* LaserFX.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000014 /* LaserFX.swift */; };
+		B00100000000000000000013 /* VoiceFireController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000015 /* VoiceFireController.swift */; };
+		B00100000000000000000014 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00100000000000000000016 /* AVFoundation.framework */; };
+		B00100000000000000000015 /* Speech.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00100000000000000000017 /* Speech.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -58,6 +61,9 @@
 		F00100000000000000000012 /* ConvexGameSessionClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvexGameSessionClient.swift; sourceTree = "<group>"; };
 		F00100000000000000000013 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		F00100000000000000000014 /* LaserFX.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaserFX.swift; sourceTree = "<group>"; };
+		F00100000000000000000015 /* VoiceFireController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceFireController.swift; sourceTree = "<group>"; };
+		F00100000000000000000016 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		F00100000000000000000017 /* Speech.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Speech.framework; path = System/Library/Frameworks/Speech.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -66,6 +72,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				B00100000000000000000010 /* ConvexMobile in Frameworks */,
+				B00100000000000000000014 /* AVFoundation.framework in Frameworks */,
+				B00100000000000000000015 /* Speech.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -127,6 +135,7 @@
 			children = (
 				F00100000000000000000005 /* GameSessionClient.swift */,
 				F00100000000000000000012 /* ConvexGameSessionClient.swift */,
+				F00100000000000000000015 /* VoiceFireController.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -320,6 +329,7 @@
 				B0010000000000000000000A /* WaitingRoomView.swift in Sources */,
 				B0010000000000000000000B /* ActiveDuelView.swift in Sources */,
 				B00100000000000000000012 /* LaserFX.swift in Sources */,
+				B00100000000000000000013 /* VoiceFireController.swift in Sources */,
 				B0010000000000000000000C /* VKZTheme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
