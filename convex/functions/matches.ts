@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import type { PlayerSession } from "../domain/contract.js";
-import { resolvePhase, scheduledTransition } from "../domain/lifecycle.js";
+import { planActivation, resolvePhase, shouldFinish } from "../domain/lifecycle.js";
 import {
+  isFiniteArenaRadius,
   isValidMatchCode,
   matchCodeFromBytes,
   planCreateMatch,
@@ -16,8 +17,10 @@ import {
   advancePhase,
   authenticatePlayer,
   fail,
+  hostPlayer,
   listPlayers,
   matchByCode,
+  schedulePresenceExpiry,
   toLobbyPlayer,
 } from "./lib/store.js";
 
@@ -45,6 +48,13 @@ export const create = mutation({
   args: { displayName: v.string(), arenaRadiusMeters: v.number() },
   handler: async (ctx, args): Promise<PlayerSession> => {
     const now = Date.now();
+    // A non-finite radius is malformed shape rather than a rejected game rule,
+    // so it fails like any other argument-validator violation: the frozen G2
+    // error enum has no code for it and inventing one would widen the wire.
+    if (!isFiniteArenaRadius(args.arenaRadiusMeters)) {
+      throw new Error("arenaRadiusMeters must be a finite number");
+    }
+
     const plan = planCreateMatch({
       displayName: args.displayName,
       arenaRadiusMeters: args.arenaRadiusMeters,
@@ -71,6 +81,7 @@ export const create = mutation({
       actorPlayerId: playerId,
       createdAt: now,
     });
+    await schedulePresenceExpiry(ctx, playerId, now);
 
     return {
       matchId,
@@ -123,6 +134,7 @@ export const join = mutation({
       actorPlayerId: playerId,
       createdAt: now,
     });
+    await schedulePresenceExpiry(ctx, playerId, now);
 
     return {
       matchId: match._id,
@@ -175,7 +187,6 @@ export const start = mutation({
       phase: resolvePhase(match, now),
       actorRole: player.role,
       players: players.map(toLobbyPlayer),
-      durationMs: match.durationMs,
       now,
     });
 
@@ -186,25 +197,15 @@ export const start = mutation({
     await ctx.db.patch(match._id, {
       phase: plan.value.phase,
       startsAt: plan.value.startsAt,
-      endsAt: plan.value.endsAt,
     });
 
-    await ctx.db.insert("events", {
+    // Subscriptions only rerun on a write, so the countdown boundary is
+    // persisted by scheduled work rather than left for the next client call to
+    // notice. The duel's end time belongs to that activation, not to the
+    // countdown, so a running match always carries an `endsAt`.
+    await ctx.scheduler.runAt(plan.value.startsAt, scheduled.activate, {
       matchId: match._id,
-      type: "started",
-      message: plan.value.message,
-      actorPlayerId: player._id,
-      createdAt: now,
-    });
-
-    // Subscriptions only rerun on a write, so the time-based edges out of the
-    // countdown are persisted by scheduled work rather than left for the next
-    // client call to notice.
-    await ctx.scheduler.runAt(plan.value.startsAt, scheduled.advanceToRunning, {
-      matchId: match._id,
-    });
-    await ctx.scheduler.runAt(plan.value.endsAt, scheduled.advanceToFinished, {
-      matchId: match._id,
+      expectedStartsAt: plan.value.startsAt,
     });
 
     return null;
@@ -212,37 +213,61 @@ export const start = mutation({
 });
 
 /**
- * Persist a scheduled phase transition at its server-owned boundary.
+ * `internal.matches:activate` — fires at `startsAt`.
  *
- * Guarded by {@link scheduledTransition}, so an early, duplicated, or stale run
- * against a match that already moved on writes nothing.
+ * The single writer of `endsAt` and of the `started` event: the duel becomes
+ * playable at the server-owned boundary, and the guard makes an early,
+ * duplicated, or superseded run a no-op.
  */
-async function runScheduledTransition(
-  ctx: MutationCtx,
-  matchId: Id<"matches">,
-  target: "running" | "finished",
-): Promise<null> {
-  const match = await ctx.db.get(matchId);
-  if (match === null) {
+export const activate = internalMutation({
+  args: { matchId: v.id("matches"), expectedStartsAt: v.number() },
+  handler: async (ctx, args): Promise<null> => {
+    const now = Date.now();
+    const match = await ctx.db.get(args.matchId);
+    if (match === null) {
+      return null;
+    }
+
+    const plan = planActivation(match, args.expectedStartsAt, now);
+    if (plan === null) {
+      return null;
+    }
+
+    await ctx.db.patch(match._id, { phase: plan.phase, endsAt: plan.endsAt });
+    await ctx.db.insert("events", {
+      matchId: match._id,
+      type: "started",
+      message: plan.message,
+      ...hostActor(await hostPlayer(ctx, match._id)),
+      createdAt: now,
+    });
+
+    await ctx.scheduler.runAt(plan.endsAt, scheduled.finish, {
+      matchId: match._id,
+      expectedEndsAt: plan.endsAt,
+    });
+
     return null;
-  }
-
-  const phase = scheduledTransition(match, target, Date.now());
-  if (phase !== null) {
-    await ctx.db.patch(match._id, { phase });
-  }
-
-  return null;
-}
-
-/** `matches:advanceToRunning` — internal; fires at `startsAt`. */
-export const advanceToRunning = internalMutation({
-  args: { matchId: v.id("matches") },
-  handler: async (ctx, args): Promise<null> => await runScheduledTransition(ctx, args.matchId, "running"),
+  },
 });
 
-/** `matches:advanceToFinished` — internal; fires at `endsAt`. */
-export const advanceToFinished = internalMutation({
-  args: { matchId: v.id("matches") },
-  handler: async (ctx, args): Promise<null> => await runScheduledTransition(ctx, args.matchId, "finished"),
+function hostActor(host: { _id: Id<"players"> } | null): { actorPlayerId?: Id<"players"> } {
+  return host === null ? {} : { actorPlayerId: host._id };
+}
+
+/** `internal.matches:finish` — fires at the `endsAt` it was scheduled for. */
+export const finish = internalMutation({
+  args: { matchId: v.id("matches"), expectedEndsAt: v.number() },
+  handler: async (ctx, args): Promise<null> => {
+    const match = await ctx.db.get(args.matchId);
+    if (match === null) {
+      return null;
+    }
+
+    if (shouldFinish(match, args.expectedEndsAt, Date.now())) {
+      await ctx.db.patch(match._id, { phase: "finished" });
+    }
+
+    return null;
+  },
 });

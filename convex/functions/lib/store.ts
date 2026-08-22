@@ -3,7 +3,9 @@ import type { ErrorCode } from "../../domain/contract.js";
 import { resolvePhase } from "../../domain/lifecycle.js";
 import type { LobbyPlayer } from "../../domain/match.js";
 import { isValidMatchCode, normalizeMatchCode } from "../../domain/match.js";
+import { presenceExpiresAt } from "../../domain/presence.js";
 import { authenticates } from "../../domain/session.js";
+import { scheduled } from "./scheduled.js";
 import type { Doc, Id, MutationCtx, QueryCtx } from "./server.js";
 
 /**
@@ -20,7 +22,36 @@ export function toLobbyPlayer(player: Doc<"players">): LobbyPlayer {
     role: player.role,
     ready: player.ready,
     connected: player.connected,
+    lastSeenAt: player.lastSeenAt,
   };
+}
+
+/**
+ * Arm the guarded expiry for a heartbeat.
+ *
+ * Presence must decay without a client call, and a subscription only reruns on a
+ * write, so every renewal schedules its own expiry. The job is keyed to the
+ * heartbeat it was armed for, so superseded jobs simply do nothing.
+ */
+export async function schedulePresenceExpiry(
+  ctx: MutationCtx,
+  playerId: Id<"players">,
+  lastSeenAt: number,
+): Promise<void> {
+  await ctx.scheduler.runAt(presenceExpiresAt(lastSeenAt), scheduled.expirePresence, {
+    playerId,
+    expectedLastSeenAt: lastSeenAt,
+  });
+}
+
+export async function hostPlayer(
+  ctx: MutationCtx | QueryCtx,
+  matchId: Id<"matches">,
+): Promise<Doc<"players"> | null> {
+  return await ctx.db
+    .query("players")
+    .withIndex("by_match_role", (q) => q.eq("matchId", matchId).eq("role", "host"))
+    .unique();
 }
 
 export async function listPlayers(

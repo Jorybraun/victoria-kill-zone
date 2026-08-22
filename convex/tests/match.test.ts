@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
+  ARENA_RADIUS_DEFAULT_METERS,
   ARENA_RADIUS_MAX_METERS,
   ARENA_RADIUS_MIN_METERS,
   COUNTDOWN_MS,
+  DISPLAY_NAME_MAX_SCALARS,
   INITIAL_AMMO,
   INITIAL_HEALTH,
   MATCH_CODE_LENGTH,
   MATCH_DURATION_MS,
+  PRESENCE_TIMEOUT_MS,
 } from "../domain/contract.js";
 import {
+  displayNameLength,
+  isValidDisplayName,
+  isFiniteArenaRadius,
   isValidMatchCode,
   matchCodeFromBytes,
   normalizeArenaRadius,
@@ -23,34 +29,80 @@ import {
 
 const T0 = 1_760_000_000_000;
 
-const host: LobbyPlayer = { id: "p1", role: "host", ready: true, connected: true };
-const guest: LobbyPlayer = { id: "p2", role: "guest", ready: true, connected: true };
+const host: LobbyPlayer = { id: "p1", role: "host", ready: true, connected: true, lastSeenAt: T0 };
+const guest: LobbyPlayer = { id: "p2", role: "guest", ready: true, connected: true, lastSeenAt: T0 };
 
 function create(displayName = "Vic", radius = 30) {
   return planCreateMatch({ displayName, arenaRadiusMeters: radius, code: "ABC123", now: T0 });
 }
 
-describe("normalization", () => {
-  it("trims and collapses a callsign", () => {
-    expect(normalizeDisplayName("  Vic   Braun  ")).toBe("Vic Braun");
+describe("display names", () => {
+  it("trims only the surrounding whitespace and preserves everything inside", () => {
+    expect(normalizeDisplayName("  Vic   Braun  ")).toBe("Vic   Braun");
+    expect(normalizeDisplayName("\u00a0 Vic\u2003Braun \u2028")).toBe("Vic\u2003Braun");
   });
 
-  it("uppercases a code and drops separators without truncating it", () => {
+  it("counts Unicode scalars, not UTF-16 code units", () => {
+    // Twenty scalars that occupy forty code units: a truncating implementation
+    // would both accept this name and cut it in half through a surrogate pair.
+    const twentyEmoji = "\u{1f5fd}".repeat(DISPLAY_NAME_MAX_SCALARS);
+
+    expect(twentyEmoji.length).toBe(DISPLAY_NAME_MAX_SCALARS * 2);
+    expect(displayNameLength(twentyEmoji)).toBe(DISPLAY_NAME_MAX_SCALARS);
+    expect(isValidDisplayName(twentyEmoji)).toBe(true);
+    expect(isValidDisplayName(`\u{1f5fd}${twentyEmoji}`)).toBe(false);
+  });
+
+  it("accepts one through twenty scalars and rejects anything else", () => {
+    expect(isValidDisplayName("V")).toBe(true);
+    expect(isValidDisplayName("V".repeat(DISPLAY_NAME_MAX_SCALARS))).toBe(true);
+    expect(isValidDisplayName("V".repeat(DISPLAY_NAME_MAX_SCALARS + 1))).toBe(false);
+    expect(isValidDisplayName("")).toBe(false);
+    expect(isValidDisplayName("   ")).toBe(false);
+  });
+});
+
+describe("duel codes", () => {
+  it("uppercases and drops only typed separators, without truncating", () => {
     expect(normalizeMatchCode("abc-123")).toBe("ABC123");
+    expect(normalizeMatchCode(" ab c-12 3 ")).toBe("ABC123");
     expect(normalizeMatchCode("abc1237")).toBe("ABC1237");
     expect(isValidMatchCode("abc123")).toBe(true);
-    expect(isValidMatchCode("a-b c.1/2*3")).toBe(true);
+    expect(isValidMatchCode("a-b c-1 2 3")).toBe(true);
+  });
+
+  it("rejects wrong lengths and characters that are not separators", () => {
     expect(isValidMatchCode("abc12")).toBe(false);
     expect(isValidMatchCode("abc1237")).toBe(false);
     expect(isValidMatchCode("")).toBe(false);
+    // Dropping unknown punctuation would silently resolve a different duel.
+    expect(isValidMatchCode("a.b/c*123")).toBe(false);
+    expect(isValidMatchCode("ABC12\u00e9")).toBe(false);
   });
 
-  it("clamps the arena radius", () => {
+  it("accepts the ambiguous glyphs a human may type but never generates them", () => {
+    expect(isValidMatchCode("O0I1AB")).toBe(true);
+    expect(matchCodeFromBytes(Uint8Array.from([7, 8, 9, 10, 11, 12]))).not.toMatch(/[01IO]/);
+  });
+});
+
+describe("arena radius", () => {
+  it("rounds and clamps to the playable range", () => {
     expect(normalizeArenaRadius(5)).toBe(ARENA_RADIUS_MIN_METERS);
     expect(normalizeArenaRadius(500)).toBe(ARENA_RADIUS_MAX_METERS);
-    expect(normalizeArenaRadius(Number.NaN)).toBe(ARENA_RADIUS_MIN_METERS);
+    expect(normalizeArenaRadius(30.4)).toBe(30);
+    expect(normalizeArenaRadius(30.5)).toBe(31);
   });
 
+  it("treats a non-finite radius as malformed rather than a playable arena", () => {
+    expect(isFiniteArenaRadius(ARENA_RADIUS_DEFAULT_METERS)).toBe(true);
+    expect(isFiniteArenaRadius(Number.NaN)).toBe(false);
+    expect(isFiniteArenaRadius(Number.POSITIVE_INFINITY)).toBe(false);
+    expect(isFiniteArenaRadius(Number.NEGATIVE_INFINITY)).toBe(false);
+  });
+});
+
+describe("code generation", () => {
   it("derives a fixed-length code from random bytes deterministically", () => {
     const bytes = Uint8Array.from([0, 1, 2, 3, 4, 5]);
 
@@ -81,10 +133,24 @@ describe("planCreateMatch", () => {
     });
   });
 
-  it("rejects an empty callsign", () => {
-    const plan = create("   ");
+  it("keeps the callsign exactly as typed, minus surrounding whitespace", () => {
+    const plan = create("  Vic   Braun  ");
 
-    expect(plan).toEqual({ ok: false, code: "INVALID_DISPLAY_NAME" });
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    expect(plan.value.host.displayName).toBe("Vic   Braun");
+    expect(plan.value.host.lastSeenAt).toBe(T0);
+  });
+
+  it("rejects an empty callsign", () => {
+    expect(create("   ")).toEqual({ ok: false, code: "INVALID_DISPLAY_NAME" });
+  });
+
+  it("rejects an overlong callsign instead of truncating it", () => {
+    expect(create("V".repeat(DISPLAY_NAME_MAX_SCALARS + 1))).toEqual({
+      ok: false,
+      code: "INVALID_DISPLAY_NAME",
+    });
   });
 });
 
@@ -130,11 +196,11 @@ describe("planSetReady", () => {
   it("records readiness in the lobby", () => {
     expect(planSetReady({ phase: "lobby", displayName: "Vic", isReady: true })).toEqual({
       ok: true,
-      value: { ready: true, message: "Vic IS READY" },
+      value: { ready: true, message: "Vic READY" },
     });
     expect(planSetReady({ phase: "lobby", displayName: "Vic", isReady: false })).toEqual({
       ok: true,
-      value: { ready: false, message: "Vic IS NOT READY" },
+      value: { ready: false, message: "Vic NOT READY" },
     });
   });
 
@@ -152,23 +218,15 @@ describe("planStartMatch", () => {
       phase: "lobby",
       actorRole: "host",
       players: [host, guest],
-      durationMs: MATCH_DURATION_MS,
       now: T0,
       ...overrides,
     });
   }
 
-  it("starts a server-timed countdown", () => {
-    const plan = start();
-
-    expect(plan).toEqual({
+  it("starts a server-timed countdown and leaves the end time to activation", () => {
+    expect(start()).toEqual({
       ok: true,
-      value: {
-        phase: "countdown",
-        startsAt: T0 + COUNTDOWN_MS,
-        endsAt: T0 + COUNTDOWN_MS + MATCH_DURATION_MS,
-        message: "DUEL STARTED",
-      },
+      value: { phase: "countdown", startsAt: T0 + COUNTDOWN_MS },
     });
   });
 
@@ -192,6 +250,18 @@ describe("planStartMatch", () => {
       ok: false,
       code: "PLAYERS_NOT_CONNECTED",
     });
+  });
+
+  it("requires presence to be fresh, not merely flagged connected", () => {
+    const stale = { ...guest, lastSeenAt: T0 - PRESENCE_TIMEOUT_MS };
+
+    expect(start({ players: [host, stale] })).toEqual({
+      ok: false,
+      code: "PLAYERS_NOT_CONNECTED",
+    });
+    expect(start({ players: [host, { ...stale, lastSeenAt: T0 - PRESENCE_TIMEOUT_MS + 1 }] }).ok).toBe(
+      true,
+    );
   });
 
   it("rejects a second start", () => {

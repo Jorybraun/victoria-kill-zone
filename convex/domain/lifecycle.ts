@@ -3,9 +3,11 @@ import type { MatchPhase } from "./contract.js";
 /**
  * Authoritative phase resolution.
  *
- * The stored phase advances on write, but the countdown → running and
- * running → finished edges are time based, so every read and every rule
- * resolves the phase from server time instead of trusting a stale record.
+ * The stored phase advances on write. `endsAt` is the one boundary a read may
+ * resolve on its own, because a match whose end time has passed must never be
+ * treated as playable even if its scheduled finish has not landed yet. The
+ * countdown → running edge is deliberately *not* resolved on read: `running`
+ * requires an `endsAt`, and only {@link planActivation} may issue one.
  */
 export interface MatchTiming {
   readonly phase: MatchPhase;
@@ -28,32 +30,55 @@ export function resolvePhase(match: MatchTiming, now: number): MatchPhase {
     return "finished";
   }
 
-  if (match.phase === "countdown" && match.startsAt !== undefined && now >= match.startsAt) {
-    return "running";
-  }
-
   return match.phase;
 }
 
+export interface ActivationPlan {
+  readonly phase: "running";
+  readonly endsAt: number;
+  readonly message: string;
+}
+
 /**
- * Phase a scheduled transition is allowed to persist, or `null` when it must do
- * nothing.
+ * What a scheduled activation may persist, or `null` when it must do nothing.
  *
- * Scheduled work can fire early, fire late, or fire against a match that moved
- * on, so the target is only written when server time already resolves to it and
- * the record does not already say so. That makes every scheduled transition
- * idempotent and safe to run twice.
+ * The job carries the countdown it was scheduled for, so a duplicate run, a run
+ * against a restarted or terminal match, or an early run writes nothing. The
+ * duel length is measured from the activation itself, so a delayed job still
+ * yields a full-length match.
  */
-export function scheduledTransition(
-  match: MatchTiming,
-  target: Extract<MatchPhase, "running" | "finished">,
+export function planActivation(
+  match: MatchTiming & { readonly durationMs: number },
+  expectedStartsAt: number,
   now: number,
-): MatchPhase | null {
-  if (isTerminal(match.phase) || match.phase === target) {
+): ActivationPlan | null {
+  if (match.phase !== "countdown" || match.startsAt !== expectedStartsAt) {
     return null;
   }
 
-  return resolvePhase(match, now) === target ? target : null;
+  if (now < expectedStartsAt) {
+    return null;
+  }
+
+  return { phase: "running", endsAt: now + match.durationMs, message: "DUEL STARTED" };
+}
+
+/**
+ * Whether a scheduled finish may persist `finished`.
+ *
+ * Guarded by the `endsAt` the job was scheduled for, so a stale job from an
+ * earlier end time, a terminal match, or an early run writes nothing.
+ */
+export function shouldFinish(
+  match: MatchTiming,
+  expectedEndsAt: number,
+  now: number,
+): boolean {
+  if (isTerminal(match.phase) || match.endsAt !== expectedEndsAt) {
+    return false;
+  }
+
+  return now >= expectedEndsAt;
 }
 
 /** Only a `lobby` match accepts a second player. */

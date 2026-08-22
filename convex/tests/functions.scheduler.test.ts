@@ -33,6 +33,19 @@ async function startedMatch(t: Backend) {
   return { host, guest };
 }
 
+/** Activation only issues the end time when it runs, so the clock moves twice. */
+async function runDuel(t: Backend) {
+  vi.advanceTimersByTime(COUNTDOWN_MS);
+  await t.finishInProgressScheduledFunctions();
+  vi.advanceTimersByTime(MATCH_DURATION_MS);
+  await t.finishInProgressScheduledFunctions();
+}
+
+async function scheduledNames(t: Backend, name: string) {
+  const jobs = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+  return jobs.filter((job) => job.name === name);
+}
+
 function storedMatch(t: Backend, matchId: string) {
   return t.run(async (ctx) => {
     const id = ctx.db.normalizeId("matches", matchId);
@@ -49,64 +62,124 @@ describe("scheduled phase transitions", () => {
     vi.useRealTimers();
   });
 
-  it("schedules both server-owned boundaries when the countdown starts", async () => {
+  it("schedules the countdown boundary for the countdown it started", async () => {
     const t = testBackend();
     const { host } = await startedMatch(t);
-
-    const scheduled = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
-    expect(scheduled.map((job) => job.name).sort()).toEqual([
-      "matches:advanceToFinished",
-      "matches:advanceToRunning",
-    ]);
-
     const match = await storedMatch(t, host.matchId);
-    expect(scheduled.map((job) => job.scheduledTime).sort()).toEqual([
-      match?.startsAt,
-      match?.endsAt,
-    ]);
+
+    const activation = (
+      await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())
+    ).filter((job) => job.name === "matches:activate");
+
+    expect(activation).toHaveLength(1);
+    expect(activation[0]?.scheduledTime).toBe(match?.startsAt);
+    expect(activation[0]?.args[0]).toMatchObject({ expectedStartsAt: match?.startsAt });
   });
 
-  it("persists running at startsAt without a client mutation", async () => {
+  it("persists running and its end time at startsAt, with no client mutation", async () => {
     const t = testBackend();
     const { host } = await startedMatch(t);
+    const countdown = await storedMatch(t, host.matchId);
 
-    expect((await storedMatch(t, host.matchId))?.phase).toBe("countdown");
+    expect(countdown?.phase).toBe("countdown");
+    expect(countdown?.endsAt).toBeUndefined();
 
     vi.advanceTimersByTime(COUNTDOWN_MS);
     await t.finishInProgressScheduledFunctions();
 
-    expect((await storedMatch(t, host.matchId))?.phase).toBe("running");
+    const running = await storedMatch(t, host.matchId);
+    expect(running?.phase).toBe("running");
+    expect(running?.endsAt).toBe((running?.startsAt ?? 0) + MATCH_DURATION_MS);
+
+    const events = await t.run((ctx) => ctx.db.query("events").collect());
+    expect(events.filter((event) => event.type === "started")).toHaveLength(1);
+  });
+
+  it("schedules the finish only once the duel is running", async () => {
+    const t = testBackend();
+    const { host } = await startedMatch(t);
+
+    expect(await scheduledNames(t, "matches:finish")).toHaveLength(0);
+
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    await t.finishInProgressScheduledFunctions();
+
+    const running = await storedMatch(t, host.matchId);
+    const finish = await scheduledNames(t, "matches:finish");
+    expect(finish).toHaveLength(1);
+    expect(finish[0]?.scheduledTime).toBe(running?.endsAt);
+    expect(finish[0]?.args[0]).toMatchObject({ expectedEndsAt: running?.endsAt });
   });
 
   it("persists finished at endsAt", async () => {
     const t = testBackend();
     const { host } = await startedMatch(t);
 
-    vi.advanceTimersByTime(COUNTDOWN_MS + MATCH_DURATION_MS);
-    await t.finishInProgressScheduledFunctions();
+    await runDuel(t);
 
     expect((await storedMatch(t, host.matchId))?.phase).toBe("finished");
   });
 
-  it("writes nothing when it runs before its boundary", async () => {
+  it("writes nothing when a job runs before its boundary", async () => {
     const t = testBackend();
     const { host } = await startedMatch(t);
+    const startsAt = (await storedMatch(t, host.matchId))?.startsAt ?? 0;
 
-    await t.mutation(api.internal.advanceToRunning, { matchId: host.matchId });
+    await t.mutation(api.internal.activate, {
+      matchId: host.matchId,
+      expectedStartsAt: startsAt,
+    });
+
+    const match = await storedMatch(t, host.matchId);
+    expect(match?.phase).toBe("countdown");
+    expect(match?.endsAt).toBeUndefined();
+  });
+
+  it("writes nothing for a job carrying a superseded timestamp", async () => {
+    const t = testBackend();
+    const { host } = await startedMatch(t);
+    const startsAt = (await storedMatch(t, host.matchId))?.startsAt ?? 0;
+
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    await t.mutation(api.internal.activate, {
+      matchId: host.matchId,
+      expectedStartsAt: startsAt - 1_000,
+    });
 
     expect((await storedMatch(t, host.matchId))?.phase).toBe("countdown");
+
+    await t.finishInProgressScheduledFunctions();
+    const running = await storedMatch(t, host.matchId);
+
+    await t.mutation(api.internal.finish, {
+      matchId: host.matchId,
+      expectedEndsAt: (running?.endsAt ?? 0) - 1_000,
+    });
+
+    expect((await storedMatch(t, host.matchId))?.phase).toBe("running");
   });
 
   it("is idempotent and never regresses a terminal match", async () => {
     const t = testBackend();
     const { host } = await startedMatch(t);
 
-    vi.advanceTimersByTime(COUNTDOWN_MS + MATCH_DURATION_MS);
-    await t.finishInProgressScheduledFunctions();
+    await runDuel(t);
 
-    await t.mutation(api.internal.advanceToFinished, { matchId: host.matchId });
-    await t.mutation(api.internal.advanceToRunning, { matchId: host.matchId });
+    const finished = await storedMatch(t, host.matchId);
+    await t.mutation(api.internal.finish, {
+      matchId: host.matchId,
+      expectedEndsAt: finished?.endsAt ?? 0,
+    });
+    await t.mutation(api.internal.activate, {
+      matchId: host.matchId,
+      expectedStartsAt: finished?.startsAt ?? 0,
+    });
 
-    expect((await storedMatch(t, host.matchId))?.phase).toBe("finished");
+    const match = await storedMatch(t, host.matchId);
+    expect(match?.phase).toBe("finished");
+    expect(match?.endsAt).toBe(finished?.endsAt);
+
+    const events = await t.run((ctx) => ctx.db.query("events").collect());
+    expect(events.filter((event) => event.type === "started")).toHaveLength(1);
   });
 });

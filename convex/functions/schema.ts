@@ -33,8 +33,10 @@ export default defineSchema({
     connected: v.boolean(),
     health: v.number(),
     ammo: v.number(),
-    /** SHA-256 of the match-scoped session secret; never returned to a client. */
+    /** SHA-256 of the server-issued session secret; never returned to a client. */
     sessionHash: v.string(),
+    /** Server receipt time of the newest heartbeat; owns `connected`. */
+    lastSeenAt: v.number(),
     joinedAt: v.number(),
   })
     .index("by_match", ["matchId"])

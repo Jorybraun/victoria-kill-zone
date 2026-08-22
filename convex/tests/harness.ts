@@ -14,6 +14,7 @@ import schema from "../functions/schema.js";
 const modules: Record<string, () => Promise<unknown>> = {
   "../functions/_generated/api.ts": () => Promise.resolve({}),
   "../functions/matches.ts": () => import("../functions/matches.js"),
+  "../functions/players.ts": () => import("../functions/players.js"),
 };
 
 export function testBackend(): TestConvex<typeof schema> {
@@ -41,13 +42,27 @@ export const api = {
       null
     >("matches:start"),
   },
-  /** Internal scheduled transitions; never part of the public wire surface. */
+  players: {
+    heartbeat: makeFunctionReference<
+      "mutation",
+      { matchId: string; playerId: string; sessionSecret: string },
+      null
+    >("players:heartbeat"),
+  },
+  /** Internal scheduled work; never part of the public wire surface. */
   internal: {
-    advanceToRunning: makeFunctionReference<"mutation", { matchId: string }, null>(
-      "matches:advanceToRunning",
+    activate: makeFunctionReference<
+      "mutation",
+      { matchId: string; expectedStartsAt: number },
+      null
+    >("matches:activate"),
+    finish: makeFunctionReference<"mutation", { matchId: string; expectedEndsAt: number }, null>(
+      "matches:finish",
     ),
-    advanceToFinished: makeFunctionReference<"mutation", { matchId: string }, null>(
-      "matches:advanceToFinished",
-    ),
+    expirePresence: makeFunctionReference<
+      "mutation",
+      { playerId: string; expectedLastSeenAt: number },
+      null
+    >("players:expirePresence"),
   },
 };

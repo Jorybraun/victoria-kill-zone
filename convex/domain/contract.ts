@@ -8,9 +8,14 @@
 export const PLAYER_CAPACITY = 2;
 export const MATCH_CODE_LENGTH = 6;
 export const INITIAL_HEALTH = 100;
-export const INITIAL_AMMO = 8;
+export const MAGAZINE_SIZE = 8;
+export const INITIAL_AMMO = MAGAZINE_SIZE;
 export const DEBUG_TORSO_DAMAGE = 34;
 export const COUNTDOWN_MS = 3_000;
+
+/** Phones heartbeat every 5s; a player is stale after 15s of silence. */
+export const HEARTBEAT_INTERVAL_MS = 5_000;
+export const PRESENCE_TIMEOUT_MS = 15_000;
 
 /** Server-owned duel length; clients read it as `MatchSummary.durationMs`. */
 export const MATCH_DURATION_MS = 180_000;
@@ -19,10 +24,18 @@ export const ARENA_RADIUS_MIN_METERS = 20;
 export const ARENA_RADIUS_MAX_METERS = 60;
 export const ARENA_RADIUS_DEFAULT_METERS = 30;
 
-export const DISPLAY_NAME_MAX_LENGTH = 24;
+/** Counted in Unicode scalar values, never in UTF-16 code units. */
+export const DISPLAY_NAME_MAX_SCALARS = 20;
 
 /** Ambiguous glyphs are excluded so a spoken or typed code stays unique. */
 export const MATCH_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+/**
+ * Codes are generated from {@link MATCH_CODE_ALPHABET} but accepted from the
+ * wider typed alphabet, so a human misreading `0` for `O` fails as an unknown
+ * duel rather than as malformed input.
+ */
+export const MATCH_CODE_INPUT_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
 export type MatchPhase = "lobby" | "countdown" | "running" | "finished" | "cancelled";
 
