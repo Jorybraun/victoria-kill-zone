@@ -1,6 +1,8 @@
 import { makeFunctionReference } from "convex/server";
 import { convexTest, type TestConvex } from "convex-test";
 import type { PlayerSession } from "../domain/contract.js";
+import type { DebugFireResult } from "../domain/fire.js";
+import type { MatchSnapshot, SpectatorSnapshot } from "../domain/snapshot.js";
 import schema from "../functions/schema.js";
 
 /**
@@ -15,7 +17,17 @@ const modules: Record<string, () => Promise<unknown>> = {
   "../functions/_generated/api.ts": () => Promise.resolve({}),
   "../functions/matches.ts": () => import("../functions/matches.js"),
   "../functions/players.ts": () => import("../functions/players.js"),
+  "../functions/shots.ts": () => import("../functions/shots.js"),
+  "../functions/queries.ts": () => import("../functions/queries.js"),
 };
+
+type AuthenticatedArgs = {
+  matchId: string;
+  playerId: string;
+  sessionSecret: string;
+};
+
+type DebugFireArgs = AuthenticatedArgs & { clientShotId: string };
 
 export function testBackend(): TestConvex<typeof schema> {
   return convexTest(schema, modules);
@@ -42,6 +54,17 @@ export const api = {
       null
     >("matches:start"),
   },
+  shots: {
+    debugFire: makeFunctionReference<"mutation", DebugFireArgs, DebugFireResult>("shots:debugFire"),
+  },
+  queries: {
+    matchSnapshot: makeFunctionReference<"query", AuthenticatedArgs, MatchSnapshot>(
+      "queries:matchSnapshot",
+    ),
+    spectatorSnapshot: makeFunctionReference<"query", { code: string }, SpectatorSnapshot | null>(
+      "queries:spectatorSnapshot",
+    ),
+  },
   players: {
     heartbeat: makeFunctionReference<
       "mutation",
@@ -66,3 +89,11 @@ export const api = {
     >("players:expirePresence"),
   },
 };
+
+export function auth(session: PlayerSession): AuthenticatedArgs {
+  return {
+    matchId: session.matchId,
+    playerId: session.playerId,
+    sessionSecret: session.sessionSecret,
+  };
+}
