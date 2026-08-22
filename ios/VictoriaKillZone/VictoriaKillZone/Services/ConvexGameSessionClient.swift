@@ -12,6 +12,45 @@ enum ConvexGameSessionContract {
   static let matchSnapshot = "queries:matchSnapshot"
 }
 
+/// Typed builders keep the Convex argument keys in one testable place.
+enum ConvexGameSessionArguments {
+  static func create(_ request: CreateDuelRequest) -> [String: ConvexEncodable?] {
+    [
+      "displayName": request.displayName,
+      "arenaRadiusMeters": request.arenaRadiusMeters,
+    ]
+  }
+
+  static func join(_ request: JoinDuelRequest) -> [String: ConvexEncodable?] {
+    [
+      "displayName": request.displayName,
+      "code": request.code,
+    ]
+  }
+
+  static func authenticated(_ session: PlayerSession) -> [String: ConvexEncodable?] {
+    [
+      "matchId": session.matchId,
+      "playerId": session.playerId,
+      "sessionSecret": session.sessionSecret,
+    ]
+  }
+
+  static func setReady(
+    session: PlayerSession,
+    isReady: Bool
+  ) -> [String: ConvexEncodable?] {
+    authenticated(session).merging(["isReady": isReady]) { _, new in new }
+  }
+
+  static func debugFire(
+    session: PlayerSession,
+    clientShotId: String
+  ) -> [String: ConvexEncodable?] {
+    authenticated(session).merging(["clientShotId": clientShotId]) { _, new in new }
+  }
+}
+
 final class ConvexGameSessionClient: GameSessionClient, @unchecked Sendable {
   let availability = GameSessionAvailability.available
 
@@ -25,10 +64,7 @@ final class ConvexGameSessionClient: GameSessionClient, @unchecked Sendable {
     do {
       return try await client.mutation(
         ConvexGameSessionContract.create,
-        with: [
-          "displayName": request.displayName,
-          "arenaRadiusMeters": request.arenaRadiusMeters,
-        ]
+        with: ConvexGameSessionArguments.create(request)
       )
     } catch {
       throw Self.mapped(error)
@@ -39,10 +75,7 @@ final class ConvexGameSessionClient: GameSessionClient, @unchecked Sendable {
     do {
       return try await client.mutation(
         ConvexGameSessionContract.join,
-        with: [
-          "displayName": request.displayName,
-          "code": request.code,
-        ]
+        with: ConvexGameSessionArguments.join(request)
       )
     } catch {
       throw Self.mapped(error)
@@ -53,7 +86,7 @@ final class ConvexGameSessionClient: GameSessionClient, @unchecked Sendable {
     do {
       try await client.mutation(
         ConvexGameSessionContract.setReady,
-        with: authenticatedArguments(session).merging(["isReady": isReady]) { _, new in new }
+        with: ConvexGameSessionArguments.setReady(session: session, isReady: isReady)
       )
     } catch {
       throw Self.mapped(error)
@@ -64,7 +97,7 @@ final class ConvexGameSessionClient: GameSessionClient, @unchecked Sendable {
     do {
       try await client.mutation(
         ConvexGameSessionContract.start,
-        with: authenticatedArguments(session)
+        with: ConvexGameSessionArguments.authenticated(session)
       )
     } catch {
       throw Self.mapped(error)
@@ -75,9 +108,10 @@ final class ConvexGameSessionClient: GameSessionClient, @unchecked Sendable {
     do {
       let result: DebugFireResultWire = try await client.mutation(
         ConvexGameSessionContract.debugFire,
-        with: authenticatedArguments(session).merging(["clientShotId": clientShotId]) { _, new in
-          new
-        }
+        with: ConvexGameSessionArguments.debugFire(
+          session: session,
+          clientShotId: clientShotId
+        )
       )
       return try result.domainValue()
     } catch {
@@ -88,7 +122,7 @@ final class ConvexGameSessionClient: GameSessionClient, @unchecked Sendable {
   func snapshots(for session: PlayerSession) -> AsyncThrowingStream<MatchSnapshot, Error> {
     let publisher = client.subscribe(
       to: ConvexGameSessionContract.matchSnapshot,
-      with: authenticatedArguments(session),
+      with: ConvexGameSessionArguments.authenticated(session),
       yielding: MatchSnapshotWire.self
     )
     .tryMap { try $0.domainValue() }
@@ -128,14 +162,6 @@ final class ConvexGameSessionClient: GameSessionClient, @unchecked Sendable {
     }
   }
 
-  private func authenticatedArguments(_ session: PlayerSession) -> [String: ConvexEncodable?] {
-    [
-      "matchId": session.matchId,
-      "playerId": session.playerId,
-      "sessionSecret": session.sessionSecret,
-    ]
-  }
-
   private static func mapped(_ error: Error) -> GameSessionClientError {
     if let error = error as? GameSessionClientError {
       return error
@@ -158,7 +184,7 @@ final class ConvexGameSessionClient: GameSessionClient, @unchecked Sendable {
     return .unknown
   }
 
-  private static func backendCode(in value: String) -> BackendErrorCode? {
+  static func backendCode(in value: String) -> BackendErrorCode? {
     guard let data = value.data(using: .utf8) else { return nil }
     if let code = try? JSONDecoder().decode(BackendErrorCode.self, from: data) {
       return code
@@ -186,7 +212,7 @@ final class ConvexGameSessionClient: GameSessionClient, @unchecked Sendable {
   }
 }
 
-private struct MatchSnapshotWire: Decodable {
+struct MatchSnapshotWire: Decodable {
   @ConvexFloat var serverNow: Double
   let match: MatchSummaryWire
   let localPlayerId: String
@@ -204,7 +230,7 @@ private struct MatchSnapshotWire: Decodable {
   }
 }
 
-private struct MatchSummaryWire: Decodable {
+struct MatchSummaryWire: Decodable {
   let id: String
   let code: String
   let phase: MatchPhase
@@ -224,7 +250,7 @@ private struct MatchSummaryWire: Decodable {
   }
 }
 
-private struct PlayerSnapshotWire: Decodable {
+struct PlayerSnapshotWire: Decodable {
   let id: String
   let displayName: String
   let role: PlayerRole
@@ -246,7 +272,7 @@ private struct PlayerSnapshotWire: Decodable {
   }
 }
 
-private struct EventSnapshotWire: Decodable {
+struct EventSnapshotWire: Decodable {
   let id: String
   let type: MatchEventType
   let message: String
@@ -257,7 +283,10 @@ private struct EventSnapshotWire: Decodable {
   @OptionalConvexFloat var damage: Double?
 
   func domainValue() throws -> EventSnapshot {
-    EventSnapshot(
+    guard zone == nil || zone == "torso" else {
+      throw GameSessionClientError.invalidSnapshot
+    }
+    return EventSnapshot(
       id: id,
       type: type,
       message: message,
@@ -270,7 +299,7 @@ private struct EventSnapshotWire: Decodable {
   }
 }
 
-private struct DebugFireResultWire: Decodable {
+struct DebugFireResultWire: Decodable {
   let accepted: Bool
   let outcome: DebugFireOutcome
   let clientShotId: String
