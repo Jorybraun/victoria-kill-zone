@@ -76,13 +76,13 @@ struct ActiveDuelView: View {
       voiceFire.setSceneActive(false)
       Task { await store.stopTargeting() }
     }
-    .onChange(of: scenePhase) { _, phase in
+    .onChange(of: scenePhase) { phase in
       voiceFire.setSceneActive(phase == .active)
     }
-    .onChange(of: duel.phase) { _, _ in
+    .onChange(of: duel.phase) { _ in
       refreshVoiceEligibility()
     }
-    .onChange(of: voiceFire.fireRequestSequence) { _, _ in
+    .onChange(of: voiceFire.fireRequestSequence) { _ in
       fireShot()
     }
   }
@@ -91,7 +91,7 @@ struct ActiveDuelView: View {
   private var cameraSurface: some View {
     #if os(iOS) && canImport(ARKit) && canImport(AVFoundation) && canImport(Vision)
       if let targeting = store.environment.targetingSession as? ARVisionTargetingSession {
-        ARCameraPreview(session: targeting.arSession, fxEngine: fx)
+        ARCameraPreview(targeting: targeting, fxEngine: fx)
       } else {
         fallbackCameraSurface
       }

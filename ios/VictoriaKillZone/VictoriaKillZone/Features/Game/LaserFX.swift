@@ -200,4 +200,11 @@
       return noErr
     }
   }
+#else
+  import Combine
+
+  @MainActor
+  final class LaserFXEngine: ObservableObject {
+    func fireLaser(hit: Bool) {}
+  }
 #endif

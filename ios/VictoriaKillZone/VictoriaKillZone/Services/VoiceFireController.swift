@@ -375,11 +375,11 @@ final class VoiceFireController: ObservableObject {
         now: ProcessInfo.processInfo.systemUptime
       )
     {
-      // End capture before publishing the request. The view rechecks LobbyStore
-      // eligibility and then uses the same debugFire() path as the button.
-      stopListening()
-      status = .enabled
+      // End capture before publishing the request, then restart listening so
+      // the next "pew pew" can fire. The view rechecks LobbyStore eligibility
+      // and then uses the same debugFire() path as the button.
       fireRequestSequence &+= 1
+      restartRecognitionAfterFinalResult()
       return
     }
 

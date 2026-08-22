@@ -752,6 +752,14 @@ enum TargetingSessionFactory {
       snapshotHub.makeStream()
     }
 
+    /// `ARSCNView` installs itself as the session delegate when it is handed a
+    /// session, which would disconnect frame processing (and body detection).
+    /// Rendering views must call this after taking the session.
+    func reassertSessionDelegate() {
+      arSession.delegate = self
+      arSession.delegateQueue = sessionQueue
+    }
+
     func start() async throws {
       guard availability == .available else {
         throw TargetingSessionError.notConfigured
@@ -1125,23 +1133,25 @@ enum TargetingSessionFactory {
   }
 
   struct ARCameraPreview: UIViewRepresentable {
-    let session: ARSession
+    let targeting: ARVisionTargetingSession
     let fxEngine: LaserFXEngine?
 
     func makeUIView(context: Context) -> ARSCNView {
       let view = ARSCNView(frame: .zero)
-      view.session = session
+      view.session = targeting.arSession
       view.scene = SCNScene()
       view.automaticallyUpdatesLighting = false
       view.backgroundColor = .black
+      targeting.reassertSessionDelegate()
       fxEngine?.attach(to: view)
       return view
     }
 
     func updateUIView(_ view: ARSCNView, context: Context) {
-      if view.session !== session {
-        view.session = session
+      if view.session !== targeting.arSession {
+        view.session = targeting.arSession
       }
+      targeting.reassertSessionDelegate()
       fxEngine?.attach(to: view)
     }
 
@@ -1158,7 +1168,7 @@ enum TargetingSessionFactory {
     @ViewBuilder
     var body: some View {
       if let liveSession = session as? ARVisionTargetingSession {
-        ARCameraPreview(session: liveSession.arSession, fxEngine: nil)
+        ARCameraPreview(targeting: liveSession, fxEngine: nil)
       } else {
         Color.black
       }

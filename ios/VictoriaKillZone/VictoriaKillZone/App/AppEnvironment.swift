@@ -31,7 +31,17 @@ struct AppEnvironment: Sendable {
     )
   }
 
-  private static func validatedDeploymentURL(_ value: String) -> String? {
+  static func configuredDeploymentURL(
+    bundleValue: String?,
+    environmentValue: String?
+  ) -> String? {
+    [environmentValue, bundleValue]
+      .compactMap { $0 }
+      .compactMap(validatedDeploymentURL)
+      .first
+  }
+
+  static func validatedDeploymentURL(_ value: String) -> String? {
     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty, !trimmed.contains("$("),
       let components = URLComponents(string: trimmed),
