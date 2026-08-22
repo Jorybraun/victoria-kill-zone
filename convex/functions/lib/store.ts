@@ -5,8 +5,11 @@ import type { LobbyPlayer } from "../../domain/match.js";
 import { isValidMatchCode, normalizeMatchCode } from "../../domain/match.js";
 import { presenceExpiresAt } from "../../domain/presence.js";
 import { authenticates } from "../../domain/session.js";
+import type { StoredEvent, StoredMatch, StoredPlayer } from "../../domain/snapshot.js";
 import { scheduled } from "./scheduled.js";
 import type { Doc, Id, MutationCtx, QueryCtx } from "./server.js";
+
+const EVENT_FEED_LIMIT = 50;
 
 /**
  * Stable error codes cross the wire as `ConvexError({ code })`; raw messages and
@@ -64,6 +67,54 @@ export async function listPlayers(
     .collect();
 
   return players.sort((left, right) => left.joinedAt - right.joinedAt);
+}
+
+/** Newest-first slice of the authoritative event feed. */
+export async function listEvents(
+  ctx: MutationCtx | QueryCtx,
+  matchId: Id<"matches">,
+): Promise<Doc<"events">[]> {
+  return await ctx.db
+    .query("events")
+    .withIndex("by_match", (q) => q.eq("matchId", matchId))
+    .order("desc")
+    .take(EVENT_FEED_LIMIT);
+}
+
+export function toStoredMatch(match: Doc<"matches">): StoredMatch {
+  return {
+    id: match._id,
+    code: match.code,
+    phase: match.phase,
+    durationMs: match.durationMs,
+    ...(match.startsAt === undefined ? {} : { startsAt: match.startsAt }),
+    ...(match.endsAt === undefined ? {} : { endsAt: match.endsAt }),
+  };
+}
+
+export function toStoredPlayer(player: Doc<"players">): StoredPlayer {
+  return {
+    id: player._id,
+    displayName: player.displayName,
+    role: player.role,
+    ready: player.ready,
+    connected: player.connected,
+    health: player.health,
+    ammo: player.ammo,
+  };
+}
+
+export function toStoredEvent(event: Doc<"events">): StoredEvent {
+  return {
+    id: event._id,
+    type: event.type,
+    message: event.message,
+    createdAt: event.createdAt,
+    ...(event.actorPlayerId === undefined ? {} : { actorPlayerId: event.actorPlayerId }),
+    ...(event.targetPlayerId === undefined ? {} : { targetPlayerId: event.targetPlayerId }),
+    ...(event.zone === undefined ? {} : { zone: event.zone }),
+    ...(event.damage === undefined ? {} : { damage: event.damage }),
+  };
 }
 
 export async function matchByCode(
