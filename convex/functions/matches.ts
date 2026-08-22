@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { PlayerSession } from "../domain/contract.js";
 import { resolvePhase } from "../domain/lifecycle.js";
 import {
+  isValidMatchCode,
   matchCodeFromBytes,
   planCreateMatch,
   planJoinMatch,
@@ -62,6 +63,14 @@ export const create = mutation({
       sessionHash: session.hash,
     });
 
+    await ctx.db.insert("events", {
+      matchId,
+      type: "joined",
+      message: plan.value.message,
+      actorPlayerId: playerId,
+      createdAt: now,
+    });
+
     return {
       matchId,
       code: plan.value.match.code,
@@ -76,6 +85,10 @@ export const join = mutation({
   args: { displayName: v.string(), code: v.string() },
   handler: async (ctx, args): Promise<PlayerSession> => {
     const now = Date.now();
+    if (!isValidMatchCode(args.code)) {
+      fail("INVALID_CODE");
+    }
+
     const found = await matchByCode(ctx, args.code);
     if (found === null) {
       fail("MATCH_NOT_FOUND");
@@ -85,6 +98,7 @@ export const join = mutation({
     const players = await listPlayers(ctx, match._id);
     const plan = planJoinMatch({
       displayName: args.displayName,
+      code: args.code,
       phase: resolvePhase(match, now),
       players: players.map(toLobbyPlayer),
       now,
