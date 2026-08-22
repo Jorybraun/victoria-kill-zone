@@ -44,6 +44,7 @@ export interface PlayerDraft {
 export interface CreateMatchPlan {
   readonly match: MatchDraft;
   readonly host: PlayerDraft;
+  readonly message: string;
 }
 
 export interface JoinMatchPlan {
@@ -127,17 +128,23 @@ export function planCreateMatch(request: {
       createdAt: request.now,
     },
     host: newPlayer(normalizeDisplayName(request.displayName), "host", request.now),
+    message: `${normalizeDisplayName(request.displayName)} JOINED`,
   });
 }
 
 export function planJoinMatch(request: {
   readonly displayName: string;
+  readonly code: string;
   readonly phase: MatchPhase;
   readonly players: readonly LobbyPlayer[];
   readonly now: number;
 }): DomainResult<JoinMatchPlan> {
   if (!isValidDisplayName(request.displayName)) {
     return rejected("INVALID_DISPLAY_NAME");
+  }
+
+  if (!isValidMatchCode(request.code)) {
+    return rejected("INVALID_CODE");
   }
 
   if (!isJoinable(request.phase)) {

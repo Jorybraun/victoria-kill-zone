@@ -86,7 +86,7 @@ describe("planCreateMatch", () => {
 
 describe("planJoinMatch", () => {
   it("adds the guest to a lobby holding one player", () => {
-    const plan = planJoinMatch({ displayName: "Jory", phase: "lobby", players: [host], now: T0 });
+    const plan = planJoinMatch({ displayName: "Jory", code: "ABC123", phase: "lobby", players: [host], now: T0 });
 
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
@@ -94,9 +94,16 @@ describe("planJoinMatch", () => {
     expect(plan.value.message).toBe("Jory JOINED");
   });
 
+  it("rejects a malformed duel code", () => {
+    expect(
+      planJoinMatch({ displayName: "Jory", code: "AB", phase: "lobby", players: [host], now: T0 }),
+    ).toEqual({ ok: false, code: "INVALID_CODE" });
+  });
+
   it("rejects a third player", () => {
     const plan = planJoinMatch({
       displayName: "Third",
+      code: "ABC123",
       phase: "lobby",
       players: [host, guest],
       now: T0,
@@ -107,7 +114,7 @@ describe("planJoinMatch", () => {
 
   it("rejects joining after the duel leaves the lobby", () => {
     for (const phase of ["countdown", "running", "finished", "cancelled"] as const) {
-      expect(planJoinMatch({ displayName: "Late", phase, players: [host], now: T0 })).toEqual({
+      expect(planJoinMatch({ displayName: "Late", code: "ABC123", phase, players: [host], now: T0 })).toEqual({
         ok: false,
         code: "MATCH_ALREADY_STARTED",
       });
