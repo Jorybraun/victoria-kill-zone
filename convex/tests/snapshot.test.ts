@@ -16,7 +16,6 @@ const match: StoredMatch = {
   phase: "countdown",
   durationMs: 300_000,
   startsAt: T0 + COUNTDOWN_MS,
-  endsAt: T0 + COUNTDOWN_MS + 300_000,
 };
 
 const players: StoredPlayer[] = [
@@ -58,29 +57,29 @@ describe("buildMatchSnapshot", () => {
       phase: "countdown",
       durationMs: 300_000,
       startsAt: T0 + COUNTDOWN_MS,
-      endsAt: T0 + COUNTDOWN_MS + 300_000,
     });
     expect(snapshot.players.map((player) => player.role)).toEqual(["host", "guest"]);
     expect(snapshot.events.map((event) => event.id)).toEqual(["event-2", "event-1"]);
   });
 
-  it("resolves the phase from server time rather than the stored column", () => {
-    const running = buildMatchSnapshot({
+  it("keeps countdown persisted until activation and resolves an elapsed running end", () => {
+    const countdown = buildMatchSnapshot({
       match,
       localPlayerId: "host",
       players,
       events,
       now: T0 + COUNTDOWN_MS + 1,
     });
+    const endsAt = T0 + COUNTDOWN_MS + 300_000;
     const finished = buildMatchSnapshot({
-      match,
+      match: { ...match, phase: "running", endsAt },
       localPlayerId: "host",
       players,
       events,
-      now: (match.endsAt ?? 0) + 1,
+      now: endsAt + 1,
     });
 
-    expect(running.match.phase).toBe("running");
+    expect(countdown.match.phase).toBe("countdown");
     expect(finished.match.phase).toBe("finished");
   });
 
@@ -107,7 +106,6 @@ describe("buildSpectatorSnapshot", () => {
     expect(Object.keys(snapshot.match).sort()).toEqual([
       "code",
       "durationMs",
-      "endsAt",
       "id",
       "phase",
       "startsAt",
