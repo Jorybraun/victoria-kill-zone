@@ -92,7 +92,9 @@ function parseFixtures(raw: unknown, expectedVersion: string): ContractFixtures 
 }
 
 export function loadG2Fixtures(): ContractFixtures {
-  return parseFixtures(g2 as unknown, "g2.v1");
+  // Parsed as unknown data: the fixture is the contract, so its shape is
+  // validated rather than trusted from a JSON module's inferred type.
+  return parseFixtures(g2, "g2.v1");
 }
 
 export function fixtureCase(cases: readonly FixtureCase[], id: string): FixtureCase {
