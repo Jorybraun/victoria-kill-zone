@@ -137,6 +137,8 @@ jobs:
     needs:
       - fast-gate
       - ios-gate
+    outputs:
+      pages_artifact_id: ${{ steps.pages_artifact.outputs.artifact_id }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -170,18 +172,26 @@ jobs:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
           DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           VITE_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          VKZ_CONVEX_URL_FILE: ${{ runner.temp }}/vkz-convex-url
         run: |
           if [[ -z "${CONVEX_DEPLOY_KEY:-}" ]]; then
             echo "::error::CONVEX_DEPLOY_KEY is required when VKZ_DEPLOY_ENABLED is true."
             exit 1
           fi
 
+          trap 'rm -f -- "$VKZ_CONVEX_URL_FILE"' ERR INT TERM
           pnpm --dir convex exec convex deploy \
-            --cmd "pnpm --dir ../spectator build" \
+            --cmd "bash ../scripts/release/build-spectator.sh" \
             --cmd-url-env-var-name VITE_CONVEX_URL \
             --message "GitHub Actions ${DEPLOY_SHA}"
 
+      - name: Smoke the sanitized production spectator query
+        env:
+          VKZ_CONVEX_URL_FILE: ${{ runner.temp }}/vkz-convex-url
+        run: node scripts/release/smoke-convex.mjs
+
       - name: Upload spectator artifact
+        id: pages_artifact
         uses: actions/upload-pages-artifact@v4
         with:
           path: spectator/dist
@@ -191,7 +201,7 @@ jobs:
     needs:
       - release-build
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions:
       contents: read
       pages: write
@@ -203,3 +213,35 @@ jobs:
       - name: Deploy GitHub Pages artifact
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Check out the green revision
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Smoke the deployed spectator page
+        env:
+          VKZ_PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+        run: bash scripts/release/smoke-pages.sh
+
+      - name: Create sanitized release evidence
+        env:
+          VKZ_RELEASE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          VKZ_RELEASE_ENVIRONMENT: production
+          VKZ_SOURCE_RUN_ID: ${{ github.event.workflow_run.id || '' }}
+          VKZ_PAGES_ARTIFACT_ID: ${{ needs.release-build.outputs.pages_artifact_id }}
+          VKZ_EVIDENCE_PATH: ${{ runner.temp }}/release-evidence/release-evidence.json
+        run: node scripts/release/write-evidence.mjs
+
+      - name: Upload sanitized release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-evidence-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          path: ${{ runner.temp }}/release-evidence/release-evidence.json
+          if-no-files-found: error
