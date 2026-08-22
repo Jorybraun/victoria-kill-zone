@@ -35,10 +35,14 @@ describe("normalization", () => {
     expect(normalizeDisplayName("  Vic   Braun  ")).toBe("Vic Braun");
   });
 
-  it("uppercases a code and drops separators", () => {
+  it("uppercases a code and drops separators without truncating it", () => {
     expect(normalizeMatchCode("abc-123")).toBe("ABC123");
+    expect(normalizeMatchCode("abc1237")).toBe("ABC1237");
     expect(isValidMatchCode("abc123")).toBe(true);
+    expect(isValidMatchCode("a-b c.1/2*3")).toBe(true);
     expect(isValidMatchCode("abc12")).toBe(false);
+    expect(isValidMatchCode("abc1237")).toBe(false);
+    expect(isValidMatchCode("")).toBe(false);
   });
 
   it("clamps the arena radius", () => {

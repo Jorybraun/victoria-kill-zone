@@ -67,13 +67,17 @@ export function isValidDisplayName(value: string): boolean {
   return normalizeDisplayName(value).length > 0;
 }
 
+/**
+ * Uppercase and drop separators without truncating.
+ *
+ * Length is a validation concern, not a normalization one: truncating here would
+ * silently accept an overlong code and resolve it to a different duel.
+ */
 export function normalizeMatchCode(value: string): string {
-  return value
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "")
-    .slice(0, MATCH_CODE_LENGTH);
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+/** True only for exactly {@link MATCH_CODE_LENGTH} normalized characters. */
 export function isValidMatchCode(value: string): boolean {
   return normalizeMatchCode(value).length === MATCH_CODE_LENGTH;
 }
@@ -83,7 +87,10 @@ export function normalizeArenaRadius(meters: number): number {
     return ARENA_RADIUS_MIN_METERS;
   }
 
-  return Math.min(ARENA_RADIUS_MAX_METERS, Math.max(ARENA_RADIUS_MIN_METERS, Math.round(meters)));
+  return Math.min(
+    ARENA_RADIUS_MAX_METERS,
+    Math.max(ARENA_RADIUS_MIN_METERS, Math.round(meters)),
+  );
 }
 
 /** Deterministic given its random bytes, so code allocation stays testable. */
@@ -97,7 +104,11 @@ export function matchCodeFromBytes(bytes: Uint8Array): string {
   return code;
 }
 
-function newPlayer(displayName: string, role: PlayerRole, now: number): PlayerDraft {
+function newPlayer(
+  displayName: string,
+  role: PlayerRole,
+  now: number,
+): PlayerDraft {
   return {
     displayName,
     role,
@@ -127,7 +138,11 @@ export function planCreateMatch(request: {
       durationMs: MATCH_DURATION_MS,
       createdAt: request.now,
     },
-    host: newPlayer(normalizeDisplayName(request.displayName), "host", request.now),
+    host: newPlayer(
+      normalizeDisplayName(request.displayName),
+      "host",
+      request.now,
+    ),
     message: `${normalizeDisplayName(request.displayName)} JOINED`,
   });
 }
