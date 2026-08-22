@@ -5,8 +5,13 @@
  * registered names, validators, database effects, session isolation, and
  * exactly-once behavior for a repeated `clientShotId`.
  */
-import { describe, expect, it } from "vitest";
-import { DEBUG_TORSO_DAMAGE, INITIAL_AMMO, INITIAL_HEALTH } from "../domain/contract.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  COUNTDOWN_MS,
+  DEBUG_TORSO_DAMAGE,
+  INITIAL_AMMO,
+  INITIAL_HEALTH,
+} from "../domain/contract.js";
 import type { PlayerSession } from "../domain/contract.js";
 import { api, auth, testBackend } from "./harness.js";
 
@@ -21,17 +26,21 @@ async function runningDuel(t: Backend): Promise<{ host: PlayerSession; guest: Pl
   await t.mutation(api.matches.setReady, { ...auth(guest), isReady: true });
   await t.mutation(api.matches.start, auth(host));
 
-  // The countdown is server timed, so the duel only becomes `running` once the
-  // stored window opens.
-  await t.run(async (ctx) => {
-    const id = ctx.db.normalizeId("matches", host.matchId);
-    if (id !== null) {
-      await ctx.db.patch(id, { startsAt: Date.now() - 1 });
-    }
-  });
+  // The countdown is server timed and server persisted: the duel becomes
+  // `running` when the scheduled transition writes it, not when a client asks.
+  vi.advanceTimersByTime(COUNTDOWN_MS);
+  await t.finishInProgressScheduledFunctions();
 
   return { host, guest };
 }
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("shots:debugFire", () => {
   it("applies server-owned damage and writes exactly one shot and one hit event", async () => {
@@ -83,21 +92,6 @@ describe("shots:debugFire", () => {
 
     expect(stored.shots.filter((shot) => shot.clientShotId === SHOT_ID)).toHaveLength(1);
     expect(stored.hits).toHaveLength(2);
-  });
-
-  it("is registered under the matches alias with identical authority", async () => {
-    const t = testBackend();
-    const { host } = await runningDuel(t);
-
-    const viaMatches = await t.mutation(api.matches.debugFire, {
-      ...auth(host),
-      clientShotId: SHOT_ID,
-    });
-    const viaShots = await t.mutation(api.shots.debugFire, { ...auth(host), clientShotId: SHOT_ID });
-
-    expect(viaMatches.accepted).toBe(true);
-    expect(viaShots).toEqual({ ...viaMatches, replayed: true });
-    expect(await t.run((ctx) => ctx.db.query("shots").collect())).toHaveLength(1);
   });
 
   it("rejects the guest, a foreign secret, and a duel that is not running", async () => {
@@ -183,5 +177,38 @@ describe("queries:spectatorSnapshot", () => {
     expect(serialized).not.toContain("arenaRadiusMeters");
 
     expect(await t.query(api.queries.spectatorSnapshot, { code: "ZZZZZZ" })).toBeNull();
+  });
+});
+
+describe("scheduled countdown boundary", () => {
+  it("moves both registered snapshots to running with no client mutation or manual patch", async () => {
+    const t = testBackend();
+    const host = await t.mutation(api.matches.create, {
+      displayName: "VIC",
+      arenaRadiusMeters: 30,
+    });
+    const guest = await t.mutation(api.matches.join, { displayName: "JORY", code: host.code });
+    await t.mutation(api.matches.setReady, { ...auth(host), isReady: true });
+    await t.mutation(api.matches.setReady, { ...auth(guest), isReady: true });
+    await t.mutation(api.matches.start, auth(host));
+
+    expect((await t.query(api.queries.matchSnapshot, auth(host))).match.phase).toBe("countdown");
+    expect((await t.query(api.queries.spectatorSnapshot, { code: host.code }))?.match.phase).toBe(
+      "countdown",
+    );
+
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    await t.finishInProgressScheduledFunctions();
+
+    // The stored phase is what makes subscriptions rerun; the queries only read it.
+    const stored = await t.run(async (ctx) => {
+      const id = ctx.db.normalizeId("matches", host.matchId);
+      return id === null ? null : await ctx.db.get(id);
+    });
+    expect(stored?.phase).toBe("running");
+    expect((await t.query(api.queries.matchSnapshot, auth(host))).match.phase).toBe("running");
+    expect((await t.query(api.queries.spectatorSnapshot, { code: host.code }))?.match.phase).toBe(
+      "running",
+    );
   });
 });

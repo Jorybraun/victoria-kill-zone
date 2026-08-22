@@ -53,9 +53,6 @@ export const api = {
       { matchId: string; playerId: string; sessionSecret: string },
       null
     >("matches:start"),
-    debugFire: makeFunctionReference<"mutation", DebugFireArgs, DebugFireResult>(
-      "matches:debugFire",
-    ),
   },
   shots: {
     debugFire: makeFunctionReference<"mutation", DebugFireArgs, DebugFireResult>("shots:debugFire"),
