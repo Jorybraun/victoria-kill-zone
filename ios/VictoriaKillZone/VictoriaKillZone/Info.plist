@@ -31,6 +31,10 @@
 		<key>VictoriaKillZoneArena</key>
 		<string>Precise location is used during an active duel to evaluate the arena boundary.</string>
 	</dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>When you turn on Voice Fire, Victoria Kill Zone uses the microphone to listen for the phrase “pew pew.” Audio and transcripts are not stored by Victoria Kill Zone.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>When you turn on Voice Fire, Victoria Kill Zone uses speech recognition to recognize “pew pew” as an optional alternate trigger.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIRequiresFullScreen</key>

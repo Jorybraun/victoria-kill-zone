@@ -3,6 +3,8 @@ import SwiftUI
 struct ActiveDuelView: View {
   let duel: ActiveDuel
   @ObservedObject var store: LobbyStore
+  @Environment(\.scenePhase) private var scenePhase
+  @StateObject private var voiceFire = VoiceFireController()
 
   var body: some View {
     ZStack {
@@ -33,6 +35,24 @@ struct ActiveDuelView: View {
           .opacity(store.isMatchInputLocked ? 0.58 : 1)
         }
       }
+    }
+    .onAppear {
+      voiceFire.setViewVisible(true)
+      voiceFire.setSceneActive(scenePhase == .active)
+      voiceFire.setFireEligible(voiceInputEligible)
+    }
+    .onDisappear {
+      voiceFire.setViewVisible(false)
+    }
+    .vkzOnChange(of: scenePhase) { newPhase in
+      voiceFire.setSceneActive(newPhase == .active)
+    }
+    .vkzOnChange(of: voiceInputEligible) { isEligible in
+      voiceFire.setFireEligible(isEligible)
+    }
+    .vkzOnChange(of: voiceFire.fireRequestSequence) { _ in
+      guard store.canDebugFire else { return }
+      store.debugFire()
     }
   }
 
@@ -124,6 +144,8 @@ struct ActiveDuelView: View {
         Text(debugHelper)
           .font(.caption.weight(.semibold).monospaced())
           .foregroundStyle(VKZPalette.textMuted)
+        voiceControl
+          .padding(.top, 8)
       }
     case .running:
       Text("AWAITING TEST SHOT")
@@ -137,6 +159,41 @@ struct ActiveDuelView: View {
         .font(.title.bold())
     case .lobby:
       EmptyView()
+    }
+  }
+
+  private var voiceControl: some View {
+    VKZPanel {
+      Toggle(
+        isOn: Binding(
+          get: { voiceFire.isEnabled },
+          set: { isEnabled in
+            if isEnabled {
+              voiceFire.enable()
+            } else {
+              voiceFire.disable()
+            }
+          }
+        )
+      ) {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("VOICE FIRE")
+            .font(.caption.weight(.bold).monospaced())
+          Text(voiceFire.status.displayText)
+            .font(.caption2.weight(.semibold).monospaced())
+            .foregroundStyle(voiceStatusColor)
+          if case .listening = voiceFire.status {
+            Text("SAY \u{201c}PEW PEW\u{201d}")
+              .font(.caption.weight(.bold).monospaced())
+              .foregroundStyle(VKZPalette.text)
+          }
+        }
+      }
+      .tint(VKZPalette.telemetry)
+      .disabled(!voiceFire.isEnabled && !voiceInputEligible)
+      .accessibilityLabel("Voice Fire")
+      .accessibilityValue(Text(verbatim: voiceFire.status.accessibilityText))
+      .accessibilityHint(voiceAccessibilityHint)
     }
   }
 
@@ -163,6 +220,35 @@ struct ActiveDuelView: View {
     switch store.debugShotState {
     case .confirmed: "STATE VERIFIED"
     case .idle, .pending, .failed: "TORSO TEST • 34 DAMAGE"
+    }
+  }
+
+  private var voiceInputEligible: Bool {
+    duel.phase == .running && duel.localRole == .host && store.canDebugFire
+  }
+
+  private var voiceAccessibilityHint: String {
+    if voiceFire.isEnabled {
+      return "Turn off voice control."
+    }
+    if voiceInputEligible {
+      return "Turn on the optional pew pew trigger and request microphone and speech access."
+    }
+    return "Voice Fire becomes available when the host debug shot is ready."
+  }
+
+  private var voiceStatusColor: Color {
+    switch voiceFire.status {
+    case .disabled:
+      VKZPalette.textMuted
+    case .requestingPermission:
+      VKZPalette.pending
+    case .enabled:
+      VKZPalette.telemetry
+    case .listening:
+      VKZPalette.ready
+    case .unavailable:
+      VKZPalette.danger
     }
   }
 
@@ -193,5 +279,21 @@ struct ActiveDuelView: View {
         .foregroundStyle(color)
     }
     .accessibilityElement(children: .combine)
+  }
+}
+
+private extension View {
+  @ViewBuilder
+  func vkzOnChange<Value: Equatable>(
+    of value: Value,
+    action: @escaping (Value) -> Void
+  ) -> some View {
+    #if os(iOS)
+      onChange(of: value) { _, newValue in
+        action(newValue)
+      }
+    #else
+      onChange(of: value, perform: action)
+    #endif
   }
 }

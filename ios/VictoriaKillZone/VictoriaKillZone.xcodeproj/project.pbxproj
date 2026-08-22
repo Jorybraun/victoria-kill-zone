@@ -24,6 +24,10 @@
 		B0010000000000000000000F /* ConvexGameSessionClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000012 /* ConvexGameSessionClient.swift */; };
 		B00100000000000000000010 /* ConvexMobile in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000001 /* ConvexMobile */; };
 		B00100000000000000000011 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000013 /* RootView.swift */; };
+		B00100000000000000000012 /* VoiceFireController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000014 /* VoiceFireController.swift */; };
+		B00100000000000000000013 /* VoiceFireControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000015 /* VoiceFireControllerTests.swift */; };
+		B00100000000000000000014 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00100000000000000000016 /* AVFoundation.framework */; };
+		B00100000000000000000015 /* Speech.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00100000000000000000017 /* Speech.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -56,6 +60,10 @@
 		F00100000000000000000011 /* GameSessionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSessionModels.swift; sourceTree = "<group>"; };
 		F00100000000000000000012 /* ConvexGameSessionClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvexGameSessionClient.swift; sourceTree = "<group>"; };
 		F00100000000000000000013 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		F00100000000000000000014 /* VoiceFireController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceFireController.swift; sourceTree = "<group>"; };
+		F00100000000000000000015 /* VoiceFireControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceFireControllerTests.swift; sourceTree = "<group>"; };
+		F00100000000000000000016 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		F00100000000000000000017 /* Speech.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Speech.framework; path = System/Library/Frameworks/Speech.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -63,7 +71,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B00100000000000000000014 /* AVFoundation.framework in Frameworks */,
 				B00100000000000000000010 /* ConvexMobile in Frameworks */,
+				B00100000000000000000015 /* Speech.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -82,6 +92,7 @@
 			children = (
 				G00100000000000000000002 /* VictoriaKillZone */,
 				G0010000000000000000000C /* VictoriaKillZoneTests */,
+				G0010000000000000000000E /* Frameworks */,
 				G0010000000000000000000D /* Products */,
 			);
 			sourceTree = "<group>";
@@ -125,6 +136,7 @@
 			children = (
 				F00100000000000000000005 /* GameSessionClient.swift */,
 				F00100000000000000000012 /* ConvexGameSessionClient.swift */,
+				F00100000000000000000014 /* VoiceFireController.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -185,6 +197,7 @@
 			isa = PBXGroup;
 			children = (
 				F0010000000000000000000E /* LobbyStateMachineTests.swift */,
+				F00100000000000000000015 /* VoiceFireControllerTests.swift */,
 			);
 			path = VictoriaKillZoneTests;
 			sourceTree = "<group>";
@@ -196,6 +209,15 @@
 				F00100000000000000000010 /* VictoriaKillZoneTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		G0010000000000000000000E /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				F00100000000000000000016 /* AVFoundation.framework */,
+				F00100000000000000000017 /* Speech.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -310,6 +332,7 @@
 				B0010000000000000000000E /* GameSessionModels.swift in Sources */,
 				B00100000000000000000005 /* GameSessionClient.swift in Sources */,
 				B0010000000000000000000F /* ConvexGameSessionClient.swift in Sources */,
+				B00100000000000000000012 /* VoiceFireController.swift in Sources */,
 				B00100000000000000000006 /* TargetingSession.swift in Sources */,
 				B00100000000000000000007 /* LobbyStore.swift in Sources */,
 				B00100000000000000000008 /* HomeView.swift in Sources */,
@@ -325,6 +348,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B0010000000000000000000D /* LobbyStateMachineTests.swift in Sources */,
+				B00100000000000000000013 /* VoiceFireControllerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
