@@ -26,6 +26,49 @@ An owner declares its exact write set in the draft PR. A needed edit outside tha
 
 Independent PRs are the default. Stack PRs only when the child cannot pass or be reviewed without the parent; each child names its parent, target branch, and merge order. A stack does not permit overlapping writes.
 
+## Linear control plane and Devin native stacks
+
+Linear is the execution control plane for dispatched work. GitHub remains the code review, CI, and merge record. Slack may carry short notifications, but it does not replace the Linear issue or create authority to change scope.
+
+Before Codex or Devin starts an implementation lane, its Linear issue records:
+
+- the user-observable outcome, owner, exact allowed paths, and forbidden paths;
+- dependencies and the issue or PR that supplies each frozen input;
+- a timebox and checkpoint expressed in wall-clock time;
+- exact acceptance commands and required observable evidence;
+- the intended delivery shape: standalone PR or named native Devin stack; and
+- stop conditions for contract drift, missing repository access, unavailable credentials, or a write-boundary collision.
+
+Use Devin's native GitHub stacked-PR feature only for one intentionally decomposed, dependent change that needs at least two PR layers. Do not imitate a native stack with a branch-name convention or group unrelated parallel lanes merely because they will land near each other. For every native Devin stack:
+
+1. Devin announces the stack name and ordered layers in its session and the owning Linear issue before opening PRs.
+2. The bottom PR targets `main`; every higher PR targets the head branch immediately below it.
+3. Devin creates focused PRs with independent descriptions and CI, then groups them as a native GitHub stack.
+4. Devin remains attached to every layer, reports per-layer head SHA, CI, review state, conflicts, and mergeability to Linear, and resolves mechanical propagation conflicts without changing the frozen contract.
+5. Integration reviews every layer and its current-head evidence. A stack is merged only through Devin/GitHub's native stack merge, never through the ordinary GitHub merge button; selecting a layer also lands every still-open layer below it.
+6. Client, design, and backend lanes retain their exclusive write boundaries even when one consumes another lane's merged contract.
+
+Never start a second Devin implementation session for an issue that already has unpushed work. First recover or publish the existing session's work, link that session to the Linear issue, and then let the same session announce and manage the stack. Do not place private session URLs, credentials, or repository-access details in public Slack channels or PR text.
+
+## Parallel agent dispatch gate
+
+Codex/local execution is the default for planning, contracts, integration, review, repository maintenance, and work that can be completed safely in the shared workspace. Devin Cloud is reserved for an isolated implementation slice whose contract is already frozen; the Mac Outpost is reserved for work that actually requires macOS, Xcode, a simulator, signing, or connected devices.
+
+Before adding `devin-ready` or launching a write-capable Cloud session, the Linear issue must contain:
+
+- one user-observable outcome that a reviewer can accept independently;
+- one exclusive write boundary with exact allowed paths and explicit forbidden paths;
+- a green starting branch or commit SHA and all required input contracts;
+- one short acceptance procedure with the exact verification commands;
+- a feature-branch and draft-PR deliverable; and
+- stop conditions for missing context, shared-contract changes, unavailable credentials, or repeated failure.
+
+Concurrency follows the wall-clock critical path. After the shared contract is frozen, independently owned backend, spectator, iOS, and design lanes may run simultaneously. Dependent changes within one Devin lane may use a short native GitHub stack; independent lanes use standalone PRs so a failure in one lane does not serialize the others. Keep deadline-path stacks to the minimum useful layer count and begin review as soon as the lowest layer has executable evidence.
+
+Every dispatched issue records an owner, dependency, explicit timebox, expected checkpoint, and acceptance command. If a task reaches its checkpoint without executable evidence, needs a shared-contract decision, or crosses its write boundary, stop it and re-scope or reassign it immediately rather than allowing the critical path to drift. Planning-only, speculative, cross-lane, and repository-wide cleanup tasks stay off the deadline path.
+
+Review completed sessions for elapsed time, dead ends, and verification quality before repeating the task shape. Promote a repeated successful task shape into a playbook; keep repository-specific setup and delivery rules in version-controlled agent instructions so they are not restated in every ticket.
+
 ## One-slice-ahead design
 
 Design freezes only the next slice, not the whole product. A slice packet in `design/**` is **Ready** when it names:

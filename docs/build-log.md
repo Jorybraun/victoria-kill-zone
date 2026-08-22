@@ -41,3 +41,17 @@ This is the integration-owned, evidence-based status record. Append observed res
 - **Blocker and owner:**
 - **Next integration step:**
 - **Cut/deferred or risk change:**
+
+### 2026-08-22 11:22 PDT — Six-hour G1/G2 checkpoint
+
+- **Git SHA / PR:** Local `feat/g1-contracts-and-shells` worktree based on `a023465`; not yet integrated or promoted.
+- **Owner and write set:** Integration (`docs/**`, root lock/verification), Design (`design/**`), iOS shell/client (`ios/**`), Spectator (`spectator/**`), Devin Cloud backend (`convex/**`).
+- **Environment/artifact:** Xcode 26.6; root pnpm workspace; public canonical GitHub repository.
+- **Commands/checks:** `pnpm install` completed and updated the workspace lockfile. `pnpm verify` passed at 11:12 PDT: repository contract, spectator lint, strict typecheck, 23 Vitest tests, and Vite production build all passed. The previously completed unsigned iOS shell build and six host-side XCTest cases passed; live-client changes are still in progress.
+- **Observed on browser/simulator:** Spectator programmatic tests/build pass. No visual browser or simulator evidence recorded; no simulator runtime is currently evidenced.
+- **Observed on physical devices:** macOS reports one usable Apple Development signing identity. Xcode reports two trusted physical iPhones. No signed install, launch, permission, mutation, subscription, or mirroring result is recorded yet.
+- **Mocked or unproven:** Live iOS client, deployed Convex functions, live spectator subscription, signed two-phone run, idempotent debug fire, reconnect/recovery, and exact-SHA deployment.
+- **Result:** BLOCKED at live backend/client integration; hardware discovery is now unblocked.
+- **Blocker and owner:** Devin Cloud backend branch has not pushed an executable commit as of 11:22 PDT. Integration owns the 11:30 local-fallback decision. User owns keeping both phones connected, unlocked, and trusted.
+- **Next integration step:** Receive or replace the backend implementation; reconcile both clients to `docs/interface-contracts.md`; run exact-head verification and open the first green PR.
+- **Cut/deferred or risk change:** The 17:00 demo scope is G2 only. Vision/ARKit targeting, geofence enforcement, radar, K/D, kill/respawn, reload, sound, haptics, and presentation polish are deferred.

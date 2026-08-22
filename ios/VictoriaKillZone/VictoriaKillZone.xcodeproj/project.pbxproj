@@ -1,0 +1,583 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B00100000000000000000001 /* VictoriaKillZoneApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000001 /* VictoriaKillZoneApp.swift */; };
+		B00100000000000000000002 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000002 /* AppEnvironment.swift */; };
+		B00100000000000000000003 /* LobbyModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000003 /* LobbyModels.swift */; };
+		B00100000000000000000004 /* LobbyStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000004 /* LobbyStateMachine.swift */; };
+		B00100000000000000000005 /* GameSessionClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000005 /* GameSessionClient.swift */; };
+		B00100000000000000000006 /* TargetingSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000006 /* TargetingSession.swift */; };
+		B00100000000000000000007 /* LobbyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000007 /* LobbyStore.swift */; };
+		B00100000000000000000008 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000008 /* HomeView.swift */; };
+		B00100000000000000000009 /* JoinDuelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000009 /* JoinDuelView.swift */; };
+		B0010000000000000000000A /* WaitingRoomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0010000000000000000000A /* WaitingRoomView.swift */; };
+		B0010000000000000000000B /* ActiveDuelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0010000000000000000000B /* ActiveDuelView.swift */; };
+		B0010000000000000000000C /* VKZTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0010000000000000000000C /* VKZTheme.swift */; };
+		B0010000000000000000000D /* LobbyStateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0010000000000000000000E /* LobbyStateMachineTests.swift */; };
+		B0010000000000000000000E /* GameSessionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000011 /* GameSessionModels.swift */; };
+		B0010000000000000000000F /* ConvexGameSessionClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000012 /* ConvexGameSessionClient.swift */; };
+		B00100000000000000000010 /* ConvexMobile in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000001 /* ConvexMobile */; };
+		B00100000000000000000011 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000013 /* RootView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		C00100000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = PR0100000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = T00100000000000000000001;
+			remoteInfo = VictoriaKillZone;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		F00100000000000000000001 /* VictoriaKillZoneApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VictoriaKillZoneApp.swift; sourceTree = "<group>"; };
+		F00100000000000000000002 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		F00100000000000000000003 /* LobbyModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LobbyModels.swift; sourceTree = "<group>"; };
+		F00100000000000000000004 /* LobbyStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LobbyStateMachine.swift; sourceTree = "<group>"; };
+		F00100000000000000000005 /* GameSessionClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSessionClient.swift; sourceTree = "<group>"; };
+		F00100000000000000000006 /* TargetingSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetingSession.swift; sourceTree = "<group>"; };
+		F00100000000000000000007 /* LobbyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LobbyStore.swift; sourceTree = "<group>"; };
+		F00100000000000000000008 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		F00100000000000000000009 /* JoinDuelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoinDuelView.swift; sourceTree = "<group>"; };
+		F0010000000000000000000A /* WaitingRoomView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaitingRoomView.swift; sourceTree = "<group>"; };
+		F0010000000000000000000B /* ActiveDuelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveDuelView.swift; sourceTree = "<group>"; };
+		F0010000000000000000000C /* VKZTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VKZTheme.swift; sourceTree = "<group>"; };
+		F0010000000000000000000D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F0010000000000000000000E /* LobbyStateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LobbyStateMachineTests.swift; sourceTree = "<group>"; };
+		F0010000000000000000000F /* VictoriaKillZone.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VictoriaKillZone.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F00100000000000000000010 /* VictoriaKillZoneTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VictoriaKillZoneTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F00100000000000000000011 /* GameSessionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSessionModels.swift; sourceTree = "<group>"; };
+		F00100000000000000000012 /* ConvexGameSessionClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvexGameSessionClient.swift; sourceTree = "<group>"; };
+		F00100000000000000000013 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		PH0100000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00100000000000000000010 /* ConvexMobile in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		PH0200000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		G00100000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				G00100000000000000000002 /* VictoriaKillZone */,
+				G0010000000000000000000C /* VictoriaKillZoneTests */,
+				G0010000000000000000000D /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		G00100000000000000000002 /* VictoriaKillZone */ = {
+			isa = PBXGroup;
+			children = (
+				G00100000000000000000003 /* App */,
+				G00100000000000000000004 /* Domain */,
+				G00100000000000000000005 /* Services */,
+				G00100000000000000000006 /* Targeting */,
+				G00100000000000000000007 /* Features */,
+				G0010000000000000000000B /* DesignSystem */,
+				F0010000000000000000000D /* Info.plist */,
+			);
+			path = VictoriaKillZone;
+			sourceTree = "<group>";
+		};
+		G00100000000000000000003 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				F00100000000000000000001 /* VictoriaKillZoneApp.swift */,
+				F00100000000000000000002 /* AppEnvironment.swift */,
+				F00100000000000000000013 /* RootView.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		G00100000000000000000004 /* Domain */ = {
+			isa = PBXGroup;
+			children = (
+				F00100000000000000000003 /* LobbyModels.swift */,
+				F00100000000000000000004 /* LobbyStateMachine.swift */,
+				F00100000000000000000011 /* GameSessionModels.swift */,
+			);
+			path = Domain;
+			sourceTree = "<group>";
+		};
+		G00100000000000000000005 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				F00100000000000000000005 /* GameSessionClient.swift */,
+				F00100000000000000000012 /* ConvexGameSessionClient.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		G00100000000000000000006 /* Targeting */ = {
+			isa = PBXGroup;
+			children = (
+				F00100000000000000000006 /* TargetingSession.swift */,
+			);
+			path = Targeting;
+			sourceTree = "<group>";
+		};
+		G00100000000000000000007 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				G00100000000000000000008 /* Home */,
+				G00100000000000000000009 /* Lobby */,
+				G0010000000000000000000A /* Game */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		G00100000000000000000008 /* Home */ = {
+			isa = PBXGroup;
+			children = (
+				F00100000000000000000008 /* HomeView.swift */,
+			);
+			path = Home;
+			sourceTree = "<group>";
+		};
+		G00100000000000000000009 /* Lobby */ = {
+			isa = PBXGroup;
+			children = (
+				F00100000000000000000007 /* LobbyStore.swift */,
+				F00100000000000000000009 /* JoinDuelView.swift */,
+				F0010000000000000000000A /* WaitingRoomView.swift */,
+			);
+			path = Lobby;
+			sourceTree = "<group>";
+		};
+		G0010000000000000000000A /* Game */ = {
+			isa = PBXGroup;
+			children = (
+				F0010000000000000000000B /* ActiveDuelView.swift */,
+			);
+			path = Game;
+			sourceTree = "<group>";
+		};
+		G0010000000000000000000B /* DesignSystem */ = {
+			isa = PBXGroup;
+			children = (
+				F0010000000000000000000C /* VKZTheme.swift */,
+			);
+			path = DesignSystem;
+			sourceTree = "<group>";
+		};
+		G0010000000000000000000C /* VictoriaKillZoneTests */ = {
+			isa = PBXGroup;
+			children = (
+				F0010000000000000000000E /* LobbyStateMachineTests.swift */,
+			);
+			path = VictoriaKillZoneTests;
+			sourceTree = "<group>";
+		};
+		G0010000000000000000000D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F0010000000000000000000F /* VictoriaKillZone.app */,
+				F00100000000000000000010 /* VictoriaKillZoneTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		T00100000000000000000001 /* VictoriaKillZone */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CL0100000000000000000001 /* Build configuration list for PBXNativeTarget "VictoriaKillZone" */;
+			buildPhases = (
+				PH0100000000000000000001 /* Sources */,
+				PH0100000000000000000002 /* Frameworks */,
+				PH0100000000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VictoriaKillZone;
+			packageProductDependencies = (
+				PP0100000000000000000001 /* ConvexMobile */,
+			);
+			productName = VictoriaKillZone;
+			productReference = F0010000000000000000000F /* VictoriaKillZone.app */;
+			productType = "com.apple.product-type.application";
+		};
+		T00200000000000000000001 /* VictoriaKillZoneTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CL0200000000000000000001 /* Build configuration list for PBXNativeTarget "VictoriaKillZoneTests" */;
+			buildPhases = (
+				PH0200000000000000000001 /* Sources */,
+				PH0200000000000000000002 /* Frameworks */,
+				PH0200000000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				TD0100000000000000000001 /* PBXTargetDependency */,
+			);
+			name = VictoriaKillZoneTests;
+			productName = VictoriaKillZoneTests;
+			productReference = F00100000000000000000010 /* VictoriaKillZoneTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		PR0100000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					T00100000000000000000001 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					T00200000000000000000001 = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = T00100000000000000000001;
+					};
+				};
+			};
+			buildConfigurationList = CL0000000000000000000001 /* Build configuration list for PBXProject "VictoriaKillZone" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = G00100000000000000000001;
+			packageReferences = (
+				PKG010000000000000000001 /* XCRemoteSwiftPackageReference "convex-swift" */,
+			);
+			productRefGroup = G0010000000000000000000D /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				T00100000000000000000001 /* VictoriaKillZone */,
+				T00200000000000000000001 /* VictoriaKillZoneTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		PH0100000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		PH0200000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		PH0100000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00100000000000000000001 /* VictoriaKillZoneApp.swift in Sources */,
+				B00100000000000000000002 /* AppEnvironment.swift in Sources */,
+				B00100000000000000000011 /* RootView.swift in Sources */,
+				B00100000000000000000003 /* LobbyModels.swift in Sources */,
+				B00100000000000000000004 /* LobbyStateMachine.swift in Sources */,
+				B0010000000000000000000E /* GameSessionModels.swift in Sources */,
+				B00100000000000000000005 /* GameSessionClient.swift in Sources */,
+				B0010000000000000000000F /* ConvexGameSessionClient.swift in Sources */,
+				B00100000000000000000006 /* TargetingSession.swift in Sources */,
+				B00100000000000000000007 /* LobbyStore.swift in Sources */,
+				B00100000000000000000008 /* HomeView.swift in Sources */,
+				B00100000000000000000009 /* JoinDuelView.swift in Sources */,
+				B0010000000000000000000A /* WaitingRoomView.swift in Sources */,
+				B0010000000000000000000B /* ActiveDuelView.swift in Sources */,
+				B0010000000000000000000C /* VKZTheme.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		PH0200000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B0010000000000000000000D /* LobbyStateMachineTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		TD0100000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = T00100000000000000000001 /* VictoriaKillZone */;
+			targetProxy = C00100000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		BC0000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		BC0000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		BC0100000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = VictoriaKillZone/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.victoriakillzone.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		BC0100000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = VictoriaKillZone/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.victoriakillzone.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		BC0200000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.victoriakillzone.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VictoriaKillZone.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/VictoriaKillZone";
+			};
+			name = Debug;
+		};
+		BC0200000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.victoriakillzone.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VictoriaKillZone.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/VictoriaKillZone";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		CL0000000000000000000001 /* Build configuration list for PBXProject "VictoriaKillZone" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BC0000000000000000000001 /* Debug */,
+				BC0000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CL0100000000000000000001 /* Build configuration list for PBXNativeTarget "VictoriaKillZone" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BC0100000000000000000001 /* Debug */,
+				BC0100000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CL0200000000000000000001 /* Build configuration list for PBXNativeTarget "VictoriaKillZoneTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BC0200000000000000000001 /* Debug */,
+				BC0200000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		PKG010000000000000000001 /* XCRemoteSwiftPackageReference "convex-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/get-convex/convex-swift.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.8.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		PP0100000000000000000001 /* ConvexMobile */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = PKG010000000000000000001 /* XCRemoteSwiftPackageReference "convex-swift" */;
+			productName = ConvexMobile;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = PR0100000000000000000001 /* Project object */;
+}

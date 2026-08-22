@@ -1,0 +1,323 @@
+import Combine
+import ConvexMobile
+import Foundation
+
+/// The single reconciliation point for every G2 backend wire name.
+enum ConvexGameSessionContract {
+  static let create = "matches:create"
+  static let join = "matches:join"
+  static let setReady = "matches:setReady"
+  static let start = "matches:start"
+  static let debugFire = "shots:debugFire"
+  static let matchSnapshot = "queries:matchSnapshot"
+}
+
+final class ConvexGameSessionClient: GameSessionClient, @unchecked Sendable {
+  let availability = GameSessionAvailability.available
+
+  private let client: ConvexClient
+
+  init(deploymentURL: String) {
+    client = ConvexClient(deploymentUrl: deploymentURL)
+  }
+
+  func createDuel(_ request: CreateDuelRequest) async throws -> PlayerSession {
+    do {
+      return try await client.mutation(
+        ConvexGameSessionContract.create,
+        with: [
+          "displayName": request.displayName,
+          "arenaRadiusMeters": request.arenaRadiusMeters,
+        ]
+      )
+    } catch {
+      throw Self.mapped(error)
+    }
+  }
+
+  func joinDuel(_ request: JoinDuelRequest) async throws -> PlayerSession {
+    do {
+      return try await client.mutation(
+        ConvexGameSessionContract.join,
+        with: [
+          "displayName": request.displayName,
+          "code": request.code,
+        ]
+      )
+    } catch {
+      throw Self.mapped(error)
+    }
+  }
+
+  func setReady(session: PlayerSession, isReady: Bool) async throws {
+    do {
+      try await client.mutation(
+        ConvexGameSessionContract.setReady,
+        with: authenticatedArguments(session).merging(["isReady": isReady]) { _, new in new }
+      )
+    } catch {
+      throw Self.mapped(error)
+    }
+  }
+
+  func startDuel(session: PlayerSession) async throws {
+    do {
+      try await client.mutation(
+        ConvexGameSessionContract.start,
+        with: authenticatedArguments(session)
+      )
+    } catch {
+      throw Self.mapped(error)
+    }
+  }
+
+  func debugFire(session: PlayerSession, clientShotId: String) async throws -> DebugFireResult {
+    do {
+      let result: DebugFireResultWire = try await client.mutation(
+        ConvexGameSessionContract.debugFire,
+        with: authenticatedArguments(session).merging(["clientShotId": clientShotId]) { _, new in
+          new
+        }
+      )
+      return try result.domainValue()
+    } catch {
+      throw Self.mapped(error)
+    }
+  }
+
+  func snapshots(for session: PlayerSession) -> AsyncThrowingStream<MatchSnapshot, Error> {
+    let publisher = client.subscribe(
+      to: ConvexGameSessionContract.matchSnapshot,
+      with: authenticatedArguments(session),
+      yielding: MatchSnapshotWire.self
+    )
+    .tryMap { try $0.domainValue() }
+
+    return AsyncThrowingStream { continuation in
+      let cancellation = CancellationBox()
+      cancellation.value = publisher.sink(
+        receiveCompletion: { completion in
+          switch completion {
+          case .finished:
+            continuation.finish()
+          case .failure(let error):
+            continuation.finish(throwing: Self.mapped(error))
+          }
+        },
+        receiveValue: { snapshot in
+          continuation.yield(snapshot)
+        }
+      )
+      continuation.onTermination = { _ in
+        cancellation.cancel()
+      }
+    }
+  }
+
+  func connectionStates() -> AsyncStream<GameSessionConnectionState> {
+    let publisher = client.watchWebSocketState()
+
+    return AsyncStream { continuation in
+      let cancellation = CancellationBox()
+      cancellation.value = publisher.sink { state in
+        continuation.yield(state == .connected ? .connected : .connecting)
+      }
+      continuation.onTermination = { _ in
+        cancellation.cancel()
+      }
+    }
+  }
+
+  private func authenticatedArguments(_ session: PlayerSession) -> [String: ConvexEncodable?] {
+    [
+      "matchId": session.matchId,
+      "playerId": session.playerId,
+      "sessionSecret": session.sessionSecret,
+    ]
+  }
+
+  private static func mapped(_ error: Error) -> GameSessionClientError {
+    if let error = error as? GameSessionClientError {
+      return error
+    }
+
+    if case ClientError.ConvexError(let data) = error,
+      let code = backendCode(in: data)
+    {
+      return .backend(code)
+    }
+
+    if error is DecodingError {
+      return .invalidSnapshot
+    }
+
+    if error is ClientError {
+      return .networkUnavailable
+    }
+
+    return .unknown
+  }
+
+  private static func backendCode(in value: String) -> BackendErrorCode? {
+    guard let data = value.data(using: .utf8) else { return nil }
+    if let code = try? JSONDecoder().decode(BackendErrorCode.self, from: data) {
+      return code
+    }
+    if let object = try? JSONSerialization.jsonObject(with: data),
+      let code = findCode(in: object)
+    {
+      return BackendErrorCode(rawValue: code)
+    }
+    return BackendErrorCode(rawValue: value)
+  }
+
+  private static func findCode(in value: Any) -> String? {
+    if let dictionary = value as? [String: Any] {
+      if let code = dictionary["code"] as? String { return code }
+      for child in dictionary.values {
+        if let code = findCode(in: child) { return code }
+      }
+    } else if let values = value as? [Any] {
+      for child in values {
+        if let code = findCode(in: child) { return code }
+      }
+    }
+    return nil
+  }
+}
+
+private struct MatchSnapshotWire: Decodable {
+  @ConvexFloat var serverNow: Double
+  let match: MatchSummaryWire
+  let localPlayerId: String
+  let players: [PlayerSnapshotWire]
+  let events: [EventSnapshotWire]
+
+  func domainValue() throws -> MatchSnapshot {
+    MatchSnapshot(
+      serverNow: serverNow,
+      match: try match.domainValue(),
+      localPlayerId: localPlayerId,
+      players: try players.map { try $0.domainValue() },
+      events: try events.map { try $0.domainValue() }
+    )
+  }
+}
+
+private struct MatchSummaryWire: Decodable {
+  let id: String
+  let code: String
+  let phase: MatchPhase
+  @ConvexFloat var durationMs: Double
+  @OptionalConvexFloat var startsAt: Double?
+  @OptionalConvexFloat var endsAt: Double?
+
+  func domainValue() throws -> MatchSummary {
+    MatchSummary(
+      id: id,
+      code: code,
+      phase: phase,
+      durationMs: try exactInteger(durationMs),
+      startsAt: startsAt,
+      endsAt: endsAt
+    )
+  }
+}
+
+private struct PlayerSnapshotWire: Decodable {
+  let id: String
+  let displayName: String
+  let role: PlayerRole
+  let ready: Bool
+  let connected: Bool
+  @ConvexFloat var health: Double
+  @ConvexFloat var ammo: Double
+
+  func domainValue() throws -> PlayerSnapshot {
+    PlayerSnapshot(
+      id: id,
+      displayName: displayName,
+      role: role,
+      ready: ready,
+      connected: connected,
+      health: try exactInteger(health),
+      ammo: try exactInteger(ammo)
+    )
+  }
+}
+
+private struct EventSnapshotWire: Decodable {
+  let id: String
+  let type: MatchEventType
+  let message: String
+  @ConvexFloat var createdAt: Double
+  let actorPlayerId: String?
+  let targetPlayerId: String?
+  let zone: String?
+  @OptionalConvexFloat var damage: Double?
+
+  func domainValue() throws -> EventSnapshot {
+    EventSnapshot(
+      id: id,
+      type: type,
+      message: message,
+      createdAt: createdAt,
+      actorPlayerId: actorPlayerId,
+      targetPlayerId: targetPlayerId,
+      zone: zone,
+      damage: try damage.map(exactInteger)
+    )
+  }
+}
+
+private struct DebugFireResultWire: Decodable {
+  let accepted: Bool
+  let outcome: DebugFireOutcome
+  let clientShotId: String
+  let replayed: Bool
+  @ConvexFloat var damage: Double
+  @ConvexFloat var shooterAmmo: Double
+  @ConvexFloat var targetHealth: Double
+  let eventId: String?
+  let rejectReason: BackendErrorCode?
+
+  func domainValue() throws -> DebugFireResult {
+    DebugFireResult(
+      accepted: accepted,
+      outcome: outcome,
+      clientShotId: clientShotId,
+      replayed: replayed,
+      damage: try exactInteger(damage),
+      shooterAmmo: try exactInteger(shooterAmmo),
+      targetHealth: try exactInteger(targetHealth),
+      eventId: eventId,
+      rejectReason: rejectReason
+    )
+  }
+}
+
+private func exactInteger(_ value: Double) throws -> Int {
+  guard value.isFinite, value.rounded() == value, value >= Double(Int.min),
+    value <= Double(Int.max)
+  else {
+    throw GameSessionClientError.invalidSnapshot
+  }
+  return Int(value)
+}
+
+private final class CancellationBox: @unchecked Sendable {
+  private let lock = NSLock()
+  private var storage: AnyCancellable?
+
+  var value: AnyCancellable? {
+    get { lock.withLock { storage } }
+    set { lock.withLock { storage = newValue } }
+  }
+
+  func cancel() {
+    lock.withLock {
+      storage?.cancel()
+      storage = nil
+    }
+  }
+}
