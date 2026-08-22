@@ -140,7 +140,7 @@ The client generates one cryptographically random clientShotId per trigger press
 - A display name is trimmed of leading/trailing Unicode whitespace. Internal characters are preserved. The result must contain 1–20 Unicode scalar values; otherwise create/join throws INVALID_DISPLAY_NAME. The backend does not silently truncate it.
 - A generated duel code is exactly six characters from ABCDEFGHJKLMNPQRSTUVWXYZ23456789, excluding ambiguous 0, 1, I, and O.
 - A typed or pasted code is uppercased and may remove ASCII whitespace or hyphen separators. The normalized input must be exactly six ASCII A–Z/0–9 characters; any other character or length throws INVALID_CODE. An unknown valid code throws MATCH_NOT_FOUND.
-- arenaRadiusMeters must be finite. It is rounded to the nearest whole metre and clamped to 20–60; clients default to 30.
+- arenaRadiusMeters must be finite. A non-finite value makes matches:create throw the sanitized ConvexError({ code: "INVALID_ARENA_RADIUS" }) before writing a match, player, or event. A finite value is rounded to the nearest whole metre and clamped to 20–60; clients default to 30.
 
 ## G2 snapshots
 
@@ -219,6 +219,7 @@ The first valid debug fire during running atomically changes host ammunition 8 �
 export type G2ErrorCode =
   | "INVALID_DISPLAY_NAME"
   | "INVALID_CODE"
+  | "INVALID_ARENA_RADIUS"
   | "MATCH_NOT_FOUND"
   | "MATCH_FULL"
   | "MATCH_ALREADY_STARTED"
@@ -230,7 +231,7 @@ export type G2ErrorCode =
   | "CONNECTION_STALE";
 ~~~
 
-Create, join, ready, start, heartbeat, query authentication, and invalid debug-fire authentication throw ConvexError({ code }). A validly authenticated debug-fire business rejection returns accepted false rather than throwing. Clients show frozen product copy, never raw error text.
+Create, join, ready, start, heartbeat, query authentication, and invalid debug-fire authentication throw ConvexError({ code }). For a non-finite matches:create arenaRadiusMeters, the exact public error data is { code: "INVALID_ARENA_RADIUS" }; the rejected numeric value and internal validation text are never returned. A validly authenticated debug-fire business rejection returns accepted false rather than throwing. Clients show frozen product copy, never raw error text.
 
 ## Presence, match clock, and reconnect amendment
 
