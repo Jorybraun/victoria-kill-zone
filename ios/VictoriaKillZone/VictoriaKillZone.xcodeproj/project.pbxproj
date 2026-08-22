@@ -24,6 +24,7 @@
 		B0010000000000000000000F /* ConvexGameSessionClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000012 /* ConvexGameSessionClient.swift */; };
 		B00100000000000000000010 /* ConvexMobile in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000001 /* ConvexMobile */; };
 		B00100000000000000000011 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000013 /* RootView.swift */; };
+		B00100000000000000000012 /* LaserFX.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000014 /* LaserFX.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -56,6 +57,7 @@
 		F00100000000000000000011 /* GameSessionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSessionModels.swift; sourceTree = "<group>"; };
 		F00100000000000000000012 /* ConvexGameSessionClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvexGameSessionClient.swift; sourceTree = "<group>"; };
 		F00100000000000000000013 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		F00100000000000000000014 /* LaserFX.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaserFX.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -169,6 +171,7 @@
 			isa = PBXGroup;
 			children = (
 				F0010000000000000000000B /* ActiveDuelView.swift */,
+				F00100000000000000000014 /* LaserFX.swift */,
 			);
 			path = Game;
 			sourceTree = "<group>";
@@ -316,6 +319,7 @@
 				B00100000000000000000009 /* JoinDuelView.swift in Sources */,
 				B0010000000000000000000A /* WaitingRoomView.swift in Sources */,
 				B0010000000000000000000B /* ActiveDuelView.swift in Sources */,
+				B00100000000000000000012 /* LaserFX.swift in Sources */,
 				B0010000000000000000000C /* VKZTheme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -452,6 +456,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CURRENT_PROJECT_VERSION = 1;
+				CONVEX_DEPLOYMENT_URL = "https://brave-crow-277.convex.cloud";
 				DEVELOPMENT_TEAM = UGMA3967M2;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VictoriaKillZone/Info.plist;
@@ -474,6 +479,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CURRENT_PROJECT_VERSION = 1;
+				CONVEX_DEPLOYMENT_URL = "https://brave-crow-277.convex.cloud";
 				DEVELOPMENT_TEAM = UGMA3967M2;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VictoriaKillZone/Info.plist;

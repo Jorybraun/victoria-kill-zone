@@ -3,6 +3,8 @@ import SwiftUI
 struct ActiveDuelView: View {
   let duel: ActiveDuel
   @ObservedObject var store: LobbyStore
+  @StateObject private var fx = LaserFXEngine()
+  @State private var muzzleFlash = false
 
   var body: some View {
     TimelineView(.periodic(from: .now, by: 0.2)) { context in
@@ -17,6 +19,24 @@ struct ActiveDuelView: View {
         )
         .ignoresSafeArea()
         .allowsHitTesting(false)
+
+        if muzzleFlash {
+          Rectangle()
+            .fill(.white.opacity(0.22))
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+          Circle()
+            .fill(
+              RadialGradient(
+                colors: [.white, .red.opacity(0.85), .clear],
+                center: .center,
+                startRadius: 2,
+                endRadius: 190
+              )
+            )
+            .frame(width: 380, height: 380)
+            .allowsHitTesting(false)
+        }
 
         VStack(spacing: 14) {
           topTelemetry(at: context.date)
@@ -53,7 +73,7 @@ struct ActiveDuelView: View {
   private var cameraSurface: some View {
     #if os(iOS) && canImport(ARKit) && canImport(AVFoundation) && canImport(Vision)
       if let targeting = store.environment.targetingSession as? ARVisionTargetingSession {
-        ARCameraPreview(session: targeting.arSession)
+        ARCameraPreview(session: targeting.arSession, fxEngine: fx)
       } else {
         fallbackCameraSurface
       }
@@ -178,10 +198,23 @@ struct ActiveDuelView: View {
     case .running:
       VStack(spacing: 8) {
         Button(shotButtonLabel) {
-          store.fireMarkerless()
+          let canFireMarkerless = store.canFireMarkerless
+          fx.fireLaser(hit: canFireMarkerless)
+          if canFireMarkerless {
+            store.fireMarkerless()
+          } else if store.canDebugFire {
+            store.debugFire()
+          }
+          withAnimation(.easeOut(duration: 0.12)) {
+            muzzleFlash = true
+          }
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            withAnimation(.easeOut(duration: 0.12)) {
+              muzzleFlash = false
+            }
+          }
         }
         .buttonStyle(VKZPrimaryButtonStyle())
-        .disabled(!store.canFireMarkerless)
         .accessibilityLabel("Fire markerless shot")
 
         if duel.localRole == .host {

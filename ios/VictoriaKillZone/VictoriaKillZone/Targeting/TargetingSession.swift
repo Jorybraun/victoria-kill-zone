@@ -1126,6 +1126,7 @@ enum TargetingSessionFactory {
 
   struct ARCameraPreview: UIViewRepresentable {
     let session: ARSession
+    let fxEngine: LaserFXEngine?
 
     func makeUIView(context: Context) -> ARSCNView {
       let view = ARSCNView(frame: .zero)
@@ -1133,6 +1134,7 @@ enum TargetingSessionFactory {
       view.scene = SCNScene()
       view.automaticallyUpdatesLighting = false
       view.backgroundColor = .black
+      fxEngine?.attach(to: view)
       return view
     }
 
@@ -1140,6 +1142,7 @@ enum TargetingSessionFactory {
       if view.session !== session {
         view.session = session
       }
+      fxEngine?.attach(to: view)
     }
 
     static func dismantleUIView(_ view: ARSCNView, coordinator: Void) {
@@ -1155,7 +1158,7 @@ enum TargetingSessionFactory {
     @ViewBuilder
     var body: some View {
       if let liveSession = session as? ARVisionTargetingSession {
-        ARCameraPreview(session: liveSession.arSession)
+        ARCameraPreview(session: liveSession.arSession, fxEngine: nil)
       } else {
         Color.black
       }
