@@ -1,6 +1,8 @@
 import Foundation
 
 struct AppEnvironment: Sendable {
+  static let deploymentURLKey = "CONVEX_DEPLOYMENT_URL"
+
   let gameSessionClient: any GameSessionClient
   let targetingSession: any TargetingSession
 
@@ -9,10 +11,16 @@ struct AppEnvironment: Sendable {
     targetingSession: UnavailableTargetingSession()
   )
 
-  static func liveOrShell(bundle: Bundle = .main) -> AppEnvironment {
+  static func liveOrShell(
+    bundle: Bundle = .main,
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> AppEnvironment {
+    let bundleValue = bundle.object(forInfoDictionaryKey: deploymentURLKey) as? String
     guard
-      let rawValue = bundle.object(forInfoDictionaryKey: "CONVEX_DEPLOYMENT_URL") as? String,
-      let deploymentURL = validatedDeploymentURL(rawValue)
+      let deploymentURL = configuredDeploymentURL(
+        bundleValue: bundleValue,
+        environmentValue: environment[deploymentURLKey]
+      )
     else {
       return .phaseZeroShell
     }
@@ -31,7 +39,19 @@ struct AppEnvironment: Sendable {
     )
   }
 
-  private static func validatedDeploymentURL(_ value: String) -> String? {
+  /// Xcode scheme environments can override the Info.plist build-setting value.
+  /// Invalid or absent values deliberately retain the safe networking shell.
+  static func configuredDeploymentURL(
+    bundleValue: String?,
+    environmentValue: String?
+  ) -> String? {
+    [environmentValue, bundleValue]
+      .compactMap { $0 }
+      .compactMap(validatedDeploymentURL)
+      .first
+  }
+
+  static func validatedDeploymentURL(_ value: String) -> String? {
     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty, !trimmed.contains("$("),
       let components = URLComponents(string: trimmed),
