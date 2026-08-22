@@ -1,0 +1,28 @@
+{
+  "name": "@vkz/backend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Authoritative Convex backend for Victoria Pew Pew.",
+  "main": "dist/domain/index.js",
+  "types": "dist/domain/index.d.ts",
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "typecheck": "tsc --project tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@noble/hashes": "2.3.0",
+    "convex": "1.44.0"
+  },
+  "devDependencies": {
+    "@edge-runtime/vm": "5.0.0",
+    "@eslint/js": "10.0.1",
+    "convex-test": "0.0.55",
+    "eslint": "10.8.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.67.0",
+    "vitest": "4.1.10"
+  }
+}
