@@ -15,6 +15,7 @@ struct AppEnvironment: Sendable {
     bundle: Bundle = .main,
     environment: [String: String] = ProcessInfo.processInfo.environment
   ) -> AppEnvironment {
+    let targetingSession = makeLiveTargetingSession()
     let bundleValue = bundle.object(forInfoDictionaryKey: deploymentURLKey) as? String
     guard
       let deploymentURL = configuredDeploymentURL(
@@ -22,12 +23,15 @@ struct AppEnvironment: Sendable {
         environmentValue: environment[deploymentURLKey]
       )
     else {
-      return .phaseZeroShell
+      return AppEnvironment(
+        gameSessionClient: UnavailableGameSessionClient(),
+        targetingSession: targetingSession
+      )
     }
 
     return AppEnvironment(
       gameSessionClient: ConvexGameSessionClient(deploymentURL: deploymentURL),
-      targetingSession: UnavailableTargetingSession()
+      targetingSession: targetingSession
     )
   }
 
@@ -35,8 +39,16 @@ struct AppEnvironment: Sendable {
     guard let deploymentURL = validatedDeploymentURL(deploymentURL) else { return nil }
     return AppEnvironment(
       gameSessionClient: ConvexGameSessionClient(deploymentURL: deploymentURL),
-      targetingSession: UnavailableTargetingSession()
+      targetingSession: makeLiveTargetingSession()
     )
+  }
+
+  private static func makeLiveTargetingSession() -> any TargetingSession {
+    #if os(iOS) && canImport(ARKit) && canImport(AVFoundation) && canImport(Vision)
+      ARVisionTargetingSession()
+    #else
+      UnavailableTargetingSession()
+    #endif
   }
 
   /// Xcode scheme environments can override the Info.plist build-setting value.

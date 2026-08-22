@@ -123,9 +123,14 @@ final class LobbyStore: ObservableObject {
       return false
     }
     switch debugShotState {
-    case .idle, .failed: return true
-    case .pending, .confirmed: return false
+    case .idle, .failed, .confirmed: return true
+    case .pending: return false
     }
+  }
+
+  func isNetworkFresh(at date: Date) -> Bool {
+    guard let lastSyncAt, date >= lastSyncAt else { return false }
+    return !isMatchInputLocked && (syncStatus == .connected || syncStatus == .restored)
   }
 
   func showJoin() {
@@ -324,9 +329,9 @@ final class LobbyStore: ObservableObject {
       return
     }
     switch debugShotState {
-    case .idle, .failed:
+    case .idle, .failed, .confirmed:
       break
-    case .pending, .confirmed:
+    case .pending:
       return
     }
 

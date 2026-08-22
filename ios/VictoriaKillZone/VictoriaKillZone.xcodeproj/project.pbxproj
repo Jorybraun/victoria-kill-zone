@@ -26,8 +26,9 @@
 		B00100000000000000000011 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000013 /* RootView.swift */; };
 		B00100000000000000000012 /* VoiceFireController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000014 /* VoiceFireController.swift */; };
 		B00100000000000000000013 /* VoiceFireControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000015 /* VoiceFireControllerTests.swift */; };
-		B00100000000000000000014 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00100000000000000000016 /* AVFoundation.framework */; };
-		B00100000000000000000015 /* Speech.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00100000000000000000017 /* Speech.framework */; };
+		B00100000000000000000014 /* ActiveDuelViewStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000016 /* ActiveDuelViewStateTests.swift */; };
+		B00100000000000000000015 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00100000000000000000017 /* AVFoundation.framework */; };
+		B00100000000000000000016 /* Speech.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00100000000000000000018 /* Speech.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -62,8 +63,9 @@
 		F00100000000000000000013 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		F00100000000000000000014 /* VoiceFireController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceFireController.swift; sourceTree = "<group>"; };
 		F00100000000000000000015 /* VoiceFireControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceFireControllerTests.swift; sourceTree = "<group>"; };
-		F00100000000000000000016 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
-		F00100000000000000000017 /* Speech.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Speech.framework; path = System/Library/Frameworks/Speech.framework; sourceTree = SDKROOT; };
+		F00100000000000000000016 /* ActiveDuelViewStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveDuelViewStateTests.swift; sourceTree = "<group>"; };
+		F00100000000000000000017 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		F00100000000000000000018 /* Speech.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Speech.framework; path = System/Library/Frameworks/Speech.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -71,9 +73,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B00100000000000000000014 /* AVFoundation.framework in Frameworks */,
+				B00100000000000000000015 /* AVFoundation.framework in Frameworks */,
 				B00100000000000000000010 /* ConvexMobile in Frameworks */,
-				B00100000000000000000015 /* Speech.framework in Frameworks */,
+				B00100000000000000000016 /* Speech.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -198,6 +200,7 @@
 			children = (
 				F0010000000000000000000E /* LobbyStateMachineTests.swift */,
 				F00100000000000000000015 /* VoiceFireControllerTests.swift */,
+				F00100000000000000000016 /* ActiveDuelViewStateTests.swift */,
 			);
 			path = VictoriaKillZoneTests;
 			sourceTree = "<group>";
@@ -214,8 +217,8 @@
 		G0010000000000000000000E /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				F00100000000000000000016 /* AVFoundation.framework */,
-				F00100000000000000000017 /* Speech.framework */,
+				F00100000000000000000017 /* AVFoundation.framework */,
+				F00100000000000000000018 /* Speech.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -349,6 +352,7 @@
 			files = (
 				B0010000000000000000000D /* LobbyStateMachineTests.swift in Sources */,
 				B00100000000000000000013 /* VoiceFireControllerTests.swift in Sources */,
+				B00100000000000000000014 /* ActiveDuelViewStateTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
