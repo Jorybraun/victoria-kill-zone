@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { COUNTDOWN_MS, MATCH_DURATION_MS } from "../domain/contract.js";
-import { countdownRemainingMs, isJoinable, isTerminal, resolvePhase } from "../domain/lifecycle.js";
+import {
+  countdownRemainingMs,
+  isJoinable,
+  isTerminal,
+  resolvePhase,
+  scheduledTransition,
+} from "../domain/lifecycle.js";
 
 const T0 = 1_760_000_000_000;
 
@@ -50,6 +56,37 @@ describe("phase predicates", () => {
     for (const phase of ["countdown", "running", "finished", "cancelled"] as const) {
       expect(isJoinable(phase)).toBe(false);
     }
+  });
+});
+
+describe("scheduledTransition", () => {
+  const startsAt = T0 + COUNTDOWN_MS;
+  const endsAt = startsAt + MATCH_DURATION_MS;
+  const countdown = { phase: "countdown", startsAt, endsAt } as const;
+
+  it("writes running only once the start time has arrived", () => {
+    expect(scheduledTransition(countdown, "running", startsAt - 1)).toBeNull();
+    expect(scheduledTransition(countdown, "running", startsAt)).toBe("running");
+  });
+
+  it("writes finished only once the end time has arrived", () => {
+    const running = { ...countdown, phase: "running" } as const;
+
+    expect(scheduledTransition(running, "finished", endsAt - 1)).toBeNull();
+    expect(scheduledTransition(running, "finished", endsAt)).toBe("finished");
+  });
+
+  it("is a no-op when the record already says the target", () => {
+    expect(scheduledTransition({ ...countdown, phase: "running" }, "running", endsAt - 1)).toBeNull();
+  });
+
+  it("never reopens a terminal match", () => {
+    expect(scheduledTransition({ ...countdown, phase: "finished" }, "running", startsAt)).toBeNull();
+    expect(scheduledTransition({ ...countdown, phase: "cancelled" }, "finished", endsAt)).toBeNull();
+  });
+
+  it("still lands finished when the running transition never ran", () => {
+    expect(scheduledTransition(countdown, "finished", endsAt)).toBe("finished");
   });
 });
 

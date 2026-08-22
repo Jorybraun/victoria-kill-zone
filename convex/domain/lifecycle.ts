@@ -35,6 +35,27 @@ export function resolvePhase(match: MatchTiming, now: number): MatchPhase {
   return match.phase;
 }
 
+/**
+ * Phase a scheduled transition is allowed to persist, or `null` when it must do
+ * nothing.
+ *
+ * Scheduled work can fire early, fire late, or fire against a match that moved
+ * on, so the target is only written when server time already resolves to it and
+ * the record does not already say so. That makes every scheduled transition
+ * idempotent and safe to run twice.
+ */
+export function scheduledTransition(
+  match: MatchTiming,
+  target: Extract<MatchPhase, "running" | "finished">,
+  now: number,
+): MatchPhase | null {
+  if (isTerminal(match.phase) || match.phase === target) {
+    return null;
+  }
+
+  return resolvePhase(match, now) === target ? target : null;
+}
+
 /** Only a `lobby` match accepts a second player. */
 export function isJoinable(phase: MatchPhase): boolean {
   return phase === "lobby";

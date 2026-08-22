@@ -41,4 +41,13 @@ export const api = {
       null
     >("matches:start"),
   },
+  /** Internal scheduled transitions; never part of the public wire surface. */
+  internal: {
+    advanceToRunning: makeFunctionReference<"mutation", { matchId: string }, null>(
+      "matches:advanceToRunning",
+    ),
+    advanceToFinished: makeFunctionReference<"mutation", { matchId: string }, null>(
+      "matches:advanceToFinished",
+    ),
+  },
 };

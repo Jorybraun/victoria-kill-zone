@@ -6,6 +6,7 @@ import {
   type MutationBuilder,
   type QueryBuilder,
   type TableNamesInDataModel,
+  internalMutationGeneric,
   mutationGeneric,
   queryGeneric,
 } from "convex/server";
@@ -27,4 +28,5 @@ export type MutationCtx = GenericMutationCtx<DataModel>;
 export type QueryCtx = GenericQueryCtx<DataModel>;
 
 export const mutation: MutationBuilder<DataModel, "public"> = mutationGeneric;
+export const internalMutation: MutationBuilder<DataModel, "internal"> = internalMutationGeneric;
 export const query: QueryBuilder<DataModel, "public"> = queryGeneric;
