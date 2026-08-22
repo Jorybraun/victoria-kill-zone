@@ -48,6 +48,14 @@ final class TargetingStateMachineTests: XCTestCase {
       evaluatedAt: time(0.06)
     )
 
+    XCTAssertEqual(machine.snapshot.state, .bodyLock)
+    XCTAssertNil(machine.snapshot.hitZone)
+
+    machine.ingest(
+      observation(at: 0.13, bodyConfidence: 0.78, torsoConfidence: 0.66),
+      evaluatedAt: time(0.14)
+    )
+
     XCTAssertEqual(machine.snapshot.state, .torsoLock)
     XCTAssertTrue(machine.snapshot.bodyDetected)
     XCTAssertTrue(machine.snapshot.torsoDetected)
@@ -57,19 +65,33 @@ final class TargetingStateMachineTests: XCTestCase {
 
   func testHeadRegionWinsWhenHeadAndTorsoOverlapCrosshair() {
     var machine = readyMachine()
+    let overlappingHead = NormalizedTargetingEllipse(
+      centerX: 0.5,
+      centerY: 0.5,
+      radiusX: 0.08,
+      radiusY: 0.1
+    )
     machine.ingest(
       observation(
         at: 0.05,
         bodyConfidence: 0.84,
         torsoConfidence: 0.7,
-        headRegion: NormalizedTargetingEllipse(
-          centerX: 0.5,
-          centerY: 0.5,
-          radiusX: 0.08,
-          radiusY: 0.1
-        )
+        headRegion: overlappingHead
       ),
       evaluatedAt: time(0.06)
+    )
+
+    XCTAssertEqual(machine.snapshot.state, .bodyLock)
+    XCTAssertNil(machine.snapshot.hitZone)
+
+    machine.ingest(
+      observation(
+        at: 0.13,
+        bodyConfidence: 0.84,
+        torsoConfidence: 0.7,
+        headRegion: overlappingHead
+      ),
+      evaluatedAt: time(0.14)
     )
 
     XCTAssertEqual(machine.snapshot.state, .bodyLock)
@@ -152,11 +174,15 @@ final class TargetingStateMachineTests: XCTestCase {
       observation(at: 0.05, bodyConfidence: 0.78, torsoConfidence: 0.66),
       evaluatedAt: time(0.06)
     )
+    machine.ingest(
+      observation(at: 0.15, bodyConfidence: 0.78, torsoConfidence: 0.66),
+      evaluatedAt: time(0.16)
+    )
 
-    machine.tick(at: time(0.26))
+    machine.tick(at: time(0.36))
 
     XCTAssertEqual(machine.snapshot.state, .torsoLock)
-    XCTAssertFalse(machine.snapshot.isPoseFresh(at: time(0.26)))
+    XCTAssertFalse(machine.snapshot.isPoseFresh(at: time(0.36)))
     XCTAssertNil(machine.snapshot.hitZone)
   }
 
@@ -191,6 +217,13 @@ final class TargetingStateMachineTests: XCTestCase {
     XCTAssertEqual(machine.snapshot.state, .targetReacquired)
     XCTAssertTrue(machine.snapshot.torsoDetected)
 
+    machine.ingest(
+      observation(at: 0.51, bodyConfidence: 0.82, torsoConfidence: 0.7),
+      evaluatedAt: time(0.52)
+    )
+    XCTAssertEqual(machine.snapshot.state, .targetReacquired)
+    XCTAssertTrue(machine.snapshot.torsoDetected)
+
     machine.tick(at: time(0.74))
     XCTAssertEqual(machine.snapshot.state, .torsoLock)
   }
@@ -217,12 +250,16 @@ final class TargetingStateMachineTests: XCTestCase {
       evaluatedAt: time(0.11)
     )
     machine.ingest(
+      observation(at: 0.19, bodyConfidence: 0.8, torsoConfidence: 0.7),
+      evaluatedAt: time(0.20)
+    )
+    machine.ingest(
       observation(at: 0.09, bodyConfidence: 0.9),
-      evaluatedAt: time(0.12)
+      evaluatedAt: time(0.21)
     )
 
     XCTAssertEqual(machine.snapshot.state, .torsoLock)
-    XCTAssertEqual(machine.snapshot.poseObservedAt, time(0.1))
+    XCTAssertEqual(machine.snapshot.poseObservedAt, time(0.19))
   }
 
   func testUnavailableClearsPoseAndCameraRay() {
@@ -235,7 +272,7 @@ final class TargetingStateMachineTests: XCTestCase {
       TargetingCameraRay(
         origin: TargetingVector3(x: 0, y: 1, z: 2),
         direction: TargetingVector3(x: 0, y: 0, z: -1),
-        capturedAt: time(0.07)
+        capturedAtMonotonic: 123.45
       ),
       at: time(0.07)
     )
@@ -245,6 +282,73 @@ final class TargetingStateMachineTests: XCTestCase {
     XCTAssertEqual(machine.snapshot.state, .targetingUnavailable)
     XCTAssertNil(machine.snapshot.poseObservedAt)
     XCTAssertNil(machine.snapshot.cameraRay)
+  }
+
+  func testPreviewTransformConvertsVisionCoordinatesIntoPortraitAspectFillViewport() {
+    let transform = TargetingPreviewTransform(
+      imageWidth: 1_440,
+      imageHeight: 1_920,
+      viewportWidth: 390,
+      viewportHeight: 844
+    )
+
+    XCTAssertEqual(transform.convert(x: 0.5, y: 0.5).x, 0.5, accuracy: 0.0001)
+    XCTAssertEqual(transform.convert(x: 0.5, y: 0.5).y, 0.5, accuracy: 0.0001)
+    XCTAssertLessThan(transform.convert(x: 0, y: 0.5).x, 0)
+    XCTAssertGreaterThan(transform.convert(x: 1, y: 0.5).x, 1)
+    XCTAssertEqual(transform.convert(x: 0.5, y: 1).y, 1, accuracy: 0.0001)
+    XCTAssertEqual(transform.convert(x: 0.5, y: 0).y, 0, accuracy: 0.0001)
+  }
+
+  func testAimPublishesAfterTwoSameZoneObservationsSpanningStableDuration() {
+    var machine = readyMachine()
+    machine.ingest(
+      observation(at: 0.05, bodyConfidence: 0.8, torsoConfidence: 0.7),
+      evaluatedAt: time(0.06)
+    )
+    XCTAssertNil(machine.snapshot.hitZone)
+
+    machine.ingest(
+      observation(at: 0.15, bodyConfidence: 0.8, torsoConfidence: 0.7),
+      evaluatedAt: time(0.16)
+    )
+    XCTAssertEqual(machine.snapshot.hitZone, .torso)
+  }
+
+  func testAimDoesNotPublishWhenTwoSameZoneObservationsAreUnderStableDuration() {
+    var machine = readyMachine()
+    machine.ingest(
+      observation(at: 0.05, bodyConfidence: 0.8, torsoConfidence: 0.7),
+      evaluatedAt: time(0.06)
+    )
+    XCTAssertNil(machine.snapshot.hitZone)
+
+    machine.ingest(
+      observation(at: 0.10, bodyConfidence: 0.8, torsoConfidence: 0.7),
+      evaluatedAt: time(0.11)
+    )
+    XCTAssertNil(machine.snapshot.hitZone)
+  }
+
+  func testObservationPublishesPreviewSpaceJoints() {
+    var machine = readyMachine()
+    let joints = [point(0.4, 0.6), point(0.6, 0.6)]
+    machine.ingest(
+      observation(at: 0.05, bodyConfidence: 0.8, joints: joints),
+      evaluatedAt: time(0.06)
+    )
+
+    XCTAssertEqual(machine.snapshot.joints, joints)
+  }
+
+  func testCameraRayCarriesMonotonicTimestamp() {
+    let ray = TargetingCameraRay(
+      origin: TargetingVector3(x: 0, y: 1, z: 2),
+      direction: TargetingVector3(x: 0, y: 0, z: -1),
+      capturedAtMonotonic: 987.65
+    )
+
+    XCTAssertEqual(ray.capturedAtMonotonic, 987.65)
   }
 
   private func readyMachine() -> TargetingStateMachine {
@@ -259,7 +363,8 @@ final class TargetingStateMachineTests: XCTestCase {
     bodyConfidence: Double,
     torsoConfidence: Double? = nil,
     headRegion: NormalizedTargetingEllipse? = nil,
-    torsoRegion: NormalizedTargetingPolygon? = nil
+    torsoRegion: NormalizedTargetingPolygon? = nil,
+    joints: [NormalizedTargetingPoint] = []
   ) -> TargetingObservation {
     let resolvedTorsoRegion = torsoConfidence == nil
       ? nil
@@ -276,7 +381,8 @@ final class TargetingStateMachineTests: XCTestCase {
       bodyBounds: bounds,
       torsoBounds: resolvedTorsoRegion?.bounds,
       headRegion: headRegion,
-      torsoRegion: resolvedTorsoRegion
+      torsoRegion: resolvedTorsoRegion,
+      joints: joints
     )
   }
 
