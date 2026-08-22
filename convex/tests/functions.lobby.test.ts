@@ -79,10 +79,7 @@ describe("matches:create", () => {
   it("initializes server-owned presence and arms its expiry", async () => {
     const t = testBackend();
     const before = Date.now();
-    const host = await t.mutation(api.matches.create, {
-      displayName: "Host",
-      arenaRadiusMeters: 30,
-    });
+    await t.mutation(api.matches.create, { displayName: "Host", arenaRadiusMeters: 30 });
 
     const stored = await t.run(async (ctx) => ({
       players: await ctx.db.query("players").collect(),
