@@ -21,6 +21,7 @@ export interface ContractFixtures {
   readonly enums: Readonly<Record<string, readonly string[]>>;
   readonly snapshots: readonly FixtureCase[];
   readonly mutationResults: readonly FixtureCase[];
+  readonly connectionScenarios: readonly FixtureCase[];
   readonly errors: readonly FixtureCase[];
 }
 
@@ -87,6 +88,7 @@ function parseFixtures(raw: unknown, expectedVersion: string): ContractFixtures 
     enums: parseEnums(record.enums),
     snapshots: parseCases(record.snapshots, "snapshots"),
     mutationResults: parseCases(record.mutationResults, "mutationResults"),
+    connectionScenarios: parseCases(record.connectionScenarios, "connectionScenarios"),
     errors: parseCases(record.errors, "errors"),
   };
 }
@@ -104,6 +106,13 @@ export function fixtureCase(cases: readonly FixtureCase[], id: string): FixtureC
   }
 
   return found;
+}
+
+/** Ordered scenario steps, parsed from unknown so a drifted fixture fails loudly. */
+export function scenarioSteps(fixture: FixtureCase): Record<string, unknown>[] {
+  return requireArray(fixture.payload.steps, `${fixture.id}.steps`).map((entry, index) =>
+    requireRecord(entry, `${fixture.id}.steps[${index}]`),
+  );
 }
 
 /** Fixture ids of every case for one wire name, so no case is silently skipped. */

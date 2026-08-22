@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { DEBUG_TORSO_DAMAGE, INITIAL_AMMO, INITIAL_HEALTH } from "../domain/contract.js";
+import {
+  DEBUG_TORSO_DAMAGE,
+  INITIAL_AMMO,
+  INITIAL_HEALTH,
+  PRESENCE_TIMEOUT_MS,
+} from "../domain/contract.js";
 import { replayShot, resolveDebugFire, type FireShooter, type FireTarget } from "../domain/fire.js";
 
 const T0 = 1_760_000_000_000;
@@ -10,6 +15,7 @@ const shooter: FireShooter = {
   displayName: "VIC",
   role: "host",
   connected: true,
+  lastSeenAt: T0,
   ammo: INITIAL_AMMO,
 };
 
@@ -17,6 +23,7 @@ const target: FireTarget = {
   id: "guest",
   displayName: "JORY",
   connected: true,
+  lastSeenAt: T0,
   health: INITIAL_HEALTH,
 };
 
@@ -95,11 +102,54 @@ describe("resolveDebugFire", () => {
     );
   });
 
-  it("rejects an empty idempotency key", () => {
-    expect(fire({ clientShotId: "  " }).result).toMatchObject({
+  it("rejects a heartbeat that has aged out even while connected is still set", () => {
+    const aged = T0 - PRESENCE_TIMEOUT_MS;
+
+    expect(fire({ shooter: { ...shooter, lastSeenAt: aged } }).result).toMatchObject({
       accepted: false,
-      rejectReason: "INVALID_SESSION",
+      rejectReason: "CONNECTION_STALE",
+      shooterAmmo: INITIAL_AMMO,
+      targetHealth: INITIAL_HEALTH,
     });
+    expect(fire({ target: { ...target, lastSeenAt: aged } }).result.rejectReason).toBe(
+      "CONNECTION_STALE",
+    );
+    expect(
+      fire({ shooter: { ...shooter, lastSeenAt: aged + 1 } }).result.accepted,
+    ).toBe(true);
+  });
+
+  it("rejects a solo lobby with the authoritative default target health", () => {
+    const plan = fire({ phase: "lobby", target: null });
+
+    expect(plan.result).toEqual({
+      accepted: false,
+      outcome: "rejected",
+      clientShotId: CLIENT_SHOT_ID,
+      replayed: false,
+      damage: 0,
+      shooterAmmo: INITIAL_AMMO,
+      targetHealth: INITIAL_HEALTH,
+      rejectReason: "MATCH_NOT_RUNNING",
+    });
+    expect(plan.ledger).toBeUndefined();
+    expect(plan.event).toBeUndefined();
+  });
+
+  it("rejects an empty idempotency key without borrowing a credential code", () => {
+    const plan = fire({ clientShotId: "  " });
+
+    expect(plan.result).toEqual({
+      accepted: false,
+      outcome: "rejected",
+      clientShotId: "  ",
+      replayed: false,
+      damage: 0,
+      shooterAmmo: INITIAL_AMMO,
+      targetHealth: INITIAL_HEALTH,
+    });
+    expect(plan.result.rejectReason).toBeUndefined();
+    expect(plan.ledger).toBeUndefined();
   });
 
   it("rejects an empty magazine without changing state", () => {

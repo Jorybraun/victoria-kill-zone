@@ -1,5 +1,11 @@
-import { DEBUG_TORSO_DAMAGE, type ErrorCode, type HitZone } from "./contract.js";
+import {
+  DEBUG_TORSO_DAMAGE,
+  INITIAL_HEALTH,
+  type ErrorCode,
+  type HitZone,
+} from "./contract.js";
 import type { MatchPhase, PlayerRole } from "./contract.js";
+import { isPresent } from "./presence.js";
 
 /**
  * Debug fire: the temporary, explicitly labelled network path that proves one
@@ -27,6 +33,7 @@ export interface FireShooter {
   readonly displayName: string;
   readonly role: PlayerRole;
   readonly connected: boolean;
+  readonly lastSeenAt: number;
   readonly ammo: number;
 }
 
@@ -34,6 +41,7 @@ export interface FireTarget {
   readonly id: string;
   readonly displayName: string;
   readonly connected: boolean;
+  readonly lastSeenAt: number;
   readonly health: number;
 }
 
@@ -74,7 +82,18 @@ export interface StoredShot {
   readonly eventId?: string;
 }
 
-function rejection(clientShotId: string, shooter: FireShooter, target: FireTarget, reason?: ErrorCode): FirePlan {
+/**
+ * Every rejection after successful authentication is a returned result, never a
+ * throw, and reports the unchanged authoritative ammunition and health. Before a
+ * second player joins there is no target row, so the result carries the health a
+ * player is created with rather than inventing a sentinel.
+ */
+function rejection(
+  clientShotId: string,
+  shooter: FireShooter,
+  target: FireTarget | null,
+  reason?: ErrorCode,
+): FirePlan {
   return {
     result: {
       accepted: false,
@@ -83,7 +102,7 @@ function rejection(clientShotId: string, shooter: FireShooter, target: FireTarge
       replayed: false,
       damage: 0,
       shooterAmmo: shooter.ammo,
-      targetHealth: target.health,
+      targetHealth: target?.health ?? INITIAL_HEALTH,
       ...(reason === undefined ? {} : { rejectReason: reason }),
     },
   };
@@ -112,17 +131,20 @@ export function replayShot(shot: StoredShot): FirePlan {
 export function resolveDebugFire(request: {
   readonly phase: MatchPhase;
   readonly shooter: FireShooter;
-  readonly target: FireTarget;
+  /** `null` until an opponent joins: a solo lobby has nothing to shoot at. */
+  readonly target: FireTarget | null;
   readonly clientShotId: string;
   readonly now: number;
 }): FirePlan {
   const { clientShotId, shooter, target } = request;
 
+  // A missing idempotency key is a malformed press, not a credential problem, and
+  // the frozen error union has no code for it.
   if (clientShotId.trim().length === 0) {
-    return rejection(clientShotId, shooter, target, "INVALID_SESSION");
+    return rejection(clientShotId, shooter, target);
   }
 
-  if (request.phase !== "running") {
+  if (request.phase !== "running" || target === null) {
     return rejection(clientShotId, shooter, target, "MATCH_NOT_RUNNING");
   }
 
@@ -131,7 +153,9 @@ export function resolveDebugFire(request: {
     return rejection(clientShotId, shooter, target, "HOST_ONLY");
   }
 
-  if (!shooter.connected || !target.connected) {
+  // Presence is the stored flag *and* heartbeat freshness at server time, so a
+  // phone whose expiry job has not landed yet still cannot fire or be hit.
+  if (!isPresent(shooter, request.now) || !isPresent(target, request.now)) {
     return rejection(clientShotId, shooter, target, "CONNECTION_STALE");
   }
 

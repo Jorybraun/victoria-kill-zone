@@ -64,8 +64,11 @@ describe("buildMatchSnapshot", () => {
     expect(snapshot.events.map((event) => event.id)).toEqual(["event-2", "event-1"]);
   });
 
-  it("resolves the phase from server time rather than the stored column", () => {
-    const running = buildMatchSnapshot({
+  it("retires a match whose end time has passed but never promotes a countdown", () => {
+    // A read may retire a duel whose `endsAt` has passed — treating it as
+    // playable would be worse than showing it early — but only the scheduled
+    // activation issues `running`, so a read that outran the job still waits.
+    const pastStart = buildMatchSnapshot({
       match,
       localPlayerId: "host",
       players,
@@ -80,8 +83,29 @@ describe("buildMatchSnapshot", () => {
       now: (match.endsAt ?? 0) + 1,
     });
 
-    expect(running.match.phase).toBe("running");
+    expect(pastStart.match.phase).toBe("countdown");
     expect(finished.match.phase).toBe("finished");
+  });
+
+  it("breaks equal event timestamps by ascending id", () => {
+    const tied: StoredEvent[] = [
+      { id: "event-b", type: "ready", message: "JORY READY", createdAt: T0 },
+      { id: "event-a", type: "ready", message: "VIC READY", createdAt: T0 },
+      { id: "event-c", type: "joined", message: "VIC JOINED", createdAt: T0 - 1 },
+    ];
+
+    const feed = (
+      snapshot: { events: readonly { id: string }[] },
+    ): string[] => snapshot.events.map((event) => event.id);
+
+    expect(
+      feed(buildMatchSnapshot({ match, localPlayerId: "host", players, events: tied, now: T0 })),
+    ).toEqual(["event-a", "event-b", "event-c"]);
+    expect(feed(buildSpectatorSnapshot({ match, players, events: tied, now: T0 }))).toEqual([
+      "event-a",
+      "event-b",
+      "event-c",
+    ]);
   });
 
   it("omits absent countdown timings instead of emitting nulls", () => {

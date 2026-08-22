@@ -123,10 +123,24 @@ function eventSnapshot(event: StoredEvent): EventSnapshot {
   };
 }
 
-/** Events are newest-first and stable by `id` so clients de-duplicate a replay. */
+/**
+ * Newest-first by `createdAt`, then ascending by `id` for equal timestamps.
+ *
+ * Two writes inside one mutation share a server timestamp, so the id tiebreak is
+ * what makes the feed a total order: every subscriber sees the same sequence and
+ * can de-duplicate a replayed page by id.
+ */
 function eventFeed(events: readonly StoredEvent[]): EventSnapshot[] {
   return [...events]
-    .sort((left, right) => right.createdAt - left.createdAt)
+    .sort((left, right) =>
+      left.createdAt === right.createdAt
+        ? left.id < right.id
+          ? -1
+          : left.id > right.id
+            ? 1
+            : 0
+        : right.createdAt - left.createdAt,
+    )
     .map((event) => eventSnapshot(event));
 }
 
