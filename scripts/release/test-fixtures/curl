@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+counter_file="${VKZ_HTTP_SMOKE_COUNTER_FILE:?}"
+attempt=0
+
+if [[ -f "$counter_file" ]]; then
+  read -r attempt < "$counter_file"
+fi
+
+attempt=$((attempt + 1))
+printf '%s\n' "$attempt" > "$counter_file"
+
+if ((attempt < 3)); then
+  printf '503'
+  exit 22
+fi
+
+printf '204'
