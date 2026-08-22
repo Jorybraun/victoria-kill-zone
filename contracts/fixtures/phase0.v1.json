@@ -1,0 +1,421 @@
+{
+  "fixtureFormatVersion": 1,
+  "contractVersion": "phase0.v1",
+  "extends": "g2.v1",
+  "enums": {
+    "matchPhase": ["lobby", "countdown", "running", "finished", "cancelled"],
+    "playerRole": ["host", "guest"],
+    "playerLifeState": ["alive", "dead", "respawning", "disconnected"],
+    "hitZone": ["head", "torso", "limbs"],
+    "shotOutcome": ["miss", "hit", "kill", "rejected"],
+    "arenaState": ["inside", "warning", "uncertain", "outside"],
+    "eventType": ["joined", "ready", "started", "shot", "hit", "eliminated", "respawned", "out_of_zone", "finished"],
+    "fireRejectReason": [
+      "MATCH_NOT_RUNNING",
+      "CONNECTION_STALE",
+      "SHOOTER_NOT_ALIVE",
+      "RELOADING",
+      "OUT_OF_ARENA",
+      "LOCATION_STALE",
+      "OUT_OF_AMMO",
+      "FIRE_COOLDOWN",
+      "IDEMPOTENCY_CONFLICT",
+      "INVALID_TARGET",
+      "TARGET_NOT_ALIVE"
+    ],
+    "errorCode": [
+      "INVALID_DISPLAY_NAME",
+      "INVALID_CODE",
+      "MATCH_NOT_FOUND",
+      "MATCH_FULL",
+      "MATCH_ALREADY_STARTED",
+      "INVALID_SESSION",
+      "PLAYERS_NOT_READY",
+      "PLAYERS_NOT_CONNECTED",
+      "HOST_ONLY",
+      "MATCH_NOT_RUNNING",
+      "CONNECTION_STALE",
+      "INVALID_ARENA",
+      "INVALID_LOCATION",
+      "MATCH_ALREADY_FINISHED",
+      "PLAYER_NOT_ALIVE",
+      "MAGAZINE_FULL",
+      "ALREADY_RELOADING"
+    ]
+  },
+  "snapshots": [
+    {
+      "id": "p0.snapshot.lobby-one-player",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 1980000,
+        "match": {"id": "match_p0_001", "code": "VKZP01", "phase": "lobby", "durationMs": 180000},
+        "arena": {"latitude": 0, "longitude": 0, "radiusMeters": 30},
+        "localPlayerId": "player_host",
+        "players": [
+          {"id": "player_host", "displayName": "HOST", "role": "host", "ready": false, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 0, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 1979900, "latitude": 0.00005, "longitude": 0, "headingDegrees": 90, "locationAccuracyMeters": 4, "locationAt": 1979900}
+        ],
+        "events": [
+          {"id": "p0_event_001", "type": "joined", "message": "HOST JOINED", "createdAt": 1979000, "actorPlayerId": "player_host"}
+        ]
+      }
+    },
+    {
+      "id": "p0.snapshot.lobby-two-ready",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 1990000,
+        "match": {"id": "match_p0_001", "code": "VKZP01", "phase": "lobby", "durationMs": 180000},
+        "arena": {"latitude": 0, "longitude": 0, "radiusMeters": 30},
+        "localPlayerId": "player_host",
+        "players": [
+          {"id": "player_host", "displayName": "HOST", "role": "host", "ready": true, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 0, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 1989900, "latitude": 0.00005, "longitude": 0, "headingDegrees": 90, "locationAccuracyMeters": 4, "locationAt": 1989900},
+          {"id": "player_guest", "displayName": "GUEST", "role": "guest", "ready": true, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 0, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 1989800, "latitude": -0.00005, "longitude": 0, "headingDegrees": 270, "locationAccuracyMeters": 5, "locationAt": 1989800}
+        ],
+        "events": [
+          {"id": "p0_event_004", "type": "ready", "message": "GUEST READY", "createdAt": 1989000, "actorPlayerId": "player_guest"},
+          {"id": "p0_event_003", "type": "ready", "message": "HOST READY", "createdAt": 1988000, "actorPlayerId": "player_host"},
+          {"id": "p0_event_002", "type": "joined", "message": "GUEST JOINED", "createdAt": 1987000, "actorPlayerId": "player_guest"}
+        ]
+      }
+    },
+    {
+      "id": "p0.snapshot.countdown",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 2000000,
+        "match": {"id": "match_p0_001", "code": "VKZP01", "phase": "countdown", "durationMs": 180000, "startsAt": 2003000},
+        "arena": {"latitude": 0, "longitude": 0, "radiusMeters": 30},
+        "localPlayerId": "player_host",
+        "players": [
+          {"id": "player_host", "displayName": "HOST", "role": "host", "ready": true, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 0, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 1999900, "latitude": 0.00005, "longitude": 0, "headingDegrees": 90, "locationAccuracyMeters": 4, "locationAt": 1999900},
+          {"id": "player_guest", "displayName": "GUEST", "role": "guest", "ready": true, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 0, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 1999800, "latitude": -0.00005, "longitude": 0, "headingDegrees": 270, "locationAccuracyMeters": 5, "locationAt": 1999800}
+        ],
+        "events": [
+          {"id": "p0_event_004", "type": "ready", "message": "GUEST READY", "createdAt": 1989000, "actorPlayerId": "player_guest"}
+        ]
+      }
+    },
+    {
+      "id": "p0.snapshot.guest-awaiting-location",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 1991000,
+        "match": {"id": "match_p0_001", "code": "VKZP01", "phase": "lobby", "durationMs": 180000},
+        "arena": {"latitude": 0, "longitude": 0, "radiusMeters": 30},
+        "localPlayerId": "player_guest",
+        "players": [
+          {"id": "player_host", "displayName": "HOST", "role": "host", "ready": true, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 0, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 1990900, "latitude": 0.00005, "longitude": 0, "headingDegrees": 90, "locationAccuracyMeters": 4, "locationAt": 1990900},
+          {"id": "player_guest", "displayName": "GUEST", "role": "guest", "ready": false, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 0, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "uncertain", "lastSeenAt": 1990950}
+        ],
+        "events": [
+          {"id": "p0_event_002", "type": "joined", "message": "GUEST JOINED", "createdAt": 1990000, "actorPlayerId": "player_guest"},
+          {"id": "p0_event_001", "type": "joined", "message": "HOST JOINED", "createdAt": 1979000, "actorPlayerId": "player_host"}
+        ]
+      }
+    },
+    {
+      "id": "p0.snapshot.presence-expired",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 2020000,
+        "match": {"id": "match_p0_001", "code": "VKZP01", "phase": "running", "durationMs": 180000, "startsAt": 2003000, "endsAt": 2183000},
+        "arena": {"latitude": 0, "longitude": 0, "radiusMeters": 30},
+        "localPlayerId": "player_guest",
+        "players": [
+          {"id": "player_host", "displayName": "HOST", "role": "host", "ready": true, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 0, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2019900, "latitude": 0.00005, "longitude": 0, "headingDegrees": 90, "locationAccuracyMeters": 4, "locationAt": 2019900},
+          {"id": "player_guest", "displayName": "GUEST", "role": "guest", "ready": true, "connected": false, "health": 100, "ammo": 8, "kills": 0, "deaths": 0, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "disconnected", "arenaState": "uncertain", "lastSeenAt": 2004000}
+        ],
+        "events": [
+          {"id": "p0_event_005", "type": "started", "message": "DUEL STARTED", "createdAt": 2003000, "actorPlayerId": "player_host"}
+        ]
+      }
+    },
+    {
+      "id": "p0.snapshot.arena-warning",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 2021000,
+        "match": {"id": "match_p0_001", "code": "VKZP01", "phase": "running", "durationMs": 180000, "startsAt": 2003000, "endsAt": 2183000},
+        "arena": {"latitude": 0, "longitude": 0, "radiusMeters": 30},
+        "localPlayerId": "player_guest",
+        "players": [
+          {"id": "player_host", "displayName": "HOST", "role": "host", "ready": true, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 0, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2020900, "latitude": 0.00005, "longitude": 0, "headingDegrees": 90, "locationAccuracyMeters": 4, "locationAt": 2020900},
+          {"id": "player_guest", "displayName": "GUEST", "role": "guest", "ready": true, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 0, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "warning", "lastSeenAt": 2020950, "latitude": 0.00025, "longitude": 0, "headingDegrees": 270, "locationAccuracyMeters": 8, "locationAt": 2020950}
+        ],
+        "events": [
+          {"id": "p0_event_005", "type": "started", "message": "DUEL STARTED", "createdAt": 2003000, "actorPlayerId": "player_host"}
+        ]
+      }
+    },
+    {
+      "id": "p0.snapshot.arena-outside",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 2022000,
+        "match": {"id": "match_p0_001", "code": "VKZP01", "phase": "running", "durationMs": 180000, "startsAt": 2003000, "endsAt": 2183000},
+        "arena": {"latitude": 0, "longitude": 0, "radiusMeters": 30},
+        "localPlayerId": "player_guest",
+        "players": [
+          {"id": "player_host", "displayName": "HOST", "role": "host", "ready": true, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 0, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2021900, "latitude": 0.00005, "longitude": 0, "headingDegrees": 90, "locationAccuracyMeters": 4, "locationAt": 2021900},
+          {"id": "player_guest", "displayName": "GUEST", "role": "guest", "ready": true, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 0, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "outside", "lastSeenAt": 2021950, "latitude": 0.0004, "longitude": 0, "headingDegrees": 270, "locationAccuracyMeters": 4, "locationAt": 2021950}
+        ],
+        "events": [
+          {"id": "p0_event_005a", "type": "out_of_zone", "message": "GUEST LEFT THE ARENA", "createdAt": 2021950, "actorPlayerId": "player_guest"},
+          {"id": "p0_event_005", "type": "started", "message": "DUEL STARTED", "createdAt": 2003000, "actorPlayerId": "player_host"}
+        ]
+      }
+    },
+    {
+      "id": "p0.snapshot.running",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 2003000,
+        "match": {"id": "match_p0_001", "code": "VKZP01", "phase": "running", "durationMs": 180000, "startsAt": 2003000, "endsAt": 2183000},
+        "arena": {"latitude": 0, "longitude": 0, "radiusMeters": 30},
+        "localPlayerId": "player_host",
+        "players": [
+          {"id": "player_host", "displayName": "HOST", "role": "host", "ready": true, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 0, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2002900, "latitude": 0.00005, "longitude": 0, "headingDegrees": 90, "locationAccuracyMeters": 4, "locationAt": 2002900},
+          {"id": "player_guest", "displayName": "GUEST", "role": "guest", "ready": true, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 0, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2002800, "latitude": -0.00005, "longitude": 0, "headingDegrees": 270, "locationAccuracyMeters": 5, "locationAt": 2002800}
+        ],
+        "events": [
+          {"id": "p0_event_005", "type": "started", "message": "DUEL STARTED", "createdAt": 2003000, "actorPlayerId": "player_host"}
+        ]
+      }
+    },
+    {
+      "id": "p0.snapshot.after-hit",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 2004000,
+        "match": {"id": "match_p0_001", "code": "VKZP01", "phase": "running", "durationMs": 180000, "startsAt": 2003000, "endsAt": 2183000},
+        "arena": {"latitude": 0, "longitude": 0, "radiusMeters": 30},
+        "localPlayerId": "player_host",
+        "players": [
+          {"id": "player_host", "displayName": "HOST", "role": "host", "ready": true, "connected": true, "health": 100, "ammo": 7, "kills": 0, "deaths": 0, "damageDealt": 75, "shotsFired": 1, "shotsHit": 1, "headshots": 1, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2003900, "lastShotAt": 2003900, "latitude": 0.00005, "longitude": 0, "headingDegrees": 90, "locationAccuracyMeters": 4, "locationAt": 2003900},
+          {"id": "player_guest", "displayName": "GUEST", "role": "guest", "ready": true, "connected": true, "health": 25, "ammo": 8, "kills": 0, "deaths": 0, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2003800, "latitude": -0.00005, "longitude": 0, "headingDegrees": 270, "locationAccuracyMeters": 5, "locationAt": 2003800}
+        ],
+        "events": [
+          {"id": "p0_event_006", "type": "hit", "message": "HOST HIT GUEST", "createdAt": 2003900, "actorPlayerId": "player_host", "targetPlayerId": "player_guest", "zone": "head", "damage": 75},
+          {"id": "p0_event_005", "type": "started", "message": "DUEL STARTED", "createdAt": 2003000, "actorPlayerId": "player_host"}
+        ]
+      }
+    },
+    {
+      "id": "p0.snapshot.after-miss",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 2004500,
+        "match": {"id": "match_p0_001", "code": "VKZP01", "phase": "running", "durationMs": 180000, "startsAt": 2003000, "endsAt": 2183000},
+        "arena": {"latitude": 0, "longitude": 0, "radiusMeters": 30},
+        "localPlayerId": "player_host",
+        "players": [
+          {"id": "player_host", "displayName": "HOST", "role": "host", "ready": true, "connected": true, "health": 100, "ammo": 6, "kills": 0, "deaths": 0, "damageDealt": 75, "shotsFired": 2, "shotsHit": 1, "headshots": 1, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2004400, "lastShotAt": 2004400, "latitude": 0.00005, "longitude": 0, "headingDegrees": 90, "locationAccuracyMeters": 4, "locationAt": 2004400},
+          {"id": "player_guest", "displayName": "GUEST", "role": "guest", "ready": true, "connected": true, "health": 25, "ammo": 8, "kills": 0, "deaths": 0, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2004300, "latitude": -0.00005, "longitude": 0, "headingDegrees": 270, "locationAccuracyMeters": 5, "locationAt": 2004300}
+        ],
+        "events": [
+          {"id": "p0_event_007", "type": "shot", "message": "HOST MISSED", "createdAt": 2004400, "actorPlayerId": "player_host"},
+          {"id": "p0_event_006", "type": "hit", "message": "HOST HIT GUEST", "createdAt": 2003900, "actorPlayerId": "player_host", "targetPlayerId": "player_guest", "zone": "head", "damage": 75}
+        ]
+      }
+    },
+    {
+      "id": "p0.snapshot.eliminated",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 2005000,
+        "match": {"id": "match_p0_001", "code": "VKZP01", "phase": "running", "durationMs": 180000, "startsAt": 2003000, "endsAt": 2183000},
+        "arena": {"latitude": 0, "longitude": 0, "radiusMeters": 30},
+        "localPlayerId": "player_host",
+        "players": [
+          {"id": "player_host", "displayName": "HOST", "role": "host", "ready": true, "connected": true, "health": 100, "ammo": 5, "kills": 1, "deaths": 0, "damageDealt": 100, "shotsFired": 3, "shotsHit": 2, "headshots": 1, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2004900, "lastShotAt": 2004900, "latitude": 0.00005, "longitude": 0, "headingDegrees": 90, "locationAccuracyMeters": 4, "locationAt": 2004900},
+          {"id": "player_guest", "displayName": "GUEST", "role": "guest", "ready": true, "connected": true, "health": 0, "ammo": 8, "kills": 0, "deaths": 1, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "respawning", "arenaState": "inside", "lastSeenAt": 2004800, "respawnAt": 2010000, "latitude": -0.00005, "longitude": 0, "headingDegrees": 270, "locationAccuracyMeters": 5, "locationAt": 2004800}
+        ],
+        "events": [
+          {"id": "p0_event_008", "type": "eliminated", "message": "HOST ELIMINATED GUEST", "createdAt": 2004900, "actorPlayerId": "player_host", "targetPlayerId": "player_guest", "zone": "torso", "damage": 25},
+          {"id": "p0_event_007", "type": "shot", "message": "HOST MISSED", "createdAt": 2004400, "actorPlayerId": "player_host"}
+        ]
+      }
+    },
+    {
+      "id": "p0.snapshot.respawning",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 2008000,
+        "match": {"id": "match_p0_001", "code": "VKZP01", "phase": "running", "durationMs": 180000, "startsAt": 2003000, "endsAt": 2183000},
+        "arena": {"latitude": 0, "longitude": 0, "radiusMeters": 30},
+        "localPlayerId": "player_guest",
+        "players": [
+          {"id": "player_host", "displayName": "HOST", "role": "host", "ready": true, "connected": true, "health": 100, "ammo": 5, "kills": 1, "deaths": 0, "damageDealt": 100, "shotsFired": 3, "shotsHit": 2, "headshots": 1, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2007900, "lastShotAt": 2004900, "latitude": 0.00005, "longitude": 0, "headingDegrees": 90, "locationAccuracyMeters": 4, "locationAt": 2007900},
+          {"id": "player_guest", "displayName": "GUEST", "role": "guest", "ready": true, "connected": true, "health": 0, "ammo": 8, "kills": 0, "deaths": 1, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "respawning", "arenaState": "inside", "lastSeenAt": 2007800, "respawnAt": 2010000, "latitude": -0.00005, "longitude": 0, "headingDegrees": 270, "locationAccuracyMeters": 5, "locationAt": 2007800}
+        ],
+        "events": [
+          {"id": "p0_event_008", "type": "eliminated", "message": "HOST ELIMINATED GUEST", "createdAt": 2004900, "actorPlayerId": "player_host", "targetPlayerId": "player_guest", "zone": "torso", "damage": 25}
+        ]
+      }
+    },
+    {
+      "id": "p0.snapshot.respawned",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 2010000,
+        "match": {"id": "match_p0_001", "code": "VKZP01", "phase": "running", "durationMs": 180000, "startsAt": 2003000, "endsAt": 2183000},
+        "arena": {"latitude": 0, "longitude": 0, "radiusMeters": 30},
+        "localPlayerId": "player_guest",
+        "players": [
+          {"id": "player_host", "displayName": "HOST", "role": "host", "ready": true, "connected": true, "health": 100, "ammo": 5, "kills": 1, "deaths": 0, "damageDealt": 100, "shotsFired": 3, "shotsHit": 2, "headshots": 1, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2009900, "lastShotAt": 2004900, "latitude": 0.00005, "longitude": 0, "headingDegrees": 90, "locationAccuracyMeters": 4, "locationAt": 2009900},
+          {"id": "player_guest", "displayName": "GUEST", "role": "guest", "ready": true, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 1, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2009800, "latitude": -0.00005, "longitude": 0, "headingDegrees": 270, "locationAccuracyMeters": 5, "locationAt": 2009800}
+        ],
+        "events": [
+          {"id": "p0_event_009", "type": "respawned", "message": "GUEST RESPAWNED", "createdAt": 2010000, "actorPlayerId": "player_guest"},
+          {"id": "p0_event_008", "type": "eliminated", "message": "HOST ELIMINATED GUEST", "createdAt": 2004900, "actorPlayerId": "player_host", "targetPlayerId": "player_guest", "zone": "torso", "damage": 25}
+        ]
+      }
+    },
+    {
+      "id": "p0.snapshot.reloading",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 2020000,
+        "match": {"id": "match_p0_001", "code": "VKZP01", "phase": "running", "durationMs": 180000, "startsAt": 2003000, "endsAt": 2183000},
+        "arena": {"latitude": 0, "longitude": 0, "radiusMeters": 30},
+        "localPlayerId": "player_host",
+        "players": [
+          {"id": "player_host", "displayName": "HOST", "role": "host", "ready": true, "connected": true, "health": 100, "ammo": 3, "kills": 1, "deaths": 0, "damageDealt": 100, "shotsFired": 5, "shotsHit": 2, "headshots": 1, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2019900, "lastShotAt": 2019000, "reloadEndsAt": 2021250, "latitude": 0.00005, "longitude": 0, "headingDegrees": 90, "locationAccuracyMeters": 4, "locationAt": 2019900},
+          {"id": "player_guest", "displayName": "GUEST", "role": "guest", "ready": true, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 1, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2019800, "latitude": -0.00005, "longitude": 0, "headingDegrees": 270, "locationAccuracyMeters": 5, "locationAt": 2019800}
+        ],
+        "events": [
+          {"id": "p0_event_009", "type": "respawned", "message": "GUEST RESPAWNED", "createdAt": 2010000, "actorPlayerId": "player_guest"}
+        ]
+      }
+    },
+    {
+      "id": "p0.snapshot.reloaded",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 2021250,
+        "match": {"id": "match_p0_001", "code": "VKZP01", "phase": "running", "durationMs": 180000, "startsAt": 2003000, "endsAt": 2183000},
+        "arena": {"latitude": 0, "longitude": 0, "radiusMeters": 30},
+        "localPlayerId": "player_host",
+        "players": [
+          {"id": "player_host", "displayName": "HOST", "role": "host", "ready": true, "connected": true, "health": 100, "ammo": 8, "kills": 1, "deaths": 0, "damageDealt": 100, "shotsFired": 5, "shotsHit": 2, "headshots": 1, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2021200, "lastShotAt": 2019000, "latitude": 0.00005, "longitude": 0, "headingDegrees": 90, "locationAccuracyMeters": 4, "locationAt": 2021200},
+          {"id": "player_guest", "displayName": "GUEST", "role": "guest", "ready": true, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 1, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2021150, "latitude": -0.00005, "longitude": 0, "headingDegrees": 270, "locationAccuracyMeters": 5, "locationAt": 2021150}
+        ],
+        "events": [
+          {"id": "p0_event_009", "type": "respawned", "message": "GUEST RESPAWNED", "createdAt": 2010000, "actorPlayerId": "player_guest"}
+        ]
+      }
+    },
+    {
+      "id": "p0.snapshot.finished",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 2183000,
+        "match": {"id": "match_p0_001", "code": "VKZP01", "phase": "finished", "durationMs": 180000, "startsAt": 2003000, "endsAt": 2183000, "winnerPlayerId": "player_host"},
+        "arena": {"latitude": 0, "longitude": 0, "radiusMeters": 30},
+        "localPlayerId": "player_host",
+        "players": [
+          {"id": "player_host", "displayName": "HOST", "role": "host", "ready": true, "connected": true, "health": 100, "ammo": 5, "kills": 1, "deaths": 0, "damageDealt": 100, "shotsFired": 3, "shotsHit": 2, "headshots": 1, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2182900, "lastShotAt": 2004900, "latitude": 0.00005, "longitude": 0, "headingDegrees": 90, "locationAccuracyMeters": 4, "locationAt": 2182900},
+          {"id": "player_guest", "displayName": "GUEST", "role": "guest", "ready": true, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 1, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2182800, "latitude": -0.00005, "longitude": 0, "headingDegrees": 270, "locationAccuracyMeters": 5, "locationAt": 2182800}
+        ],
+        "events": [
+          {"id": "p0_event_010", "type": "finished", "message": "HOST WINS", "createdAt": 2183000, "actorPlayerId": "player_host"},
+          {"id": "p0_event_009", "type": "respawned", "message": "GUEST RESPAWNED", "createdAt": 2010000, "actorPlayerId": "player_guest"}
+        ]
+      }
+    },
+    {
+      "id": "p0.snapshot.recovered",
+      "wireName": "queries:matchSnapshot",
+      "payload": {
+        "serverNow": 2010200,
+        "match": {"id": "match_p0_001", "code": "VKZP01", "phase": "running", "durationMs": 180000, "startsAt": 2003000, "endsAt": 2183000},
+        "arena": {"latitude": 0, "longitude": 0, "radiusMeters": 30},
+        "localPlayerId": "player_guest",
+        "players": [
+          {"id": "player_host", "displayName": "HOST", "role": "host", "ready": true, "connected": true, "health": 100, "ammo": 5, "kills": 1, "deaths": 0, "damageDealt": 100, "shotsFired": 3, "shotsHit": 2, "headshots": 1, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2010100, "lastShotAt": 2004900, "latitude": 0.00005, "longitude": 0, "headingDegrees": 90, "locationAccuracyMeters": 4, "locationAt": 2010100},
+          {"id": "player_guest", "displayName": "GUEST", "role": "guest", "ready": true, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 1, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "inside", "lastSeenAt": 2010150, "latitude": -0.00005, "longitude": 0, "headingDegrees": 270, "locationAccuracyMeters": 5, "locationAt": 2010150}
+        ],
+        "events": [
+          {"id": "p0_event_009", "type": "respawned", "message": "GUEST RESPAWNED", "createdAt": 2010000, "actorPlayerId": "player_guest"},
+          {"id": "p0_event_008", "type": "eliminated", "message": "HOST ELIMINATED GUEST", "createdAt": 2004900, "actorPlayerId": "player_host", "targetPlayerId": "player_guest", "zone": "torso", "damage": 25}
+        ]
+      }
+    },
+    {
+      "id": "p0.snapshot.spectator-finished",
+      "wireName": "queries:spectatorSnapshot",
+      "payload": {
+        "serverNow": 2183000,
+        "match": {"id": "match_p0_001", "code": "VKZP01", "phase": "finished", "durationMs": 180000, "startsAt": 2003000, "endsAt": 2183000, "winnerPlayerId": "player_host"},
+        "arena": {"radiusMeters": 30},
+        "players": [
+          {"id": "player_host", "displayName": "HOST", "role": "host", "ready": true, "connected": true, "health": 100, "ammo": 5, "kills": 1, "deaths": 0, "damageDealt": 100, "shotsFired": 3, "shotsHit": 2, "headshots": 1, "lifeState": "alive", "arenaState": "inside", "lastShotAt": 2004900, "arenaPosition": {"eastMeters": 0, "northMeters": 5.6, "headingDegrees": 90}},
+          {"id": "player_guest", "displayName": "GUEST", "role": "guest", "ready": true, "connected": true, "health": 100, "ammo": 8, "kills": 0, "deaths": 1, "damageDealt": 0, "shotsFired": 0, "shotsHit": 0, "headshots": 0, "lifeState": "alive", "arenaState": "inside", "arenaPosition": {"eastMeters": 0, "northMeters": -5.6, "headingDegrees": 270}}
+        ],
+        "events": [
+          {"id": "p0_event_010", "type": "finished", "message": "HOST WINS", "createdAt": 2183000, "actorPlayerId": "player_host"}
+        ]
+      }
+    }
+  ],
+  "mutationResults": [
+    {
+      "id": "p0.fire.hit",
+      "wireName": "shots:fire",
+      "payload": {"accepted": true, "outcome": "hit", "clientShotId": "shot_p0_001", "replayed": false, "damage": 75, "shooterAmmo": 7, "targetHealth": 25, "targetLifeState": "alive", "eventId": "p0_event_006"}
+    },
+    {
+      "id": "p0.fire.miss",
+      "wireName": "shots:fire",
+      "payload": {"accepted": true, "outcome": "miss", "clientShotId": "shot_p0_002", "replayed": false, "damage": 0, "shooterAmmo": 6, "eventId": "p0_event_007"}
+    },
+    {
+      "id": "p0.fire.rejected",
+      "wireName": "shots:fire",
+      "payload": {"accepted": false, "outcome": "rejected", "clientShotId": "shot_p0_003", "replayed": false, "damage": 0, "shooterAmmo": 0, "rejectReason": "OUT_OF_AMMO"}
+    },
+    {
+      "id": "p0.fire.replayed",
+      "wireName": "shots:fire",
+      "payload": {"accepted": true, "outcome": "hit", "clientShotId": "shot_p0_001", "replayed": true, "damage": 75, "shooterAmmo": 7, "targetHealth": 25, "targetLifeState": "alive", "eventId": "p0_event_006"}
+    },
+    {
+      "id": "p0.fire.kill",
+      "wireName": "shots:fire",
+      "payload": {"accepted": true, "outcome": "kill", "clientShotId": "shot_p0_004", "replayed": false, "damage": 25, "shooterAmmo": 5, "targetHealth": 0, "targetLifeState": "respawning", "eventId": "p0_event_008"}
+    },
+    {
+      "id": "p0.fire.idempotency-conflict",
+      "wireName": "shots:fire",
+      "payload": {"accepted": false, "outcome": "rejected", "clientShotId": "shot_p0_001", "replayed": false, "damage": 0, "shooterAmmo": 7, "rejectReason": "IDEMPOTENCY_CONFLICT"}
+    },
+    {
+      "id": "p0.reload.started",
+      "wireName": "players:startReload",
+      "payload": {"ammo": 3, "reloadEndsAt": 2012500}
+    }
+  ],
+  "connectionScenarios": [
+    {
+      "id": "p0.connection.stale-and-restored",
+      "wireName": "local:connection",
+      "payload": {
+        "steps": [
+          {"event": "freshSnapshot", "snapshotId": "p0.snapshot.running", "transport": "connected", "mutationsLocked": false},
+          {"event": "transportChanged", "transport": "connecting", "mutationsLocked": true},
+          {"event": "transportChanged", "transport": "connected", "mutationsLocked": true},
+          {"event": "freshSnapshot", "snapshotId": "p0.snapshot.recovered", "transport": "connected", "mutationsLocked": false, "deduplicateEventIds": true}
+        ]
+      }
+    }
+  ],
+  "errors": [
+    {"id": "p0.error.invalid-arena", "wireName": "error:ConvexError", "payload": {"code": "INVALID_ARENA"}},
+    {"id": "p0.error.invalid-location", "wireName": "error:ConvexError", "payload": {"code": "INVALID_LOCATION"}},
+    {"id": "p0.error.match-already-finished", "wireName": "error:ConvexError", "payload": {"code": "MATCH_ALREADY_FINISHED"}},
+    {"id": "p0.error.player-not-alive", "wireName": "error:ConvexError", "payload": {"code": "PLAYER_NOT_ALIVE"}},
+    {"id": "p0.error.magazine-full", "wireName": "error:ConvexError", "payload": {"code": "MAGAZINE_FULL"}},
+    {"id": "p0.error.already-reloading", "wireName": "error:ConvexError", "payload": {"code": "ALREADY_RELOADING"}}
+  ]
+}
