@@ -1,4 +1,4 @@
-# VKZ G2 spectator
+# Victoria Pew Pew G2 spectator
 
 Read-only browser view for the frozen create/join/start/debug-fire network slice.
 

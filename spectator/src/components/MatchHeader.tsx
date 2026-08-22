@@ -70,7 +70,7 @@ export function MatchHeader({
   return (
     <header className="match-header">
       <div className="brand-lockup">
-        <p className="product-name">VICTORIA KILL ZONE</p>
+        <p className="product-name">VICTORIA PEW PEW</p>
         <p className="product-descriptor">MARKERLESS 1V1 DUEL</p>
       </div>
 
