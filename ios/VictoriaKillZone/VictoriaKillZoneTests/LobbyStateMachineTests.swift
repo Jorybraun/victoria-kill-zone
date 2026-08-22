@@ -401,6 +401,29 @@ final class LobbyStoreTests: XCTestCase {
     XCTAssertEqual(recoveredDuel.opponent?.health, 66)
   }
 
+  func testSnapshotSubscriptionRetriesAfterDrop() async throws {
+    let client = MockGameSessionClient()
+    let store = makeStore(client: client)
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running, guestHealth: 100))
+    await settle()
+
+    client.failSnapshotSubscription()
+    await settle()
+    XCTAssertEqual(store.syncStatus, .stale)
+    XCTAssertTrue(store.isMatchInputLocked)
+
+    try await Task.sleep(for: .seconds(1.1))
+    await settle()
+    XCTAssertEqual(client.snapshotSubscriptionCount, 2)
+
+    client.send(snapshot(phase: .running, guestHealth: 66))
+    await settle()
+    XCTAssertEqual(store.syncStatus, .restored)
+    XCTAssertFalse(store.isMatchInputLocked)
+  }
+
   private func makeStore(
     client: MockGameSessionClient,
     targetingSession: any TargetingSession = UnavailableTargetingSession(),
@@ -507,6 +530,9 @@ private final class MockGameSessionClient: GameSessionClient, @unchecked Sendabl
   private let lock = NSLock()
   private let snapshotStream: AsyncThrowingStream<MatchSnapshot, Error>
   private let snapshotContinuation: AsyncThrowingStream<MatchSnapshot, Error>.Continuation
+  private var retrySnapshotContinuations:
+    [AsyncThrowingStream<MatchSnapshot, Error>.Continuation] = []
+  private var storedSnapshotSubscriptionCount = 0
   private let connectionStream: AsyncStream<GameSessionConnectionState>
   private let connectionContinuation: AsyncStream<GameSessionConnectionState>.Continuation
   private var storedCreateRequests: [CreateDuelRequest] = []
@@ -537,6 +563,10 @@ private final class MockGameSessionClient: GameSessionClient, @unchecked Sendabl
 
   var debugShotIDs: [String] {
     lock.withLock { storedDebugShotIDs }
+  }
+
+  var snapshotSubscriptionCount: Int {
+    lock.withLock { storedSnapshotSubscriptionCount }
   }
 
   var fireRequests: [FireShotRequest] {
@@ -585,7 +615,13 @@ private final class MockGameSessionClient: GameSessionClient, @unchecked Sendabl
   }
 
   func snapshots(for session: PlayerSession) -> AsyncThrowingStream<MatchSnapshot, Error> {
-    snapshotStream
+    lock.withLock {
+      storedSnapshotSubscriptionCount += 1
+      guard storedSnapshotSubscriptionCount > 1 else { return snapshotStream }
+      let (stream, continuation) = AsyncThrowingStream<MatchSnapshot, Error>.makeStream()
+      retrySnapshotContinuations.append(continuation)
+      return stream
+    }
   }
 
   func connectionStates() -> AsyncStream<GameSessionConnectionState> {
@@ -594,6 +630,13 @@ private final class MockGameSessionClient: GameSessionClient, @unchecked Sendabl
 
   func send(_ snapshot: MatchSnapshot) {
     snapshotContinuation.yield(snapshot)
+    lock.withLock {
+      retrySnapshotContinuations.forEach { $0.yield(snapshot) }
+    }
+  }
+
+  func failSnapshotSubscription() {
+    snapshotContinuation.finish(throwing: GameSessionClientError.networkUnavailable)
   }
 
   func sendConnection(_ state: GameSessionConnectionState) {
