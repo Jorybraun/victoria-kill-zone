@@ -1,6 +1,6 @@
 # @vkz/backend
 
-Authoritative Convex backend for Victoria Kill Zone. This package owns `convex/**`
+Authoritative Convex backend for Victoria Pew Pew. This package owns `convex/**`
 only and implements the frozen G2 contract in [`docs/interface-contracts.md`](../docs/interface-contracts.md).
 
 ## Layers

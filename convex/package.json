@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Authoritative Convex backend for Victoria Kill Zone.",
+  "description": "Authoritative Convex backend for Victoria Pew Pew.",
   "main": "dist/domain/index.js",
   "types": "dist/domain/index.d.ts",
   "scripts": {
