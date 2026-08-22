@@ -1,13 +1,19 @@
 import SwiftUI
 
 enum VKZPalette {
-  static let background = Color.black
-  static let panel = Color.white.opacity(0.08)
-  static let border = Color.white.opacity(0.16)
-  static let telemetry = Color.cyan
-  static let acquisition = Color.orange
-  static let danger = Color.red
-  static let ready = Color.green
+  // Frozen G1/G2 tokens from design/slices/001-g1-g2-network-vertical-slice.md.
+  static let background = Color(red: 7 / 255, green: 11 / 255, blue: 16 / 255)
+  static let panel = Color(red: 17 / 255, green: 25 / 255, blue: 35 / 255)
+  static let surfaceRaised = Color(red: 25 / 255, green: 37 / 255, blue: 51 / 255)
+  static let text = Color(red: 245 / 255, green: 248 / 255, blue: 252 / 255)
+  static let textMuted = Color(red: 168 / 255, green: 180 / 255, blue: 194 / 255)
+  static let telemetry = Color(red: 53 / 255, green: 217 / 255, blue: 230 / 255)
+  static let ready = Color(red: 67 / 255, green: 209 / 255, blue: 125 / 255)
+  static let pending = Color(red: 255 / 255, green: 179 / 255, blue: 64 / 255)
+  static let acquisition = pending
+  static let danger = Color(red: 255 / 255, green: 83 / 255, blue: 100 / 255)
+  static let focus = Color.white
+  static let border = textMuted.opacity(0.22)
 }
 
 struct VKZPrimaryButtonStyle: ButtonStyle {
@@ -16,8 +22,8 @@ struct VKZPrimaryButtonStyle: ButtonStyle {
       .font(.headline)
       .frame(maxWidth: .infinity)
       .padding(.vertical, 15)
-      .foregroundStyle(.black)
-      .background(configuration.isPressed ? Color.white.opacity(0.72) : Color.white)
+      .foregroundStyle(VKZPalette.background)
+      .background(configuration.isPressed ? VKZPalette.text.opacity(0.72) : VKZPalette.text)
       .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
       .opacity(configuration.isPressed ? 0.82 : 1)
   }
@@ -29,7 +35,7 @@ struct VKZSecondaryButtonStyle: ButtonStyle {
       .font(.headline)
       .frame(maxWidth: .infinity)
       .padding(.vertical, 14)
-      .foregroundStyle(.white)
+      .foregroundStyle(VKZPalette.text)
       .background(VKZPalette.panel)
       .overlay {
         RoundedRectangle(cornerRadius: 12, style: .continuous)

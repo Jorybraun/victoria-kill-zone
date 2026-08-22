@@ -10,7 +10,7 @@ struct JoinDuelView: View {
       } label: {
         Label("Back", systemImage: "chevron.left")
       }
-      .foregroundStyle(.white)
+      .foregroundStyle(VKZPalette.text)
 
       Spacer()
 
@@ -18,7 +18,7 @@ struct JoinDuelView: View {
         .font(.largeTitle.bold())
 
       Text("Enter the six-character code shown on the host phone.")
-        .foregroundStyle(.secondary)
+        .foregroundStyle(VKZPalette.textMuted)
 
       TextField("ABC123", text: $store.joinCode)
         .vkzJoinCodeInputTraits()

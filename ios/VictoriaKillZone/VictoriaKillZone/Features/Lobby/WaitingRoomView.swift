@@ -31,10 +31,10 @@ struct WaitingRoomView: View {
           VStack(spacing: 8) {
             Text(room.localRole == .host ? "SHARE CODE \(room.code)" : "DUEL CODE")
               .font(.caption.weight(.semibold).monospaced())
-              .foregroundStyle(.secondary)
+              .foregroundStyle(VKZPalette.textMuted)
             Text(room.code)
               .font(.system(size: 38, weight: .bold, design: .monospaced))
-              .foregroundStyle(.white)
+              .foregroundStyle(VKZPalette.text)
               .accessibilityLabel("Duel code \(room.code)")
           }
           .frame(maxWidth: .infinity)
@@ -43,7 +43,7 @@ struct WaitingRoomView: View {
         VStack(alignment: .leading, spacing: 10) {
           Text("PLAYERS")
             .font(.caption.weight(.semibold).monospaced())
-            .foregroundStyle(.secondary)
+            .foregroundStyle(VKZPalette.textMuted)
 
           ForEach(room.players) { player in
             playerRow(player)
@@ -56,7 +56,7 @@ struct WaitingRoomView: View {
               Spacer()
               ProgressView()
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(VKZPalette.textMuted)
             .padding(16)
             .background(VKZPalette.panel)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -67,11 +67,11 @@ struct WaitingRoomView: View {
           VStack(alignment: .leading, spacing: 4) {
             Text("RECONNECTING — INPUT LOCKED")
               .font(.caption.weight(.bold).monospaced())
-              .foregroundStyle(VKZPalette.acquisition)
+              .foregroundStyle(VKZPalette.pending)
             if let lastSyncAt = store.lastSyncAt {
               Text("LAST SYNC \(lastSyncAt.formatted(date: .omitted, time: .standard))")
                 .font(.caption2.monospaced())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(VKZPalette.textMuted)
             }
           }
         }
@@ -98,7 +98,7 @@ struct WaitingRoomView: View {
           if !room.canLocalPlayerStart, room.localRole == .host {
             Text("BOTH PLAYERS MUST BE READY")
               .font(.caption.monospaced())
-              .foregroundStyle(.secondary)
+              .foregroundStyle(VKZPalette.textMuted)
           }
         }
 
@@ -124,14 +124,14 @@ struct WaitingRoomView: View {
           .font(.headline)
         Text(player.id == room.localPlayerID ? "THIS DEVICE" : player.role.rawValue.uppercased())
           .font(.caption2.monospaced())
-          .foregroundStyle(.secondary)
+          .foregroundStyle(VKZPalette.textMuted)
       }
       Spacer()
       VKZStatusPill(
         label: player.isConnected
           ? (player.isReady ? "READY" : "NOT READY")
           : "DISCONNECTED",
-        color: player.isConnected && player.isReady ? VKZPalette.ready : .secondary
+        color: player.isConnected && player.isReady ? VKZPalette.ready : VKZPalette.textMuted
       )
     }
     .padding(14)
@@ -145,7 +145,7 @@ struct WaitingRoomView: View {
       VStack(alignment: .leading, spacing: 10) {
         Text("LOCAL SHELL CONTROLS")
           .font(.caption2.weight(.semibold).monospaced())
-          .foregroundStyle(.secondary)
+          .foregroundStyle(VKZPalette.textMuted)
 
         if !room.isFull, room.localRole == .host {
           Button("Simulate Opponent Joining") {

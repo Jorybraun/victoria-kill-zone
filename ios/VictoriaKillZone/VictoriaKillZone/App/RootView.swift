@@ -24,7 +24,7 @@ struct RootView: View {
           ActiveDuelView(duel: duel, store: store)
         }
       }
-      .foregroundStyle(.white)
+      .foregroundStyle(VKZPalette.text)
       .animation(.easeInOut(duration: 0.2), value: store.route)
       .alert(
         "Unable to Continue",

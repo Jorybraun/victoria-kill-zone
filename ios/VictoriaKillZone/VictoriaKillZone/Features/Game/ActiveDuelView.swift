@@ -7,7 +7,7 @@ struct ActiveDuelView: View {
   var body: some View {
     ZStack {
       LinearGradient(
-        colors: [Color.black, Color(red: 0.03, green: 0.1, blue: 0.12)],
+        colors: [VKZPalette.background, VKZPalette.surfaceRaised],
         startPoint: .top,
         endPoint: .bottom
       )
@@ -70,11 +70,11 @@ struct ActiveDuelView: View {
         VStack(spacing: 4) {
           Text("RECONNECTING — INPUT LOCKED")
             .font(.headline.monospaced())
-            .foregroundStyle(VKZPalette.acquisition)
+            .foregroundStyle(VKZPalette.pending)
           if let lastSyncAt = store.lastSyncAt {
             Text("LAST SYNC \(lastSyncAt.formatted(date: .omitted, time: .standard))")
               .font(.caption.monospaced())
-              .foregroundStyle(.secondary)
+              .foregroundStyle(VKZPalette.textMuted)
           }
         }
         .frame(maxWidth: .infinity)
@@ -96,7 +96,7 @@ struct ActiveDuelView: View {
           .tint(VKZPalette.danger)
         Text("OPPONENT HEALTH")
           .font(.caption.monospaced())
-          .foregroundStyle(.secondary)
+          .foregroundStyle(VKZPalette.textMuted)
       }
       .frame(maxWidth: .infinity)
       .accessibilityElement(children: .combine)
@@ -112,7 +112,7 @@ struct ActiveDuelView: View {
     case .countdown:
       Text("DUEL STARTS IN")
         .font(.headline.monospaced())
-        .foregroundStyle(VKZPalette.acquisition)
+        .foregroundStyle(VKZPalette.pending)
     case .running where duel.localRole == .host:
       VStack(spacing: 8) {
         Button(debugButtonLabel) {
@@ -123,12 +123,12 @@ struct ActiveDuelView: View {
         .accessibilityLabel("Debug fire, torso test, 34 damage")
         Text(debugHelper)
           .font(.caption.weight(.semibold).monospaced())
-          .foregroundStyle(.secondary)
+          .foregroundStyle(VKZPalette.textMuted)
       }
     case .running:
       Text("AWAITING TEST SHOT")
         .font(.headline.monospaced())
-        .foregroundStyle(.secondary)
+        .foregroundStyle(VKZPalette.textMuted)
     case .finished:
       Text("DUEL COMPLETE")
         .font(.title.bold())
@@ -145,7 +145,7 @@ struct ActiveDuelView: View {
     if let event = duel.events.first {
       Text(event.message)
         .font(.callout.monospaced())
-        .foregroundStyle(.secondary)
+        .foregroundStyle(VKZPalette.textMuted)
         .multilineTextAlignment(.center)
         .accessibilityAddTraits(.updatesFrequently)
     }
@@ -187,7 +187,7 @@ struct ActiveDuelView: View {
     VStack(alignment: .leading, spacing: 2) {
       Text(label)
         .font(.caption2.weight(.semibold).monospaced())
-        .foregroundStyle(.secondary)
+        .foregroundStyle(VKZPalette.textMuted)
       Text(value)
         .font(.title3.bold().monospacedDigit())
         .foregroundStyle(color)

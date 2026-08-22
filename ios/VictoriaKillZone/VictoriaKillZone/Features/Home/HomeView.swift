@@ -10,18 +10,18 @@ struct HomeView: View {
       VStack(alignment: .leading, spacing: 8) {
         Text("VKZ")
           .font(.system(size: 64, weight: .black, design: .rounded))
-          .foregroundStyle(.white)
+          .foregroundStyle(VKZPalette.text)
         Text("VICTORIA KILL ZONE")
           .font(.headline.monospaced())
           .foregroundStyle(VKZPalette.telemetry)
         Text("MARKERLESS 1V1 DUEL")
-          .foregroundStyle(.secondary)
+          .foregroundStyle(VKZPalette.textMuted)
       }
 
       VStack(alignment: .leading, spacing: 10) {
         Text("CALLSIGN")
           .font(.caption.weight(.semibold).monospaced())
-          .foregroundStyle(.secondary)
+          .foregroundStyle(VKZPalette.textMuted)
         TextField("ENTER A NAME", text: $store.displayName)
           .vkzCallsignInputTraits()
           .textFieldStyle(.plain)
@@ -55,7 +55,7 @@ struct HomeView: View {
           : "Live networking is unconfigured. Safe local shell controls are active."
       )
         .font(.footnote)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(VKZPalette.textMuted)
 
       Spacer()
     }
