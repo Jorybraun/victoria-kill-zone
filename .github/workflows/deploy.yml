@@ -1,0 +1,205 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    branches:
+      - main
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  fast-gate:
+    name: Revalidate fast gate
+    outputs:
+      current: ${{ steps.revision.outputs.current }}
+    if: >-
+      ${{
+        vars.VKZ_DEPLOY_ENABLED == 'true' &&
+        (
+          (
+            github.event_name == 'workflow_run' &&
+            github.event.workflow_run.conclusion == 'success' &&
+            github.event.workflow_run.head_branch == 'main' &&
+            github.event.workflow_run.head_repository.full_name == github.repository
+          ) ||
+          (
+            github.event_name == 'workflow_dispatch' &&
+            github.ref == 'refs/heads/main'
+          )
+        )
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Confirm the green revision is current main
+        id: revision
+        env:
+          DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          current=true
+          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+            main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+            if [[ "$main_sha" != "$DEPLOY_SHA" ]]; then
+              current=false
+              echo "::notice::A newer main revision exists; this deployment will be skipped."
+            fi
+          fi
+          echo "current=${current}" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the green revision
+        if: steps.revision.outputs.current == 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        if: steps.revision.outputs.current == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Enable Corepack
+        if: steps.revision.outputs.current == 'true'
+        run: corepack enable
+
+      - name: Install locked dependencies
+        if: steps.revision.outputs.current == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify workspace
+        if: steps.revision.outputs.current == 'true'
+        run: pnpm verify
+
+  ios-gate:
+    name: Revalidate iOS gate
+    needs:
+      - fast-gate
+    if: needs.fast-gate.outputs.current == 'true'
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Check out the green revision
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+
+      - name: Detect an iOS project
+        id: ios-project
+        run: |
+          present=false
+          if [[ -f ios/Package.swift ]]; then
+            present=true
+          elif [[ -d ios ]] && [[ -n "$(find ios -maxdepth 4 \( -name '*.xcodeproj' -o -name '*.xcworkspace' \) -print -quit)" ]]; then
+            present=true
+          fi
+          echo "present=${present}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install locked dependencies
+        if: steps.ios-project.outputs.present == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Report Xcode version
+        if: steps.ios-project.outputs.present == 'true'
+        run: xcodebuild -version
+
+      - name: Verify iOS
+        if: steps.ios-project.outputs.present == 'true'
+        run: pnpm verify:ios
+
+  release-build:
+    name: Build production release
+    needs:
+      - fast-gate
+      - ios-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - name: Check out the green revision
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Deploy Convex and build spectator
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          VITE_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+        run: |
+          if [[ -z "${CONVEX_DEPLOY_KEY:-}" ]]; then
+            echo "::error::CONVEX_DEPLOY_KEY is required when VKZ_DEPLOY_ENABLED is true."
+            exit 1
+          fi
+
+          pnpm --dir convex exec convex deploy \
+            --cmd "pnpm --dir ../spectator build" \
+            --cmd-url-env-var-name VITE_CONVEX_URL \
+            --message "GitHub Actions ${DEPLOY_SHA}"
+
+      - name: Upload spectator artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: spectator/dist
+
+  deploy-pages:
+    name: Deploy spectator to Pages
+    needs:
+      - release-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy GitHub Pages artifact
+        id: deployment
+        uses: actions/deploy-pages@v4

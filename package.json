@@ -1,0 +1,25 @@
+{
+  "name": "victoria-kill-zone",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Markerless 1v1 augmented-reality laser tag for native iOS, Convex, and the web.",
+  "packageManager": "pnpm@10.11.0",
+  "engines": {
+    "node": ">=22.12.0 <27"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "build:spectator": "pnpm --filter @vkz/spectator build",
+    "deploy:convex": "pnpm --dir convex exec convex deploy",
+    "lint": "pnpm -r --if-present lint",
+    "handoff:preflight": "bash scripts/outpost/handoff-preflight.sh",
+    "outpost:canary": "bash scripts/outpost/canary.sh",
+    "outpost:diagnose": "bash scripts/outpost/diagnose.sh",
+    "outpost:preflight": "bash scripts/outpost/preflight.sh",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "verify": "bash scripts/ci/verify.sh",
+    "verify:ios": "bash scripts/ci/verify-ios.sh",
+    "verify:repo": "bash scripts/ci/verify-repo.sh"
+  }
+}

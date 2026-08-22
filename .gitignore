@@ -1,0 +1,28 @@
+.DS_Store
+
+# Historical repositories are preserved locally but are not part of VKZ.
+/archive\ /
+
+# A Devin Outpost started here clones repositories below this directory.
+/repos/
+
+# JavaScript and build output
+node_modules/
+.pnpm-store/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.mobileprovision
+
+# Apple build and user state
+.build/
+DerivedData/
+xcuserdata/
+*.xcuserstate

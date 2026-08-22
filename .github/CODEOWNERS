@@ -1,0 +1,9 @@
+# Keep ownership centralized until feature-area teams are established.
+# Replace this handle if the canonical repository is published under another account.
+* @Jorybraun
+
+# Shipping infrastructure and contracts always require the integration owner's review.
+/.github/ @Jorybraun
+/convex/ @Jorybraun
+/ios/ @Jorybraun
+/spectator/ @Jorybraun

@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  fast-gate:
+    name: Fast gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify workspace
+        run: pnpm verify
+
+  ios-gate:
+    name: iOS gate
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Detect an iOS project
+        id: ios-project
+        run: |
+          present=false
+          if [[ -f ios/Package.swift ]]; then
+            present=true
+          elif [[ -d ios ]] && [[ -n "$(find ios -maxdepth 4 \( -name '*.xcodeproj' -o -name '*.xcworkspace' \) -print -quit)" ]]; then
+            present=true
+          fi
+
+          echo "present=${present}" >> "$GITHUB_OUTPUT"
+          if [[ "$present" == "true" ]]; then
+            echo "iOS project detected; the native gate is required."
+          else
+            echo "No ios/Package.swift, Xcode project, or Xcode workspace exists yet; native verification is not applicable."
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install locked dependencies
+        if: steps.ios-project.outputs.present == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Report Xcode version
+        if: steps.ios-project.outputs.present == 'true'
+        run: xcodebuild -version
+
+      - name: Verify iOS
+        if: steps.ios-project.outputs.present == 'true'
+        run: pnpm verify:ios

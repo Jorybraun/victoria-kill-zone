@@ -1,0 +1,4 @@
+packages:
+  - convex
+  - spectator
+  - packages/*
