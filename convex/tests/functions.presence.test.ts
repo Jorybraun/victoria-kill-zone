@@ -77,22 +77,38 @@ describe("players:heartbeat", () => {
     ).rejects.toThrow(/INVALID_SESSION/);
   });
 
-  it("restores a disconnected player without changing health or score", async () => {
-    const t = testBackend();
-    const { host } = await openLobby(t);
-    const initial = await storedPlayer(t, host.playerId);
+  it("restores a player the expiry job really disconnected", async () => {
+    vi.useFakeTimers();
+    try {
+      const t = testBackend();
+      const { host } = await openLobby(t);
+      const initial = await storedPlayer(t, host.playerId);
 
-    await t.mutation(api.internal.expirePresence, {
-      playerId: host.playerId,
-      expectedLastSeenAt: initial?.lastSeenAt ?? 0,
-    });
+      // Past the boundary and through the real scheduled job, so the player is
+      // genuinely disconnected before the heartbeat has anything to restore.
+      vi.advanceTimersByTime(PRESENCE_TIMEOUT_MS);
+      await t.finishInProgressScheduledFunctions();
 
-    await t.mutation(api.players.heartbeat, auth(host));
-    const restored = await storedPlayer(t, host.playerId);
+      const expired = await storedPlayer(t, host.playerId);
+      expect(expired?.connected).toBe(false);
+      expect(expired?.lastSeenAt).toBe(initial?.lastSeenAt);
 
-    expect(restored?.connected).toBe(true);
-    expect(restored?.health).toBe(initial?.health);
-    expect(restored?.ammo).toBe(initial?.ammo);
+      await t.mutation(api.players.heartbeat, auth(host));
+      const restored = await storedPlayer(t, host.playerId);
+
+      expect(restored?.connected).toBe(true);
+      expect(restored?.lastSeenAt ?? 0).toBeGreaterThan(initial?.lastSeenAt ?? 0);
+      expect(Date.now() - (restored?.lastSeenAt ?? 0)).toBeLessThan(PRESENCE_TIMEOUT_MS);
+      expect(restored?.health).toBe(initial?.health);
+      expect(restored?.ammo).toBe(initial?.ammo);
+
+      // The restored presence decays again on its own schedule.
+      vi.advanceTimersByTime(PRESENCE_TIMEOUT_MS);
+      await t.finishInProgressScheduledFunctions();
+      expect((await storedPlayer(t, host.playerId))?.connected).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

@@ -80,6 +80,16 @@ describe("duel codes", () => {
     expect(isValidMatchCode("ABC12\u00e9")).toBe(false);
   });
 
+  it("rejects a scalar that Unicode uppercasing would launder into ASCII", () => {
+    // ſ uppercases to S, ı to I, and ß to SS: folding first would let a
+    // forbidden scalar become a valid code, or even a valid length.
+    expect("ſbc123".toUpperCase()).toBe("SBC123");
+    expect("ßab12".toUpperCase()).toBe("SSAB12");
+    expect(isValidMatchCode("ſbc123")).toBe(false);
+    expect(isValidMatchCode("ıbc123")).toBe(false);
+    expect(isValidMatchCode("ßab12")).toBe(false);
+  });
+
   it("accepts the ambiguous glyphs a human may type but never generates them", () => {
     expect(isValidMatchCode("O0I1AB")).toBe(true);
     expect(matchCodeFromBytes(Uint8Array.from([7, 8, 9, 10, 11, 12]))).not.toMatch(/[01IO]/);

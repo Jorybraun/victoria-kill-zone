@@ -94,8 +94,22 @@ export function normalizeMatchCode(value: string): string {
   return value.toUpperCase().replace(/[ \t\n\v\f\r-]/g, "");
 }
 
+/**
+ * Every scalar a duel code may be typed with, before any case folding.
+ *
+ * Unicode uppercasing is not injective into ASCII — `ſ` becomes `S`, `ı`
+ * becomes `I`, and `ß` becomes `SS` — so a forbidden scalar could otherwise
+ * launder itself into a valid code, or even into a valid length. The raw input
+ * is therefore checked first and only ASCII survives.
+ */
+const MATCH_CODE_TYPED_SCALARS = /^[A-Za-z0-9 \t\n\v\f\r-]*$/u;
+
 /** True only for exactly {@link MATCH_CODE_LENGTH} typed-alphabet characters. */
 export function isValidMatchCode(value: string): boolean {
+  if (!MATCH_CODE_TYPED_SCALARS.test(value)) {
+    return false;
+  }
+
   const normalized = normalizeMatchCode(value);
   if (normalized.length !== MATCH_CODE_LENGTH) {
     return false;
