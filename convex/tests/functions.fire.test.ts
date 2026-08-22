@@ -19,9 +19,17 @@ type Backend = ReturnType<typeof testBackend>;
 
 const SHOT_ID = "3f0c9a2e-shot-1";
 
-async function runningDuel(t: Backend): Promise<{ host: PlayerSession; guest: PlayerSession }> {
-  const host = await t.mutation(api.matches.create, { displayName: "VIC", arenaRadiusMeters: 30 });
-  const guest = await t.mutation(api.matches.join, { displayName: "JORY", code: host.code });
+async function runningDuel(
+  t: Backend,
+): Promise<{ host: PlayerSession; guest: PlayerSession }> {
+  const host = await t.mutation(api.matches.create, {
+    displayName: "VIC",
+    arenaRadiusMeters: 30,
+  });
+  const guest = await t.mutation(api.matches.join, {
+    displayName: "JORY",
+    code: host.code,
+  });
   await t.mutation(api.matches.setReady, { ...auth(host), isReady: true });
   await t.mutation(api.matches.setReady, { ...auth(guest), isReady: true });
   await t.mutation(api.matches.start, auth(host));
@@ -64,33 +72,52 @@ describe("shots:debugFire", () => {
 
     const stored = await t.run(async (ctx) => ({
       shots: await ctx.db.query("shots").collect(),
-      hits: (await ctx.db.query("events").collect()).filter((event) => event.type === "hit"),
+      hits: (await ctx.db.query("events").collect()).filter(
+        (event) => event.type === "hit",
+      ),
       players: await ctx.db.query("players").collect(),
     }));
 
     expect(stored.shots).toHaveLength(1);
     expect(stored.hits).toHaveLength(1);
-    const players = new Map(stored.players.map((player) => [player._id as string, player]));
+    const players = new Map(
+      stored.players.map((player) => [player._id as string, player]),
+    );
     expect(players.get(host.playerId)?.ammo).toBe(INITIAL_AMMO - 1);
-    expect(players.get(guest.playerId)?.health).toBe(INITIAL_HEALTH - DEBUG_TORSO_DAMAGE);
+    expect(players.get(guest.playerId)?.health).toBe(
+      INITIAL_HEALTH - DEBUG_TORSO_DAMAGE,
+    );
   });
 
   it("replays a repeated clientShotId after intervening activity without a second effect", async () => {
     const t = testBackend();
     const { host } = await runningDuel(t);
 
-    const first = await t.mutation(api.shots.debugFire, { ...auth(host), clientShotId: SHOT_ID });
-    await t.mutation(api.shots.debugFire, { ...auth(host), clientShotId: "other-shot" });
-    const replay = await t.mutation(api.shots.debugFire, { ...auth(host), clientShotId: SHOT_ID });
+    const first = await t.mutation(api.shots.debugFire, {
+      ...auth(host),
+      clientShotId: SHOT_ID,
+    });
+    await t.mutation(api.shots.debugFire, {
+      ...auth(host),
+      clientShotId: "other-shot",
+    });
+    const replay = await t.mutation(api.shots.debugFire, {
+      ...auth(host),
+      clientShotId: SHOT_ID,
+    });
 
     expect(replay).toEqual({ ...first, replayed: true });
 
     const stored = await t.run(async (ctx) => ({
       shots: await ctx.db.query("shots").collect(),
-      hits: (await ctx.db.query("events").collect()).filter((event) => event.type === "hit"),
+      hits: (await ctx.db.query("events").collect()).filter(
+        (event) => event.type === "hit",
+      ),
     }));
 
-    expect(stored.shots.filter((shot) => shot.clientShotId === SHOT_ID)).toHaveLength(1);
+    expect(
+      stored.shots.filter((shot) => shot.clientShotId === SHOT_ID),
+    ).toHaveLength(1);
     expect(stored.hits).toHaveLength(2);
   });
 
@@ -102,7 +129,10 @@ describe("shots:debugFire", () => {
       ...auth(guest),
       clientShotId: "guest-shot",
     });
-    expect(guestShot).toMatchObject({ accepted: false, rejectReason: "HOST_ONLY" });
+    expect(guestShot).toMatchObject({
+      accepted: false,
+      rejectReason: "HOST_ONLY",
+    });
 
     await expect(
       t.mutation(api.shots.debugFire, {
@@ -117,14 +147,22 @@ describe("shots:debugFire", () => {
       displayName: "LOBBY",
       arenaRadiusMeters: 30,
     });
-    await t.mutation(api.matches.join, { displayName: "GUEST", code: lobbyHost.code });
+    await t.mutation(api.matches.join, {
+      displayName: "GUEST",
+      code: lobbyHost.code,
+    });
     const early = await t.mutation(api.shots.debugFire, {
       ...auth(lobbyHost),
       clientShotId: "early-shot",
     });
-    expect(early).toMatchObject({ accepted: false, rejectReason: "MATCH_NOT_RUNNING" });
+    expect(early).toMatchObject({
+      accepted: false,
+      rejectReason: "MATCH_NOT_RUNNING",
+    });
 
-    expect(await t.run((ctx) => ctx.db.query("shots").collect())).toHaveLength(0);
+    expect(await t.run((ctx) => ctx.db.query("shots").collect())).toHaveLength(
+      0,
+    );
   });
 });
 
@@ -132,13 +170,19 @@ describe("queries:matchSnapshot", () => {
   it("requires the caller's own session and marks the local player", async () => {
     const t = testBackend();
     const { host, guest } = await runningDuel(t);
-    await t.mutation(api.shots.debugFire, { ...auth(host), clientShotId: SHOT_ID });
+    await t.mutation(api.shots.debugFire, {
+      ...auth(host),
+      clientShotId: SHOT_ID,
+    });
 
     const snapshot = await t.query(api.queries.matchSnapshot, auth(guest));
 
     expect(snapshot.localPlayerId).toBe(guest.playerId);
     expect(snapshot.match.phase).toBe("running");
-    expect(snapshot.players.map((player) => player.role)).toEqual(["host", "guest"]);
+    expect(snapshot.players.map((player) => player.role)).toEqual([
+      "host",
+      "guest",
+    ]);
     expect(snapshot.events[0]?.type).toBe("hit");
     expect(JSON.stringify(snapshot)).not.toContain(host.sessionSecret);
     expect(JSON.stringify(snapshot)).not.toContain(guest.sessionSecret);
@@ -157,13 +201,23 @@ describe("queries:spectatorSnapshot", () => {
   it("is public, sanitized, and null for an unknown code", async () => {
     const t = testBackend();
     const { host, guest } = await runningDuel(t);
-    await t.mutation(api.shots.debugFire, { ...auth(host), clientShotId: SHOT_ID });
+    await t.mutation(api.shots.debugFire, {
+      ...auth(host),
+      clientShotId: SHOT_ID,
+    });
 
-    const snapshot = await t.query(api.queries.spectatorSnapshot, { code: host.code });
+    const snapshot = await t.query(api.queries.spectatorSnapshot, {
+      code: host.code,
+    });
     expect(snapshot).not.toBeNull();
     if (snapshot === null) return;
 
-    expect(Object.keys(snapshot).sort()).toEqual(["events", "match", "players", "serverNow"]);
+    expect(Object.keys(snapshot).sort()).toEqual([
+      "events",
+      "match",
+      "players",
+      "serverNow",
+    ]);
     expect("localPlayerId" in snapshot).toBe(false);
     expect(snapshot.players.map((player) => player.health)).toEqual([
       INITIAL_HEALTH,
@@ -176,7 +230,32 @@ describe("queries:spectatorSnapshot", () => {
     expect(serialized).not.toContain("sessionHash");
     expect(serialized).not.toContain("arenaRadiusMeters");
 
-    expect(await t.query(api.queries.spectatorSnapshot, { code: "ZZZZZZ" })).toBeNull();
+    expect(
+      await t.query(api.queries.spectatorSnapshot, { code: "ZZZZZZ" }),
+    ).toBeNull();
+  });
+
+  it("returns null for short, overlong, and punctuation-only codes", async () => {
+    const t = testBackend();
+    const { host } = await runningDuel(t);
+
+    expect(
+      await t.query(api.queries.spectatorSnapshot, {
+        code: host.code.slice(0, 5),
+      }),
+    ).toBeNull();
+    // An overlong code must not truncate onto the live duel.
+    expect(
+      await t.query(api.queries.spectatorSnapshot, { code: `${host.code}7` }),
+    ).toBeNull();
+    expect(
+      await t.query(api.queries.spectatorSnapshot, { code: "!!-.." }),
+    ).toBeNull();
+
+    const punctuated = await t.query(api.queries.spectatorSnapshot, {
+      code: host.code.replace(/^(.)/, "$1-"),
+    });
+    expect(punctuated?.match.code).toBe(host.code);
   });
 });
 
@@ -187,15 +266,21 @@ describe("scheduled countdown boundary", () => {
       displayName: "VIC",
       arenaRadiusMeters: 30,
     });
-    const guest = await t.mutation(api.matches.join, { displayName: "JORY", code: host.code });
+    const guest = await t.mutation(api.matches.join, {
+      displayName: "JORY",
+      code: host.code,
+    });
     await t.mutation(api.matches.setReady, { ...auth(host), isReady: true });
     await t.mutation(api.matches.setReady, { ...auth(guest), isReady: true });
     await t.mutation(api.matches.start, auth(host));
 
-    expect((await t.query(api.queries.matchSnapshot, auth(host))).match.phase).toBe("countdown");
-    expect((await t.query(api.queries.spectatorSnapshot, { code: host.code }))?.match.phase).toBe(
-      "countdown",
-    );
+    expect(
+      (await t.query(api.queries.matchSnapshot, auth(host))).match.phase,
+    ).toBe("countdown");
+    expect(
+      (await t.query(api.queries.spectatorSnapshot, { code: host.code }))?.match
+        .phase,
+    ).toBe("countdown");
 
     vi.advanceTimersByTime(COUNTDOWN_MS);
     await t.finishInProgressScheduledFunctions();
@@ -206,9 +291,12 @@ describe("scheduled countdown boundary", () => {
       return id === null ? null : await ctx.db.get(id);
     });
     expect(stored?.phase).toBe("running");
-    expect((await t.query(api.queries.matchSnapshot, auth(host))).match.phase).toBe("running");
-    expect((await t.query(api.queries.spectatorSnapshot, { code: host.code }))?.match.phase).toBe(
-      "running",
-    );
+    expect(
+      (await t.query(api.queries.matchSnapshot, auth(host))).match.phase,
+    ).toBe("running");
+    expect(
+      (await t.query(api.queries.spectatorSnapshot, { code: host.code }))?.match
+        .phase,
+    ).toBe("running");
   });
 });
