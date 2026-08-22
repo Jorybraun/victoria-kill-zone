@@ -188,6 +188,18 @@ describe("matches:join", () => {
     ).rejects.toThrow(/MATCH_FULL/);
   });
 
+  it("rejects a code whose non-ASCII scalar would uppercase into ASCII", async () => {
+    const t = testBackend();
+    await openLobby(t);
+
+    // Case folding first would turn these into SBC123, IBC123, and SSAB12.
+    for (const code of ["\u017fbc123", "\u0131bc123", "\u00dfab12"]) {
+      await expect(
+        t.mutation(api.matches.join, { displayName: "Third", code }),
+      ).rejects.toThrow(/INVALID_CODE/);
+    }
+  });
+
   it("rejects an unknown but well-formed code", async () => {
     const t = testBackend();
     await expect(

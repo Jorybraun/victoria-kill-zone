@@ -95,6 +95,44 @@ describe("scheduled phase transitions", () => {
     expect(events.filter((event) => event.type === "started")).toHaveLength(1);
   });
 
+  it("gives a late activation a full duel measured from when it ran", async () => {
+    const t = testBackend();
+    const { host } = await startedMatch(t);
+    const startsAt = (await storedMatch(t, host.matchId))?.startsAt ?? 0;
+    const lateBy = 7_000;
+
+    // A backlogged job must not hand the players a duel that is already partly
+    // over, so `endsAt` is measured from the activation, not from `startsAt`.
+    vi.advanceTimersByTime(COUNTDOWN_MS + lateBy);
+    const activatedAt = Date.now();
+    await t.mutation(api.internal.activate, {
+      matchId: host.matchId,
+      expectedStartsAt: startsAt,
+    });
+
+    const running = await storedMatch(t, host.matchId);
+    expect(running?.phase).toBe("running");
+    expect(running?.endsAt).toBe(activatedAt + MATCH_DURATION_MS);
+    expect(running?.endsAt).toBe(startsAt + lateBy + MATCH_DURATION_MS);
+    expect(running?.startsAt).toBe(startsAt);
+
+    const events = await t.run((ctx) => ctx.db.query("events").collect());
+    expect(events.filter((event) => event.type === "started")).toHaveLength(1);
+
+    const finish = await scheduledNames(t, "matches:finish");
+    expect(finish).toHaveLength(1);
+    expect(finish[0]?.scheduledTime).toBe(running?.endsAt);
+    expect(finish[0]?.args[0]).toMatchObject({
+      matchId: host.matchId,
+      expectedEndsAt: running?.endsAt,
+    });
+
+    // And it still finishes on that boundary rather than the original one.
+    vi.advanceTimersByTime(MATCH_DURATION_MS);
+    await t.finishInProgressScheduledFunctions();
+    expect((await storedMatch(t, host.matchId))?.phase).toBe("finished");
+  });
+
   it("schedules the finish only once the duel is running", async () => {
     const t = testBackend();
     const { host } = await startedMatch(t);
