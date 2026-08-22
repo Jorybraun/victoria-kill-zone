@@ -325,9 +325,6 @@ struct EventSnapshotWire: Decodable {
   @OptionalConvexFloat var damage: Double?
 
   func domainValue() throws -> EventSnapshot {
-    guard zone == nil || zone == "torso" else {
-      throw GameSessionClientError.invalidSnapshot
-    }
     return EventSnapshot(
       id: id,
       type: type,
@@ -335,7 +332,7 @@ struct EventSnapshotWire: Decodable {
       createdAt: createdAt,
       actorPlayerId: actorPlayerId,
       targetPlayerId: targetPlayerId,
-      zone: zone,
+      zone: zone.flatMap { HitZone(rawValue: $0)?.rawValue },
       damage: try damage.map(exactInteger)
     )
   }
