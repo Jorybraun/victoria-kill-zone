@@ -19,6 +19,14 @@ fi
   pnpm --dir "$repo_root/spectator" build
 )
 
+if [[ ! -f "$repo_root/pitch/index.html" ]]; then
+  echo "ERROR: the PEW PEW concept page is missing." >&2
+  exit 1
+fi
+
+mkdir -p "$repo_root/spectator/dist/pitch"
+cp -R "$repo_root/pitch/." "$repo_root/spectator/dist/pitch/"
+
 umask 077
 mkdir -p "$(dirname "$VKZ_CONVEX_URL_FILE")"
 printf '%s' "$VITE_CONVEX_URL" > "$VKZ_CONVEX_URL_FILE"
