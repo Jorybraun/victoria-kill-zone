@@ -1,5 +1,9 @@
 import SwiftUI
 
+#if os(iOS)
+import UIKit
+#endif
+
 struct ActiveDuelView: View {
   let duel: ActiveDuel
   @ObservedObject var store: LobbyStore
@@ -38,6 +42,12 @@ struct ActiveDuelView: View {
             )
             .frame(width: 380, height: 380)
             .allowsHitTesting(false)
+        }
+
+        if let killBanner = store.killBanner {
+          killBannerView(killBanner)
+            .transition(.scale(scale: 0.72).combined(with: .opacity))
+            .zIndex(2)
         }
 
         VStack(spacing: 14) {
@@ -81,6 +91,12 @@ struct ActiveDuelView: View {
     .onChange(of: voiceFire.fireRequestSequence) { _ in
       fireShot()
     }
+    .onChange(of: store.killBanner) { banner in
+      guard banner?.isLocalKill == true else { return }
+      #if os(iOS)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+      #endif
+    }
   }
 
   @ViewBuilder
@@ -102,6 +118,29 @@ struct ActiveDuelView: View {
       startPoint: .top,
       endPoint: .bottom
     )
+  }
+
+  private func killBannerView(_ banner: KillBanner) -> some View {
+    Text(banner.text)
+      .font(.system(size: 28, weight: .black, design: .monospaced))
+      .foregroundStyle(banner.isLocalKill ? VKZPalette.ready : VKZPalette.danger)
+      .multilineTextAlignment(.center)
+      .lineLimit(2)
+      .minimumScaleFactor(0.7)
+      .padding(.horizontal, 24)
+      .padding(.vertical, 18)
+      .background(.black.opacity(0.82), in: RoundedRectangle(cornerRadius: 16))
+      .overlay {
+        RoundedRectangle(cornerRadius: 16)
+          .stroke(
+            (banner.isLocalKill ? VKZPalette.ready : VKZPalette.danger).opacity(0.7),
+            lineWidth: 2
+          )
+      }
+      .shadow(color: .black.opacity(0.7), radius: 12)
+      .padding(.horizontal, 20)
+      .animation(.spring(response: 0.28, dampingFraction: 0.78), value: banner.eventID)
+      .allowsHitTesting(false)
   }
 
   private func topTelemetry(at date: Date) -> some View {

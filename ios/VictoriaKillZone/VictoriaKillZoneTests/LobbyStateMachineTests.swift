@@ -424,6 +424,65 @@ final class LobbyStoreTests: XCTestCase {
     XCTAssertFalse(store.isMatchInputLocked)
   }
 
+  func testLocalKillSnapshotShowsKillBanner() async throws {
+    let client = MockGameSessionClient()
+    let store = makeStore(client: client)
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running))
+    await settle()
+
+    client.send(
+      snapshot(
+        phase: .running,
+        events: [eliminatedEvent(actorPlayerID: "host-1", targetPlayerID: "guest-1")]
+      )
+    )
+    await settle()
+
+    XCTAssertEqual(store.killBanner?.text, "YOU ELIMINATED Guest")
+    XCTAssertTrue(store.killBanner?.isLocalKill == true)
+  }
+
+  func testOpponentKillSnapshotShowsEliminatedByBanner() async throws {
+    let client = MockGameSessionClient()
+    let store = makeStore(client: client)
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running))
+    await settle()
+
+    client.send(
+      snapshot(
+        phase: .running,
+        events: [eliminatedEvent(actorPlayerID: "guest-1", targetPlayerID: "host-1")]
+      )
+    )
+    await settle()
+
+    XCTAssertEqual(store.killBanner?.text, "ELIMINATED BY Guest")
+    XCTAssertFalse(store.killBanner?.isLocalKill == true)
+  }
+
+  func testDuplicateKillEventDoesNotRetriggerBanner() async throws {
+    let client = MockGameSessionClient()
+    let store = makeStore(client: client)
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running))
+    await settle()
+
+    let event = eliminatedEvent(actorPlayerID: "host-1", targetPlayerID: "guest-1")
+    client.send(snapshot(phase: .running, events: [event]))
+    await settle()
+    let firstBanner = try XCTUnwrap(store.killBanner)
+
+    client.send(snapshot(phase: .running, events: [event]))
+    await settle()
+
+    XCTAssertEqual(store.killBanner, firstBanner)
+  }
+
   private func makeStore(
     client: MockGameSessionClient,
     targetingSession: any TargetingSession = UnavailableTargetingSession(),
@@ -515,6 +574,19 @@ final class LobbyStoreTests: XCTestCase {
       targetPlayerId: "guest-1",
       zone: "torso",
       damage: 34
+    )
+  }
+
+  private func eliminatedEvent(actorPlayerID: String?, targetPlayerID: String?) -> EventSnapshot {
+    EventSnapshot(
+      id: "event-eliminated",
+      type: .eliminated,
+      message: "Host eliminated Guest",
+      createdAt: 1_750_000_010_000,
+      actorPlayerId: actorPlayerID,
+      targetPlayerId: targetPlayerID,
+      zone: nil,
+      damage: 100
     )
   }
 
