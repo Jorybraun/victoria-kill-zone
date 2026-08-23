@@ -151,17 +151,17 @@ struct ActiveDuelView: View {
   private var reticle: some View {
     ZStack {
       Circle()
-        .stroke(reticleColor.opacity(0.9), lineWidth: 3)
-        .frame(width: 74, height: 74)
+        .stroke(reticleColor.opacity(0.9), lineWidth: 2)
+        .frame(width: 44, height: 44)
       Rectangle()
         .fill(reticleColor)
-        .frame(width: 24, height: 2)
+        .frame(width: 14, height: 2)
       Rectangle()
         .fill(reticleColor)
-        .frame(width: 2, height: 24)
+        .frame(width: 2, height: 14)
       Circle()
         .fill(reticleColor)
-        .frame(width: 6, height: 6)
+        .frame(width: 4, height: 4)
     }
     .shadow(color: .black.opacity(0.8), radius: 3)
     .accessibilityLabel(store.markerlessAimZone == nil ? "No target lock" : "Target locked")
