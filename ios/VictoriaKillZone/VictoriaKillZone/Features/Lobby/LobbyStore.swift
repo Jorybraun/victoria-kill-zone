@@ -745,26 +745,24 @@ final class LobbyStore: ObservableObject {
       let shooter = snapshot.players.first(where: { $0.id == session.playerId }),
       let target = snapshot.players.first(where: { $0.id != session.playerId })
     else {
-      gameLoopTrace("reconcilePendingShot outcome=awaiting reason=noPending")
+      gameLoopTrace("reconcilePendingShot outcome=awaiting reason=noSnapshot")
       return
     }
 
-    guard shooter.ammo == result.shooterAmmo else {
-      gameLoopTrace("reconcilePendingShot outcome=awaiting reason=ammoMismatch")
-      return
+    let confirmed: Bool
+    if let eventId = result.eventId {
+      confirmed = snapshot.events.contains(where: { $0.id == eventId })
+      if !confirmed {
+        gameLoopTrace("reconcilePendingShot outcome=awaiting reason=eventMissing")
+      }
+    } else {
+      confirmed = shooter.ammo == result.shooterAmmo && target.health == result.targetHealth
+      if !confirmed {
+        gameLoopTrace("reconcilePendingShot outcome=awaiting reason=stateMismatch")
+      }
     }
 
-    guard target.health == result.targetHealth else {
-      gameLoopTrace("reconcilePendingShot outcome=awaiting reason=healthMismatch")
-      return
-    }
-
-    if let eventId = result.eventId,
-      !snapshot.events.contains(where: { $0.id == eventId })
-    {
-      gameLoopTrace("reconcilePendingShot outcome=awaiting reason=eventMissing")
-      return
-    }
+    guard confirmed else { return }
 
     gameLoopTrace("reconcilePendingShot outcome=confirmed")
     setDebugShotState(.confirmed(damage: result.damage))
@@ -819,8 +817,9 @@ final class LobbyStore: ObservableObject {
     category: "GameLoop"
   )
 
-  private func gameLoopTrace(_ message: String) {
-    Self.gameLoopLogger.debug("\(message, privacy: .public)")
+  private func gameLoopTrace(_ message: @autoclosure () -> String) {
+    let renderedMessage = message()
+    Self.gameLoopLogger.debug("\(renderedMessage, privacy: .public)")
   }
 
   private func gameLoopPlayerSummary(
@@ -852,7 +851,7 @@ final class LobbyStore: ObservableObject {
   }
 #else
   @inline(__always)
-  private func gameLoopTrace(_ message: String) {}
+  private func gameLoopTrace(_ message: @autoclosure () -> String) {}
 
   @inline(__always)
   private func gameLoopPlayerSummary(
