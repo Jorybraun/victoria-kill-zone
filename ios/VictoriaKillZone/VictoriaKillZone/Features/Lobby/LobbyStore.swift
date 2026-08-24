@@ -29,6 +29,13 @@ enum MarkerlessShotState: Equatable, Sendable {
   case failed(reason: FireRejectReason?)
 }
 
+struct KillBanner: Equatable, Sendable {
+  let eventID: String
+  let text: String
+  let timestamp: Double
+  let isLocalKill: Bool
+}
+
 @MainActor
 final class LobbyStore: ObservableObject {
   @Published private(set) var route: LobbyRoute
@@ -46,6 +53,7 @@ final class LobbyStore: ObservableObject {
   @Published private(set) var debugShotState = DebugShotState.idle
   @Published private(set) var markerlessShotState = MarkerlessShotState.idle
   @Published private(set) var targetingSnapshot: TargetingSnapshot
+  @Published private(set) var killBanner: KillBanner?
 
   let environment: AppEnvironment
 
@@ -61,6 +69,9 @@ final class LobbyStore: ObservableObject {
   private var connectionTask: Task<Void, Never>?
   private var recoveryTask: Task<Void, Never>?
   private var targetingTask: Task<Void, Never>?
+  private var killBannerTask: Task<Void, Never>?
+  private var seenKillEventIDs = Set<String>()
+  private var snapshotSubscriptionStartedAt: Double?
   private var transportState = GameSessionConnectionState.connecting
   private let now: @Sendable () -> Date
   private let makeShotId: @Sendable () -> String
@@ -88,6 +99,7 @@ final class LobbyStore: ObservableObject {
     connectionTask?.cancel()
     recoveryTask?.cancel()
     targetingTask?.cancel()
+    killBannerTask?.cancel()
   }
 
   var networkingStatus: String {
@@ -265,6 +277,7 @@ final class LobbyStore: ObservableObject {
     snapshotRetryTask?.cancel()
     recoveryTask?.cancel()
     targetingTask?.cancel()
+    killBannerTask?.cancel()
     targetingTask = nil
     let targetingSession = environment.targetingSession
     Task { await targetingSession.stop() }
@@ -276,6 +289,9 @@ final class LobbyStore: ObservableObject {
     operation = nil
     debugShotState = .idle
     markerlessShotState = .idle
+    seenKillEventIDs.removeAll()
+    snapshotSubscriptionStartedAt = nil
+    killBanner = nil
     targetingSnapshot = .unavailable()
     lastSyncAt = nil
     syncStatus =
@@ -529,6 +545,7 @@ final class LobbyStore: ObservableObject {
     snapshotTask?.cancel()
     snapshotRetryTask?.cancel()
     recoveryTask?.cancel()
+    killBannerTask?.cancel()
     session = newSession
     latestSnapshot = nil
     lastSyncAt = nil
@@ -537,6 +554,9 @@ final class LobbyStore: ObservableObject {
     pendingMarkerlessRequest = nil
     debugShotState = .idle
     markerlessShotState = .idle
+    seenKillEventIDs.removeAll()
+    killBanner = nil
+    snapshotSubscriptionStartedAt = nil
     syncStatus = .connecting
 
     startSnapshotSubscription(for: newSession)
@@ -577,9 +597,13 @@ final class LobbyStore: ObservableObject {
     let wasStale = syncStatus == .stale
     snapshotRetryTask?.cancel()
     snapshotRetryTask = nil
+    if snapshotSubscriptionStartedAt == nil {
+      snapshotSubscriptionStartedAt = snapshot.serverNow
+    }
     latestSnapshot = snapshot
     lastSyncAt = receivedAt
     route = Self.route(for: snapshot, receivedAt: receivedAt)
+    updateKillBanner(from: snapshot)
     syncStatus = wasStale ? .restored : .connected
     recoveryTask?.cancel()
     if wasStale {
@@ -596,6 +620,76 @@ final class LobbyStore: ObservableObject {
     operation = nil
     errorMessage = nil
     reconcilePendingShot()
+  }
+
+  private func updateKillBanner(from snapshot: MatchSnapshot) {
+    let newEvents = snapshot.events.filter { event in
+      guard event.type == .eliminated, !seenKillEventIDs.contains(event.id) else {
+        return false
+      }
+      seenKillEventIDs.insert(event.id)
+      return true
+    }
+    guard let startedAt = snapshotSubscriptionStartedAt,
+      let event = newEvents
+        .filter({ $0.createdAt >= startedAt })
+        .max(by: { $0.createdAt < $1.createdAt }),
+      let banner = makeKillBanner(for: event, in: snapshot)
+    else {
+      return
+    }
+
+    killBannerTask?.cancel()
+    killBanner = banner
+    killBannerTask = Task { [weak self] in
+      try? await Task.sleep(for: .seconds(3))
+      guard !Task.isCancelled, let self, self.killBanner?.eventID == banner.eventID else {
+        return
+      }
+      self.killBanner = nil
+      self.killBannerTask = nil
+    }
+  }
+
+  private func makeKillBanner(for event: EventSnapshot, in snapshot: MatchSnapshot)
+    -> KillBanner?
+  {
+    let playersByID = Dictionary(uniqueKeysWithValues: snapshot.players.map { ($0.id, $0) })
+    if event.actorPlayerId == snapshot.localPlayerId {
+      let text = playerName(
+        for: event.targetPlayerId,
+        in: playersByID
+      ).map { "YOU ELIMINATED \($0)" } ?? event.message
+      return KillBanner(
+        eventID: event.id,
+        text: text,
+        timestamp: event.createdAt,
+        isLocalKill: true
+      )
+    }
+    guard event.targetPlayerId == snapshot.localPlayerId else { return nil }
+    let text = playerName(
+      for: event.actorPlayerId,
+      in: playersByID
+    ).map { "ELIMINATED BY \($0)" } ?? event.message
+    return KillBanner(
+      eventID: event.id,
+      text: text,
+      timestamp: event.createdAt,
+      isLocalKill: false
+    )
+  }
+
+  private func playerName(
+    for playerID: String?,
+    in playersByID: [String: PlayerSnapshot]
+  ) -> String? {
+    guard let playerID, let name = playersByID[playerID]?.displayName,
+      !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    else {
+      return nil
+    }
+    return name
   }
 
   private func subscriptionFailed(_ error: Error, for expectedSession: PlayerSession) {

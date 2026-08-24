@@ -1,5 +1,9 @@
 import SwiftUI
 
+#if os(iOS)
+import UIKit
+#endif
+
 struct ActiveDuelView: View {
   let duel: ActiveDuel
   @ObservedObject var store: LobbyStore
@@ -38,6 +42,12 @@ struct ActiveDuelView: View {
             )
             .frame(width: 380, height: 380)
             .allowsHitTesting(false)
+        }
+
+        if let killBanner = store.killBanner {
+          killBannerView(killBanner)
+            .transition(.scale(scale: 0.72).combined(with: .opacity))
+            .zIndex(2)
         }
 
         VStack(spacing: 14) {
@@ -81,6 +91,12 @@ struct ActiveDuelView: View {
     .onChange(of: voiceFire.fireRequestSequence) { _ in
       fireShot()
     }
+    .onChange(of: store.killBanner) { banner in
+      guard banner?.isLocalKill == true else { return }
+      #if os(iOS)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+      #endif
+    }
   }
 
   @ViewBuilder
@@ -102,6 +118,29 @@ struct ActiveDuelView: View {
       startPoint: .top,
       endPoint: .bottom
     )
+  }
+
+  private func killBannerView(_ banner: KillBanner) -> some View {
+    Text(banner.text)
+      .font(.system(size: 28, weight: .black, design: .monospaced))
+      .foregroundStyle(banner.isLocalKill ? VKZPalette.ready : VKZPalette.danger)
+      .multilineTextAlignment(.center)
+      .lineLimit(2)
+      .minimumScaleFactor(0.7)
+      .padding(.horizontal, 24)
+      .padding(.vertical, 18)
+      .background(.black.opacity(0.82), in: RoundedRectangle(cornerRadius: 16))
+      .overlay {
+        RoundedRectangle(cornerRadius: 16)
+          .stroke(
+            (banner.isLocalKill ? VKZPalette.ready : VKZPalette.danger).opacity(0.7),
+            lineWidth: 2
+          )
+      }
+      .shadow(color: .black.opacity(0.7), radius: 12)
+      .padding(.horizontal, 20)
+      .animation(.spring(response: 0.28, dampingFraction: 0.78), value: banner.eventID)
+      .allowsHitTesting(false)
   }
 
   private func topTelemetry(at date: Date) -> some View {
@@ -151,17 +190,17 @@ struct ActiveDuelView: View {
   private var reticle: some View {
     ZStack {
       Circle()
-        .stroke(reticleColor.opacity(0.9), lineWidth: 3)
-        .frame(width: 74, height: 74)
+        .stroke(reticleColor.opacity(0.9), lineWidth: 2)
+        .frame(width: 44, height: 44)
       Rectangle()
         .fill(reticleColor)
-        .frame(width: 24, height: 2)
+        .frame(width: 14, height: 2)
       Rectangle()
         .fill(reticleColor)
-        .frame(width: 2, height: 24)
+        .frame(width: 2, height: 14)
       Circle()
         .fill(reticleColor)
-        .frame(width: 6, height: 6)
+        .frame(width: 4, height: 4)
     }
     .shadow(color: .black.opacity(0.8), radius: 3)
     .accessibilityLabel(store.markerlessAimZone == nil ? "No target lock" : "Target locked")
@@ -265,10 +304,12 @@ struct ActiveDuelView: View {
 
   private func fireShot() {
     let canFireMarkerless = store.canFireMarkerless
+    let canFireDebug = store.canDebugFire
+    guard canFireMarkerless || canFireDebug else { return }
     fx.fireLaser(hit: canFireMarkerless)
     if canFireMarkerless {
       store.fireMarkerless()
-    } else if store.canDebugFire {
+    } else {
       store.debugFire()
     }
     withAnimation(.easeOut(duration: 0.12)) {

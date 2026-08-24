@@ -424,6 +424,94 @@ final class LobbyStoreTests: XCTestCase {
     XCTAssertFalse(store.isMatchInputLocked)
   }
 
+  func testLocalKillSnapshotShowsKillBanner() async throws {
+    let client = MockGameSessionClient()
+    let store = makeStore(client: client)
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running))
+    await settle()
+
+    client.send(
+      snapshot(
+        phase: .running,
+        events: [eliminatedEvent(actorPlayerID: "host-1", targetPlayerID: "guest-1")]
+      )
+    )
+    await settle()
+
+    XCTAssertEqual(store.killBanner?.text, "YOU ELIMINATED Guest")
+    XCTAssertTrue(store.killBanner?.isLocalKill == true)
+  }
+
+  func testOpponentKillSnapshotShowsEliminatedByBanner() async throws {
+    let client = MockGameSessionClient()
+    let store = makeStore(client: client)
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running))
+    await settle()
+
+    client.send(
+      snapshot(
+        phase: .running,
+        events: [eliminatedEvent(actorPlayerID: "guest-1", targetPlayerID: "host-1")]
+      )
+    )
+    await settle()
+
+    XCTAssertEqual(store.killBanner?.text, "ELIMINATED BY Guest")
+    XCTAssertFalse(store.killBanner?.isLocalKill == true)
+  }
+
+  func testDuplicateKillEventDoesNotRetriggerBanner() async throws {
+    let client = MockGameSessionClient()
+    let store = makeStore(client: client)
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running))
+    await settle()
+
+    let event = eliminatedEvent(actorPlayerID: "host-1", targetPlayerID: "guest-1")
+    client.send(snapshot(phase: .running, events: [event]))
+    await settle()
+    let firstBanner = try XCTUnwrap(store.killBanner)
+
+    client.send(snapshot(phase: .running, events: [event]))
+    await settle()
+
+    XCTAssertEqual(store.killBanner, firstBanner)
+  }
+
+  func testKillBannerUsesFirstSnapshotServerClock() async throws {
+    let client = MockGameSessionClient()
+    let store = makeStore(
+      client: client,
+      now: { Date(timeIntervalSince1970: 2_000_000_000) }
+    )
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    let firstServerNow = 1_750_000_000_000.0
+    client.send(snapshot(phase: .running, serverNow: firstServerNow))
+    await settle()
+
+    let event = eliminatedEvent(
+      actorPlayerID: "host-1",
+      targetPlayerID: "guest-1",
+      createdAt: firstServerNow + 100
+    )
+    client.send(
+      snapshot(
+        phase: .running,
+        events: [event],
+        serverNow: firstServerNow + 1_000
+      )
+    )
+    await settle()
+
+    XCTAssertEqual(store.killBanner?.text, "YOU ELIMINATED Guest")
+  }
+
   private func makeStore(
     client: MockGameSessionClient,
     targetingSession: any TargetingSession = UnavailableTargetingSession(),
@@ -468,10 +556,11 @@ final class LobbyStoreTests: XCTestCase {
     hostReady: Bool = true,
     hostAmmo: Int = 8,
     guestHealth: Int = 100,
-    events: [EventSnapshot] = []
+    events: [EventSnapshot] = [],
+    serverNow: Double = 1_750_000_000_000
   ) -> MatchSnapshot {
     MatchSnapshot(
-      serverNow: 1_750_000_000_000,
+      serverNow: serverNow,
       match: MatchSummary(
         id: "match-1",
         code: "ABC123",
@@ -515,6 +604,23 @@ final class LobbyStoreTests: XCTestCase {
       targetPlayerId: "guest-1",
       zone: "torso",
       damage: 34
+    )
+  }
+
+  private func eliminatedEvent(
+    actorPlayerID: String?,
+    targetPlayerID: String?,
+    createdAt: Double = 1_750_000_010_000
+  ) -> EventSnapshot {
+    EventSnapshot(
+      id: "event-eliminated",
+      type: .eliminated,
+      message: "Host eliminated Guest",
+      createdAt: createdAt,
+      actorPlayerId: actorPlayerID,
+      targetPlayerId: targetPlayerID,
+      zone: nil,
+      damage: 100
     )
   }
 
