@@ -424,6 +424,67 @@ final class LobbyStoreTests: XCTestCase {
     XCTAssertFalse(store.isMatchInputLocked)
   }
 
+  func testDebugFireKillConfirmsWhenResubscribedSnapshotAlreadyShowsRespawn() async throws {
+    let client = MockGameSessionClient()
+    let store = makeStore(client: client, shotIDs: ["kill-shot-id"])
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running, hostAmmo: 8, guestHealth: 32))
+    await settle()
+
+    client.debugResults = [
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "kill-shot-id",
+          replayed: false,
+          damage: 32,
+          shooterAmmo: 7,
+          targetHealth: 0,
+          eventId: "event-kill",
+          rejectReason: nil
+        )
+      )
+    ]
+
+    await store.performDebugFire()
+    XCTAssertEqual(store.debugShotState, .pending)
+
+    client.failSnapshotSubscription()
+    await settle()
+    try await Task.sleep(for: .seconds(1.1))
+    await settle()
+    XCTAssertEqual(client.snapshotSubscriptionCount, 2)
+
+    client.send(
+      snapshot(
+        phase: .running,
+        hostAmmo: 7,
+        guestHealth: 100,
+        events: [
+          EventSnapshot(
+            id: "event-kill",
+            type: .hit,
+            message: "Host HIT Guest • TORSO −32",
+            createdAt: 1_750_000_020_000,
+            actorPlayerId: "host-1",
+            targetPlayerId: "guest-1",
+            zone: "torso",
+            damage: 32
+          )
+        ]
+      )
+    )
+    await settle()
+
+    XCTAssertEqual(
+      store.debugShotState, .confirmed(damage: 32),
+      "A snapshot containing the shot's own event must confirm the shot even when the transient post-shot state was never observed"
+    )
+    XCTAssertTrue(store.canDebugFire)
+  }
+
   func testLocalKillSnapshotShowsKillBanner() async throws {
     let client = MockGameSessionClient()
     let store = makeStore(client: client)
