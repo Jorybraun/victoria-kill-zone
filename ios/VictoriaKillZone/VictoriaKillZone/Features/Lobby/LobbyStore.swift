@@ -762,8 +762,12 @@ final class LobbyStore: ObservableObject {
       return
     }
 
-    guard let session, let shotId = pendingShotId else {
+    guard let session else {
       gameLoopTrace("reconcilePendingShot outcome=awaiting reason=noSession")
+      return
+    }
+    guard let shotId = pendingShotId else {
+      gameLoopTrace("reconcilePendingShot outcome=awaiting reason=noPendingShotId")
       return
     }
 
@@ -802,7 +806,9 @@ final class LobbyStore: ObservableObject {
   private func schedulePendingShotDeadline(for expectedSession: PlayerSession, shotId: String) {
     pendingShotReplayTask?.cancel()
     pendingShotReplayTask = Task { [weak self] in
-      try? await Task.sleep(for: .milliseconds(2_500))
+      try? await Task.sleep(
+        for: .milliseconds(Int(Self.pendingShotConfirmationBudget * 1_000))
+      )
       guard !Task.isCancelled, let self,
         self.session == expectedSession,
         self.pendingShotId == shotId
