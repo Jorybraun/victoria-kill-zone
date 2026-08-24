@@ -304,10 +304,12 @@ struct ActiveDuelView: View {
 
   private func fireShot() {
     let canFireMarkerless = store.canFireMarkerless
+    let canFireDebug = store.canDebugFire
+    guard canFireMarkerless || canFireDebug else { return }
     fx.fireLaser(hit: canFireMarkerless)
     if canFireMarkerless {
       store.fireMarkerless()
-    } else if store.canDebugFire {
+    } else {
       store.debugFire()
     }
     withAnimation(.easeOut(duration: 0.12)) {

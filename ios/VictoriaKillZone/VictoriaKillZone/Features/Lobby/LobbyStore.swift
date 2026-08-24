@@ -556,7 +556,7 @@ final class LobbyStore: ObservableObject {
     markerlessShotState = .idle
     seenKillEventIDs.removeAll()
     killBanner = nil
-    snapshotSubscriptionStartedAt = now().timeIntervalSince1970 * 1_000
+    snapshotSubscriptionStartedAt = nil
     syncStatus = .connecting
 
     startSnapshotSubscription(for: newSession)
@@ -597,6 +597,9 @@ final class LobbyStore: ObservableObject {
     let wasStale = syncStatus == .stale
     snapshotRetryTask?.cancel()
     snapshotRetryTask = nil
+    if snapshotSubscriptionStartedAt == nil {
+      snapshotSubscriptionStartedAt = snapshot.serverNow
+    }
     latestSnapshot = snapshot
     lastSyncAt = receivedAt
     route = Self.route(for: snapshot, receivedAt: receivedAt)
