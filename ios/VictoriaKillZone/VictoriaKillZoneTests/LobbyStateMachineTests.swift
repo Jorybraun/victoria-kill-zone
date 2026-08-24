@@ -557,6 +557,208 @@ final class LobbyStoreTests: XCTestCase {
     XCTAssertEqual(client.debugShotIDs, ["rejected-replay-shot-id", "rejected-replay-shot-id"])
   }
 
+  func testDebugFireNonIdempotentReplayFailsAndManualRetryReusesPendingShotID() async throws {
+    let firedAt = Date(timeIntervalSince1970: 1_750_000_000)
+    let clock = TestClock(firedAt)
+    let client = MockGameSessionClient()
+    let store = makeStore(
+      client: client,
+      shotIDs: ["non-idempotent-shot-id"],
+      now: { clock.now }
+    )
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running))
+    await settle()
+
+    client.debugResults = [
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "non-idempotent-shot-id",
+          replayed: false,
+          damage: 34,
+          shooterAmmo: 7,
+          targetHealth: 66,
+          eventId: "event-hit",
+          rejectReason: nil
+        )
+      ),
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "non-idempotent-shot-id",
+          replayed: false,
+          damage: 34,
+          shooterAmmo: 7,
+          targetHealth: 66,
+          eventId: "event-hit",
+          rejectReason: nil
+        )
+      ),
+    ]
+
+    await store.performDebugFire()
+    clock.now = firedAt.addingTimeInterval(3)
+    client.send(snapshot(phase: .running, events: agedOutEvents()))
+    await settle()
+
+    XCTAssertEqual(store.debugShotState, .failed)
+    XCTAssertEqual(client.debugShotIDs, ["non-idempotent-shot-id", "non-idempotent-shot-id"])
+
+    await store.performDebugFire()
+
+    XCTAssertEqual(
+      client.debugShotIDs,
+      ["non-idempotent-shot-id", "non-idempotent-shot-id", "non-idempotent-shot-id"]
+    )
+    client.send(
+      snapshot(
+        phase: .running,
+        hostAmmo: 7,
+        guestHealth: 66,
+        events: [hitEvent]
+      )
+    )
+    await settle()
+
+    XCTAssertEqual(store.debugShotState, .confirmed(damage: 34))
+  }
+
+  func testDebugFireReplayTransportFailureReusesPendingShotIDOnManualRetry() async throws {
+    let firedAt = Date(timeIntervalSince1970: 1_750_000_000)
+    let clock = TestClock(firedAt)
+    let client = MockGameSessionClient()
+    let store = makeStore(
+      client: client,
+      shotIDs: ["transport-retry-shot-id"],
+      now: { clock.now }
+    )
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running))
+    await settle()
+
+    client.debugResults = [
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "transport-retry-shot-id",
+          replayed: false,
+          damage: 34,
+          shooterAmmo: 7,
+          targetHealth: 66,
+          eventId: "event-hit",
+          rejectReason: nil
+        )
+      ),
+      .failure(GameSessionClientError.networkUnavailable),
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "transport-retry-shot-id",
+          replayed: true,
+          damage: 34,
+          shooterAmmo: 7,
+          targetHealth: 66,
+          eventId: "event-hit",
+          rejectReason: nil
+        )
+      ),
+    ]
+
+    await store.performDebugFire()
+    clock.now = firedAt.addingTimeInterval(3)
+    client.send(snapshot(phase: .running, events: agedOutEvents()))
+    await settle()
+
+    XCTAssertEqual(store.debugShotState, .failed)
+    XCTAssertEqual(
+      client.debugShotIDs,
+      ["transport-retry-shot-id", "transport-retry-shot-id"]
+    )
+
+    await store.performDebugFire()
+
+    XCTAssertEqual(
+      client.debugShotIDs,
+      ["transport-retry-shot-id", "transport-retry-shot-id", "transport-retry-shot-id"]
+    )
+    client.send(
+      snapshot(
+        phase: .running,
+        hostAmmo: 7,
+        guestHealth: 66,
+        events: [hitEvent]
+      )
+    )
+    await settle()
+
+    XCTAssertEqual(store.debugShotState, .confirmed(damage: 34))
+  }
+
+  func testDebugFireReplayResultAfterLeaveDoesNotBleedIntoNewState() async throws {
+    let firedAt = Date(timeIntervalSince1970: 1_750_000_000)
+    let clock = TestClock(firedAt)
+    let client = MockGameSessionClient()
+    let store = makeStore(
+      client: client,
+      shotIDs: ["stale-replay-shot-id"],
+      now: { clock.now }
+    )
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running))
+    await settle()
+
+    client.debugResults = [
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "stale-replay-shot-id",
+          replayed: false,
+          damage: 34,
+          shooterAmmo: 7,
+          targetHealth: 66,
+          eventId: "event-hit",
+          rejectReason: nil
+        )
+      ),
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "stale-replay-shot-id",
+          replayed: true,
+          damage: 34,
+          shooterAmmo: 7,
+          targetHealth: 66,
+          eventId: "event-hit",
+          rejectReason: nil
+        )
+      ),
+    ]
+    await store.performDebugFire()
+    let gate = client.gateNextDebugFire()
+    clock.now = firedAt.addingTimeInterval(3)
+    client.send(snapshot(phase: .running, events: agedOutEvents()))
+    await gate.waitUntilEntered()
+
+    store.leave()
+    gate.release()
+    await settle()
+
+    XCTAssertEqual(store.debugShotState, .idle)
+    XCTAssertNil(store.errorMessage)
+    XCTAssertFalse(store.canDebugFire)
+    XCTAssertEqual(client.debugShotIDs, ["stale-replay-shot-id", "stale-replay-shot-id"])
+  }
+
   func testMarkerlessTransportFailureRetriesExactRequest() async throws {
     let firedAt = Date(timeIntervalSince1970: 1_750_000_000)
     let clock = TestClock(firedAt)
@@ -958,6 +1160,7 @@ private final class MockGameSessionClient: GameSessionClient, @unchecked Sendabl
   private var storedFireResults: [Result<FireShotResult, Error>] = []
   private var storedDebugShotIDs: [String] = []
   private var storedDebugResults: [Result<DebugFireResult, Error>] = []
+  private var storedDebugFireGate: DebugFireGate?
 
   init() {
     playerSession = PlayerSession(
@@ -1000,6 +1203,12 @@ private final class MockGameSessionClient: GameSessionClient, @unchecked Sendabl
     set { lock.withLock { storedDebugResults = newValue } }
   }
 
+  func gateNextDebugFire() -> DebugFireGate {
+    let gate = DebugFireGate()
+    lock.withLock { storedDebugFireGate = gate }
+    return gate
+  }
+
   func createDuel(_ request: CreateDuelRequest) async throws -> PlayerSession {
     lock.withLock { storedCreateRequests.append(request) }
     return playerSession
@@ -1024,11 +1233,23 @@ private final class MockGameSessionClient: GameSessionClient, @unchecked Sendabl
   }
 
   func debugFire(session: PlayerSession, clientShotId: String) async throws -> DebugFireResult {
-    try lock.withLock {
+    let response: Result<DebugFireResult, Error>
+    let gate: DebugFireGate?
+    (response, gate) = try lock.withLock {
       storedDebugShotIDs.append(clientShotId)
-      guard !storedDebugResults.isEmpty else { throw GameSessionClientError.unknown }
-      return try storedDebugResults.removeFirst().get()
+      guard !storedDebugResults.isEmpty else {
+        throw GameSessionClientError.unknown
+      }
+      let response = storedDebugResults.removeFirst()
+      let gate = storedDebugFireGate
+      storedDebugFireGate = nil
+      return (response, gate)
     }
+    if let gate {
+      gate.enter()
+      await gate.waitForRelease()
+    }
+    return try response.get()
   }
 
   func snapshots(for session: PlayerSession) -> AsyncThrowingStream<MatchSnapshot, Error> {
@@ -1058,6 +1279,62 @@ private final class MockGameSessionClient: GameSessionClient, @unchecked Sendabl
 
   func sendConnection(_ state: GameSessionConnectionState) {
     connectionContinuation.yield(state)
+  }
+}
+
+private final class DebugFireGate: @unchecked Sendable {
+  private let lock = NSLock()
+  private var entered = false
+  private var released = false
+  private var enteredContinuation: CheckedContinuation<Void, Never>?
+  private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+  func waitUntilEntered() async {
+    await withCheckedContinuation { continuation in
+      let alreadyEntered = lock.withLock {
+        if !entered {
+          enteredContinuation = continuation
+        }
+        return entered
+      }
+      if alreadyEntered {
+        continuation.resume()
+      }
+    }
+  }
+
+  func enter() {
+    let continuation = lock.withLock {
+      entered = true
+      let continuation = enteredContinuation
+      enteredContinuation = nil
+      return continuation
+    }
+    continuation?.resume()
+  }
+
+  func waitForRelease() async {
+    await withCheckedContinuation { continuation in
+      let alreadyReleased = lock.withLock {
+        if !released {
+          releaseContinuation = continuation
+        }
+        return released
+      }
+      if alreadyReleased {
+        continuation.resume()
+      }
+    }
+  }
+
+  func release() {
+    let continuation = lock.withLock {
+      released = true
+      let continuation = releaseContinuation
+      releaseContinuation = nil
+      return continuation
+    }
+    continuation?.resume()
   }
 }
 

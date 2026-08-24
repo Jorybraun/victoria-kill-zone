@@ -472,6 +472,13 @@ final class LobbyStore: ObservableObject {
       guard result.clientShotId == shotId else {
         throw GameSessionClientError.invalidSnapshot
       }
+      guard result.replayed else {
+        gameLoopTrace("reconcilePendingShot reason=eventAgedOut outcome=replayNotIdempotent")
+        pendingShotReplayTask = nil
+        setDebugShotState(.failed)
+        present(GameSessionClientError.invalidSnapshot)
+        return
+      }
       guard result.accepted, result.outcome == .hit else {
         pendingShotId = nil
         pendingShotResult = nil
