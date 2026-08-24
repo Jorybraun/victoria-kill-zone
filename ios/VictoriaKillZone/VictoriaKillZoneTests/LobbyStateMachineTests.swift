@@ -322,6 +322,241 @@ final class LobbyStoreTests: XCTestCase {
     XCTAssertEqual(store.debugShotState, .pending)
   }
 
+  func testDebugFireAgedOutEventReplaysAndConfirmsWithSameClientShotID() async throws {
+    let firedAt = Date(timeIntervalSince1970: 1_750_000_000)
+    let clock = TestClock(firedAt)
+    let client = MockGameSessionClient()
+    let store = makeStore(
+      client: client,
+      shotIDs: ["aged-out-shot-id"],
+      now: { clock.now }
+    )
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running, hostAmmo: 8, guestHealth: 100))
+    await settle()
+
+    client.debugResults = [
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "aged-out-shot-id",
+          replayed: false,
+          damage: 34,
+          shooterAmmo: 7,
+          targetHealth: 66,
+          eventId: "event-hit",
+          rejectReason: nil
+        )
+      ),
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "aged-out-shot-id",
+          replayed: true,
+          damage: 34,
+          shooterAmmo: 7,
+          targetHealth: 66,
+          eventId: "event-hit",
+          rejectReason: nil
+        )
+      ),
+    ]
+
+    await store.performDebugFire()
+    clock.now = firedAt.addingTimeInterval(3)
+    client.send(
+      snapshot(
+        phase: .running,
+        hostAmmo: 7,
+        guestHealth: 66,
+        events: agedOutEvents()
+      )
+    )
+    await settle()
+
+    XCTAssertEqual(store.debugShotState, .confirmed(damage: 34))
+    XCTAssertTrue(store.canDebugFire)
+    XCTAssertEqual(client.debugShotIDs, ["aged-out-shot-id", "aged-out-shot-id"])
+  }
+
+  func testDebugFireAgedOutReplayDoesNotStormAndNextPressUsesNewClientShotID() async throws {
+    let firedAt = Date(timeIntervalSince1970: 1_750_000_000)
+    let clock = TestClock(firedAt)
+    let client = MockGameSessionClient()
+    let store = makeStore(
+      client: client,
+      shotIDs: ["aged-out-shot-id", "next-shot-id"],
+      now: { clock.now }
+    )
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running))
+    await settle()
+
+    client.debugResults = [
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "aged-out-shot-id",
+          replayed: false,
+          damage: 34,
+          shooterAmmo: 7,
+          targetHealth: 66,
+          eventId: "event-hit",
+          rejectReason: nil
+        )
+      ),
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "aged-out-shot-id",
+          replayed: true,
+          damage: 34,
+          shooterAmmo: 7,
+          targetHealth: 66,
+          eventId: "event-hit",
+          rejectReason: nil
+        )
+      ),
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "next-shot-id",
+          replayed: false,
+          damage: 34,
+          shooterAmmo: 6,
+          targetHealth: 32,
+          eventId: nil,
+          rejectReason: nil
+        )
+      ),
+    ]
+
+    await store.performDebugFire()
+    clock.now = firedAt.addingTimeInterval(3)
+    for _ in 0..<3 {
+      client.send(snapshot(phase: .running, events: agedOutEvents()))
+      await settle()
+    }
+    XCTAssertEqual(client.debugShotIDs, ["aged-out-shot-id", "aged-out-shot-id"])
+
+    await store.performDebugFire()
+
+    XCTAssertEqual(client.debugShotIDs, ["aged-out-shot-id", "aged-out-shot-id", "next-shot-id"])
+    XCTAssertEqual(store.debugShotState, .pending)
+  }
+
+  func testDebugFireAgedOutReplayWaitsUntilConfirmationBudgetExpires() async throws {
+    let firedAt = Date(timeIntervalSince1970: 1_750_000_000)
+    let clock = TestClock(firedAt)
+    let client = MockGameSessionClient()
+    let store = makeStore(
+      client: client,
+      shotIDs: ["budget-shot-id"],
+      now: { clock.now }
+    )
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running))
+    await settle()
+
+    client.debugResults = [
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "budget-shot-id",
+          replayed: false,
+          damage: 34,
+          shooterAmmo: 7,
+          targetHealth: 66,
+          eventId: "event-hit",
+          rejectReason: nil
+        )
+      ),
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "budget-shot-id",
+          replayed: true,
+          damage: 34,
+          shooterAmmo: 7,
+          targetHealth: 66,
+          eventId: "event-hit",
+          rejectReason: nil
+        )
+      ),
+    ]
+
+    await store.performDebugFire()
+    clock.now = firedAt.addingTimeInterval(2)
+    client.send(snapshot(phase: .running, events: agedOutEvents()))
+    await settle()
+
+    XCTAssertEqual(store.debugShotState, .pending)
+    XCTAssertEqual(client.debugShotIDs, ["budget-shot-id"])
+  }
+
+  func testDebugFireAgedOutReplayRejectionFailsAndClearsPendingShot() async throws {
+    let firedAt = Date(timeIntervalSince1970: 1_750_000_000)
+    let clock = TestClock(firedAt)
+    let client = MockGameSessionClient()
+    let store = makeStore(
+      client: client,
+      shotIDs: ["rejected-replay-shot-id"],
+      now: { clock.now }
+    )
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running))
+    await settle()
+
+    client.debugResults = [
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "rejected-replay-shot-id",
+          replayed: false,
+          damage: 34,
+          shooterAmmo: 7,
+          targetHealth: 66,
+          eventId: "event-hit",
+          rejectReason: nil
+        )
+      ),
+      .success(
+        DebugFireResult(
+          accepted: false,
+          outcome: .rejected,
+          clientShotId: "rejected-replay-shot-id",
+          replayed: true,
+          damage: 0,
+          shooterAmmo: 8,
+          targetHealth: 100,
+          eventId: nil,
+          rejectReason: .connectionStale
+        )
+      ),
+    ]
+
+    await store.performDebugFire()
+    clock.now = firedAt.addingTimeInterval(3)
+    client.send(snapshot(phase: .running, events: agedOutEvents()))
+    await settle()
+
+    XCTAssertEqual(store.debugShotState, .failed)
+    XCTAssertEqual(store.errorMessage, "SHOT LOCKED WHILE RECONNECTING")
+    XCTAssertEqual(client.debugShotIDs, ["rejected-replay-shot-id", "rejected-replay-shot-id"])
+  }
+
   func testMarkerlessTransportFailureRetriesExactRequest() async throws {
     let firedAt = Date(timeIntervalSince1970: 1_750_000_000)
     let clock = TestClock(firedAt)
@@ -666,6 +901,21 @@ final class LobbyStoreTests: XCTestCase {
       zone: "torso",
       damage: 34
     )
+  }
+
+  private func agedOutEvents() -> [EventSnapshot] {
+    (0..<40).map { index in
+      EventSnapshot(
+        id: "newer-event-\(index)",
+        type: .hit,
+        message: "Newer event",
+        createdAt: 1_750_000_020_000 + Double(index),
+        actorPlayerId: "guest-1",
+        targetPlayerId: "host-1",
+        zone: "torso",
+        damage: 1
+      )
+    }
   }
 
   private func eliminatedEvent(
