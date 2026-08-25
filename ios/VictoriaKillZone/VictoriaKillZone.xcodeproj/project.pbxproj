@@ -87,12 +87,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		3A866413303CA4AA005CD65E /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				F00100000000000000000016 /* AVFoundation.framework */,
+				F00100000000000000000017 /* Speech.framework */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		G00100000000000000000001 = {
 			isa = PBXGroup;
 			children = (
 				G00100000000000000000002 /* VictoriaKillZone */,
 				G0010000000000000000000C /* VictoriaKillZoneTests */,
 				G0010000000000000000000D /* Products */,
+				3A866413303CA4AA005CD65E /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -465,18 +475,22 @@
 		BC0100000000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 1;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CONVEX_DEPLOYMENT_URL = "https://brave-crow-277.convex.cloud";
-				DEVELOPMENT_TEAM = UGMA3967M2;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = XDXHRB7B47;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VictoriaKillZone/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.action-games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.victoriakillzone.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pewpewpew.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -488,18 +502,22 @@
 		BC0100000000000000000002 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 1;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CONVEX_DEPLOYMENT_URL = "https://brave-crow-277.convex.cloud";
-				DEVELOPMENT_TEAM = UGMA3967M2;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = XDXHRB7B47;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VictoriaKillZone/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.action-games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.victoriakillzone.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pewpewpew.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -512,14 +530,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				DEVELOPMENT_TEAM = UGMA3967M2;
+				DEVELOPMENT_TEAM = XDXHRB7B47;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.victoriakillzone.app.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pewpewpew.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_VERSION = 5.0;
@@ -532,14 +550,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				DEVELOPMENT_TEAM = UGMA3967M2;
+				DEVELOPMENT_TEAM = XDXHRB7B47;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.victoriakillzone.app.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pewpewpew.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_VERSION = 5.0;
