@@ -13,6 +13,12 @@ set -euo pipefail
 #                       (default: ~/.appstoreconnect/private_keys)
 #   VKZ_BUILD_ROOT      scratch directory for archive/export artifacts
 #                       (default: mktemp under TMPDIR)
+#   VKZ_BUILD_NUMBER    freeze CFBundleVersion for this upload instead of
+#                       letting App Store Connect assign it, so the uploaded
+#                       build can be correlated to this revision (optional)
+#   VKZ_BUILD_FACTS_FILE
+#                       write the archived marketing version and build number
+#                       as JSON for deterministic recovery (optional)
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
@@ -46,10 +52,23 @@ build_root="${VKZ_BUILD_ROOT:-$(mktemp -d "${TMPDIR:-/tmp}/vkz-testflight.XXXXXX
 mkdir -p "$build_root"
 chmod 700 "$build_root"
 archive_path="$build_root/PewPew.xcarchive"
+build_number="${VKZ_BUILD_NUMBER:-}"
+if [[ -n "$build_number" ]] && [[ ! "$build_number" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+  echo "ERROR: the frozen build number must be numeric or dotted-numeric." >&2
+  exit 1
+fi
 export_dir="$build_root/export"
 export_options="$build_root/export-options.plist"
 
 git_sha="$(git rev-parse HEAD)"
+
+# A frozen build number keeps this upload identifiable; letting App Store
+# Connect manage it makes concurrent uploads indistinguishable.
+if [[ -n "$build_number" ]]; then
+  manage_version="false"
+else
+  manage_version="true"
+fi
 
 cat > "$export_options" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -63,7 +82,7 @@ cat > "$export_options" <<PLIST
 	<key>signingStyle</key>
 	<string>automatic</string>
 	<key>manageAppVersionAndBuildNumber</key>
-	<true/>
+	<${manage_version}/>
 	<key>uploadSymbols</key>
 	<true/>
 </dict>
@@ -77,6 +96,7 @@ env DEVELOPER_DIR="$developer_dir" xcodebuild archive \
   -configuration Release \
   -destination 'generic/platform=iOS' \
   -archivePath "$archive_path" \
+  ${build_number:+CURRENT_PROJECT_VERSION="$build_number"} \
   -allowProvisioningUpdates \
   -authenticationKeyPath "$key_path" \
   -authenticationKeyID "$key_id" \
@@ -95,7 +115,16 @@ env DEVELOPER_DIR="$developer_dir" xcodebuild -exportArchive \
   -quiet
 
 marketing_version="$(plutil -extract ApplicationProperties.CFBundleShortVersionString raw "$archive_path/Info.plist")"
+# Recover the build number that was actually archived, whether it was frozen
+# here or assigned during the build.
+archived_build="$(plutil -extract ApplicationProperties.CFBundleVersion raw "$archive_path/Info.plist")"
+
+if [[ -n "${VKZ_BUILD_FACTS_FILE:-}" ]]; then
+  mkdir -p "$(dirname "$VKZ_BUILD_FACTS_FILE")"
+  printf '{"sha":"%s","marketingVersion":"%s","buildNumber":"%s"}\n' \
+    "$git_sha" "$marketing_version" "$archived_build" > "$VKZ_BUILD_FACTS_FILE"
+fi
 
 echo "TestFlight lane: PASS"
-echo "Evidence: sha=$git_sha version=$marketing_version scheme=$scheme"
+echo "Evidence: sha=$git_sha version=$marketing_version build=$archived_build scheme=$scheme"
 echo "Next: wait for App Store Connect processing, then install from TestFlight on both phones."

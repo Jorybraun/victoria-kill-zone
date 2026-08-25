@@ -1,0 +1,140 @@
+name: TestFlight
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    branches:
+      - main
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One promotion at a time. Queued runs are not cancelled, because the gate
+# below skips any revision that is no longer the current main SHA.
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  gate:
+    name: Gate the promotion candidate
+    outputs:
+      promote: ${{ steps.gate.outputs.promote }}
+      sha: ${{ steps.gate.outputs.sha }}
+    if: >-
+      ${{
+        vars.VKZ_TESTFLIGHT_ENABLED == 'true' &&
+        (
+          (
+            github.event_name == 'workflow_run' &&
+            github.event.workflow_run.name == 'CI' &&
+            github.event.workflow_run.conclusion == 'success' &&
+            github.event.workflow_run.event == 'push' &&
+            github.event.workflow_run.head_branch == 'main' &&
+            github.event.workflow_run.head_repository.full_name == github.repository
+          ) ||
+          (
+            github.event_name == 'workflow_dispatch' &&
+            github.ref == 'refs/heads/main'
+          )
+        )
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the candidate revision
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Resolve the current main revision
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+          echo "sha=${main_sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Decide whether the candidate may be promoted
+        id: gate
+        env:
+          VKZ_TESTFLIGHT_ENABLED: ${{ vars.VKZ_TESTFLIGHT_ENABLED }}
+          VKZ_EVENT_NAME: ${{ github.event_name }}
+          VKZ_CI_WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          VKZ_CI_EVENT: ${{ github.event.workflow_run.event }}
+          VKZ_CI_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          VKZ_CI_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          VKZ_CI_HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+          VKZ_REPOSITORY: ${{ github.repository }}
+          VKZ_CANDIDATE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          VKZ_CURRENT_MAIN_SHA: ${{ steps.current.outputs.sha }}
+        run: node scripts/release/promotion-gate.mjs
+
+      - name: Verify the promotion lane self-tests
+        if: steps.gate.outputs.promote == 'true'
+        run: node scripts/release/testflight-self-test.mjs
+
+  promote:
+    name: Archive, sign, upload, and poll on the Mac Outpost
+    needs:
+      - gate
+    if: needs.gate.outputs.promote == 'true'
+    # The persistent Mac Outpost holds the signing keychain and the App Store
+    # Connect key. A hosted macOS runner cannot sign this build.
+    runs-on:
+      - self-hosted
+      - macos
+      - vkz-outpost
+    timeout-minutes: 90
+    steps:
+      - name: Check out the promoted revision
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+          clean: true
+
+      - name: Report the toolchain
+        run: xcodebuild -version
+
+      - name: Promote to TestFlight
+        env:
+          VKZ_TESTFLIGHT_ENABLED: ${{ vars.VKZ_TESTFLIGHT_ENABLED }}
+          VKZ_EVENT_NAME: workflow_dispatch
+          VKZ_REPOSITORY: ${{ github.repository }}
+          VKZ_CANDIDATE_SHA: ${{ needs.gate.outputs.sha }}
+          VKZ_CURRENT_MAIN_SHA: ${{ needs.gate.outputs.sha }}
+          VKZ_RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+          VKZ_MARKETING_VERSION: ${{ vars.VKZ_MARKETING_VERSION }}
+          VKZ_BUILD_NUMBER: ${{ github.run_number }}
+          VKZ_BUILD_FACTS_FILE: ${{ runner.temp }}/testflight-evidence/build-facts.json
+          VKZ_BUNDLE_ID: ${{ vars.VKZ_BUNDLE_ID }}
+          VKZ_ASC_APP_ID: ${{ vars.VKZ_ASC_APP_ID }}
+          VKZ_ASC_KEY_ID: ${{ secrets.VKZ_ASC_KEY_ID }}
+          VKZ_ASC_ISSUER_ID: ${{ secrets.VKZ_ASC_ISSUER_ID }}
+          VKZ_SLACK_WEBHOOK_URL: ${{ secrets.VKZ_SLACK_WEBHOOK_URL }}
+          VKZ_SLACK_CHANNEL_ID: ${{ vars.VKZ_SLACK_CHANNEL_ID }}
+          VKZ_EVIDENCE_PATH: ${{ runner.temp }}/testflight-evidence/testflight-evidence.json
+        run: node scripts/release/promote-testflight.mjs
+
+      - name: Upload sanitized promotion evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testflight-evidence-${{ needs.gate.outputs.sha }}
+          path: ${{ runner.temp }}/testflight-evidence/testflight-evidence.json
+          if-no-files-found: warn

@@ -7,6 +7,7 @@ test_dir="$(mktemp -d)"
 trap 'rm -rf -- "$test_dir"' EXIT
 
 node "$script_dir/self-test.mjs"
+node "$script_dir/testflight-self-test.mjs"
 
 build_log="$test_dir/build.log"
 url_file="$test_dir/convex-url"

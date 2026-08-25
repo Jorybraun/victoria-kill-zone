@@ -55,3 +55,17 @@ This is the integration-owned, evidence-based status record. Append observed res
 - **Blocker and owner:** Devin Cloud backend branch has not pushed an executable commit as of 11:22 PDT. Integration owns the 11:30 local-fallback decision. User owns keeping both phones connected, unlocked, and trusted.
 - **Next integration step:** Receive or replace the backend implementation; reconcile both clients to `docs/interface-contracts.md`; run exact-head verification and open the first green PR.
 - **Cut/deferred or risk change:** The 17:00 demo scope is G2 only. Vision/ARKit targeting, geofence enforcement, radar, K/D, kill/respawn, reload, sound, haptics, and presentation polish are deferred.
+
+### 2026-08-25 10:40 PDT — KIL-38 TestFlight promotion automation (Tier 0/1 lane logic only)
+
+- **Git SHA / PR:** branch `kil-38-testflight-promotion-lane` based on `40d56f38b3db19d0d84ad1f2e1edb4bf269c2316`.
+- **Owner and write set:** Integration (`.github/workflows/**`, `scripts/release/**`, `docs/outpost-operations.md`, this log).
+- **Environment/artifact:** ephemeral Mac Outpost VM, macOS 26.6.2 (25G83), Xcode 26.4.1 (17E202), Node 26, pnpm 10.11.0.
+- **Commands/checks:** `node scripts/release/testflight-self-test.mjs` PASS (gate stale-SHA skip, disabled mode, non-push/non-CI trigger rejection, exact-build-number correlation, successful processing, timeout, upload failure, Slack failure, redaction). `bash scripts/release/self-test.sh` PASS. `bash -n scripts/release/testflight-upload.sh` PASS. `pnpm verify` PASS (`Repository contract: PASS`; `Workspace verification: PASS`) with the session-injected `VITE_CONVEX_URL`/`CONVEX_DEPLOYMENT_URL` unset; those inherited variables otherwise divert spectator tests off their demo fixtures.
+- **Observed on browser/simulator:** none for this slice; no archive, signing, or upload was executed.
+- **Observed on physical devices:** none. No OTA install is claimed.
+- **Mocked or unproven:** every App Store Connect and Slack interaction is fixture-driven. The self-hosted Outpost runner, Distribution signing identity, `.p8` key, and repository secrets/variables do not exist yet; this VM reports zero valid code-signing identities and no App Store Connect key directory.
+- **Result:** PASS for lane logic; BLOCKED for end-to-end promotion.
+- **Blocker and owner:** Hans owns the one-time setup — register the `self-hosted, macos, vkz-outpost` runner on the persistent Outpost, unlock its keychain with a Distribution identity, install the Admin-role `.p8`, and set `VKZ_ASC_KEY_ID`, `VKZ_ASC_ISSUER_ID`, `VKZ_SLACK_WEBHOOK_URL`, plus `VKZ_TESTFLIGHT_ENABLED`, `VKZ_MARKETING_VERSION`, `VKZ_BUNDLE_ID`, `VKZ_SLACK_CHANNEL_ID`.
+- **Next integration step:** merge the lane disabled, complete the one-time setup, then flip `VKZ_TESTFLIGHT_ENABLED` and observe one promotion end to end.
+- **Cut/deferred or risk change:** Tier 2 for KIL-38 stays open until OTA installation is observed on both phones.

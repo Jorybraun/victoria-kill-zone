@@ -150,6 +150,43 @@ Known gates the lane already clears:
 
 After upload, App Store Connect processes the build for a few minutes, then automatic distribution delivers it to the internal group; phones update through the TestFlight app. Record the observed install (device model and iOS version only, no identifiers) in [build-log.md](build-log.md).
 
+### Automated promotion on merge
+
+`.github/workflows/testflight.yml` promotes a merged commit without a manual run. The lane has two halves, because only the persistent Outpost holds signing material:
+
+1. **Gate (hosted `ubuntu-latest`).** It reacts to a completed `CI` `workflow_run` on `main`, and refuses to continue unless the repository variable `VKZ_TESTFLIGHT_ENABLED` is `true`, the completed run was the `CI` workflow for a `push` (never a pull-request run), CI concluded `success`, the run came from this repository's own `main`, and `scripts/release/promotion-gate.mjs` confirms the candidate SHA is still the exact current `main` SHA. A superseded candidate is skipped, not queued behind the newer one. The workflow's `concurrency` group `testflight` serializes promotions without cancelling an in-flight upload.
+2. **Promote (`self-hosted, macos, vkz-outpost`).** A self-hosted GitHub Actions runner registered on the persistent Outpost Mac checks out the promoted SHA, then runs `scripts/release/promote-testflight.mjs`, which archives and signs through `testflight-upload.sh`, polls App Store Connect to a terminal processing state with exponential backoff and a timeout, posts each state to `#pew-pew-releases`, and writes sanitized evidence.
+
+A hosted macOS runner is never a substitute for this runner: it has no login keychain, no Distribution identity, and no `.p8` key, so it cannot sign or upload. If the Outpost runner is offline, the promote job stays queued and no build ships — that is the intended fail-closed behaviour.
+
+The promotion freezes `CFBundleVersion` to the workflow run number rather than letting `manageAppVersionAndBuildNumber` assign it, reads the build number back out of the archive, and polls App Store Connect filtered on that exact marketing version and build number. Selecting "the newest build" instead would race a concurrent or unrelated upload. If the archived build number cannot be recovered, the lane fails instead of polling blindly.
+
+Sanitized status lines (`queued`, `archiving`, `uploaded`, `ready-for-testing`, `processing-failed`, `processing-invalid`, `processing-timeout`, `failed`) carry the short revision, marketing version, App Store Connect build number, and a redacted error only. `scripts/release/redact.mjs` strips URLs, key files, absolute paths, tokens, and device identifiers from anything the lane emits, so no message, log line, or evidence file can carry a webhook, a key, or a phone identifier. The evidence artifact `testflight-evidence-<sha>` records `physicalDeviceEvidence: not-claimed`; an OTA install observed on both phones is the only thing that closes that gap.
+
+One-time setup owned by the operator (never committed, never printed):
+
+- Register a self-hosted runner on the persistent Outpost Mac under the unprivileged worker account with the labels `self-hosted`, `macos`, and `vkz-outpost`, and run it as a user service so it holds the login keychain. Use a dedicated runner work directory outside the project checkout, and do not run it with `sudo`.
+- Unlock the login keychain for that account and confirm `security find-identity -v` lists an Apple Distribution identity.
+- Place `~/.appstoreconnect/private_keys/AuthKey_<key id>.p8` (Admin role key) as above.
+- Repository secrets: `VKZ_ASC_KEY_ID`, `VKZ_ASC_ISSUER_ID`, `VKZ_SLACK_WEBHOOK_URL`.
+- Repository variables: `VKZ_TESTFLIGHT_ENABLED`, `VKZ_MARKETING_VERSION`, `VKZ_BUNDLE_ID`, `VKZ_ASC_APP_ID` (optional; the lane resolves it from the bundle id), `VKZ_SLACK_CHANNEL_ID`.
+
+Verify the lane's logic without shipping anything:
+
+```bash
+node scripts/release/testflight-self-test.mjs
+bash scripts/release/self-test.sh
+```
+
+Lane recovery:
+
+- **Nothing promotes after a merge:** confirm `VKZ_TESTFLIGHT_ENABLED` is `true` and read the gate job's decision line. A `staleSha` skip is correct — the newest green revision promotes instead.
+- **Promote job queues forever:** the Outpost runner is offline. Restart it on the Outpost as the worker user; never reroute the job to a hosted macOS runner.
+- **Archive or signing fails:** unlock the login keychain, confirm the Distribution identity, then rerun `workflow_dispatch` on `main`.
+- **`processing-failed` / `processing-invalid`:** the upload reached Apple and was rejected. Fix the app on a branch and merge; do not retry the same revision.
+- **`processing-timeout`:** the upload succeeded but processing exceeded the timeout. Check App Store Connect directly; if it later turns valid, no rebuild is needed.
+- **No Slack status:** Slack is an observer, not a gate. Rotate `VKZ_SLACK_WEBHOOK_URL`; the promotion result stands in the evidence artifact.
+
 ## Permissions and connected devices
 
 Grant only what the worker task requires:
