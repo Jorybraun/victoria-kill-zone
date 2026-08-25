@@ -53,6 +53,8 @@ export type RejectReason =
   | "invalid_session"
   | "shooter_not_alive"
   | "shooter_disconnected"
+  | "out_of_arena"
+  | "location_stale"
   | "out_of_ammo"
   | "cooldown_active"
   | "invalid_target"
@@ -93,6 +95,14 @@ export interface PlayerState {
   respawnAt: number | null;
   lastSeenAt: number;
   joinedAt: number;
+  // Authoritative geofence state. `locationAt` is server receipt time of the
+  // last trusted sample; `capturedAtClient` never becomes authoritative.
+  latitude: number | null;
+  longitude: number | null;
+  headingDegrees: number | null;
+  locationAccuracyMeters: number | null;
+  locationAt: number | null;
+  outsideStreak: number;
 }
 
 /** A partial update the function layer applies with `ctx.db.patch`. */

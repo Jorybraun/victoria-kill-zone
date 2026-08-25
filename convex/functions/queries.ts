@@ -76,6 +76,7 @@ function snapshotMatch(match: Doc<"matches">): SnapshotMatch {
     code: match.code,
     centerLatitude: match.centerLatitude,
     centerLongitude: match.centerLongitude,
+    arenaCenterAt: match.arenaCenterAt ?? null,
   };
 }
 

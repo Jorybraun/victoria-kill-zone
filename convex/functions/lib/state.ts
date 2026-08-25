@@ -1,5 +1,6 @@
-import { ConvexError } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { normalizeMatchCode } from "../../domain/config.js";
+import type { ArenaGeometry } from "../../domain/geofence.js";
 import { authenticates } from "../../domain/session.js";
 import type { MatchPhase, MatchState, PlayerState, RejectReason } from "../../domain/types.js";
 import type { Doc, Id, MutationCtx, QueryCtx } from "./server.js";
@@ -29,6 +30,28 @@ export function toPlayerState(player: Doc<"players">): PlayerState {
     respawnAt: player.respawnAt,
     lastSeenAt: player.lastSeenAt,
     joinedAt: player.joinedAt,
+    latitude: player.latitude ?? null,
+    longitude: player.longitude ?? null,
+    headingDegrees: player.headingDegrees ?? null,
+    locationAccuracyMeters: player.locationAccuracyMeters ?? null,
+    locationAt: player.locationAt ?? null,
+    outsideStreak: player.outsideStreak ?? 0,
+  };
+}
+
+/**
+ * Arena geometry for geofence evaluation. `null` for a legacy centerless
+ * match: its fence is unenforceable, so heartbeats never derive `inside` and
+ * debug fire stays ungated per the migration rule.
+ */
+export function arenaGeometryOf(match: Doc<"matches">): ArenaGeometry | null {
+  if (match.arenaCenterAt === undefined || match.arenaCenterAt === null) {
+    return null;
+  }
+  return {
+    latitude: match.centerLatitude,
+    longitude: match.centerLongitude,
+    radiusMeters: match.radiusMeters,
   };
 }
 
@@ -46,6 +69,15 @@ export function toMatchState(match: Doc<"matches">): MatchState {
   };
 }
 
+/** Shared wire validator for a phase0.v1 LocationSample argument. */
+export const locationSampleValidator = v.object({
+  latitude: v.number(),
+  longitude: v.number(),
+  accuracyMeters: v.number(),
+  capturedAtClient: v.number(),
+  headingDegrees: v.optional(v.number()),
+});
+
 export type BackendErrorCode =
   | "INVALID_DISPLAY_NAME"
   | "INVALID_CODE"
@@ -59,6 +91,10 @@ export type BackendErrorCode =
   | "MATCH_NOT_RUNNING"
   | "CONNECTION_STALE"
   | "SHOOTER_NOT_ALIVE"
+  | "OUT_OF_ARENA"
+  | "LOCATION_STALE"
+  | "INVALID_ARENA"
+  | "INVALID_LOCATION"
   | "OUT_OF_AMMO"
   | "FIRE_COOLDOWN"
   | "INVALID_TARGET"
@@ -79,6 +115,8 @@ const ERROR_BY_REJECT_REASON: Record<RejectReason, BackendErrorCode> = {
   invalid_session: "INVALID_SESSION",
   shooter_not_alive: "SHOOTER_NOT_ALIVE",
   shooter_disconnected: "CONNECTION_STALE",
+  out_of_arena: "OUT_OF_ARENA",
+  location_stale: "LOCATION_STALE",
   out_of_ammo: "OUT_OF_AMMO",
   cooldown_active: "FIRE_COOLDOWN",
   invalid_target: "INVALID_TARGET",

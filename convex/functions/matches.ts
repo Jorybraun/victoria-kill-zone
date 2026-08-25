@@ -7,6 +7,11 @@ import {
   normalizeMatchCode,
 } from "../domain/config.js";
 import {
+  classifyLocationSample,
+  isWellFormedLocationSample,
+  type LocationSample,
+} from "../domain/geofence.js";
+import {
   matchCodeFromBytes,
   planActivateMatch,
   planCreateMatch,
@@ -22,6 +27,7 @@ import {
   fail,
   listPlayers,
   loadMatchByCode,
+  locationSampleValidator,
   toMatchState,
   toPlayerState,
 } from "./lib/state.js";
@@ -52,20 +58,26 @@ export const create = mutation({
   args: {
     displayName: v.string(),
     arenaRadiusMeters: v.number(),
+    // phase0.v1 arenaCenter. Optional during the migration window: the smaller
+    // G2 create shape stays accepted, but a match created without a valid
+    // center can never use shots:fire (its players stay LOCATION_STALE).
+    arenaCenter: v.optional(locationSampleValidator),
   },
   returns: playerSession,
   handler: async (ctx, args) => {
     const displayName = displayNameOrFail(args.displayName);
     const now = Date.now();
+    const center = validatedArenaCenter(args.arenaCenter, now);
     const code = await allocateMatchCode(ctx);
     const sessionSecret = sessionSecretFromBytes(randomBytes(32));
     const plan = planCreateMatch(
       {
         displayName,
-        // G2 has no center argument. Zero is an internal demo origin and is never
-        // exposed by the public spectator projection.
-        centerLatitude: 0,
-        centerLongitude: 0,
+        // Without a phase0 arenaCenter, zero is an internal demo origin and is
+        // never exposed by the public spectator projection.
+        centerLatitude: center === null ? 0 : center.latitude,
+        centerLongitude: center === null ? 0 : center.longitude,
+        hasArenaCenter: center !== null,
         radiusMeters: args.arenaRadiusMeters,
         now,
       },
@@ -122,7 +134,11 @@ export const join = mutation({
 
     const now = Date.now();
     const players = await listPlayers(ctx, match._id);
-    const plan = planJoinMatch(match, players.length, { displayName, now });
+    const plan = planJoinMatch(match, players.length, {
+      displayName,
+      hasArenaCenter: match.arenaCenterAt !== undefined && match.arenaCenterAt !== null,
+      now,
+    });
     if (!plan.ok) {
       fail(plan.reason);
     }
@@ -325,6 +341,29 @@ function displayNameOrFail(value: string): string {
     fail("INVALID_DISPLAY_NAME");
   }
   return trimmed;
+}
+
+/**
+ * phase0.v1 arenaCenter validation: a malformed sample (non-finite values,
+ * out-of-range coordinates, negative accuracy) throws INVALID_LOCATION; a
+ * well-formed but untrusted sample (accuracy above 20 m or an unacceptable
+ * client-capture age/skew) cannot anchor an arena and throws INVALID_ARENA.
+ * Both are thrown before any match, player, or event is written.
+ */
+function validatedArenaCenter(
+  sample: LocationSample | undefined,
+  now: number,
+): LocationSample | null {
+  if (sample === undefined) {
+    return null;
+  }
+  if (!isWellFormedLocationSample(sample)) {
+    fail("INVALID_LOCATION");
+  }
+  if (classifyLocationSample(sample, now) !== "trusted") {
+    fail("INVALID_ARENA");
+  }
+  return sample;
 }
 
 async function allocateMatchCode(ctx: MutationCtx): Promise<string> {

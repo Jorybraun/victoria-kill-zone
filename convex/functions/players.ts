@@ -1,41 +1,77 @@
 import { v } from "convex/values";
+import {
+  applyLocationSample,
+  isWellFormedLocationSample,
+  locationStateFrom,
+  type LocationState,
+} from "../domain/geofence.js";
 import { planRespawn } from "../domain/respawn.js";
-import { internalMutation, mutation } from "./lib/server.js";
+import { internalMutation, mutation, type Doc } from "./lib/server.js";
 import {
   appendEvent,
+  arenaGeometryOf,
   authenticatePlayer,
+  fail,
+  locationSampleValidator,
   toMatchState,
   toPlayerState,
 } from "./lib/state.js";
 
-const locationSample = v.object({
-  latitude: v.number(),
-  longitude: v.number(),
-  accuracyMeters: v.number(),
-  capturedAtClient: v.number(),
-  headingDegrees: v.optional(v.number()),
-});
-
-/** Presence heartbeat; location is accepted for forward compatibility only. */
+/**
+ * Presence heartbeat and the only writer of authoritative location state. A
+ * supplied sample is validated (malformed shapes throw INVALID_LOCATION before
+ * any write) and evaluated by the frozen geofence rules against this match's
+ * arena; the resulting state overwrites only this player's current
+ * match-scoped location fields. `locationAt` is the server receipt time.
+ */
 export const heartbeat = mutation({
   args: {
     matchId: v.id("matches"),
     playerId: v.id("players"),
     sessionSecret: v.string(),
-    location: v.optional(locationSample),
+    location: v.optional(locationSampleValidator),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const player = await authenticatePlayer(ctx, args.matchId, args.playerId, args.sessionSecret);
     const now = Date.now();
+
+    let locationPatch: Partial<Doc<"players">> = {};
+    if (args.location !== undefined) {
+      if (!isWellFormedLocationSample(args.location)) {
+        fail("INVALID_LOCATION");
+      }
+      const match = await ctx.db.get(args.matchId);
+      const next = applyLocationSample(
+        match === null ? null : arenaGeometryOf(match),
+        locationStateFrom(toPlayerState(player)),
+        args.location,
+        now,
+      );
+      locationPatch = locationFieldsPatch(next);
+    }
+
     await ctx.db.patch(player._id, {
       connected: true,
       lastSeenAt: now,
       ...(player.lifeState === "disconnected" && player.health > 0 ? { lifeState: "alive" as const } : {}),
+      ...locationPatch,
     });
     return null;
   },
 });
+
+function locationFieldsPatch(state: LocationState): Partial<Doc<"players">> {
+  return {
+    arenaState: state.arenaState,
+    latitude: state.latitude,
+    longitude: state.longitude,
+    headingDegrees: state.headingDegrees,
+    locationAccuracyMeters: state.accuracyMeters,
+    locationAt: state.locationAt,
+    outsideStreak: state.outsideStreak,
+  };
+}
 
 /** Restore a killed player exactly once after the server-owned delay. */
 export const respawn = internalMutation({

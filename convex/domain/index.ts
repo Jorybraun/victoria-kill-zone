@@ -1,5 +1,6 @@
 export * from "./config.js";
 export * from "./fire.js";
+export * from "./geofence.js";
 export * from "./lifecycle.js";
 export * from "./match.js";
 export * from "./respawn.js";

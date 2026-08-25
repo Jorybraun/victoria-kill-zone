@@ -17,6 +17,8 @@ function snapshotMatch(overrides: Partial<SnapshotMatch> = {}): SnapshotMatch {
     code: "AB12CD",
     centerLatitude: 48.4284,
     centerLongitude: -123.3656,
+    // Legacy centerless (G2 create shape) by default; geofenced tests override.
+    arenaCenterAt: null,
     ...overrides,
   };
 }
@@ -116,5 +118,81 @@ describe("contract snapshots", () => {
     }
     expect(spectator).not.toMatch(/centerLatitude|centerLongitude|latitude|longitude|lastSeenAt/);
     expect(phone).toContain("lastSeenAt");
+  });
+
+  describe("geofenced location projection", () => {
+    // Arena centred at the equator/prime meridian: 0.000089932° of longitude
+    // is ~10 m east; matches the frozen geofence.v1 fixture geometry.
+    const geofenced = () => snapshotMatch({ centerLatitude: 0, centerLongitude: 0, arenaCenterAt: T0 });
+    const now = T0 + 1_000;
+    const located = () =>
+      player("host", {
+        arenaState: "inside",
+        latitude: 0,
+        longitude: 0.000089932,
+        headingDegrees: 90,
+        locationAccuracyMeters: 5,
+        locationAt: now - 500,
+      });
+
+    it("projects raw location only on the authenticated phone shape", () => {
+      const snapshot = buildMatchSnapshot(geofenced(), "host", [located(), player("guest")], [], now);
+
+      expect(snapshot.players[0]).toMatchObject({
+        arenaState: "inside",
+        latitude: 0,
+        longitude: 0.000089932,
+        headingDegrees: 90,
+        locationAccuracyMeters: 5,
+        locationAt: now - 500,
+      });
+      // Players with no trusted sample omit every location field.
+      expect(snapshot.players[1]).not.toHaveProperty("latitude");
+      expect(snapshot.players[1]).not.toHaveProperty("locationAt");
+    });
+
+    it("exposes only sanitized arena-relative metres on the public spectator projection", () => {
+      const snapshot = buildSpectatorSnapshot(geofenced(), [located(), player("guest")], [], now);
+
+      expect(snapshot.players[0]?.arenaPosition).toEqual({
+        eastMeters: 10,
+        northMeters: 0,
+        headingDegrees: 90,
+      });
+      expect(snapshot.players[1]?.arenaPosition).toBeUndefined();
+
+      const serialized = JSON.stringify(snapshot);
+      // Never raw coordinates, accuracy, location timestamps, history, or
+      // session/device/capability data — only arena-relative east/north metres.
+      expect(serialized).not.toMatch(
+        /"latitude"|"longitude"|"locationAccuracyMeters"|"accuracyMeters"|"locationAt"|"capturedAtClient"|"lastSeenAt"|centerLatitude|centerLongitude|sessionHash|deviceIdHash|sessionSecret|capabilit/,
+      );
+    });
+
+    it("projects authoritative staleness decay for a geofenced match on both views", () => {
+      const stale = player("host", {
+        arenaState: "inside",
+        latitude: 0,
+        longitude: 0.000089932,
+        locationAccuracyMeters: 5,
+        locationAt: T0,
+      });
+      const later = T0 + 6_000;
+
+      const phone = buildMatchSnapshot(geofenced(), "host", [stale, player("guest")], [], later);
+      const spectator = buildSpectatorSnapshot(geofenced(), [stale, player("guest")], [], later);
+      expect(phone.players[0]?.arenaState).toBe("uncertain");
+      expect(spectator.players[0]?.arenaState).toBe("uncertain");
+
+      // Compatibility: a legacy centerless match (existing iOS clients create
+      // matches without arenaCenter) keeps its stored pre-geofence state.
+      const legacy = buildSpectatorSnapshot(
+        snapshotMatch({ arenaCenterAt: null }),
+        [stale, player("guest")],
+        [],
+        later,
+      );
+      expect(legacy.players[0]?.arenaState).toBe("inside");
+    });
   });
 });

@@ -7,9 +7,11 @@ import {
   type FirePlan,
   type FireRequest,
 } from "../domain/fire.js";
+import { fireLocationGate, locationStateFrom, type FireLocationGate } from "../domain/geofence.js";
 import { mutation, type Doc, type Id, type MutationCtx } from "./lib/server.js";
 import {
   appendEvent,
+  arenaGeometryOf,
   authenticatePlayer,
   errorCodeForRejectReason,
   fail,
@@ -110,12 +112,18 @@ export const debugFire = mutation({
       poseConfidence: 1,
       firedAtClient: now,
     };
+    // Migration rule: debug fire is arena-gated only when this match recorded
+    // a validated arenaCenter. A legacy centerless match (current playable
+    // iOS build, which never sends location) keeps working exactly as today.
+    const locationGate =
+      arenaGeometryOf(match) === null ? null : shooterLocationGate(shooter, now);
     const plan = resolveDebugFire(
       toMatchState(match),
       toPlayerState(shooter),
       opponent === null ? null : toPlayerState(opponent),
       request,
       now,
+      locationGate,
     );
 
     const eventId = await persistPlan(ctx, match, shooter, opponent, request, plan, "debug", "debug", true);
@@ -186,12 +194,16 @@ export const fire = mutation({
     const players = await listPlayers(ctx, match._id);
     const opponent = players.find((player) => player._id !== shooter._id) ?? null;
     const now = Date.now();
+    // shots:fire is always geofence-gated. On a centerless match a shooter can
+    // never establish a trusted inside state, so fire stays LOCATION_STALE per
+    // the contract: "a match without a valid center cannot use shots:fire".
     const plan = resolveFire(
       toMatchState(match),
       toPlayerState(shooter),
       opponent === null ? null : toPlayerState(opponent),
       request,
       now,
+      shooterLocationGate(shooter, now),
     );
     const eventId = await persistPlan(ctx, match, shooter, opponent, request, plan, "fire", fingerprint, false);
     return fireResult(plan, args.clientShotId, eventId);
@@ -375,8 +387,22 @@ function conflictResult(clientShotId: string, shooterAmmo: number): FireWireResu
   };
 }
 
+/** Authoritative geofence verdict for a shooter at fire time. */
+function shooterLocationGate(shooter: Doc<"players">, now: number): FireLocationGate | null {
+  return fireLocationGate(locationStateFrom(toPlayerState(shooter)), now);
+}
+
 function debugErrorCode(reason: NonNullable<FirePlan["result"]["rejectReason"]>): BackendErrorCode {
-  return reason === "shooter_disconnected" ? "CONNECTION_STALE" : "MATCH_NOT_RUNNING";
+  switch (reason) {
+    case "shooter_disconnected":
+      return "CONNECTION_STALE";
+    case "out_of_arena":
+      return "OUT_OF_ARENA";
+    case "location_stale":
+      return "LOCATION_STALE";
+    default:
+      return "MATCH_NOT_RUNNING";
+  }
 }
 
 function validVector(vector: number[] | undefined): boolean {

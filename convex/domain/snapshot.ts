@@ -1,3 +1,9 @@
+import {
+  arenaRelativePosition,
+  effectiveArenaState,
+  locationStateFrom,
+  type ArenaRelativePosition,
+} from "./geofence.js";
 import { hasExpired } from "./lifecycle.js";
 import type {
   ArenaState,
@@ -38,9 +44,27 @@ export interface PlayerSnapshot {
   lastSeenAt: number;
   lastShotAt?: number;
   respawnAt?: number;
+  latitude?: number;
+  longitude?: number;
+  headingDegrees?: number;
+  locationAccuracyMeters?: number;
+  locationAt?: number;
 }
 
-export type SpectatorPlayerSnapshot = Omit<PlayerSnapshot, "lastSeenAt">;
+/**
+ * The public spectator projection never carries raw coordinates, accuracy,
+ * location timestamps, or presence timestamps — only the sanitized
+ * arena-relative position in metres.
+ */
+export type SpectatorPlayerSnapshot = Omit<
+  PlayerSnapshot,
+  | "lastSeenAt"
+  | "latitude"
+  | "longitude"
+  | "headingDegrees"
+  | "locationAccuracyMeters"
+  | "locationAt"
+> & { arenaPosition?: ArenaRelativePosition };
 
 export interface EventSnapshot {
   id: string;
@@ -75,6 +99,8 @@ export interface SnapshotMatch extends MatchState {
   code: string;
   centerLatitude: number;
   centerLongitude: number;
+  /** Non-null only when a validated phase0 arenaCenter was captured. */
+  arenaCenterAt: number | null;
 }
 
 export interface SnapshotEvent {
@@ -105,7 +131,7 @@ export function buildMatchSnapshot(
       radiusMeters: match.radiusMeters,
     },
     localPlayerId,
-    players: orderedPlayers(players).map(projectPlayer),
+    players: orderedPlayers(players).map((player) => projectPlayer(player, match, now)),
     events: orderedEvents(events).map(projectEvent),
   };
 }
@@ -121,7 +147,7 @@ export function buildSpectatorSnapshot(
     serverNow: now,
     match: projectMatch(match, now),
     arena: { radiusMeters: match.radiusMeters },
-    players: orderedPlayers(players).map(projectSpectatorPlayer),
+    players: orderedPlayers(players).map((player) => projectSpectatorPlayer(player, match, now)),
     events: orderedEvents(events).map(projectEvent),
   };
 }
@@ -139,7 +165,19 @@ function projectMatch(match: SnapshotMatch, now: number): MatchSummarySnapshot {
   };
 }
 
-function projectPlayer(player: PlayerState): PlayerSnapshot {
+/**
+ * Authoritative arena state at `now`. A geofenced match (recorded arenaCenter)
+ * projects the evaluated effective state so grace and staleness decay are
+ * visible without waiting for the next heartbeat; a legacy centerless match
+ * keeps its stored pre-geofence state exactly.
+ */
+function projectedArenaState(player: PlayerState, match: SnapshotMatch, now: number): ArenaState {
+  return match.arenaCenterAt === null
+    ? player.arenaState
+    : effectiveArenaState(locationStateFrom(player), now);
+}
+
+function projectPlayer(player: PlayerState, match: SnapshotMatch, now: number): PlayerSnapshot {
   return {
     id: player.id,
     displayName: player.displayName,
@@ -155,14 +193,27 @@ function projectPlayer(player: PlayerState): PlayerSnapshot {
     shotsHit: player.shotsHit,
     headshots: player.headshots,
     lifeState: player.lifeState,
-    arenaState: player.arenaState,
+    arenaState: projectedArenaState(player, match, now),
     lastSeenAt: player.lastSeenAt,
     ...(player.lastShotAt === null ? {} : { lastShotAt: player.lastShotAt }),
     ...(player.respawnAt === null ? {} : { respawnAt: player.respawnAt }),
+    ...(player.latitude === null ? {} : { latitude: player.latitude }),
+    ...(player.longitude === null ? {} : { longitude: player.longitude }),
+    ...(player.headingDegrees === null ? {} : { headingDegrees: player.headingDegrees }),
+    ...(player.locationAccuracyMeters === null
+      ? {}
+      : { locationAccuracyMeters: player.locationAccuracyMeters }),
+    ...(player.locationAt === null ? {} : { locationAt: player.locationAt }),
   };
 }
 
-function projectSpectatorPlayer(player: PlayerState): SpectatorPlayerSnapshot {
+function projectSpectatorPlayer(
+  player: PlayerState,
+  match: SnapshotMatch,
+  now: number,
+): SpectatorPlayerSnapshot {
+  const hasPosition =
+    match.arenaCenterAt !== null && player.latitude !== null && player.longitude !== null;
   return {
     id: player.id,
     displayName: player.displayName,
@@ -178,9 +229,19 @@ function projectSpectatorPlayer(player: PlayerState): SpectatorPlayerSnapshot {
     shotsHit: player.shotsHit,
     headshots: player.headshots,
     lifeState: player.lifeState,
-    arenaState: player.arenaState,
+    arenaState: projectedArenaState(player, match, now),
     ...(player.lastShotAt === null ? {} : { lastShotAt: player.lastShotAt }),
     ...(player.respawnAt === null ? {} : { respawnAt: player.respawnAt }),
+    ...(hasPosition && player.latitude !== null && player.longitude !== null
+      ? {
+          arenaPosition: arenaRelativePosition(
+            { latitude: match.centerLatitude, longitude: match.centerLongitude },
+            player.latitude,
+            player.longitude,
+            player.headingDegrees,
+          ),
+        }
+      : {}),
   };
 }
 

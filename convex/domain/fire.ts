@@ -1,4 +1,5 @@
 import { GAMEPLAY, damageForZone } from "./config.js";
+import type { FireLocationGate } from "./geofence.js";
 import { hasExpired } from "./lifecycle.js";
 import type {
   HitZone,
@@ -63,6 +64,9 @@ export interface FirePlan {
 /**
  * Resolve one markerless fire claim against server-owned state. Authentication
  * and the idempotency lookup happen in the Convex adapter before this planner.
+ * `locationGate` is the authoritative geofence verdict computed by the adapter
+ * (`fireLocationGate`); it is checked after presence/life and before ammo per
+ * the contract ordering, and a gated shot changes no gameplay state.
  */
 export function resolveFire(
   match: Pick<MatchState, "status" | "phase" | "endsAt">,
@@ -70,6 +74,7 @@ export function resolveFire(
   opponent: PlayerState | null,
   request: FireRequest,
   now: number,
+  locationGate: FireLocationGate | null = null,
 ): FirePlan {
   if (match.status !== "active" || match.phase !== "running") {
     return reject(shooter, request, "match_not_active");
@@ -85,6 +90,10 @@ export function resolveFire(
 
   if (shooter.lifeState !== "alive") {
     return reject(shooter, request, "shooter_not_alive");
+  }
+
+  if (locationGate !== null) {
+    return reject(shooter, request, locationGate);
   }
 
   if (shooter.ammo <= 0) {
@@ -213,13 +222,18 @@ export function resolveFire(
   };
 }
 
-/** G2 debug fire is a trusted torso claim against the only opponent. */
+/**
+ * G2 debug fire is a trusted torso claim against the only opponent. The
+ * adapter passes a `locationGate` only for a match with a recorded arenaCenter;
+ * a legacy centerless match keeps the ungated G2 behavior.
+ */
 export function resolveDebugFire(
   match: Pick<MatchState, "status" | "phase" | "endsAt">,
   shooter: PlayerState,
   opponent: PlayerState | null,
   request: FireRequest,
   now: number,
+  locationGate: FireLocationGate | null = null,
 ): FirePlan {
   const targetId = opponent?.id ?? request.targetId;
   return resolveFire(
@@ -233,6 +247,7 @@ export function resolveDebugFire(
       poseConfidence: 1,
     },
     now,
+    locationGate,
   );
 }
 
