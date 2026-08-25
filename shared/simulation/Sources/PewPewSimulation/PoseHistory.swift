@@ -20,6 +20,13 @@ public enum TrackingState: String, Equatable, Sendable, Codable {
   case lost
 }
 
+public enum PoseResolution: Equatable, Sendable {
+  case exact(PoseSample)
+  case interpolated(position: Vector3, earlier: PoseSample, later: PoseSample)
+  case trailingEdge(PoseSample)
+  case unavailable
+}
+
 /// Fixed-capacity, monotonic ring buffer of pose samples for one player.
 /// Samples that do not advance the clock are dropped so replaying the same
 /// input log always reproduces the same buffer contents.
@@ -76,5 +83,42 @@ public struct PoseHistoryRingBuffer: Equatable, Sendable {
       }
     }
     return best
+  }
+
+  /// Resolves a pose against the nearest stored samples on either side of a
+  /// match-clock instant without depending on the buffer's physical layout.
+  public func resolvePose(atMs timestampMs: Int64) -> PoseResolution {
+    var earlier: PoseSample?
+    var later: PoseSample?
+
+    for offset in 0..<storedCount {
+      let index = (nextIndex - storedCount + offset + 2 * capacity) % capacity
+      let candidate = samples[index]
+      if candidate.timestampMs <= timestampMs,
+        earlier == nil || candidate.timestampMs > earlier!.timestampMs
+      {
+        earlier = candidate
+      }
+      if candidate.timestampMs >= timestampMs,
+        later == nil || candidate.timestampMs < later!.timestampMs
+      {
+        later = candidate
+      }
+    }
+
+    guard let earlier else {
+      return .unavailable
+    }
+    if earlier.timestampMs == timestampMs {
+      return .exact(earlier)
+    }
+    guard let later else {
+      return .trailingEdge(earlier)
+    }
+
+    let alpha = Double(timestampMs - earlier.timestampMs)
+      / Double(later.timestampMs - earlier.timestampMs)
+    let position = earlier.position + (later.position - earlier.position) * alpha
+    return .interpolated(position: position, earlier: earlier, later: later)
   }
 }

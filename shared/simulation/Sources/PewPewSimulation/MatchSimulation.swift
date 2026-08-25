@@ -39,14 +39,14 @@ public struct SimulationPlayerState: Equatable, Sendable {
   }
 }
 
-/// One element of the deterministic input log. Inputs inside a tick are applied
-/// strictly in array order; that order is part of the recorded log.
+/// One element of a tick's input set. Inputs are canonicalized by
+/// `MatchSimulation.advance(inputs:)`, so arrival order is not part of the log.
 public enum SimulationInput: Equatable, Sendable {
   case poseSample(SimulationPlayerID, PoseSample)
   case fire(ShotClaim)
 }
 
-public enum SimulationEvent: Equatable, Sendable {
+public enum SimulationEvent: Equatable, Sendable, Codable {
   case verdict(ShotVerdictRecord)
   case playerKilled(target: SimulationPlayerID, by: SimulationPlayerID, atTick: Int64)
 }
@@ -60,8 +60,8 @@ public enum SimulationSetupError: Error, Equatable {
 /// instance exists per match; it owns the fixed-tick match clock, the player set
 /// (2–4 members, match.v2 vocabulary — never exactly two), per-player pose-history
 /// ring buffers, and bounded-rewind hitscan verdicts. It reads no wall clock and
-/// iterates players only in join order, so identical input logs always produce
-/// identical event sequences.
+/// canonicalizes each tick's input set, so identical input sets always produce
+/// identical event sequences regardless of arrival order.
 public struct MatchSimulation: Equatable, Sendable {
   public let configuration: SimulationConfiguration
   public private(set) var tick: Int64
@@ -108,27 +108,68 @@ public struct MatchSimulation: Equatable, Sendable {
     poseHistories[id]
   }
 
-  /// Advances the match clock by one tick, then applies the tick's inputs in
-  /// array order. Fire claims are evaluated against the post-advance clock.
+  /// Advances the match clock by one tick, canonicalizes the input set, applies
+  /// all poses, then evaluates all fire claims in canonical order against the
+  /// post-advance clock. A canonically-first lethal claim applies
+  /// `min(hitDamage, remainingHealth)`, marks its target dead, credits one kill,
+  /// and emits `playerKilled`; later same-tick claims on that target are
+  /// rejected as `targetNotAlive`.
   @discardableResult
   public mutating func advance(inputs: [SimulationInput] = []) -> [SimulationEvent] {
     tick += 1
-    var events: [SimulationEvent] = []
-    for input in inputs {
-      switch input {
-      case .poseSample(let playerID, let sample):
-        poseHistories[playerID]?.record(sample)
-
-      case .fire(let claim):
-        events.append(contentsOf: evaluate(claim))
+    let canonicalInputs = inputs.sorted { lhs, rhs in
+      switch (lhs, rhs) {
+      case (.poseSample(let leftPlayer, let leftSample), .poseSample(let rightPlayer, let rightSample)):
+        return (
+          leftPlayer.rawValue,
+          leftSample.timestampMs,
+          leftSample.position.x,
+          leftSample.position.y,
+          leftSample.position.z,
+          leftSample.tracking.rawValue
+        ) < (
+          rightPlayer.rawValue,
+          rightSample.timestampMs,
+          rightSample.position.x,
+          rightSample.position.y,
+          rightSample.position.z,
+          rightSample.tracking.rawValue
+        )
+      case (.fire(let left), .fire(let right)):
+        return (
+          left.firedAtMs,
+          left.shooterID.rawValue,
+          left.targetID.rawValue,
+          left.shotID
+        ) < (
+          right.firedAtMs,
+          right.shooterID.rawValue,
+          right.targetID.rawValue,
+          right.shotID
+        )
+      case (.poseSample, .fire):
+        return true
+      case (.fire, .poseSample):
+        return false
       }
+    }
+
+    var events: [SimulationEvent] = []
+    for input in canonicalInputs {
+      guard case .poseSample(let playerID, let sample) = input else { continue }
+      poseHistories[playerID]?.record(sample)
+    }
+    for input in canonicalInputs {
+      guard case .fire(let claim) = input else { continue }
+      events.append(contentsOf: evaluate(claim))
     }
     return events
   }
 
   /// Bounded-rewind hitscan. Checks run in a fixed order so a claim that fails
   /// several rules always reports the same reason:
-  /// membership → life states → rewind cap → tracking → pose age → separation
+  /// membership → life states → rewind cap → tracking of latest samples → pose
+  /// resolution (availability, tracking, age, and bracket gap) → separation
   /// → range → ray-vs-sphere geometry.
   private mutating func evaluate(_ claim: ShotClaim) -> [SimulationEvent] {
     let now = clockMs
@@ -168,16 +209,36 @@ public struct MatchSimulation: Equatable, Sendable {
     else {
       return rejected(.trackingLost)
     }
-    guard let rewoundPose = poseHistories[claim.targetID]?.sample(atOrBefore: claim.firedAtMs),
-      claim.firedAtMs - rewoundPose.timestampMs <= SimulationConstants.maxPoseAgeMilliseconds
-    else {
+    guard let poseResolution = poseHistories[claim.targetID]?.resolvePose(atMs: claim.firedAtMs) else {
       return rejected(.poseTooOld)
     }
-    guard rewoundPose.tracking == .normal else {
-      return rejected(.trackingLost)
+
+    let rewoundPosition: Vector3
+    switch poseResolution {
+    case .unavailable:
+      return rejected(.poseTooOld)
+    case .exact(let sample), .trailingEdge(let sample):
+      guard sample.tracking == .normal else {
+        return rejected(.trackingLost)
+      }
+      guard claim.firedAtMs - sample.timestampMs <= SimulationConstants.maxPoseAgeMilliseconds else {
+        return rejected(.poseTooOld)
+      }
+      rewoundPosition = sample.position
+    case .interpolated(let position, let earlier, let later):
+      guard earlier.tracking == .normal, later.tracking == .normal else {
+        return rejected(.trackingLost)
+      }
+      guard claim.firedAtMs - earlier.timestampMs <= SimulationConstants.maxPoseAgeMilliseconds else {
+        return rejected(.poseTooOld)
+      }
+      guard later.timestampMs - earlier.timestampMs <= SimulationConstants.maxPoseAgeMilliseconds else {
+        return rejected(.poseTooOld)
+      }
+      rewoundPosition = position
     }
 
-    let separation = claim.origin.distance(to: rewoundPose.position)
+    let separation = claim.origin.distance(to: rewoundPosition)
     guard separation >= SimulationConstants.minimumSeparationMeters else {
       return rejected(.targetTooClose)
     }
@@ -191,7 +252,7 @@ public struct MatchSimulation: Equatable, Sendable {
       rayIntersectsSphere(
         origin: claim.origin,
         direction: direction,
-        center: rewoundPose.position,
+        center: rewoundPosition,
         radius: SimulationConstants.proxyRadiusMeters
       )
     else {
