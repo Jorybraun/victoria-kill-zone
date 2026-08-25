@@ -481,7 +481,7 @@
             "damageDealt": 100,
             "shotsFired": 3,
             "shotsHit": 2,
-            "headshots": 0,
+            "headshots": 1,
             "lifeState": "alive",
             "arenaState": "inside",
             "lastSeenAt": 2299100
