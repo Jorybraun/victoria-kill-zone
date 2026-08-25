@@ -124,6 +124,32 @@ Return: commit SHA, GitHub PR URL, validation output, and any remaining blocker.
 
 After handoff, let Devin/Outpost create its branch and pull request on GitHub. CI validates the PR; it does not dispatch Devin.
 
+## TestFlight delivery lane (KIL-38)
+
+The lane turns a merged commit into an over-the-air install on enrolled phones with no cable. It was first rehearsed on 2026-08-24.
+
+Prerequisites, done once per operator machine:
+
+- An App Store Connect API key with the **Admin** role. Cloud signing (automatic Distribution certificate and App Store profile management) fails with an App Manager key.
+- The `.p8` key file at `~/.appstoreconnect/private_keys/AuthKey_<key id>.p8` with `700`/`600` permissions. The key file never enters the repository, chat, logs, or process arguments.
+- The app record and an **Internal Testing** group with automatic distribution in App Store Connect; testers must be team members who accepted their invite.
+
+Run from the repository root:
+
+```bash
+VKZ_ASC_KEY_ID=<key id> VKZ_ASC_ISSUER_ID=<issuer id> \
+  bash scripts/release/testflight-upload.sh
+```
+
+The script archives the `VictoriaKillZone` scheme for `generic/platform=iOS`, exports with `method: app-store-connect` and `destination: upload`, lets App Store Connect manage the build number (`manageAppVersionAndBuildNumber`), and prints sanitized evidence (commit SHA, marketing version, scheme). The key id and issuer id are identifiers, not credentials; the private key is read only from the key directory.
+
+Known gates the lane already clears:
+
+- **Export compliance:** `ITSAppUsesNonExemptEncryption` is `false` in the app Info.plist, so uploads do not stall on the encryption question.
+- **App icon:** App Store Connect rejects icon-less packages (errors 90022/90713); the asset catalog satisfies this.
+
+After upload, App Store Connect processes the build for a few minutes, then automatic distribution delivers it to the internal group; phones update through the TestFlight app. Record the observed install (device model and iOS version only, no identifiers) in [build-log.md](build-log.md).
+
 ## Permissions and connected devices
 
 Grant only what the worker task requires:
