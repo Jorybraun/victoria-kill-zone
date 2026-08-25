@@ -55,6 +55,9 @@ export default defineSchema({
     hostPlayerId: v.union(v.id("players"), v.null()),
     centerLatitude: v.number(),
     centerLongitude: v.number(),
+    // Receipt time of a validated phase0 arenaCenter sample. Absent/null on
+    // legacy centerless (G2 create shape) matches, which stay geofence-exempt.
+    arenaCenterAt: v.optional(nullableNumber),
     radiusMeters: v.number(),
     maxPlayers: v.number(),
     durationMs: v.number(),
@@ -97,6 +100,14 @@ export default defineSchema({
     respawnAt: nullableNumber,
     lastSeenAt: v.number(),
     joinedAt: v.number(),
+    // Authoritative geofence state; locationAt is server receipt time of the
+    // last trusted sample. Raw client timestamps are never stored.
+    latitude: v.optional(nullableNumber),
+    longitude: v.optional(nullableNumber),
+    headingDegrees: v.optional(nullableNumber),
+    locationAccuracyMeters: v.optional(nullableNumber),
+    locationAt: v.optional(nullableNumber),
+    outsideStreak: v.optional(v.number()),
   })
     .index("by_match", ["matchId"])
     .index("by_match_and_device", ["matchId", "deviceIdHash"]),

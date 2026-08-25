@@ -3,9 +3,11 @@ import { GAMEPLAY, ZONE_DAMAGE } from "../domain/config.js";
 import {
   fireClaimFingerprint,
   replayResult,
+  resolveDebugFire,
   resolveFire,
   type FireRequest,
 } from "../domain/fire.js";
+import type { FireLocationGate } from "../domain/geofence.js";
 import type { PlayerState } from "../domain/types.js";
 import { match, player, T0 } from "./factories.js";
 
@@ -213,5 +215,100 @@ describe("debugFire authority", () => {
 
     const dry = resolveFire(match(), shooter, target, request({ clientShotId: "shot-9" }), now);
     expect(dry.result.rejectReason).toBe("out_of_ammo");
+  });
+});
+
+describe("geofence fire gate", () => {
+  const now = T0 + 1_000;
+
+  function gatedFire(gate: FireLocationGate | null, overrides: Parameters<typeof fire>[0] = {}) {
+    return resolveFire(
+      match(overrides.matchOverrides),
+      player("host", overrides.shooter),
+      player("guest", overrides.target),
+      request(overrides.request),
+      overrides.now ?? now,
+      gate,
+    );
+  }
+
+  it("rejects out-of-arena and stale shooters with zero gameplay change", () => {
+    for (const [gate, reason] of [
+      ["out_of_arena", "out_of_arena"],
+      ["location_stale", "location_stale"],
+    ] as const) {
+      const plan = gatedFire(gate);
+
+      expect(plan.result).toMatchObject({
+        accepted: false,
+        outcome: "rejected",
+        damage: 0,
+        rejectReason: reason,
+        shooterAmmo: GAMEPLAY.magazineSize,
+      });
+      // Zero gameplay mutation: no player patches, no gameplay events, no
+      // respawn scheduling; only the idempotency ledger row is recorded.
+      expect(plan.shooterPatch).toBeNull();
+      expect(plan.targetPatch).toBeNull();
+      expect(plan.events).toHaveLength(0);
+      expect(plan.respawnAt).toBeNull();
+      expect(plan.shot).toMatchObject({ outcome: "rejected", rejectReason: reason, damage: 0 });
+    }
+  });
+
+  it("is deterministic on retry: identical inputs produce the identical plan", () => {
+    const first = gatedFire("out_of_arena");
+    const second = gatedFire("out_of_arena");
+    expect(second).toEqual(first);
+    expect(replayResult(first.result)).toEqual(first.result);
+  });
+
+  it("orders the gate per contract: after presence/life, before ammo and cooldown", () => {
+    expect(gatedFire("out_of_arena", { matchOverrides: { status: "waiting" } }).result.rejectReason).toBe(
+      "match_not_active",
+    );
+    expect(gatedFire("out_of_arena", { shooter: { lifeState: "dead" } }).result.rejectReason).toBe(
+      "shooter_not_alive",
+    );
+    expect(gatedFire("out_of_arena", { shooter: { connected: false } }).result.rejectReason).toBe(
+      "shooter_disconnected",
+    );
+    expect(gatedFire("location_stale", { shooter: { ammo: 0 } }).result.rejectReason).toBe(
+      "location_stale",
+    );
+    expect(
+      gatedFire("out_of_arena", { shooter: { lastShotAt: now - 1 } }).result.rejectReason,
+    ).toBe("out_of_arena");
+  });
+
+  it("gates debugFire identically on an arena-centered match", () => {
+    const plan = resolveDebugFire(
+      match(),
+      player("host"),
+      player("guest"),
+      request(),
+      now,
+      "location_stale",
+    );
+    expect(plan.result).toMatchObject({
+      accepted: false,
+      outcome: "rejected",
+      damage: 0,
+      rejectReason: "location_stale",
+    });
+    expect(plan.shooterPatch).toBeNull();
+    expect(plan.targetPatch).toBeNull();
+    expect(plan.events).toHaveLength(0);
+  });
+
+  it("keeps legacy centerless debugFire ungated (existing iOS clients send no location)", () => {
+    // Compatibility: the adapter passes a null gate when the match has no
+    // recorded arenaCenter, so today's playable build fires exactly as before.
+    const plan = resolveDebugFire(match(), player("host"), player("guest"), request(), now, null);
+    expect(plan.result).toMatchObject({
+      accepted: true,
+      outcome: "hit",
+      damage: ZONE_DAMAGE.torso,
+    });
   });
 });

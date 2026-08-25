@@ -1,7 +1,14 @@
 import { GAMEPLAY, normalizeArenaRadius, normalizeDisplayName } from "./config.js";
 import { isJoinable } from "./lifecycle.js";
 import { ok, rejected, type DomainResult } from "./result.js";
-import type { MatchState, MatchStatus, PlayerRole, PlayerState, StatePatch } from "./types.js";
+import type {
+  ArenaState,
+  MatchState,
+  MatchStatus,
+  PlayerRole,
+  PlayerState,
+  StatePatch,
+} from "./types.js";
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -23,6 +30,8 @@ export interface CreateMatchInput {
   displayName: string;
   centerLatitude: number;
   centerLongitude: number;
+  /** True only when a validated phase0 arenaCenter sample was captured. */
+  hasArenaCenter?: boolean;
   radiusMeters?: number;
   now: number;
 }
@@ -34,6 +43,7 @@ export interface NewMatch {
     phase: "lobby";
     centerLatitude: number;
     centerLongitude: number;
+    arenaCenterAt: number | null;
     radiusMeters: number;
     maxPlayers: number;
     durationMs: number;
@@ -56,6 +66,7 @@ export function planCreateMatch(input: CreateMatchInput, code: string): NewMatch
       phase: "lobby" as const,
       centerLatitude: input.centerLatitude,
       centerLongitude: input.centerLongitude,
+      arenaCenterAt: input.hasArenaCenter === true ? input.now : null,
       radiusMeters: normalizeArenaRadius(input.radiusMeters),
       maxPlayers: GAMEPLAY.maxPlayers,
       durationMs: GAMEPLAY.matchDurationMs,
@@ -66,21 +77,39 @@ export function planCreateMatch(input: CreateMatchInput, code: string): NewMatch
       createdAt: input.now,
       updatedAt: input.now,
     },
-    host: newPlayer(normalizeDisplayName(input.displayName, "Host"), "host", input.now),
+    host: newPlayer(
+      normalizeDisplayName(input.displayName, "Host"),
+      "host",
+      input.now,
+      initialArenaState(input.hasArenaCenter === true),
+    ),
   };
 }
 
+/**
+ * phase0.v1: a player in a geofenced match starts `uncertain` with omitted
+ * location fields until a trusted fresh sample establishes authoritative state.
+ * A legacy centerless (G2 create shape) match has no enforceable fence, so its
+ * players keep the pre-geofence `inside` behavior exactly as today.
+ */
+export function initialArenaState(hasArenaCenter: boolean): ArenaState {
+  return hasArenaCenter ? "uncertain" : "inside";
+}
+
 /** Server-owned starting state for a player record. */
-export function newPlayer(displayName: string, role: PlayerRole, now: number): Omit<PlayerState, "id"> {
+export function newPlayer(
+  displayName: string,
+  role: PlayerRole,
+  now: number,
+  arenaState: ArenaState = "inside",
+): Omit<PlayerState, "id"> {
   return {
     displayName,
     role,
     ready: false,
     connected: true,
     lifeState: "alive",
-    // G2-compatible create/join has no location heartbeat yet. The four-mechanic
-    // demo cut treats those players as inside until the geofence slice lands.
-    arenaState: "inside",
+    arenaState,
     health: GAMEPLAY.startingHealth,
     ammo: GAMEPLAY.magazineSize,
     kills: 0,
@@ -93,11 +122,19 @@ export function newPlayer(displayName: string, role: PlayerRole, now: number): O
     respawnAt: null,
     lastSeenAt: now,
     joinedAt: now,
+    latitude: null,
+    longitude: null,
+    headingDegrees: null,
+    locationAccuracyMeters: null,
+    locationAt: null,
+    outsideStreak: 0,
   };
 }
 
 export interface JoinMatchInput {
   displayName: string;
+  /** True when the match records a validated arenaCenter (see create). */
+  hasArenaCenter?: boolean;
   now: number;
 }
 
@@ -124,7 +161,12 @@ export function planJoinMatch(
   }
 
   return ok({
-    guest: newPlayer(normalizeDisplayName(input.displayName, "Challenger"), "guest", input.now),
+    guest: newPlayer(
+      normalizeDisplayName(input.displayName, "Challenger"),
+      "guest",
+      input.now,
+      initialArenaState(input.hasArenaCenter === true),
+    ),
     matchPatch: { status: "waiting" as const, updatedAt: input.now },
   });
 }

@@ -61,6 +61,32 @@ describe("createMatch planning", () => {
     expect(matchCodeFromBytes(bytes)).toHaveLength(GAMEPLAY.matchCodeLength);
     expect(matchCodeFromBytes(bytes)).toMatch(/^[A-HJ-NP-Z2-9]{6}$/);
   });
+
+  it("starts players uncertain in an arena-centered match, inside in a legacy one", () => {
+    // Compatibility: existing iOS clients create matches without arenaCenter;
+    // those matches must behave exactly as before the geofence slice.
+    const legacy = planCreateMatch(createInput, "AB12CD");
+    expect(legacy.match.arenaCenterAt).toBeNull();
+    expect(legacy.host.arenaState).toBe("inside");
+
+    const geofenced = planCreateMatch({ ...createInput, hasArenaCenter: true }, "AB12CD");
+    expect(geofenced.match.arenaCenterAt).toBe(T0);
+    expect(geofenced.host).toMatchObject({
+      arenaState: "uncertain",
+      latitude: null,
+      longitude: null,
+      locationAccuracyMeters: null,
+      locationAt: null,
+      outsideStreak: 0,
+    });
+
+    const guest = planJoinMatch({ status: "setup" }, 1, {
+      displayName: "Rival",
+      hasArenaCenter: true,
+      now: T0,
+    });
+    expect(guest.ok && guest.value.guest.arenaState).toBe("uncertain");
+  });
 });
 
 describe("joinMatch planning", () => {
