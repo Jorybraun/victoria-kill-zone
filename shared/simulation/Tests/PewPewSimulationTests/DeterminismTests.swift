@@ -146,12 +146,13 @@ final class DeterminismTests: XCTestCase {
   func testDegradedConditionsProduceExpectedVerdictSequence() throws {
     let events = try replay(playerIDs: [playerA, playerB, playerC], log: degradedScenarioLog())
 
+    // Same-tick claims resolve by firedAtMs ascending, so the 400 ms-late claim precedes the claim stamped at the current clock.
     XCTAssertEqual(
       verdicts(in: events),
       [
         .rejected(.trackingLost),
-        .rejected(.trackingLost),
         .rejected(.shotTooLate),
+        .rejected(.trackingLost),
       ]
     )
   }

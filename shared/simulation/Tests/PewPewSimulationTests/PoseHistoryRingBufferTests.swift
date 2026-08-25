@@ -48,4 +48,40 @@ final class PoseHistoryRingBufferTests: XCTestCase {
     XCTAssertNil(buffer.latest)
     XCTAssertNil(buffer.sample(atOrBefore: 1_000))
   }
+
+  func testResolvePoseReturnsExactSample() {
+    var buffer = PoseHistoryRingBuffer(capacity: 4)
+    let sample = PoseSample(timestampMs: 100, position: Vector3(1, 2, 3))
+    buffer.record(sample)
+
+    XCTAssertEqual(buffer.resolvePose(atMs: 100), .exact(sample))
+  }
+
+  func testResolvePoseInterpolatesBracketingSamples() {
+    var buffer = PoseHistoryRingBuffer(capacity: 4)
+    let earlier = PoseSample(timestampMs: 100, position: Vector3(0, 0, 0))
+    let later = PoseSample(timestampMs: 200, position: Vector3(2, 4, 6))
+    buffer.record(earlier)
+    buffer.record(later)
+
+    XCTAssertEqual(
+      buffer.resolvePose(atMs: 150),
+      .interpolated(position: Vector3(1, 2, 3), earlier: earlier, later: later)
+    )
+  }
+
+  func testResolvePoseReturnsTrailingEdgeWithoutLaterSample() {
+    var buffer = PoseHistoryRingBuffer(capacity: 4)
+    let sample = PoseSample(timestampMs: 100, position: .zero)
+    buffer.record(sample)
+
+    XCTAssertEqual(buffer.resolvePose(atMs: 150), .trailingEdge(sample))
+  }
+
+  func testResolvePoseReturnsUnavailableWithoutEarlierSample() {
+    var buffer = PoseHistoryRingBuffer(capacity: 4)
+    buffer.record(PoseSample(timestampMs: 100, position: .zero))
+
+    XCTAssertEqual(buffer.resolvePose(atMs: 50), .unavailable)
+  }
 }
