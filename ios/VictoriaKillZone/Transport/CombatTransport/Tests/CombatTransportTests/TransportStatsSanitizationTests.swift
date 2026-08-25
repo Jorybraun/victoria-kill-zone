@@ -22,6 +22,28 @@ final class TransportStatsSanitizationTests: XCTestCase {
     XCTAssertFalse(String(data: data, encoding: .utf8)!.contains("UDID"))
   }
 
+  func testDeviceSnapshotDoesNotFabricateSendToReceiveLatency() throws {
+    var stats = TransportStats(evidenceTier: .device)
+    stats.recordReceived(
+      channel: .pose,
+      slot: 1,
+      accepted: true,
+      arrivalMs: 10,
+      sentAtMs: nil,
+      sequence: 1,
+      epoch: 1
+    )
+    let snapshot = stats.sanitizedSnapshot()
+    XCTAssertEqual(snapshot.evidenceTier, .device)
+    XCTAssertNil(snapshot.channels[0].sendToReceiveP50Ms)
+    XCTAssertNil(snapshot.channels[0].sendToReceiveP95Ms)
+    let data = try stats.sanitizedSnapshotData()
+    let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let channels = try XCTUnwrap(object["channels"] as? [[String: Any]])
+    XCTAssertNil(channels[0]["sendToReceiveP50Ms"])
+    XCTAssertNil(channels[0]["sendToReceiveP95Ms"])
+  }
+
   func testPercentilesAndFireLockDurationUseMatchClock() {
     var stats = TransportStats()
     for (time, delay) in [(10, 1), (22, 3), (38, 7), (59, 11), (87, 17)] {

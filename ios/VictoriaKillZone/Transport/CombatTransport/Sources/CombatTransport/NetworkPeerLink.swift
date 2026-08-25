@@ -32,7 +32,7 @@ public struct NetworkPeerLinkConfiguration: Sendable, Equatable {
 }
 
 public typealias PeerLinkReceiveHandler =
-  @Sendable (TransportFrame, Int64, Int64, Bool) -> Void
+  @Sendable (TransportFrame, Int64, Int64?) -> Void
 
 public protocol PeerLink: AnyObject, Sendable {
   var remoteSlot: UInt8 { get }
@@ -232,7 +232,7 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
     connection.receiveMessage { [weak self] content, _, _, error in
       if let content, let frame = try? TransportFrameCodec.decode(content) {
         let nowMs = Int64(DispatchTime.now().uptimeNanoseconds / 1_000_000)
-        self?.receiveHandler?(frame, nowMs, nowMs, true)
+        self?.receiveHandler?(frame, nowMs, nil)
       }
       if error == nil {
         self?.receive(on: connection, for: remoteSlot)

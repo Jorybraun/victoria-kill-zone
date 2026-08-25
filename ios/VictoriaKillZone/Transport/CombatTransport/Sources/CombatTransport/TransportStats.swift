@@ -11,6 +11,21 @@ public enum TransportEvidenceTier: String, Codable, Sendable {
 }
 
 public struct TransportChannelSnapshot: Codable, Equatable, Sendable {
+  private enum CodingKeys: String, CodingKey {
+    case channel
+    case sent
+    case received
+    case accepted
+    case discarded
+    case duplicate
+    case buffered
+    case sequenceGapLossPercent
+    case jitterP50Ms
+    case jitterP95Ms
+    case sendToReceiveP50Ms
+    case sendToReceiveP95Ms
+  }
+
   public let channel: TransportChannel
   public let sent: Int
   public let received: Int
@@ -19,10 +34,10 @@ public struct TransportChannelSnapshot: Codable, Equatable, Sendable {
   public let duplicate: Int
   public let buffered: Int
   public let sequenceGapLossPercent: Double
-  public let jitterP50Ms: Double
-  public let jitterP95Ms: Double
-  public let sendToReceiveP50Ms: Double
-  public let sendToReceiveP95Ms: Double
+  public let jitterP50Ms: Double?
+  public let jitterP95Ms: Double?
+  public let sendToReceiveP50Ms: Double?
+  public let sendToReceiveP95Ms: Double?
 
   public init(
     channel: TransportChannel,
@@ -33,10 +48,10 @@ public struct TransportChannelSnapshot: Codable, Equatable, Sendable {
     duplicate: Int,
     buffered: Int,
     sequenceGapLossPercent: Double,
-    jitterP50Ms: Double,
-    jitterP95Ms: Double,
-    sendToReceiveP50Ms: Double,
-    sendToReceiveP95Ms: Double
+    jitterP50Ms: Double?,
+    jitterP95Ms: Double?,
+    sendToReceiveP50Ms: Double?,
+    sendToReceiveP95Ms: Double?
   ) {
     self.channel = channel
     self.sent = sent
@@ -50,6 +65,22 @@ public struct TransportChannelSnapshot: Codable, Equatable, Sendable {
     self.jitterP95Ms = jitterP95Ms
     self.sendToReceiveP50Ms = sendToReceiveP50Ms
     self.sendToReceiveP95Ms = sendToReceiveP95Ms
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(channel, forKey: .channel)
+    try container.encode(sent, forKey: .sent)
+    try container.encode(received, forKey: .received)
+    try container.encode(accepted, forKey: .accepted)
+    try container.encode(discarded, forKey: .discarded)
+    try container.encode(duplicate, forKey: .duplicate)
+    try container.encode(buffered, forKey: .buffered)
+    try container.encode(sequenceGapLossPercent, forKey: .sequenceGapLossPercent)
+    try container.encodeIfPresent(jitterP50Ms, forKey: .jitterP50Ms)
+    try container.encodeIfPresent(jitterP95Ms, forKey: .jitterP95Ms)
+    try container.encodeIfPresent(sendToReceiveP50Ms, forKey: .sendToReceiveP50Ms)
+    try container.encodeIfPresent(sendToReceiveP95Ms, forKey: .sendToReceiveP95Ms)
   }
 }
 
@@ -275,6 +306,7 @@ public struct TransportStats: Equatable, Sendable {
       )
     }
     return TransportStatsSnapshot(
+      evidenceTier: evidenceTier,
       channels: channels,
       slots: slots,
       disconnectCount: disconnectCount,
@@ -301,8 +333,8 @@ private struct SampleRing: Equatable, Sendable {
     values.append(value)
   }
 
-  func percentile(_ fraction: Double) -> Double {
-    guard !values.isEmpty else { return 0 }
+  func percentile(_ fraction: Double) -> Double? {
+    guard !values.isEmpty else { return nil }
     let sorted = values.sorted()
     let index = min(sorted.count - 1, Int(Double(sorted.count - 1) * fraction))
     return Double(sorted[index])

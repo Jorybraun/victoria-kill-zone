@@ -72,10 +72,9 @@ public final class LoopbackEndpoint: PeerLink, @unchecked Sendable {
   fileprivate func notify(
     _ frame: TransportFrame,
     arrivalMs: Int64,
-    sentAtMs: Int64,
-    accepted: Bool
+    sentAtMs: Int64
   ) {
-    receiveHandler?(frame, arrivalMs, sentAtMs, accepted)
+    receiveHandler?(frame, arrivalMs, sentAtMs)
   }
 
   public func latestPose(for senderSlot: UInt8) -> PoseFrame? {
@@ -277,8 +276,7 @@ public final class LoopbackFabric {
       endpoints[event.destination]?.notify(
         .pose(frame, relayed: relayed),
         arrivalMs: nowMs,
-        sentAtMs: event.sentAtMs,
-        accepted: admission.accepted
+        sentAtMs: event.sentAtMs
       )
       if event.destination == HostRelayTopology.hostSlot {
         topology = destinationCore.topology
@@ -296,8 +294,7 @@ public final class LoopbackFabric {
       endpoints[event.destination]?.notify(
         .reliable(frame, relayed: relayed),
         arrivalMs: nowMs,
-        sentAtMs: event.sentAtMs,
-        accepted: delivery.status == .delivered
+        sentAtMs: event.sentAtMs
       )
       if event.destination == HostRelayTopology.hostSlot {
         topology = destinationCore.topology

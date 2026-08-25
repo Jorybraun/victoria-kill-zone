@@ -124,6 +124,12 @@ sequence-gap loss percent, inter-arrival jitter (p50/p95 over a fixed 128-sample
 ring), send→receive milliseconds (p50/p95, with an explicit clock-source label),
 disconnect/recovery counts and total fire-locked milliseconds.
 
+On loopback, virtual send and receive clocks are comparable, so send→receive
+percentiles are populated. On a physical device, the receive handler has no
+comparable remote send clock and reports `nil` for those percentiles rather than
+fabricating zero-latency values. Arrival-delta jitter and cadence remain
+measurable on device; percentile fields remain absent until enough samples exist.
+
 No device names, no UDIDs, no addresses, no Bonjour service names, no secrets:
 the API is addressed by slot index, so there is no surface through which an
 identifier could enter the snapshot. A test pins the exact key set.

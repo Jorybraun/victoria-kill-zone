@@ -2,18 +2,19 @@ import Foundation
 
 public final class TransportFieldHarness: @unchecked Sendable {
   private let link: any PeerLink
+  private var core: CombatTransportCore
   private var stats: TransportStats
   private var nowMs: Int64 = 0
 
   public init(link: any PeerLink) {
     self.link = link
+    core = CombatTransportCore(slot: link.remoteSlot, evidenceTier: link.evidenceTier)
     stats = TransportStats(evidenceTier: link.evidenceTier)
-    link.setReceiveHandler { [weak self] frame, arrivalMs, sentAtMs, accepted in
+    link.setReceiveHandler { [weak self] frame, arrivalMs, sentAtMs in
       self?.recordReceived(
         frame,
         arrivalMs: arrivalMs,
-        sentAtMs: sentAtMs,
-        accepted: accepted
+        sentAtMs: sentAtMs
       )
     }
   }
@@ -37,7 +38,6 @@ public final class TransportFieldHarness: @unchecked Sendable {
       )
       stats.recordSent(channel: .pose, slot: senderSlot)
       try link.send(.pose(frame))
-      (link as? LoopbackEndpoint)?.advance(to: nowMs)
     }
   }
 
@@ -48,25 +48,36 @@ public final class TransportFieldHarness: @unchecked Sendable {
   private func recordReceived(
     _ frame: TransportFrame,
     arrivalMs: Int64,
-    sentAtMs: Int64,
-    accepted: Bool
+    sentAtMs: Int64?
   ) {
     switch frame {
     case let .pose(value, _):
+      let admission = core.receivePose(
+        value,
+        receivedAtMs: arrivalMs,
+        sentAtMs: sentAtMs
+      )
       stats.recordReceived(
         channel: .pose,
         slot: value.senderSlot,
-        accepted: accepted,
+        accepted: admission.accepted,
         arrivalMs: arrivalMs,
         sentAtMs: sentAtMs,
         sequence: value.sequence,
         epoch: value.epoch
       )
     case let .reliable(value, _):
+      let delivery = core.receiveReliable(
+        value,
+        receivedAtMs: arrivalMs,
+        sentAtMs: sentAtMs
+      )
       stats.recordReceived(
         channel: .reliable,
         slot: value.senderSlot,
-        accepted: accepted,
+        accepted: delivery.status == .delivered,
+        duplicate: delivery.status == .duplicate,
+        buffered: delivery.status == .buffered,
         arrivalMs: arrivalMs,
         sentAtMs: sentAtMs,
         sequence: value.sequence,

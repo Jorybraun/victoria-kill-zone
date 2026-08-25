@@ -13,6 +13,7 @@ final class TransportFieldHarnessTests: XCTestCase {
     let harness = TransportFieldHarness(link: fabric.client(slot: 2))
     harness.startHostAndClient()
     try harness.drivePoseCadence(seconds: 1)
+    fabric.advance(to: 1_000)
     let data = try harness.sanitizedStatsSnapshot()
     let snapshot = try JSONDecoder().decode(TransportStatsSnapshot.self, from: data)
     XCTAssertEqual(snapshot.schema, "transport-stats.v0")
