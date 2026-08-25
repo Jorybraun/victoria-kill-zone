@@ -485,3 +485,201 @@ FireRejectReason values are returned in FireShotResult rather than thrown after 
 8. Simulator evidence is not physical evidence. The final gate names both phones and records observed camera, network, haptic, geofence, signing, reconnect, and spectator results without identifiers or secrets.
 
 A backend change to a wire name, enum, constant, required field, authentication rule, ordering rule, or idempotency key requires an Integration-owned revision and explicit handoff to iOS and spectator.
+
+# match.v2
+
+match.v2 is the multiplayer-first contract authorized by ADR 0003. It models player sets with a capacity of 2–4, replaces the host/guest binary with server-assigned capabilities, and validates fire against "a targetable player", never "the opponent". It is a parallel surface: g2.v1 and phase0.v1 keep working unchanged until their consumers migrate, and no v2 change edits a v1 wire name, field, or fixture.
+
+## match.v2 constants and enums
+
+~~~ts
+export const MATCH_V2_PLAYER_CAPACITY_MIN = 2;
+export const MATCH_V2_PLAYER_CAPACITY_MAX = 4;
+export const MATCH_V2_DEFAULT_PLAYER_CAPACITY = 4;
+
+export type PlayerCapability =
+  | "canStartMatch"
+  | "canEndMatch"
+  | "canConfigureArena"
+  | "authorityHost";
+~~~
+
+All other shared constants (health, ammunition, cooldowns, arena, presence, damage) and the MatchPhase, PlayerLifeState, HitZone, ShotOutcome, and ArenaState enums carry over from the shared catalog unchanged. PlayerRole does not exist in match.v2.
+
+Capability rules:
+
+- Capabilities are server-assigned and appear only in snapshots; clients never request or grant them.
+- The creating player receives all four capabilities. Phase 1 does not transfer capabilities between players; `authorityHost` reassignment is an L1 authority concern deferred to ADR 0004.
+- A capability array is ordered exactly as the enum above and never contains duplicates.
+- If every player holding `canStartMatch` leaves during lobby, the match becomes cancelled.
+
+## match.v2 public functions
+
+| Function | Kind | Arguments | Result |
+|---|---|---|---|
+| matchesV2:create | mutation | CreateMatchV2Args | PlayerSession |
+| matchesV2:join | mutation | JoinMatchArgs | PlayerSession |
+| matchesV2:leave | mutation | AuthenticatedPlayerArgs | null |
+| matchesV2:setReady | mutation | AuthenticatedPlayerArgs plus isReady | null |
+| matchesV2:start | mutation | AuthenticatedPlayerArgs | null |
+| matchesV2:end | mutation | AuthenticatedPlayerArgs | null |
+| playersV2:heartbeat | mutation | HeartbeatArgs | null |
+| playersV2:startReload | mutation | AuthenticatedPlayerArgs | ReloadStartResult |
+| shotsV2:fire | mutation | FireShotV2Args | FireShotV2Result |
+| queriesV2:matchSnapshot | query | AuthenticatedPlayerArgs | MatchV2Snapshot |
+| queriesV2:spectatorSnapshot | query | code | SpectatorV2Snapshot or null |
+
+Session capability, authentication, idempotency, presence, heartbeat cadence, geofence evaluation, reload, and respawn semantics are identical to phase0.v1. The guarded internal mutations (activate, finish, expirePresence, completeReload, respawn) carry over with the same expected-timestamp guards.
+
+## match.v2 requests
+
+~~~ts
+export interface CreateMatchV2Args {
+  displayName: string;
+  arenaRadiusMeters: number;
+  arenaCenter: LocationSample;
+  playerCapacity?: number;
+}
+
+export interface FireShotV2Args {
+  matchId: string;
+  shooterId: string;
+  sessionSecret: string;
+  clientShotId: string;
+  targetId?: string;
+  zone?: HitZone;
+  poseConfidence?: number;
+  origin?: [number, number, number];
+  direction?: [number, number, number];
+  firedAtClient: number;
+}
+~~~
+
+- playerCapacity must be an integer from 2 to 4; omitted means 4. Any other value throws INVALID_CAPACITY before writing state. Capacity is fixed for the life of the match.
+- matchesV2:join is valid only during lobby and while the player set is below capacity; at capacity it throws MATCH_FULL.
+- matchesV2:leave is valid only during lobby. It removes the player, frees the slot, appends one left event, and invalidates that player's session. Calling it during any other phase throws MATCH_ALREADY_STARTED; abandoning a started match is presence expiry, and the player remains a member.
+- For a claimed hit, targetId must name **a targetable player**: a member of the same match who is not the shooter and whose lifeState is alive. Self-target, an unknown id, or a non-member id is INVALID_TARGET; a dead, respawning, or disconnected target is TARGET_NOT_ALIVE. No rule anywhere in v2 may assume the target is "the" opponent.
+- Confidence thresholds, damage constants, cooldown, idempotency-replay, and miss/hit/kill accounting are exactly the phase0.v1 rules.
+
+## match.v2 snapshots
+
+~~~ts
+export interface MatchV2Summary {
+  id: string;
+  code: string;
+  phase: MatchPhase;
+  durationMs: number;
+  playerCapacity: number;
+  startsAt?: number;
+  endsAt?: number;
+  winnerPlayerId?: string;
+}
+
+export interface PlayerV2Snapshot {
+  id: string;
+  displayName: string;
+  capabilities: PlayerCapability[];
+  ready: boolean;
+  connected: boolean;
+  health: number;
+  ammo: number;
+  kills: number;
+  deaths: number;
+  damageDealt: number;
+  shotsFired: number;
+  shotsHit: number;
+  headshots: number;
+  lifeState: PlayerLifeState;
+  arenaState: ArenaState;
+  lastSeenAt: number;
+  lastShotAt?: number;
+  reloadEndsAt?: number;
+  respawnAt?: number;
+  latitude?: number;
+  longitude?: number;
+  headingDegrees?: number;
+  locationAccuracyMeters?: number;
+  locationAt?: number;
+}
+
+export type MatchV2EventType = Phase0EventType | "left";
+
+export interface MatchV2EventSnapshot {
+  id: string;
+  type: MatchV2EventType;
+  message: string;
+  createdAt: number;
+  actorPlayerId?: string;
+  targetPlayerId?: string;
+  zone?: HitZone;
+  damage?: number;
+}
+
+export interface MatchV2Snapshot {
+  serverNow: number;
+  match: MatchV2Summary;
+  arena: ArenaSnapshot;
+  localPlayerId: string;
+  players: PlayerV2Snapshot[];
+  events: MatchV2EventSnapshot[];
+}
+
+export interface SpectatorV2PlayerSnapshot
+  extends Omit<
+    PlayerV2Snapshot,
+    | "latitude"
+    | "longitude"
+    | "headingDegrees"
+    | "locationAccuracyMeters"
+    | "locationAt"
+    | "lastSeenAt"
+  > {
+  arenaPosition?: SpectatorArenaPosition;
+}
+
+export interface SpectatorV2Snapshot {
+  serverNow: number;
+  match: MatchV2Summary;
+  arena: { radiusMeters: number };
+  players: SpectatorV2PlayerSnapshot[];
+  events: MatchV2EventSnapshot[];
+}
+~~~
+
+- Player order is joinedAt ascending, then id ascending. "Host-first" ordering does not exist in v2; the creator is first only because they joined first.
+- Event order, stable ids, de-duplication, and the phase0.v1 privacy sanitization rules are unchanged. FireShotV2Result is shape-identical to FireShotResult.
+
+## match.v2 lifecycle for player sets
+
+1. **lobby:** join and leave are open below capacity. Every player toggles ready independently.
+2. **start:** requires the caller to hold canStartMatch (otherwise CAPABILITY_REQUIRED), at least MATCH_V2_PLAYER_CAPACITY_MIN members, and every current member ready, connected, and presence-fresh. It sets countdown exactly as phase0.v1. The member set freezes at start; join after lobby is MATCH_ALREADY_STARTED.
+3. **running:** identical timing, geofence, fire, reload, elimination, and respawn rules, evaluated per player over the set.
+4. **finished:** the winner rule generalizes over the set: most kills, then fewest deaths, then most applied damageDealt; an exact tie omits winnerPlayerId. matchesV2:end requires canEndMatch.
+5. **cancelled:** lobby-only terminal state, reached when every canStartMatch holder leaves per the capability rules above.
+
+## match.v2 spatial-hit coordination
+
+spatial-hit.v1 (KIL-18/KIL-22) remains the vocabulary authority for Phone Pose Samples, Phone Target Proxies, Frame-Aligned Shot Claims, and Spatial Verdicts. match.v2 generalizes its consumption to N players without duplicating it:
+
+- Every member has a Phone Target Proxy; a Frame-Aligned Shot Claim names exactly one targetPlayerId chosen from the targetable set.
+- The minimum-separation rule applies pairwise between the shooter and the named target, not to a single fixed opponent.
+- Verdict vocabulary, rewind bounds, and rejection reasons are spatial-hit.v1 values; match.v2 adds no spatial enum.
+
+## match.v2 stable errors
+
+~~~ts
+export type MatchV2ErrorCode =
+  | Phase0ErrorCode
+  | "INVALID_CAPACITY"
+  | "CAPABILITY_REQUIRED";
+~~~
+
+HOST_ONLY is never thrown by a v2 function; CAPABILITY_REQUIRED replaces it. All other error semantics carry over.
+
+## match.v2 rollout
+
+1. The immutable fixture suite contracts/fixtures/match.v2.json is the compatibility authority; consumers validate it through production seams before emitting or decoding v2 payloads.
+2. Backend may implement matchesV2/playersV2/shotsV2/queriesV2 beside the v1 functions without touching v1 behavior.
+3. iOS and spectator migrate by switching function names and decoders wholesale per surface; mixed v1/v2 calls inside one running match are forbidden.
+4. The left event value and every v2-only enum value follow the standard rule: decoders merge before the backend emits.
+5. g2.v1 and phase0.v1 retire only after all three consumers run v2 on physical-device evidence and integration records it in the build log.
