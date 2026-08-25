@@ -1,0 +1,29 @@
+{
+  "name": "degraded_tracking_stale_pose_late_shot",
+  "description": "Player-c is lost at 100 ms, so the same-tick shot is trackingLost. A normal c pose at 150 ms then goes stale: at 300 ms its 150 ms age exceeds the 100 ms limit, producing poseTooOld. Replaying that 300 ms claim at 650 ms is 350 ms late, exceeding the 250 ms rewind cap, so shotTooLate wins the documented check order.",
+  "clock": { "tickMs": 50 },
+  "players": [{ "id": "player-a" }, { "id": "player-b" }, { "id": "player-c" }],
+  "timeline": [
+    { "atMs": 50, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 50, "poseSample": { "player": "player-b", "pos": [10, 0, 0] } },
+    { "atMs": 50, "poseSample": { "player": "player-c", "pos": [0, 0, 10] } },
+    { "atMs": 100, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 100, "poseSample": { "player": "player-b", "pos": [10, 0, 0] } },
+    { "atMs": 100, "poseSample": { "player": "player-c", "pos": [0, 0, 10], "tracking": "lost" } },
+    { "atMs": 100, "fire": { "shooter": "player-a", "target": "player-c", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 100, "shotId": "lost" } },
+    { "atMs": 150, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 150, "poseSample": { "player": "player-b", "pos": [10, 0, 0] } },
+    { "atMs": 150, "poseSample": { "player": "player-c", "pos": [0, 0, 10] } },
+    { "atMs": 300, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 300, "poseSample": { "player": "player-b", "pos": [10, 0, 0] } },
+    { "atMs": 300, "fire": { "shooter": "player-a", "target": "player-c", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 300, "shotId": "stale" } },
+    { "atMs": 650, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 650, "poseSample": { "player": "player-b", "pos": [10, 0, 0] } },
+    { "atMs": 650, "fire": { "shooter": "player-a", "target": "player-c", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 300, "shotId": "late" } }
+  ],
+  "expect": [
+    { "verdict": { "shotId": "lost", "outcome": "rejected", "reason": "trackingLost", "rewindMs": 0 } },
+    { "verdict": { "shotId": "stale", "outcome": "rejected", "reason": "poseTooOld", "rewindMs": 0 } },
+    { "verdict": { "shotId": "late", "outcome": "rejected", "reason": "shotTooLate", "rewindMs": 350 } }
+  ]
+}

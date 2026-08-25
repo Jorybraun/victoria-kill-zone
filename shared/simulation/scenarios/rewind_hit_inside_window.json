@@ -1,0 +1,15 @@
+{
+  "name": "rewind_hit_inside_window",
+  "description": "B's pose at 800 ms is 10 m down A's +z ray. The claim is evaluated at 1000 ms, so rewind is 200 ms ≤ the 250 ms cap and pose age is 0 ms; separation and closest approach pass, producing a 34-damage hit.",
+  "clock": { "tickMs": 50 },
+  "players": [{ "id": "player-a" }, { "id": "player-b" }],
+  "timeline": [
+    { "atMs": 800, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 800, "poseSample": { "player": "player-b", "pos": [0, 0, 10] } },
+    { "atMs": 1000, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 1000, "fire": { "shooter": "player-a", "target": "player-b", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 800, "shotId": "s1" } }
+  ],
+  "expect": [
+    { "verdict": { "shotId": "s1", "outcome": "hit", "appliedDamage": 34, "rewindMs": 200 } }
+  ]
+}
