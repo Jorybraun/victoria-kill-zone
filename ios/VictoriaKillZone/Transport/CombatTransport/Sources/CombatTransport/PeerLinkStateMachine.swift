@@ -28,6 +28,37 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
     case disconnected(slot: UInt8)
   }
 
+  public struct SendIssue: Equatable, Sendable {
+    public enum Kind: Equatable, Sendable {
+      case skipped(PeerLinkStateMachineError)
+      case queuedReliable
+      case failed(PeerLinkStateMachineError)
+    }
+
+    public let slot: UInt8
+    public let kind: Kind
+
+    public init(slot: UInt8, kind: Kind) {
+      self.slot = slot
+      self.kind = kind
+    }
+
+    var failure: PeerLinkStateMachineError? {
+      guard case let .failed(error) = kind else { return nil }
+      return error
+    }
+  }
+
+  public struct SendOutcome: Equatable, Sendable {
+    public let actions: [Action]
+    public let issues: [SendIssue]
+
+    public init(actions: [Action] = [], issues: [SendIssue] = []) {
+      self.actions = actions
+      self.issues = issues
+    }
+  }
+
   public enum PeerLinkStateMachineError: Error, Equatable, Sendable {
     case invalidSlotClaim
     case authenticationFailed
@@ -202,6 +233,14 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
   }
 
   public mutating func send(_ frame: TransportFrame) throws -> [Action] {
+    let outcome = try sendOutcome(frame)
+    if let failure = outcome.issues.compactMap(\.failure).first {
+      throw failure
+    }
+    return outcome.actions
+  }
+
+  public mutating func sendOutcome(_ frame: TransportFrame) throws -> SendOutcome {
     guard frame.senderSlot == localSlot else {
       throw PeerLinkStateMachineError.senderSlotMismatch
     }
@@ -218,37 +257,73 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
     }
 
     var actions: [Action] = []
+    var issues: [SendIssue] = []
     for target in targets {
       if disconnectedSlots.contains(target) {
-        throw PeerLinkStateMachineError.disconnected(slot: target)
+        switch frame {
+        case .pose:
+          issues.append(.init(slot: target, kind: .skipped(.disconnected(slot: target))))
+          continue
+        case .reliable:
+          break
+        case .slotClaim:
+          throw PeerLinkStateMachineError.unboundConnection
+        }
       }
       guard let binding = bindingsBySlot[target] else {
         if channel(for: frame) == .reliable {
-          try enqueueReliable(frame, for: target)
+          if try enqueueReliable(frame, for: target) {
+            issues.append(.init(slot: target, kind: .queuedReliable))
+          } else {
+            issues.append(.init(
+              slot: target,
+              kind: .failed(.reliableQueueFull(slot: target))
+            ))
+          }
           continue
         }
-        throw PeerLinkStateMachineError.linkNotReady(channel: .pose, slot: target)
+        issues.append(.init(
+          slot: target,
+          kind: .skipped(.linkNotReady(channel: .pose, slot: target))
+        ))
+        continue
       }
       switch frame {
       case .pose:
         guard binding.datagramReady else {
-          throw PeerLinkStateMachineError.linkNotReady(channel: .pose, slot: target)
+          issues.append(.init(
+            slot: target,
+            kind: .skipped(.linkNotReady(channel: .pose, slot: target))
+          ))
+          continue
         }
         actions.append(.write(connection: binding.connection, channel: .pose, frame: frame))
       case .reliable:
         if binding.reliableReady {
           actions.append(contentsOf: flushAndWrite(frame, for: target, binding: binding))
         } else {
-          try enqueueReliable(frame, for: target)
+          if try enqueueReliable(frame, for: target) {
+            issues.append(.init(slot: target, kind: .queuedReliable))
+          } else {
+            issues.append(.init(
+              slot: target,
+              kind: .failed(.reliableQueueFull(slot: target))
+            ))
+          }
         }
       case .slotClaim:
         throw PeerLinkStateMachineError.unboundConnection
       }
     }
-    return actions
+    if actions.isEmpty, case .pose = frame,
+       let issue = issues.first,
+       case let .skipped(error) = issue.kind {
+      throw error
+    }
+    return SendOutcome(actions: actions, issues: issues)
   }
 
-  public mutating func sendSlotClaim(
+  public func sendSlotClaim(
     _ claim: SlotClaimFrame,
     on connection: ConnectionID
   ) throws -> Action {
@@ -297,16 +372,17 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
   private mutating func enqueueReliable(
     _ frame: TransportFrame,
     for slot: UInt8
-  ) throws {
+  ) throws -> Bool {
     guard case let .reliable(value, _) = frame else {
       throw PeerLinkStateMachineError.linkNotReady(channel: .pose, slot: slot)
     }
     var queue = reliableQueues[slot] ?? ReliableSendQueue()
     guard queue.enqueue(value) == .enqueued else {
       lastEffects = topology.rejectReliableQueueFull()
-      throw PeerLinkStateMachineError.reliableQueueFull(slot: slot)
+      return false
     }
     reliableQueues[slot] = queue
+    return true
   }
 
   private mutating func flushAndWrite(

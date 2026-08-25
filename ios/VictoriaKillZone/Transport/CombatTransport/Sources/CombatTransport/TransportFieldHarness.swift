@@ -21,15 +21,13 @@ public final class TransportFieldHarness: @unchecked Sendable {
   }
 
   public func startHostAndClient() {
-    withLock {
-      link.start()
-    }
+    link.start()
   }
 
   public func drivePoseCadence(seconds: Int, senderSlot: UInt8 = 1) throws {
-    try withLock {
-      let totalFrames = max(0, seconds) * 30
-      for index in 0..<totalFrames {
+    let totalFrames = max(0, seconds) * 30
+    for index in 0..<totalFrames {
+      let frame: PoseFrame = withLock {
         nowMs = Int64(index + 1) * 33
         let frame = PoseFrame(
           epoch: 1,
@@ -41,8 +39,9 @@ public final class TransportFieldHarness: @unchecked Sendable {
           tracking: .normal
         )
         stats.recordSent(channel: .pose, slot: senderSlot)
-        try link.send(.pose(frame))
+        return frame
       }
+      try link.send(.pose(frame))
     }
   }
 

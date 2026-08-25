@@ -166,6 +166,97 @@ final class PeerLinkStateMachineTests: XCTestCase {
     }
   }
 
+  func testHostFanoutSkipsDegradedPeersWithoutAbortingHealthyWrites() throws {
+    var machine = try host()
+    try bind(&machine, connection: 1, slot: 1)
+    try bind(&machine, connection: 2, slot: 2)
+    _ = try machine.setFlowReady(.pose, for: 1, connection: .init(1))
+    _ = try machine.setFlowReady(.pose, for: 2, connection: .init(2))
+    _ = try machine.setFlowReady(.reliable, for: 1, connection: .init(1))
+    _ = try machine.setFlowReady(.reliable, for: 2, connection: .init(2))
+
+    let initialPose = try machine.sendOutcome(.pose(pose()))
+    XCTAssertEqual(
+      initialPose.actions.compactMap { action -> UInt64? in
+        guard case let .write(connection, .pose, _) = action else { return nil }
+        return connection.rawValue
+      },
+      [1, 2]
+    )
+    XCTAssertEqual(initialPose.issues.map(\.slot), [3])
+
+    _ = machine.disconnect(.init(2))
+    let degradedPose = try machine.sendOutcome(.pose(pose(sequence: 2)))
+    XCTAssertEqual(
+      degradedPose.actions.compactMap { action -> UInt64? in
+        guard case let .write(connection, .pose, _) = action else { return nil }
+        return connection.rawValue
+      },
+      [1]
+    )
+    XCTAssertEqual(degradedPose.issues.map(\.slot), [2, 3])
+    XCTAssertTrue(degradedPose.issues.allSatisfy {
+      if case .skipped = $0.kind { return true }
+      return false
+    })
+
+    let fire = try machine.sendOutcome(.reliable(event(sequence: 1)))
+    XCTAssertEqual(
+      fire.actions.compactMap { action -> UInt64? in
+        guard case let .write(connection, .reliable, _) = action else { return nil }
+        return connection.rawValue
+      },
+      [1]
+    )
+    XCTAssertEqual(fire.issues.map(\.slot), [2, 3])
+    XCTAssertTrue(fire.issues.allSatisfy {
+      if case .queuedReliable = $0.kind { return true }
+      return false
+    })
+
+    try bind(&machine, connection: 4, slot: 2)
+    let flushed = try machine.setFlowReady(.reliable, for: 2, connection: .init(4))
+    XCTAssertEqual(
+      flushed.compactMap { action -> UInt32? in
+        guard case let .write(_, .reliable, .reliable(frame, _)) = action else { return nil }
+        return frame.sequence
+      },
+      [1]
+    )
+
+    var queueMachine = try host()
+    try bind(&queueMachine, connection: 1, slot: 1)
+    try bind(&queueMachine, connection: 2, slot: 2)
+    _ = try queueMachine.setFlowReady(.reliable, for: 1, connection: .init(1))
+    for sequence in 1...128 {
+      _ = try queueMachine.sendOutcome(
+        .reliable(event(sequence: UInt32(sequence)))
+      )
+    }
+    let queueFull = try queueMachine.sendOutcome(.reliable(event(sequence: 129)))
+    XCTAssertEqual(
+      queueFull.actions.compactMap { action -> UInt64? in
+        guard case let .write(connection, .reliable, _) = action else { return nil }
+        return connection.rawValue
+      },
+      [1]
+    )
+    XCTAssertEqual(
+      queueFull.issues.first(where: { $0.slot == 2 })?.kind,
+      .failed(.reliableQueueFull(slot: 2))
+    )
+  }
+
+  func testHostWithNoWritablePoseTargetThrowsTypedNotReady() throws {
+    var machine = try host(playerCount: 2)
+    XCTAssertThrowsError(try machine.sendOutcome(.pose(pose()))) { error in
+      XCTAssertEqual(
+        error as? PeerLinkStateMachine.PeerLinkStateMachineError,
+        .linkNotReady(channel: .pose, slot: 1)
+      )
+    }
+  }
+
   func testClientUsesOnlyHostRouteAndBonjourSelectionRequiresExactToken() throws {
     var machine = try PeerLinkStateMachine(
       role: .client,

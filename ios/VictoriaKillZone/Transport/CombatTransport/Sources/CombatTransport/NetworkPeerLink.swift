@@ -73,12 +73,12 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
     configuration: NetworkPeerLinkConfiguration,
     receiveHandler: PeerLinkReceiveHandler? = nil,
     failureHandler: (() -> Void)? = nil
-  ) {
+  ) throws {
     self.remoteSlot = remoteSlot
     self.configuration = configuration
     self.receiveHandler = receiveHandler
     self.failureHandler = failureHandler
-    stateMachine = try! PeerLinkStateMachine(
+    stateMachine = try PeerLinkStateMachine(
       role: configuration.role == .host ? .host : .client,
       localSlot: configuration.role == .host ? 0 : configuration.localSlot,
       remoteSlot: configuration.role == .host ? nil : remoteSlot,
@@ -114,10 +114,18 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
   }
 
   public func send(_ frame: TransportFrame) throws {
-    _ = try TransportFrameCodec.encode(frame)
-    let actions = try withStateLock { try stateMachine.send(frame) }
+    let outcome = try withStateLock { try stateMachine.sendOutcome(frame) }
+    let writes = try outcome.actions.map { action -> (PeerLinkStateMachine.Action, Data) in
+      guard case let .write(_, _, actionFrame) = action else {
+        return (action, Data())
+      }
+      return (action, try TransportFrameCodec.encode(actionFrame))
+    }
     queue.async { [weak self] in
-      self?.write(actions)
+      self?.writeEncoded(writes)
+    }
+    if let failure = outcome.issues.compactMap(\.failure).first {
+      throw failure
     }
   }
 
@@ -306,10 +314,23 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
   }
 
   private func write(_ actions: [PeerLinkStateMachine.Action]) {
-    for action in actions {
+    let writes = actions.compactMap { action -> (PeerLinkStateMachine.Action, Data)? in
+      guard case let .write(_, _, frame) = action,
+            let encoded = try? TransportFrameCodec.encode(frame)
+      else { return nil }
+      return (action, encoded)
+    }
+    writeEncoded(writes)
+  }
+
+  private func writeEncoded(
+    _ writes: [(PeerLinkStateMachine.Action, Data)]
+  ) {
+    for (action, encoded) in writes {
       guard case let .write(id, channel, frame) = action else { continue }
       let connection = channel == .pose ? datagramConnections[id] : connections[id]
-      guard let connection, let encoded = try? TransportFrameCodec.encode(frame) else {
+      guard let connection else {
+        failConnection(id)
         continue
       }
       let context = NWConnection.ContentContext(
@@ -349,9 +370,8 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
               }
             case let .received(_, receivedFrame):
               let nowMs = Int64(DispatchTime.now().uptimeNanoseconds / 1_000_000)
-              self.withStateLock {
-                self.receiveHandler?(receivedFrame, nowMs, nil)
-              }
+              let handler = self.withStateLock { self.receiveHandler }
+              handler?(receivedFrame, nowMs, nil)
             case .rejected:
               connection.cancel()
             case .write, .disconnected:
