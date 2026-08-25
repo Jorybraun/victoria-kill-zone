@@ -73,7 +73,11 @@ final class SelfSignedIdentityFixture: @unchecked Sendable, TransportIdentityPro
     else {
       throw FixtureError.securityStatus(importStatus)
     }
-    let secIdentity = entry[kSecImportItemIdentity as String] as! SecIdentity
+    guard let secIdentity = Self.identity(
+      from: entry[kSecImportItemIdentity as String]
+    ) else {
+      throw FixtureError.identityUnavailable
+    }
     guard let createdIdentity = sec_identity_create(secIdentity) else {
       throw FixtureError.identityUnavailable
     }
@@ -107,6 +111,19 @@ final class SelfSignedIdentityFixture: @unchecked Sendable, TransportIdentityPro
     guard process.terminationStatus == 0 else {
       throw FixtureError.opensslFailed(process.terminationStatus)
     }
+  }
+
+  private static func identity(from value: Any?) -> SecIdentity? {
+    guard let value,
+          CFGetTypeID(value as CFTypeRef) == SecIdentityGetTypeID()
+    else {
+      return nil
+    }
+    return dynamicCast(value, to: SecIdentity.self)
+  }
+
+  private static func dynamicCast<T, U>(_ value: T, to: U.Type) -> U? {
+    value as? U
   }
 
   private enum FixtureError: Error {

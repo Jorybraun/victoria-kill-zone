@@ -12,22 +12,28 @@ final class NetworkPeerLinkLoopbackSmokeTests: XCTestCase {
     let hostReceived = FrameRecorder()
     let clientOneReceived = FrameRecorder()
     let clientTwoReceived = FrameRecorder()
+    let hostSlotsFulfilled = FulfillmentGate()
+    let clientOneHostReliableFulfilled = FulfillmentGate()
+    let clientTwoHostReliableFulfilled = FulfillmentGate()
+    let continuityPoseFulfilled = FulfillmentGate()
+    let continuityReliableFulfilled = FulfillmentGate()
     let listenersReady = expectation(description: "host listeners ready")
     let ports = PortRecorder()
+    let sendErrors = SendErrorRecorder()
     let hostSlots = expectation(description: "host receives both authenticated slots")
     let clientOneHostPose = expectation(description: "client one pose reaches host")
     let clientOneHostReliable = expectation(description: "client one reliable reaches host")
     let clientTwoHostPose = expectation(description: "client two pose reaches host")
     let clientTwoHostReliable = expectation(description: "client two reliable reaches host")
-    let hostPoseReachesBothClients = expectation(description: "host pose reaches both clients")
+    let hostPoseReachesClientOne = expectation(description: "host pose reaches client one")
+    let hostPoseReachesClientTwo = expectation(description: "host pose reaches client two")
     let poseRelay = expectation(description: "pose relays from client one to client two")
     let reliableRelay = expectation(description: "reliable fire relays from client one to client two")
     let continuityPose = expectation(description: "client one continuity pose")
     let continuityReliable = expectation(description: "client one continuity reliable")
     [
-      hostSlots, clientOneHostPose, clientOneHostReliable, clientTwoHostPose,
-      clientTwoHostReliable, hostPoseReachesBothClients, poseRelay,
-      reliableRelay, continuityPose, continuityReliable
+      clientOneHostPose, clientTwoHostPose, hostPoseReachesClientOne,
+      hostPoseReachesClientTwo
     ].forEach { $0.assertForOverFulfill = false }
     let clientLinks = ClientLinks()
 
@@ -50,14 +56,25 @@ final class NetworkPeerLinkLoopbackSmokeTests: XCTestCase {
         hostReceived.append(frame)
         if case let .pose(value, _) = frame, value.senderSlot == 1 {
           clientOneHostPose.fulfill()
-          if value.sequence == 3 { continuityPose.fulfill() }
+          if value.sequence == 3 && continuityPoseFulfilled.mark() {
+            continuityPose.fulfill()
+          }
         }
         if case let .reliable(value, _) = frame, value.senderSlot == 1 {
-          clientOneHostReliable.fulfill()
-          if value.sequence == 3 { continuityReliable.fulfill() }
+          if clientOneHostReliableFulfilled.mark() {
+            clientOneHostReliable.fulfill()
+          }
+          if value.sequence == 3 && continuityReliableFulfilled.mark() {
+            continuityReliable.fulfill()
+          }
           if value.sequence == 1 {
             if let link = clientLinks.one {
-              Self.scheduleSend(link, frame: .pose(Self.pose(slot: 1, sequence: 1)))
+              Self.scheduleSend(
+                link,
+                frame: .pose(Self.pose(slot: 1, sequence: 1)),
+                label: "client one relay pose",
+                errors: sendErrors
+              )
             }
           }
         }
@@ -65,15 +82,22 @@ final class NetworkPeerLinkLoopbackSmokeTests: XCTestCase {
           clientTwoHostPose.fulfill()
         }
         if case let .reliable(value, _) = frame, value.senderSlot == 2 {
-          clientTwoHostReliable.fulfill()
+          if clientTwoHostReliableFulfilled.mark() {
+            clientTwoHostReliable.fulfill()
+          }
           if value.sequence == 1 {
             if let link = clientLinks.two {
-              Self.scheduleSend(link, frame: .pose(Self.pose(slot: 2, sequence: 1)))
+              Self.scheduleSend(
+                link,
+                frame: .pose(Self.pose(slot: 2, sequence: 1)),
+                label: "client two relay pose",
+                errors: sendErrors
+              )
             }
           }
         }
-        let slots = Set(hostReceived.frames.compactMap(\.senderSlot))
-        if slots.isSuperset(of: [UInt8(1), UInt8(2)]) {
+        let slots = Set(hostReceived.snapshot().compactMap(\.senderSlot))
+        if slots.isSuperset(of: [UInt8(1), UInt8(2)]) && hostSlotsFulfilled.mark() {
           hostSlots.fulfill()
         }
       },
@@ -103,10 +127,7 @@ final class NetworkPeerLinkLoopbackSmokeTests: XCTestCase {
       receiveHandler: { frame, _, _ in
         clientOneReceived.append(frame)
         if case let .pose(value, relayed) = frame, value.senderSlot == 0, !relayed {
-          hostPoseReachesBothClients.fulfill()
-        }
-        if case let .pose(value, relayed) = frame, value.senderSlot == 1, relayed {
-          poseRelay.fulfill()
+          hostPoseReachesClientOne.fulfill()
         }
       },
     )
@@ -115,14 +136,24 @@ final class NetworkPeerLinkLoopbackSmokeTests: XCTestCase {
       configuration: clientConfiguration(2),
       receiveHandler: { frame, _, _ in
         clientTwoReceived.append(frame)
+        if frame.senderSlot == 2 || (frame.senderSlot == 0 && frame.relayed) {
+          XCTFail("client two received an invalid sender slot: \(frame.senderSlot)")
+        }
         if case let .pose(value, relayed) = frame, value.senderSlot == 0, !relayed {
-          hostPoseReachesBothClients.fulfill()
+          hostPoseReachesClientTwo.fulfill()
         }
         if case let .pose(value, relayed) = frame, value.senderSlot == 1, relayed {
+          guard value.sequence == 2 else { return }
+          XCTAssertEqual(value.senderSlot, 1)
           XCTAssertTrue(relayed)
+          XCTAssertEqual(value.sequence, 2)
           poseRelay.fulfill()
         }
         if case let .reliable(value, relayed) = frame, value.senderSlot == 1, relayed {
+          guard value.sequence == 2 else { return }
+          XCTAssertEqual(value.senderSlot, 1)
+          XCTAssertTrue(relayed)
+          XCTAssertEqual(value.sequence, 2)
           XCTAssertEqual(value.eventKind, .fire)
           reliableRelay.fulfill()
         }
@@ -148,40 +179,67 @@ final class NetworkPeerLinkLoopbackSmokeTests: XCTestCase {
     clientLinks.one?.connect(to: endpoint)
     clientLinks.two?.connect(to: endpoint)
 
-    Self.scheduleSend(clientLinks.one!, frame: .reliable(Self.event(slot: 1, sequence: 1)))
-    Self.scheduleSend(clientLinks.two!, frame: .reliable(Self.event(slot: 2, sequence: 1)))
+    Self.scheduleSend(
+      clientLinks.one!,
+      frame: .reliable(Self.event(slot: 1, sequence: 1)),
+      label: "client one initial reliable",
+      errors: sendErrors
+    )
+    Self.scheduleSend(
+      clientLinks.two!,
+      frame: .reliable(Self.event(slot: 2, sequence: 1)),
+      label: "client two initial reliable",
+      errors: sendErrors
+    )
     wait(for: [hostSlots, clientOneHostPose, clientOneHostReliable,
                clientTwoHostPose, clientTwoHostReliable], timeout: 10)
-    XCTAssertEqual(hostReceived.frames.count > 0, true)
-
     try host.send(TransportFrame.pose(Self.pose(slot: 0, sequence: 1)))
-    wait(for: [hostPoseReachesBothClients], timeout: 10)
+    wait(for: [hostPoseReachesClientOne, hostPoseReachesClientTwo], timeout: 10)
 
-    Self.scheduleSend(clientLinks.one!, frame: .pose(Self.pose(slot: 1, sequence: 2)))
+    Self.scheduleSend(
+      clientLinks.one!,
+      frame: .pose(Self.pose(slot: 1, sequence: 2)),
+      label: "client one relay pose",
+      errors: sendErrors
+    )
     wait(for: [poseRelay], timeout: 10)
-    Self.scheduleSend(clientLinks.one!, frame: .reliable(Self.event(slot: 1, sequence: 2)))
+    Self.scheduleSend(
+      clientLinks.one!,
+      frame: .reliable(Self.event(slot: 1, sequence: 2)),
+      label: "client one relay reliable",
+      errors: sendErrors
+    )
     wait(for: [reliableRelay], timeout: 10)
 
     clientLinks.two?.stop()
-    Self.scheduleSend(clientLinks.one!, frame: .reliable(Self.event(slot: 1, sequence: 3)))
-    Self.scheduleSend(clientLinks.one!, frame: .pose(Self.pose(slot: 1, sequence: 3)))
+    Self.scheduleSend(
+      clientLinks.one!,
+      frame: .reliable(Self.event(slot: 1, sequence: 3)),
+      label: "client one continuity reliable",
+      errors: sendErrors
+    )
+    Self.scheduleSend(
+      clientLinks.one!,
+      frame: .pose(Self.pose(slot: 1, sequence: 3)),
+      label: "client one continuity pose",
+      errors: sendErrors
+    )
     wait(for: [continuityPose, continuityReliable], timeout: 10)
+    XCTAssertTrue(sendErrors.values.isEmpty, sendErrors.values.joined(separator: ", "))
   }
 
   private static func scheduleSend(
     _ link: NetworkPeerLink,
-    frame: TransportFrame
+    frame: TransportFrame,
+    label: String,
+    errors: SendErrorRecorder
   ) {
-    let deadline = Date().addingTimeInterval(9)
-    func attempt() {
-      guard Date() < deadline else { return }
-      do {
-        try link.send(frame)
-      } catch {
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.05, execute: attempt)
-      }
-    }
-    attempt()
+    SendAttempt(
+      link: link,
+      frame: frame,
+      label: label,
+      errors: errors
+    ).run()
   }
 
   private static func pose(slot: UInt8, sequence: UInt32) -> PoseFrame {
@@ -241,6 +299,78 @@ private final class FrameRecorder: @unchecked Sendable {
     lock.lock()
     frames.append(frame)
     lock.unlock()
+  }
+
+  func snapshot() -> [TransportFrame] {
+    lock.lock()
+    defer { lock.unlock() }
+    return frames
+  }
+}
+
+private final class SendErrorRecorder: @unchecked Sendable {
+  private let lock = NSLock()
+  private var errors: [String] = []
+
+  var values: [String] {
+    lock.lock()
+    defer { lock.unlock() }
+    return errors
+  }
+
+  func append(_ error: String) {
+    lock.lock()
+    errors.append(error)
+    lock.unlock()
+  }
+}
+
+private final class FulfillmentGate: @unchecked Sendable {
+  private let lock = NSLock()
+  private var fulfilled = false
+
+  func mark() -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    guard !fulfilled else { return false }
+    fulfilled = true
+    return true
+  }
+}
+
+private final class SendAttempt: @unchecked Sendable {
+  private let link: NetworkPeerLink
+  private let frame: TransportFrame
+  private let label: String
+  private let errors: SendErrorRecorder
+  private let deadline = Date().addingTimeInterval(9)
+  private var lastError: Error?
+
+  init(
+    link: NetworkPeerLink,
+    frame: TransportFrame,
+    label: String,
+    errors: SendErrorRecorder
+  ) {
+    self.link = link
+    self.frame = frame
+    self.label = label
+    self.errors = errors
+  }
+
+  func run() {
+    guard Date() < deadline else {
+      errors.append("\(label): \(lastError.map(String.init(describing:)) ?? "deadline exceeded")")
+      return
+    }
+    do {
+      try link.send(frame)
+    } catch {
+      lastError = error
+      DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) { [self] in
+        run()
+      }
+    }
   }
 }
 
