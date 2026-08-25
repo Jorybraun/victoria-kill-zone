@@ -5,6 +5,11 @@ public enum TransportChannel: String, Codable, CaseIterable, Sendable {
   case reliable
 }
 
+public enum TransportEvidenceTier: String, Codable, Sendable {
+  case loopbackSimulated = "loopback-simulated"
+  case device
+}
+
 public struct TransportChannelSnapshot: Codable, Equatable, Sendable {
   public let channel: TransportChannel
   public let sent: Int
@@ -79,6 +84,7 @@ public struct TransportSlotSnapshot: Codable, Equatable, Sendable {
 public struct TransportStatsSnapshot: Codable, Equatable, Sendable {
   public let schema: String
   public let clockSource: String
+  public let evidenceTier: TransportEvidenceTier
   public let channels: [TransportChannelSnapshot]
   public let slots: [TransportSlotSnapshot]
   public let disconnectCount: Int
@@ -88,6 +94,7 @@ public struct TransportStatsSnapshot: Codable, Equatable, Sendable {
   public init(
     schema: String = "transport-stats.v0",
     clockSource: String = "virtual-match-ms",
+    evidenceTier: TransportEvidenceTier = .loopbackSimulated,
     channels: [TransportChannelSnapshot],
     slots: [TransportSlotSnapshot],
     disconnectCount: Int,
@@ -96,6 +103,7 @@ public struct TransportStatsSnapshot: Codable, Equatable, Sendable {
   ) {
     self.schema = schema
     self.clockSource = clockSource
+    self.evidenceTier = evidenceTier
     self.channels = channels
     self.slots = slots
     self.disconnectCount = disconnectCount
@@ -105,6 +113,11 @@ public struct TransportStatsSnapshot: Codable, Equatable, Sendable {
 }
 
 public struct TransportStats: Equatable, Sendable {
+  private struct SequenceCursor: Equatable, Sendable {
+    var epoch: UInt16
+    var sequence: UInt32
+  }
+
   private struct Counters: Equatable, Sendable {
     var sent = 0
     var received = 0
@@ -128,12 +141,16 @@ public struct TransportStats: Equatable, Sendable {
     Dictionary(uniqueKeysWithValues: TransportChannel.allCases.map { ($0, Counters()) })
   }()
   private var slotCounters: [UInt8: Counters] = [:]
+  private var lastReceivedSequence: [TransportChannel: [UInt8: SequenceCursor]] = [:]
+  public let evidenceTier: TransportEvidenceTier
   public private(set) var disconnectCount = 0
   public private(set) var recoveryCount = 0
   public private(set) var fireLockedMilliseconds: Int64 = 0
   private var fireLockStartedAtMs: Int64?
 
-  public init() {}
+  public init(evidenceTier: TransportEvidenceTier = .loopbackSimulated) {
+    self.evidenceTier = evidenceTier
+  }
 
   public mutating func recordSent(channel: TransportChannel, slot: UInt8) {
     channelCounters[channel]!.sent += 1
@@ -147,7 +164,9 @@ public struct TransportStats: Equatable, Sendable {
     duplicate: Bool = false,
     buffered: Bool = false,
     arrivalMs: Int64? = nil,
-    sentAtMs: Int64? = nil
+    sentAtMs: Int64? = nil,
+    sequence: UInt32? = nil,
+    epoch: UInt16? = nil
   ) {
     var channelValue = channelCounters[channel]!
     var slotValue = slotCounters[slot, default: Counters()]
@@ -176,6 +195,21 @@ public struct TransportStats: Equatable, Sendable {
       if let sentAtMs {
         channelValue.sendToReceive.append(max(0, arrivalMs - sentAtMs))
       }
+    }
+    if let sequence, sequence > 0 {
+      let previous = lastReceivedSequence[channel]?[slot]
+      let gap = if let previous, previous.epoch == (epoch ?? previous.epoch),
+        sequence > previous.sequence {
+        Int(sequence - previous.sequence - 1)
+      } else {
+        0
+      }
+      channelValue.expectedSequences += 1
+      channelValue.missingSequences += gap
+      lastReceivedSequence[channel, default: [:]][slot] = SequenceCursor(
+        epoch: epoch ?? previous?.epoch ?? 0,
+        sequence: max(sequence, previous?.sequence ?? 0)
+      )
     }
     channelCounters[channel] = channelValue
     slotCounters[slot] = slotValue
@@ -210,7 +244,7 @@ public struct TransportStats: Equatable, Sendable {
     }
     let channels = TransportChannel.allCases.map { channel in
       let value = channelCounters[channel]!
-      let denominator = value.expectedSequences + value.missingSequences
+      let denominator = value.expectedSequences
       return TransportChannelSnapshot(
         channel: channel,
         sent: value.sent,

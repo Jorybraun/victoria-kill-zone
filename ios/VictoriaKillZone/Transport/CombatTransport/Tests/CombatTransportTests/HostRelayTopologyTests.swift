@@ -27,4 +27,23 @@ final class HostRelayTopologyTests: XCTestCase {
       XCTAssertEqual(error as? TopologyError, .playerCountFull)
     }
   }
+
+  func testFourPlayerFabricRelaysToOtherClientsOnly() throws {
+    let fabric = LoopbackFabric(playerCount: 4)
+    let frame = PoseFrame(
+      epoch: 1,
+      senderSlot: 1,
+      sequence: 1,
+      timestampMs: 1,
+      position: SIMD3<Float>(1, 0, 0),
+      orientation: SIMD4<Float>(0, 0, 0, 1),
+      tracking: .normal
+    )
+    try fabric.client(slot: 1).send(frame)
+    fabric.advance(to: 1)
+    XCTAssertEqual(fabric.latestPose(for: 1, at: 0)?.sequence, 1)
+    XCTAssertNil(fabric.latestPose(for: 1, at: 1))
+    XCTAssertEqual(fabric.latestPose(for: 1, at: 2)?.sequence, 1)
+    XCTAssertEqual(fabric.latestPose(for: 1, at: 3)?.sequence, 1)
+  }
 }

@@ -41,6 +41,24 @@ final class FrameCodecTests: XCTestCase {
     }
   }
 
+  func testEveryReliablePrefixIsTruncated() throws {
+    let frame: TransportFrame = .reliable(
+      ReliableEventFrame(
+        epoch: 3,
+        senderSlot: 2,
+        sequence: 9,
+        eventKind: .control,
+        payload: Data([1, 2, 3])
+      )
+    )
+    let encoded = try TransportFrameCodec.encode(frame)
+    for length in 0..<encoded.count {
+      XCTAssertThrowsError(try TransportFrameCodec.decode(encoded.prefix(length))) { error in
+        XCTAssertEqual(error as? TransportCodecError, .truncated)
+      }
+    }
+  }
+
   func testMalformedInputsThrowTypedErrors() throws {
     let encoded = try TransportFrameCodec.encode(.pose(pose))
     var cases: [(Data, TransportCodecError)] = []
@@ -75,6 +93,38 @@ final class FrameCodecTests: XCTestCase {
     trailing.append(0)
     cases.append((trailing, .trailingBytes))
 
+    var eventKind = try TransportFrameCodec.encode(
+      .reliable(
+        ReliableEventFrame(
+          epoch: 1,
+          senderSlot: 1,
+          sequence: 1,
+          eventKind: .fire,
+          payload: Data()
+        )
+      )
+    )
+    eventKind[12] = 99
+    cases.append((eventKind, .invalidEventKind))
+    var tooLarge = eventKind
+    tooLarge[12] = ReliableEventKind.control.rawValue
+    tooLarge.replaceSubrange(13..<15, with: [0x01, 0x02])
+    tooLarge.append(Data(repeating: 0, count: 513))
+    cases.append((tooLarge, .payloadTooLarge))
+    var mismatched = try TransportFrameCodec.encode(
+      .reliable(
+        ReliableEventFrame(
+          epoch: 1,
+          senderSlot: 1,
+          sequence: 1,
+          eventKind: .fire,
+          payload: Data([1, 2])
+        )
+      )
+    )
+    mismatched[13] = 1
+    cases.append((mismatched, .payloadLengthMismatch))
+
     for (data, expected) in cases {
       XCTAssertThrowsError(try TransportFrameCodec.decode(data)) { error in
         XCTAssertEqual(error as? TransportCodecError, expected)
@@ -92,7 +142,9 @@ final class FrameCodecTests: XCTestCase {
       let bit = UInt8(1 << (state % 8))
       var mutated = original
       mutated[index] ^= bit
-      _ = try? TransportFrameCodec.decode(mutated)
+      if let decoded = try? TransportFrameCodec.decode(mutated) {
+        XCTAssertEqual(try TransportFrameCodec.encode(decoded), mutated)
+      }
     }
   }
 }

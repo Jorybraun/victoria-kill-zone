@@ -1,6 +1,7 @@
 import Foundation
 
 public enum PoseDiscardReason: Equatable, Sendable {
+  case invalidSlot
   case epochMismatch
   case duplicateSequence
   case staleSequence
@@ -32,12 +33,13 @@ public struct PoseInbox: Equatable, Sendable {
 
   private var cursors: [UInt8: Cursor] = [:]
   private var latest: [UInt8: PoseFrame] = [:]
+  public private(set) var admittedHistory: [PoseFrame] = []
 
   public init() {}
 
   public mutating func admit(_ frame: PoseFrame) -> PoseAdmission {
     guard frame.senderSlot <= 3 else {
-      return PoseAdmission(accepted: false, discardedReason: .epochMismatch)
+      return PoseAdmission(accepted: false, discardedReason: .invalidSlot)
     }
     guard let cursor = cursors[frame.senderSlot] else {
       cursors[frame.senderSlot] = Cursor(
@@ -46,6 +48,7 @@ public struct PoseInbox: Equatable, Sendable {
         timestampMs: frame.timestampMs
       )
       latest[frame.senderSlot] = frame
+      admittedHistory.append(frame)
       return PoseAdmission(accepted: true, frame: frame)
     }
     if frame.epoch > cursor.epoch {
@@ -55,6 +58,7 @@ public struct PoseInbox: Equatable, Sendable {
         timestampMs: frame.timestampMs
       )
       latest[frame.senderSlot] = frame
+      admittedHistory.append(frame)
       return PoseAdmission(accepted: true, frame: frame)
     }
     guard frame.epoch == cursor.epoch else {
@@ -77,6 +81,7 @@ public struct PoseInbox: Equatable, Sendable {
       timestampMs: frame.timestampMs
     )
     latest[frame.senderSlot] = frame
+    admittedHistory.append(frame)
     return PoseAdmission(accepted: true, frame: frame)
   }
 

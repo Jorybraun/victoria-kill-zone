@@ -6,13 +6,13 @@ let package = Package(
   name: "CombatTransport",
   platforms: [
     .iOS(.v17),
-    .macOS(.v13),
+    .macOS(.v14),
   ],
   products: [
     .library(name: "CombatTransport", targets: ["CombatTransport"])
   ],
   dependencies: [
-    .package(path: "../../../shared/simulation")
+    .package(path: "../../../../shared/simulation")
   ],
   targets: [
     .target(

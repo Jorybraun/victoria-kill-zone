@@ -37,6 +37,17 @@ final class BoundedQueueBackpressureTests: XCTestCase {
     XCTAssertEqual(queue.dequeue()?.sequence, 1)
   }
 
+  func testCoreReliableQueueOverflowEngagesTopologyFireLock() {
+    let topology = try! HostRelayTopology(playerCount: 2)
+    var core = CombatTransportCore(slot: 0, topology: topology)
+    for sequence in 1...128 {
+      XCTAssertEqual(core.enqueueReliable(event(UInt32(sequence))), .enqueued)
+    }
+    XCTAssertEqual(core.enqueueReliable(event(129)), .rejectedQueueFull)
+    XCTAssertTrue(core.fireLocked)
+    XCTAssertEqual(core.lastEffects.last, .fireLockEngaged)
+  }
+
   func testLowWaterReleaseIsExposedByTopology() throws {
     var topology = try HostRelayTopology(playerCount: 2)
     _ = topology.markReliableGapUnrecoverable(slot: 1)

@@ -89,6 +89,7 @@ public enum TransportCodecError: Error, Equatable, Sendable {
   case magicMismatch
   case unsupportedVersion
   case unknownFrameKind
+  case invalidEventKind
   case truncated
   case trailingBytes
   case slotOutOfRange
@@ -111,7 +112,7 @@ public enum TransportFrameCodec {
     var data = Data()
     switch frame {
     case let .pose(value, relayed):
-      try validateHeader(epoch: value.epoch, senderSlot: value.senderSlot, relayed: relayed)
+      try validateHeader(senderSlot: value.senderSlot)
       guard value.sequence != 0 else { throw TransportCodecError.zeroSequence }
       guard value.timestampMs > 0 else { throw TransportCodecError.nonPositiveTimestamp }
       guard value.position.x.isFinite, value.position.y.isFinite,
@@ -140,7 +141,7 @@ public enum TransportFrameCodec {
       }
       data.append(value.tracking.rawValue)
     case let .reliable(value, relayed):
-      try validateHeader(epoch: value.epoch, senderSlot: value.senderSlot, relayed: relayed)
+      try validateHeader(senderSlot: value.senderSlot)
       guard value.sequence != 0 else { throw TransportCodecError.zeroSequence }
       guard value.payload.count <= maxPayloadLength else {
         throw TransportCodecError.payloadTooLarge
@@ -215,7 +216,7 @@ public enum TransportFrameCodec {
       guard sequence != 0 else { throw TransportCodecError.zeroSequence }
       let eventKindRaw = try reader.read(UInt8.self)
       guard let eventKind = ReliableEventKind(rawValue: eventKindRaw) else {
-        throw TransportCodecError.unknownFrameKind
+        throw TransportCodecError.invalidEventKind
       }
       let payloadLength = Int(try reader.read(UInt16.self))
       guard payloadLength <= maxPayloadLength else {
@@ -242,9 +243,7 @@ public enum TransportFrameCodec {
     }
   }
 
-  private static func validateHeader(epoch: UInt16, senderSlot: UInt8, relayed: Bool) throws {
-    _ = epoch
-    _ = relayed
+  private static func validateHeader(senderSlot: UInt8) throws {
     guard senderSlot <= 3 else { throw TransportCodecError.slotOutOfRange }
   }
 

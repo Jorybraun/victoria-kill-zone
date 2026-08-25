@@ -22,11 +22,11 @@ final class PoseInboxLatestStateTests: XCTestCase {
 
   func testOnlyStrictlyNewerSequenceAndTimestampAreAdmitted() {
     var inbox = PoseInbox()
-    XCTAssertTrue(inbox.admit(frame(sequence: 1, timestamp: 1)).accepted)
-    XCTAssertEqual(inbox.admit(frame(sequence: 1, timestamp: 2)).discardedReason, .duplicateSequence)
-    XCTAssertEqual(inbox.admit(frame(sequence: 0, timestamp: 0)).discardedReason, .staleSequence)
-    XCTAssertEqual(inbox.admit(frame(sequence: 2, timestamp: 1)).discardedReason, .staleTimestamp)
     XCTAssertTrue(inbox.admit(frame(sequence: 2, timestamp: 2)).accepted)
+    XCTAssertEqual(inbox.admit(frame(sequence: 2, timestamp: 3)).discardedReason, .duplicateSequence)
+    XCTAssertEqual(inbox.admit(frame(sequence: 1, timestamp: 3)).discardedReason, .staleSequence)
+    XCTAssertEqual(inbox.admit(frame(sequence: 3, timestamp: 1)).discardedReason, .staleTimestamp)
+    XCTAssertTrue(inbox.admit(frame(sequence: 3, timestamp: 3)).accepted)
   }
 
   func testEpochMismatchAndResetAreIndependentPerSlot() {
@@ -47,5 +47,24 @@ final class PoseInboxLatestStateTests: XCTestCase {
     _ = inbox.admit(frame(sequence: 2, timestamp: 2))
     _ = inbox.admit(frame(sequence: 1, timestamp: 1))
     XCTAssertEqual(inbox.latestFrame(for: 1)?.sequence, 2)
+  }
+
+  func testInvalidSlotHasDistinctAdmissionReason() {
+    var inbox = PoseInbox()
+    XCTAssertEqual(
+      inbox.admit(frame(slot: 4, sequence: 1, timestamp: 1)).discardedReason,
+      .invalidSlot
+    )
+  }
+
+  func testFourPlayerInterleaveKeepsCursorsIndependent() {
+    var inbox = PoseInbox()
+    for slot in 1...3 {
+      XCTAssertTrue(inbox.admit(frame(slot: UInt8(slot), sequence: 2, timestamp: 20)).accepted)
+      XCTAssertTrue(inbox.admit(frame(slot: UInt8(slot), sequence: 3, timestamp: 30)).accepted)
+    }
+    XCTAssertEqual(inbox.admittedFrames.count, 3)
+    XCTAssertEqual(inbox.cursor(for: 1)?.sequence, 3)
+    XCTAssertEqual(inbox.cursor(for: 3)?.timestampMs, 30)
   }
 }

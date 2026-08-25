@@ -30,6 +30,11 @@ policy in it.
 `LoopbackFabric` both satisfy the same `PeerLink` protocol. That is what makes
 the fault-injection suite meaningful rather than a mock of itself.
 
+The standalone package manifest is at
+`ios/VictoriaKillZone/Transport/CombatTransport/Package.swift`; its sources and
+tests are under that package directory. Keeping the manifest below the iOS
+verification script's search depth preserves the app package test target.
+
 ## Topology
 
 Host/relay, never a mesh, never a 1v1 pair assumption:

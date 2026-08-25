@@ -83,6 +83,7 @@ public enum TransportEffect: Equatable, Sendable {
   case peerRecovered(slot: UInt8)
   case reliableGapUnrecoverable(slot: UInt8)
   case rejectedReliableQueueFull
+  case epochReset(epoch: UInt16)
 }
 
 public struct HostRelayTopology: Equatable, Sendable {
@@ -93,17 +94,30 @@ public struct HostRelayTopology: Equatable, Sendable {
   private var reliableChannelsInOrder = true
   private var queuesAtLowWater = true
   private var hostLinkDown = false
+  public let peerTimeoutMs: Int64
+  private var lastHeardMs: [UInt8: Int64]
   public private(set) var fireLocked = false
 
-  public init(playerCount: Int) throws {
+  private init(validatedPlayerCount playerCount: Int, peerTimeoutMs: Int64) {
+    self.playerCount = playerCount
+    self.peerTimeoutMs = max(1, peerTimeoutMs)
+    peers = [Self.hostSlot: .active]
+    lastHeardMs = [Self.hostSlot: 0]
+    for slot in 1..<UInt8(playerCount) {
+      peers[slot] = .active
+      lastHeardMs[slot] = 0
+    }
+  }
+
+  public init(playerCount: Int, peerTimeoutMs: Int64 = 1_000) throws {
     guard (2...4).contains(playerCount) else {
       throw TopologyError.invalidPlayerCount
     }
-    self.playerCount = playerCount
-    peers = [Self.hostSlot: .active]
-    for slot in 1..<UInt8(playerCount) {
-      peers[slot] = .active
-    }
+    self.init(validatedPlayerCount: playerCount, peerTimeoutMs: peerTimeoutMs)
+  }
+
+  static func defaultTopology() -> HostRelayTopology {
+    HostRelayTopology(validatedPlayerCount: 2, peerTimeoutMs: 1_000)
   }
 
   public var activeSlots: [UInt8] {
@@ -120,7 +134,9 @@ public struct HostRelayTopology: Equatable, Sendable {
   }
 
   public func relayTargets(from origin: UInt8) -> [UInt8] {
-    activeSlots.filter { $0 != origin && $0 != Self.hostSlot || origin == Self.hostSlot && $0 != origin }
+    activeSlots.filter { slot in
+      slot != origin && (origin == Self.hostSlot || slot != Self.hostSlot)
+    }
   }
 
   public func status(for slot: UInt8) -> PeerMembership? {
@@ -132,6 +148,7 @@ public struct HostRelayTopology: Equatable, Sendable {
       throw TopologyError.playerCountFull
     }
     peers[slot] = .active
+    lastHeardMs[slot] = 0
     return slot
   }
 
@@ -142,11 +159,12 @@ public struct HostRelayTopology: Equatable, Sendable {
     return engageFireLock(.peerDisconnected(slot: slot))
   }
 
-  public mutating func recover(slot: UInt8) throws -> [TransportEffect] {
+  public mutating func recover(slot: UInt8, nowMs: Int64 = 0) throws -> [TransportEffect] {
     guard peers[slot] != nil else {
       throw TopologyError.invalidSlot
     }
     peers[slot] = .active
+    lastHeardMs[slot] = nowMs
     if slot == Self.hostSlot {
       hostLinkDown = false
     }
@@ -169,6 +187,16 @@ public struct HostRelayTopology: Equatable, Sendable {
     return engageFireLock(nil)
   }
 
+  public mutating func markHeard(slot: UInt8, nowMs: Int64) -> [TransportEffect] {
+    guard slot != Self.hostSlot, peers[slot] != nil else { return [] }
+    lastHeardMs[slot] = nowMs
+    return []
+  }
+
+  public mutating func resetEpoch(_ epoch: UInt16) -> [TransportEffect] {
+    [.epochReset(epoch: epoch)]
+  }
+
   public mutating func advance(
     nowMs: Int64,
     reliableChannelsInOrder: Bool,
@@ -176,10 +204,18 @@ public struct HostRelayTopology: Equatable, Sendable {
     reliableQueueCount: Int,
     lowWaterMark: Int
   ) -> [TransportEffect] {
-    _ = nowMs
     self.reliableChannelsInOrder = reliableChannelsInOrder
     queuesAtLowWater = poseQueueCount <= lowWaterMark && reliableQueueCount <= lowWaterMark
-    return releaseIfHealthy()
+    var effects: [TransportEffect] = []
+    for slot in expectedPeerSlots where peers[slot] == .active {
+      guard let lastHeard = lastHeardMs[slot],
+            nowMs - lastHeard > peerTimeoutMs
+      else { continue }
+      peers[slot] = .disconnected
+      effects += engageFireLock(.peerDisconnected(slot: slot))
+    }
+    effects += releaseIfHealthy()
+    return effects
   }
 
   private mutating func engageFireLock(_ cause: TransportEffect?) -> [TransportEffect] {
