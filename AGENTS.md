@@ -4,10 +4,10 @@ This file applies to the entire repository. Read it before editing.
 
 ## Product authority
 
-- The current product is the native iOS, markerless 1v1 prototype defined by [victoria-kill-zone-technical-spec.md](victoria-kill-zone-technical-spec.md) and orchestrated by [victoria-kill-zone-build-prompt.md](victoria-kill-zone-build-prompt.md). If they conflict, the technical spec wins unless a newer accepted decision record says otherwise.
+- The current product is the native iOS, markerless multiplayer game (Phase 1 cap: 4 players) defined by [victoria-kill-zone-technical-spec.md](victoria-kill-zone-technical-spec.md), orchestrated by [victoria-kill-zone-build-prompt.md](victoria-kill-zone-build-prompt.md), and re-founded per [docs/decisions/0003-multiplayer-first-refounding.md](docs/decisions/0003-multiplayer-first-refounding.md) and [docs/roadmap.md](docs/roadmap.md). If they conflict, the technical spec wins unless a newer accepted decision record says otherwise; ADR 0003 supersedes the spec's 1v1-only scope.
 - The committed Phase 0 stack is Swift/SwiftUI + ARKit + Vision + Core Location on iOS, Convex as authoritative game state, and React + TypeScript + Vite for the read-only spectator. See [docs/decisions/0001-phase-zero-stack.md](docs/decisions/0001-phase-zero-stack.md).
 - Everything under `archive /` is preserved, reference-only history. Do not build on, modernize, move, delete, or copy archived Unity, custom-server, or LAN code into the active product without an accepted decision record.
-- Do not add Unity, Unreal, React Native, Expo, Firebase, Supabase, visible target markers, WebRTC, persistent accounts, or 3+ player targeting to Phase 0.
+- Do not add Unity, Unreal, React Native, Expo, Firebase, Supabase, visible target markers, WebRTC, or persistent accounts. Per ADR 0003, multiplayer targeting is allowed up to the Phase 1 cap of 4 players; more than 4 players requires a new accepted decision record.
 
 ## Write ownership
 

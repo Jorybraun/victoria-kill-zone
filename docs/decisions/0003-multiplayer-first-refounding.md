@@ -1,6 +1,6 @@
 # ADR 0003: Multiplayer-first re-founding (Phase 1 direction)
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-08-24, product owner confirmation via KIL-31)
 - **Date:** 2026-08-24
 - **Decision owners:** Product and integration
 
