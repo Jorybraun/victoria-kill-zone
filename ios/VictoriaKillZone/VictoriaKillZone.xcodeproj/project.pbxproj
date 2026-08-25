@@ -28,6 +28,7 @@
 		B00100000000000000000013 /* VoiceFireController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000015 /* VoiceFireController.swift */; };
 		B00100000000000000000014 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00100000000000000000016 /* AVFoundation.framework */; };
 		B00100000000000000000015 /* Speech.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00100000000000000000017 /* Speech.framework */; };
+		B00100000000000000000016 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000018 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -64,6 +65,7 @@
 		F00100000000000000000015 /* VoiceFireController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceFireController.swift; sourceTree = "<group>"; };
 		F00100000000000000000016 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		F00100000000000000000017 /* Speech.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Speech.framework; path = System/Library/Frameworks/Speech.framework; sourceTree = SDKROOT; };
+		F00100000000000000000018 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -87,12 +89,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		3A866413303CA4AA005CD65E /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				F00100000000000000000016 /* AVFoundation.framework */,
+				F00100000000000000000017 /* Speech.framework */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		G00100000000000000000001 = {
 			isa = PBXGroup;
 			children = (
 				G00100000000000000000002 /* VictoriaKillZone */,
 				G0010000000000000000000C /* VictoriaKillZoneTests */,
 				G0010000000000000000000D /* Products */,
+				3A866413303CA4AA005CD65E /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -105,6 +117,7 @@
 				G00100000000000000000006 /* Targeting */,
 				G00100000000000000000007 /* Features */,
 				G0010000000000000000000B /* DesignSystem */,
+				F00100000000000000000018 /* Assets.xcassets */,
 				F0010000000000000000000D /* Info.plist */,
 			);
 			path = VictoriaKillZone;
@@ -297,6 +310,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B00100000000000000000016 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -465,18 +479,23 @@
 		BC0100000000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 1;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CONVEX_DEPLOYMENT_URL = "https://brave-crow-277.convex.cloud";
-				DEVELOPMENT_TEAM = UGMA3967M2;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = XDXHRB7B47;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VictoriaKillZone/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.action-games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.victoriakillzone.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pewpewpew.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -488,18 +507,23 @@
 		BC0100000000000000000002 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 1;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CONVEX_DEPLOYMENT_URL = "https://brave-crow-277.convex.cloud";
-				DEVELOPMENT_TEAM = UGMA3967M2;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = XDXHRB7B47;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VictoriaKillZone/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.action-games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.victoriakillzone.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pewpewpew.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -512,14 +536,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				DEVELOPMENT_TEAM = UGMA3967M2;
+				DEVELOPMENT_TEAM = XDXHRB7B47;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.victoriakillzone.app.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pewpewpew.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_VERSION = 5.0;
@@ -532,14 +556,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				DEVELOPMENT_TEAM = UGMA3967M2;
+				DEVELOPMENT_TEAM = XDXHRB7B47;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.victoriakillzone.app.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pewpewpew.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_VERSION = 5.0;
