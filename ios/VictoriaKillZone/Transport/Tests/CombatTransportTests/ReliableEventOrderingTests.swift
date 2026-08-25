@@ -43,4 +43,12 @@ final class ReliableEventOrderingTests: XCTestCase {
     XCTAssertEqual(orderer.ingest(event(1, epoch: 2)).status, .delivered)
     XCTAssertEqual(orderer.nextExpectedSequence(for: 1), 2)
   }
+
+  func testNewEpochStillRequiresSequenceOneBeforeDelivery() {
+    var orderer = ReliableEventOrderer()
+    _ = orderer.ingest(event(1))
+
+    XCTAssertEqual(orderer.ingest(event(2, epoch: 2)).status, .buffered)
+    XCTAssertEqual(orderer.ingest(event(1, epoch: 2)).frames.map(\.sequence), [1, 2])
+  }
 }

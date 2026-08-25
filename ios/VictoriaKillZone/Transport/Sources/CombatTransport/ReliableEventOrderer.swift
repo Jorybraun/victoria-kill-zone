@@ -44,11 +44,9 @@ public struct ReliableEventOrderer: Equatable, Sendable {
     if frame.epoch > state.epoch {
       state = SenderState(
         epoch: frame.epoch,
-        nextSequence: frame.sequence + 1,
+        nextSequence: 1,
         pending: [:]
       )
-      senders[frame.senderSlot] = state
-      return ReliableDelivery(status: .delivered, frames: [frame])
     }
     guard frame.epoch == state.epoch else {
       return ReliableDelivery(status: .epochMismatch)
