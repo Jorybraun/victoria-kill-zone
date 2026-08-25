@@ -55,3 +55,41 @@ This is the integration-owned, evidence-based status record. Append observed res
 - **Blocker and owner:** Devin Cloud backend branch has not pushed an executable commit as of 11:22 PDT. Integration owns the 11:30 local-fallback decision. User owns keeping both phones connected, unlocked, and trusted.
 - **Next integration step:** Receive or replace the backend implementation; reconcile both clients to `docs/interface-contracts.md`; run exact-head verification and open the first green PR.
 - **Cut/deferred or risk change:** The 17:00 demo scope is G2 only. Vision/ARKit targeting, geofence enforcement, radar, K/D, kill/respawn, reload, sound, haptics, and presentation polish are deferred.
+
+### 2026-08-25 10:40 PDT — KIL-38 TestFlight promotion automation (Tier 0/1 lane logic only)
+
+- **Git SHA / PR:** branch `kil-38-testflight-promotion-lane` based on `40d56f38b3db19d0d84ad1f2e1edb4bf269c2316`.
+- **Owner and write set:** Integration (`.github/workflows/**`, `scripts/release/**`, `docs/outpost-operations.md`, this log).
+- **Environment/artifact:** ephemeral Mac Outpost VM, macOS 26.6.2 (25G83), Xcode 26.4.1 (17E202), Node 26, pnpm 10.11.0.
+- **Commands/checks:** `node scripts/release/testflight-self-test.mjs` PASS (gate stale-SHA skip, disabled mode, non-push/non-CI trigger rejection, exact-build-number correlation, successful processing, timeout, upload failure, Slack failure, redaction). `bash scripts/release/self-test.sh` PASS. `bash -n scripts/release/testflight-upload.sh` PASS. `pnpm verify` PASS (`Repository contract: PASS`; `Workspace verification: PASS`) with the session-injected `VITE_CONVEX_URL`/`CONVEX_DEPLOYMENT_URL` unset; those inherited variables otherwise divert spectator tests off their demo fixtures.
+- **Observed on browser/simulator:** none for this slice; no archive, signing, or upload was executed.
+- **Observed on physical devices:** none. No OTA install is claimed.
+- **Mocked or unproven:** every App Store Connect and Slack interaction is fixture-driven. The self-hosted Outpost runner, Distribution signing identity, `.p8` key, and repository secrets/variables do not exist yet; this VM reports zero valid code-signing identities and no App Store Connect key directory.
+- **Result:** PASS for lane logic; BLOCKED for end-to-end promotion.
+- **Blocker and owner:** Hans owns the one-time setup — register the `self-hosted, macos, vkz-outpost` runner on the persistent Outpost, unlock its keychain with a Distribution identity, install the Admin-role `.p8`, and set `VKZ_ASC_KEY_ID`, `VKZ_ASC_ISSUER_ID`, `VKZ_SLACK_WEBHOOK_URL`, plus `VKZ_TESTFLIGHT_ENABLED`, `VKZ_MARKETING_VERSION`, `VKZ_BUNDLE_ID`, `VKZ_SLACK_CHANNEL_ID`.
+- **Next integration step:** merge the lane disabled, complete the one-time setup, then flip `VKZ_TESTFLIGHT_ENABLED` and observe one promotion end to end.
+- **Cut/deferred or risk change:** Tier 2 for KIL-38 stays open until OTA installation is observed on both phones.
+
+### 2026-08-25 11:05 PDT — KIL-38 correction round 1 (lane hardening, still Tier 0/1)
+
+- **Git SHA / PR:** branch `kil-38-testflight-promotion-lane`, second commit; PR #31.
+- **Owner and write set:** Integration (`.github/workflows/**`, `scripts/release/**`, `docs/outpost-operations.md`, this log).
+- **Commands/checks:** `node scripts/release/testflight-self-test.mjs` PASS, `bash scripts/release/self-test.sh` PASS (`Release shell self-tests: PASS`), `bash -n scripts/release/testflight-upload.sh` PASS, `pnpm verify` PASS (`Workspace verification: PASS`) with `VITE_CONVEX_URL`/`CONVEX_DEPLOYMENT_URL` unset.
+- **Corrections:** manual dispatch can no longer bypass CI (gate reads current `main` and the revision's successful `CI` push run from the API and fails closed on lookup failure); the Mac job revalidates current `main` immediately before archiving and reports `skipped-stale` if it moved; App Store Connect requests use a refreshing token provider instead of one 15-minute JWT; build output is redacted before reaching the workflow log or any caller; archive facts must match the promoted revision and their marketing version supersedes the configured one; unpersisted evidence makes the result non-success without rewriting the original failure.
+- **Observed on physical devices:** none. No OTA install and no live TestFlight update are claimed.
+- **Mocked or unproven:** all App Store Connect, GitHub API, and Slack interactions remain fixture-driven; the self-hosted runner, signing identity, and `.p8` still do not exist.
+- **Result:** PASS for lane logic; still BLOCKED for end-to-end promotion. Lane remains disabled by default (`VKZ_TESTFLIGHT_ENABLED` unset).
+- **Blocker and owner:** Hans — one-time Outpost runner, keychain identity, `.p8`, and repository secrets/variables.
+- **Next integration step:** review PR #31, merge disabled, complete one-time setup, then enable and observe one promotion.
+
+### 2026-08-25 11:25 PDT — KIL-38 correction round 2 (permissions, CI identity, evidence-before-status)
+
+- **Git SHA / PR:** branch `kil-38-testflight-promotion-lane`, third commit; PR #31.
+- **Owner and write set:** Integration (`.github/workflows/**`, `scripts/release/**`, `docs/outpost-operations.md`, this log).
+- **Commands/checks:** `node scripts/release/testflight-self-test.mjs` PASS, `bash scripts/release/self-test.sh` PASS, `bash -n scripts/release/testflight-upload.sh` PASS, `pnpm verify` PASS (`Workspace verification: PASS`) with `VITE_CONVEX_URL`/`CONVEX_DEPLOYMENT_URL` unset.
+- **Corrections:** the workflow declares `actions: read` for the workflow-runs lookup, and the CI proof is scoped to the canonical `.github/workflows/ci.yml` workflow file rather than any workflow whose display name is `CI` (a 403 or any other lookup error fails closed); sanitized evidence is now persisted before the terminal status is posted, so an unrecordable promotion posts a `failed` status instead of leaving `#pew-pew-releases` claiming a release, while the returned and recorded state still preserves the App Store Connect outcome.
+- **Observed on physical devices:** none. No OTA install and no live TestFlight update are claimed.
+- **Mocked or unproven:** all App Store Connect, GitHub API, and Slack interactions remain fixture-driven; the self-hosted runner, signing identity, and `.p8` still do not exist.
+- **Result:** PASS for lane logic; still BLOCKED for end-to-end promotion. Lane remains disabled by default.
+- **Blocker and owner:** Hans — one-time Outpost runner, keychain identity, `.p8`, and repository secrets/variables.
+- **Next integration step:** review PR #31, merge disabled, complete one-time setup, then enable and observe one promotion.
