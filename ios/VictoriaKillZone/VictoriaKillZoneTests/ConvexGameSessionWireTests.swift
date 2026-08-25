@@ -101,16 +101,24 @@ final class ConvexGameSessionWireTests: XCTestCase {
     }
   }
 
-  func testSnapshotRejectsOutOfContractHitZone() throws {
-    let malformed = try replacingJSONValue(
-      in: snapshotFixture,
-      path: ["events", 0, "zone"],
-      with: "head"
-    )
-    let wire = try JSONDecoder().decode(MatchSnapshotWire.self, from: malformed)
+  func testSnapshotPreservesKnownAndIgnoresUnknownHitZones() throws {
+    let cases: [(String, String?)] = [
+      ("head", "head"),
+      ("torso", "torso"),
+      ("limbs", "limbs"),
+      ("future-zone", nil),
+    ]
 
-    XCTAssertThrowsError(try wire.domainValue()) { error in
-      XCTAssertEqual(error as? GameSessionClientError, .invalidSnapshot)
+    for (zone, expectedZone) in cases {
+      let data = try replacingJSONValue(
+        in: snapshotFixture,
+        path: ["events", 0, "zone"],
+        with: zone
+      )
+      let wire = try JSONDecoder().decode(MatchSnapshotWire.self, from: data)
+      let snapshot = try wire.domainValue()
+
+      XCTAssertEqual(snapshot.events.first?.zone, expectedZone)
     }
   }
 

@@ -38,12 +38,18 @@
         -cameraTransform.columns.2.y,
         -cameraTransform.columns.2.z
       ))
+      let cameraPosition = SIMD3<Float>(
+        cameraTransform.columns.3.x,
+        cameraTransform.columns.3.y,
+        cameraTransform.columns.3.z
+      )
       let muzzle = worldPoint(
         cameraTransform,
         SIMD3<Float>(0.05, -0.08, -0.1)
       )
-      let beamLength: Float = 25
-      let beamEnd = muzzle + forward * beamLength
+      let beamEnd = cameraPosition + forward * 25
+      let beamDirection = normalized(beamEnd - muzzle)
+      let beamLength = simd_length(beamEnd - muzzle)
       let root = sceneView.scene.rootNode
 
       let beam = SCNCylinder(radius: 0.008, height: CGFloat(beamLength))
@@ -56,7 +62,7 @@
       beamNode.position = midpoint(muzzle, beamEnd)
       beamNode.simdOrientation = simd_quatf(
         from: SIMD3<Float>(0, 1, 0),
-        to: forward
+        to: beamDirection
       )
       root.addChildNode(beamNode)
       beamNode.runAction(.sequence([
@@ -79,7 +85,7 @@
       ]))
 
       if hit {
-        let hitPoint = muzzle + forward * 6
+        let hitPoint = cameraPosition + forward * 6
         let spark = SCNSphere(radius: 0.07)
         let sparkMaterial = SCNMaterial()
         sparkMaterial.diffuse.contents = UIColor.orange

@@ -1,5 +1,9 @@
 import SwiftUI
 
+#if DEBUG
+import os
+#endif
+
 enum LobbySyncStatus: Equatable, Sendable {
   case shell
   case connecting
@@ -29,8 +33,17 @@ enum MarkerlessShotState: Equatable, Sendable {
   case failed(reason: FireRejectReason?)
 }
 
+struct KillBanner: Equatable, Sendable {
+  let eventID: String
+  let text: String
+  let timestamp: Double
+  let isLocalKill: Bool
+}
+
 @MainActor
 final class LobbyStore: ObservableObject {
+  private static let pendingShotConfirmationBudget: TimeInterval = 2.5
+
   @Published private(set) var route: LobbyRoute
   @Published var displayName = "Player"
   @Published var joinCode = "" {
@@ -46,6 +59,7 @@ final class LobbyStore: ObservableObject {
   @Published private(set) var debugShotState = DebugShotState.idle
   @Published private(set) var markerlessShotState = MarkerlessShotState.idle
   @Published private(set) var targetingSnapshot: TargetingSnapshot
+  @Published private(set) var killBanner: KillBanner?
 
   let environment: AppEnvironment
 
@@ -54,6 +68,8 @@ final class LobbyStore: ObservableObject {
   private var latestSnapshot: MatchSnapshot?
   private var pendingShotId: String?
   private var pendingShotResult: DebugFireResult?
+  private var pendingShotDispatchedAt: Date?
+  private var pendingShotAutomaticReplayStarted = false
   private var pendingMarkerlessRequest: FireShotRequest?
   private var actionTask: Task<Void, Never>?
   private var snapshotTask: Task<Void, Never>?
@@ -61,6 +77,10 @@ final class LobbyStore: ObservableObject {
   private var connectionTask: Task<Void, Never>?
   private var recoveryTask: Task<Void, Never>?
   private var targetingTask: Task<Void, Never>?
+  private var killBannerTask: Task<Void, Never>?
+  private var pendingShotReplayTask: Task<Void, Never>?
+  private var seenKillEventIDs = Set<String>()
+  private var snapshotSubscriptionStartedAt: Double?
   private var transportState = GameSessionConnectionState.connecting
   private let now: @Sendable () -> Date
   private let makeShotId: @Sendable () -> String
@@ -88,6 +108,8 @@ final class LobbyStore: ObservableObject {
     connectionTask?.cancel()
     recoveryTask?.cancel()
     targetingTask?.cancel()
+    killBannerTask?.cancel()
+    pendingShotReplayTask?.cancel()
   }
 
   var networkingStatus: String {
@@ -265,6 +287,9 @@ final class LobbyStore: ObservableObject {
     snapshotRetryTask?.cancel()
     recoveryTask?.cancel()
     targetingTask?.cancel()
+    killBannerTask?.cancel()
+    pendingShotReplayTask?.cancel()
+    pendingShotReplayTask = nil
     targetingTask = nil
     let targetingSession = environment.targetingSession
     Task { await targetingSession.stop() }
@@ -272,10 +297,15 @@ final class LobbyStore: ObservableObject {
     latestSnapshot = nil
     pendingShotId = nil
     pendingShotResult = nil
+    pendingShotDispatchedAt = nil
+    pendingShotAutomaticReplayStarted = false
     pendingMarkerlessRequest = nil
     operation = nil
-    debugShotState = .idle
-    markerlessShotState = .idle
+    setDebugShotState(.idle)
+    setMarkerlessShotState(.idle)
+    seenKillEventIDs.removeAll()
+    snapshotSubscriptionStartedAt = nil
+    killBanner = nil
     targetingSnapshot = .unavailable()
     lastSyncAt = nil
     syncStatus =
@@ -427,7 +457,11 @@ final class LobbyStore: ObservableObject {
 
     let shotId = pendingShotId ?? makeShotId()
     pendingShotId = shotId
-    debugShotState = .pending
+    pendingShotDispatchedAt = now()
+    pendingShotAutomaticReplayStarted = false
+    pendingShotReplayTask?.cancel()
+    pendingShotReplayTask = nil
+    setDebugShotState(.pending)
     errorMessage = nil
     do {
       let result = try await environment.gameSessionClient.debugFire(
@@ -441,7 +475,9 @@ final class LobbyStore: ObservableObject {
       guard result.accepted, result.outcome == .hit else {
         pendingShotId = nil
         pendingShotResult = nil
-        debugShotState = .failed
+        pendingShotDispatchedAt = nil
+        pendingShotAutomaticReplayStarted = false
+        setDebugShotState(.failed)
         if let reason = result.rejectReason {
           present(GameSessionClientError.backend(reason))
         } else {
@@ -450,10 +486,11 @@ final class LobbyStore: ObservableObject {
         return
       }
       pendingShotResult = result
+      schedulePendingShotDeadline(for: session, shotId: shotId)
       reconcilePendingShot()
     } catch {
       guard !Task.isCancelled else { return }
-      debugShotState = .failed
+      setDebugShotState(.failed)
       present(error)
     }
   }
@@ -496,7 +533,7 @@ final class LobbyStore: ObservableObject {
       )
       pendingMarkerlessRequest = request
     }
-    markerlessShotState = .pending(zone: zone)
+    setMarkerlessShotState(.pending(zone: zone))
     errorMessage = nil
 
     do {
@@ -507,20 +544,20 @@ final class LobbyStore: ObservableObject {
       }
       guard result.accepted, result.outcome != .rejected else {
         pendingMarkerlessRequest = nil
-        markerlessShotState = .failed(reason: result.rejectReason)
+        setMarkerlessShotState(.failed(reason: result.rejectReason))
         errorMessage = Self.message(for: result.rejectReason)
         return
       }
 
       pendingMarkerlessRequest = nil
-      markerlessShotState = .confirmed(
+      setMarkerlessShotState(.confirmed(
         outcome: result.outcome,
         zone: zone,
         damage: result.damage
-      )
+      ))
     } catch {
       guard !Task.isCancelled else { return }
-      markerlessShotState = .failed(reason: nil)
+      setMarkerlessShotState(.failed(reason: nil))
       present(error)
     }
   }
@@ -529,14 +566,22 @@ final class LobbyStore: ObservableObject {
     snapshotTask?.cancel()
     snapshotRetryTask?.cancel()
     recoveryTask?.cancel()
+    killBannerTask?.cancel()
+    pendingShotReplayTask?.cancel()
+    pendingShotReplayTask = nil
     session = newSession
     latestSnapshot = nil
     lastSyncAt = nil
     pendingShotId = nil
     pendingShotResult = nil
+    pendingShotDispatchedAt = nil
+    pendingShotAutomaticReplayStarted = false
     pendingMarkerlessRequest = nil
-    debugShotState = .idle
-    markerlessShotState = .idle
+    setDebugShotState(.idle)
+    setMarkerlessShotState(.idle)
+    seenKillEventIDs.removeAll()
+    killBanner = nil
+    snapshotSubscriptionStartedAt = nil
     syncStatus = .connecting
 
     startSnapshotSubscription(for: newSession)
@@ -574,13 +619,26 @@ final class LobbyStore: ObservableObject {
     }
 
     let receivedAt = now()
+    let previousSnapshot = latestSnapshot
+    let previousSyncStatus = syncStatus
     let wasStale = syncStatus == .stale
     snapshotRetryTask?.cancel()
     snapshotRetryTask = nil
+    if snapshotSubscriptionStartedAt == nil {
+      snapshotSubscriptionStartedAt = snapshot.serverNow
+    }
     latestSnapshot = snapshot
     lastSyncAt = receivedAt
     route = Self.route(for: snapshot, receivedAt: receivedAt)
-    syncStatus = wasStale ? .restored : .connected
+    updateKillBanner(from: snapshot)
+    let nextSyncStatus: LobbySyncStatus = wasStale ? .restored : .connected
+    gameLoopTrace(
+      "receive phase=\(snapshot.match.phase.rawValue) players=\(snapshot.players.count) "
+        + "events=\(snapshot.events.count) serverNow=\(snapshot.serverNow) "
+        + "syncStatus \(String(describing: previousSyncStatus))->\(String(describing: nextSyncStatus)) "
+        + "players=\(gameLoopPlayerSummary(snapshot.players, previous: previousSnapshot))"
+    )
+    syncStatus = nextSyncStatus
     recoveryTask?.cancel()
     if wasStale {
       recoveryTask = Task { [weak self] in
@@ -598,8 +656,88 @@ final class LobbyStore: ObservableObject {
     reconcilePendingShot()
   }
 
+  private func updateKillBanner(from snapshot: MatchSnapshot) {
+    let newEvents = snapshot.events.filter { event in
+      guard event.type == .eliminated, !seenKillEventIDs.contains(event.id) else {
+        return false
+      }
+      seenKillEventIDs.insert(event.id)
+      return true
+    }
+    let chosenEvent = snapshotSubscriptionStartedAt.flatMap { startedAt in
+      newEvents
+        .filter({ $0.createdAt >= startedAt })
+        .max(by: { $0.createdAt < $1.createdAt })
+    }
+    gameLoopTrace(
+      "updateKillBanner newEliminatedEventCount=\(newEvents.count) "
+        + "chosenEventCreatedAt=\(chosenEvent.map { String($0.createdAt) } ?? "none")"
+    )
+    guard let event = chosenEvent,
+      let banner = makeKillBanner(for: event, in: snapshot)
+    else {
+      return
+    }
+
+    killBannerTask?.cancel()
+    killBanner = banner
+    killBannerTask = Task { [weak self] in
+      try? await Task.sleep(for: .seconds(3))
+      guard !Task.isCancelled, let self, self.killBanner?.eventID == banner.eventID else {
+        return
+      }
+      self.killBanner = nil
+      self.killBannerTask = nil
+    }
+  }
+
+  private func makeKillBanner(for event: EventSnapshot, in snapshot: MatchSnapshot)
+    -> KillBanner?
+  {
+    let playersByID = Dictionary(uniqueKeysWithValues: snapshot.players.map { ($0.id, $0) })
+    if event.actorPlayerId == snapshot.localPlayerId {
+      let text = playerName(
+        for: event.targetPlayerId,
+        in: playersByID
+      ).map { "YOU ELIMINATED \($0)" } ?? event.message
+      return KillBanner(
+        eventID: event.id,
+        text: text,
+        timestamp: event.createdAt,
+        isLocalKill: true
+      )
+    }
+    guard event.targetPlayerId == snapshot.localPlayerId else { return nil }
+    let text = playerName(
+      for: event.actorPlayerId,
+      in: playersByID
+    ).map { "ELIMINATED BY \($0)" } ?? event.message
+    return KillBanner(
+      eventID: event.id,
+      text: text,
+      timestamp: event.createdAt,
+      isLocalKill: false
+    )
+  }
+
+  private func playerName(
+    for playerID: String?,
+    in playersByID: [String: PlayerSnapshot]
+  ) -> String? {
+    guard let playerID, let name = playersByID[playerID]?.displayName,
+      !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    else {
+      return nil
+    }
+    return name
+  }
+
   private func subscriptionFailed(_ error: Error, for expectedSession: PlayerSession) {
     guard session == expectedSession else { return }
+    gameLoopTrace(
+      "subscriptionFailed errorType=\(String(describing: type(of: error))) "
+        + "snapshotExisted=\(latestSnapshot != nil)"
+    )
     operation = nil
     if latestSnapshot == nil {
       present(error)
@@ -613,28 +751,159 @@ final class LobbyStore: ObservableObject {
         return
       }
       self.snapshotRetryTask = nil
+      gameLoopTrace("subscriptionFailed retryResubscribe=start")
       self.startSnapshotSubscription(for: expectedSession)
     }
   }
 
   private func reconcilePendingShot() {
-    guard let result = pendingShotResult, let session, let snapshot = latestSnapshot,
+    guard let result = pendingShotResult else {
+      gameLoopTrace("reconcilePendingShot outcome=awaiting reason=noPending")
+      return
+    }
+
+    guard let session else {
+      gameLoopTrace("reconcilePendingShot outcome=awaiting reason=noSession")
+      return
+    }
+    guard let shotId = pendingShotId else {
+      gameLoopTrace("reconcilePendingShot outcome=awaiting reason=noPendingShotId")
+      return
+    }
+
+    guard let snapshot = latestSnapshot,
       let shooter = snapshot.players.first(where: { $0.id == session.playerId }),
-      let target = snapshot.players.first(where: { $0.id != session.playerId }),
-      shooter.ammo == result.shooterAmmo, target.health == result.targetHealth
+      let target = snapshot.players.first(where: { $0.id != session.playerId })
+    else {
+      gameLoopTrace("reconcilePendingShot outcome=awaiting reason=noSnapshot")
+      startPendingShotReplayIfBudgetElapsed(for: session, shotId: shotId)
+      return
+    }
+
+    let confirmed: Bool
+    if let eventId = result.eventId {
+      confirmed = snapshot.events.contains(where: { $0.id == eventId })
+      if !confirmed {
+        gameLoopTrace("reconcilePendingShot outcome=awaiting reason=eventMissing")
+      }
+    } else {
+      confirmed = shooter.ammo == result.shooterAmmo && target.health == result.targetHealth
+      if !confirmed {
+        gameLoopTrace("reconcilePendingShot outcome=awaiting reason=stateMismatch")
+      }
+    }
+
+    guard confirmed else {
+      startPendingShotReplayIfBudgetElapsed(for: session, shotId: shotId)
+      return
+    }
+
+    gameLoopTrace("reconcilePendingShot outcome=confirmed")
+    setDebugShotState(.confirmed(damage: result.damage))
+    clearPendingShot()
+  }
+
+  private func schedulePendingShotDeadline(for expectedSession: PlayerSession, shotId: String) {
+    pendingShotReplayTask?.cancel()
+    pendingShotReplayTask = Task { [weak self] in
+      try? await Task.sleep(
+        for: .milliseconds(Int(Self.pendingShotConfirmationBudget * 1_000))
+      )
+      guard !Task.isCancelled, let self,
+        self.session == expectedSession,
+        self.pendingShotId == shotId
+      else {
+        return
+      }
+      self.pendingShotReplayTask = nil
+      self.reconcilePendingShot()
+    }
+  }
+
+  private func startPendingShotReplayIfBudgetElapsed(
+    for expectedSession: PlayerSession,
+    shotId: String
+  ) {
+    guard let dispatchedAt = pendingShotDispatchedAt,
+      now().timeIntervalSince(dispatchedAt) >= Self.pendingShotConfirmationBudget,
+      !pendingShotAutomaticReplayStarted,
+      pendingShotId == shotId,
+      session == expectedSession
     else {
       return
     }
 
-    if let eventId = result.eventId,
-      !snapshot.events.contains(where: { $0.id == eventId })
-    {
+    pendingShotAutomaticReplayStarted = true
+    pendingShotReplayTask?.cancel()
+    pendingShotReplayTask = Task { [weak self] in
+      guard let self else { return }
+      await self.performPendingShotReplay(
+        for: expectedSession,
+        shotId: shotId
+      )
+    }
+  }
+
+  private func performPendingShotReplay(
+    for expectedSession: PlayerSession,
+    shotId: String
+  ) async {
+    guard session == expectedSession, pendingShotId == shotId else {
+      pendingShotReplayTask = nil
       return
     }
 
-    debugShotState = .confirmed(damage: result.damage)
+    do {
+      let result = try await environment.gameSessionClient.debugFire(
+        session: expectedSession,
+        clientShotId: shotId
+      )
+      guard !Task.isCancelled, session == expectedSession, pendingShotId == shotId else {
+        return
+      }
+      guard result.clientShotId == shotId else {
+        throw GameSessionClientError.invalidSnapshot
+      }
+      guard result.accepted, result.outcome == .hit else {
+        gameLoopTrace("reconcilePendingShot reason=eventAgedOut outcome=replayRejected")
+        clearPendingShot()
+        setDebugShotState(.failed)
+        if let reason = result.rejectReason {
+          present(GameSessionClientError.backend(reason))
+        } else {
+          present(GameSessionClientError.unknown)
+        }
+        return
+      }
+      guard result.replayed else {
+        gameLoopTrace("reconcilePendingShot reason=eventAgedOut outcome=replayNotIdempotent")
+        pendingShotReplayTask = nil
+        setDebugShotState(.failed)
+        present(GameSessionClientError.invalidSnapshot)
+        return
+      }
+
+      gameLoopTrace("reconcilePendingShot reason=eventAgedOut outcome=replayConfirmed")
+      clearPendingShot()
+      setDebugShotState(.confirmed(damage: result.damage))
+    } catch {
+      guard !Task.isCancelled, session == expectedSession, pendingShotId == shotId else {
+        return
+      }
+      gameLoopTrace("reconcilePendingShot reason=eventAgedOut outcome=replayFailed")
+      pendingShotReplayTask = nil
+      setDebugShotState(.failed)
+      present(error)
+    }
+  }
+
+  private func clearPendingShot() {
+    pendingShotReplayTask?.cancel()
+    pendingShotReplayTask = nil
     pendingShotResult = nil
     pendingShotId = nil
+    pendingShotDispatchedAt = nil
+    pendingShotAutomaticReplayStarted = false
   }
 
   private func startConnectionMonitoring() {
@@ -663,6 +932,71 @@ final class LobbyStore: ObservableObject {
       }
     }
   }
+
+  private func setDebugShotState(_ state: DebugShotState) {
+    gameLoopTrace(
+      "debugShotState \(String(describing: debugShotState)) -> \(String(describing: state))"
+    )
+    debugShotState = state
+  }
+
+  private func setMarkerlessShotState(_ state: MarkerlessShotState) {
+    gameLoopTrace(
+      "markerlessShotState \(String(describing: markerlessShotState)) -> \(String(describing: state))"
+    )
+    markerlessShotState = state
+  }
+
+#if DEBUG
+  private static let gameLoopLogger = Logger(
+    subsystem: "com.victoriakillzone.lobby",
+    category: "GameLoop"
+  )
+
+  private func gameLoopTrace(_ message: @autoclosure () -> String) {
+    let renderedMessage = message()
+    Self.gameLoopLogger.debug("\(renderedMessage, privacy: .public)")
+  }
+
+  private func gameLoopPlayerSummary(
+    _ players: [PlayerSnapshot],
+    previous: MatchSnapshot?
+  ) -> String {
+    players.map { player in
+      let oldPlayer = previous?.players.first(where: { $0.role == player.role })
+      return "\(player.role.rawValue)"
+        + " health=\(player.health)(Δ\(gameLoopDelta(player.health, oldPlayer?.health)))"
+        + " ammo=\(player.ammo)(Δ\(gameLoopDelta(player.ammo, oldPlayer?.ammo)))"
+        + " lifeState=\(player.lifeState.rawValue)(\(gameLoopStateDelta(player.lifeState, oldPlayer?.lifeState)))"
+        + " kills=\(player.kills)(Δ\(gameLoopDelta(player.kills, oldPlayer?.kills)))"
+        + " deaths=\(player.deaths)(Δ\(gameLoopDelta(player.deaths, oldPlayer?.deaths)))"
+    }.joined(separator: " ")
+  }
+
+  private func gameLoopDelta(_ current: Int, _ previous: Int?) -> String {
+    guard let previous else { return "n/a" }
+    return String(current - previous)
+  }
+
+  private func gameLoopStateDelta(
+    _ current: PlayerLifeState,
+    _ previous: PlayerLifeState?
+  ) -> String {
+    guard let previous else { return "n/a" }
+    return current == previous ? "same" : "from-\(previous.rawValue)"
+  }
+#else
+  @inline(__always)
+  private func gameLoopTrace(_ message: @autoclosure () -> String) {}
+
+  @inline(__always)
+  private func gameLoopPlayerSummary(
+    _ players: [PlayerSnapshot],
+    previous: MatchSnapshot?
+  ) -> String {
+    ""
+  }
+#endif
 
   private func schedule(_ work: @escaping @MainActor (LobbyStore) async -> Void) {
     guard actionTask == nil || actionTask?.isCancelled == true || operation == nil else { return }
