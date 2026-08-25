@@ -9,6 +9,8 @@
 import { appendFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
+import { fetchCurrentMainSha, hasSuccessfulCiPushRun } from "./github-api.mjs";
+
 const SHA_PATTERN = /^[0-9a-f]{40}$/u;
 
 export const PROMOTION_DECISIONS = Object.freeze({
@@ -16,12 +18,14 @@ export const PROMOTION_DECISIONS = Object.freeze({
   forkedRepository: "the CI run came from another repository",
   notCiWorkflow: "the completed run was not the CI workflow",
   notMergeEvent: "the CI run was not a push to main",
+  ciNotVerifiedForSha: "no successful CI push run is recorded for this revision",
   invalidCandidate: "the candidate revision is not a full commit SHA",
   invalidCurrent: "the current main revision is not a full commit SHA",
   notMain: "the CI run was not on main",
   ciNotSuccessful: "the CI run did not succeed",
   staleSha: "a newer main revision exists",
   unsupportedEvent: "the triggering event cannot promote",
+  remoteUnavailable: "the authoritative main revision could not be confirmed",
   promote: "the exact current main revision is green",
 });
 
@@ -36,6 +40,7 @@ export function decidePromotion(input) {
     ciWorkflowName,
     ciEvent,
     ciConclusion,
+    ciVerifiedForSha,
     headBranch,
     headRepository,
     repository,
@@ -84,6 +89,11 @@ export function decidePromotion(input) {
       return decide("forkedRepository");
     }
   }
+  // Manual dispatch may not skip CI: the revision itself must have a recorded
+  // successful CI push run.
+  if (ciVerifiedForSha !== true) {
+    return decide("ciNotVerifiedForSha");
+  }
   if (candidate !== current) {
     return decide("staleSha");
   }
@@ -98,6 +108,7 @@ export function decideFromEnvironment(environment = process.env) {
     ciWorkflowName: environment.VKZ_CI_WORKFLOW_NAME,
     ciEvent: environment.VKZ_CI_EVENT,
     ciConclusion: environment.VKZ_CI_CONCLUSION,
+    ciVerifiedForSha: environment.VKZ_CI_VERIFIED_FOR_SHA === "true",
     headBranch: environment.VKZ_CI_HEAD_BRANCH,
     headRepository: environment.VKZ_CI_HEAD_REPOSITORY,
     repository: environment.VKZ_REPOSITORY,
@@ -106,12 +117,57 @@ export function decideFromEnvironment(environment = process.env) {
   });
 }
 
+// The gate never trusts the workflow payload for currency or CI success: both
+// are re-read from the remote at decision time. Any lookup failure fails closed.
+export async function decideWithRemoteFacts(environment = process.env, deps = {}) {
+  const {
+    fetchCurrentMain = fetchCurrentMainSha,
+    verifyCi = hasSuccessfulCiPushRun,
+  } = deps;
+
+  if (environment.VKZ_TESTFLIGHT_ENABLED !== "true") {
+    return decidePromotion({ enabled: false });
+  }
+
+  const repository = environment.VKZ_REPOSITORY ?? "";
+  const token = environment.VKZ_GITHUB_TOKEN ?? "";
+  const candidateSha = environment.VKZ_CANDIDATE_SHA ?? "";
+
+  let currentMainSha;
+  let ciVerifiedForSha;
+  try {
+    currentMainSha = await fetchCurrentMain({ repository, token });
+    ciVerifiedForSha = await verifyCi({ repository, sha: candidateSha, token });
+  } catch {
+    return {
+      promote: false,
+      reasonKey: "remoteUnavailable",
+      reason: PROMOTION_DECISIONS.remoteUnavailable,
+      sha: null,
+    };
+  }
+
+  return decidePromotion({
+    enabled: true,
+    eventName: environment.VKZ_EVENT_NAME,
+    ciWorkflowName: environment.VKZ_CI_WORKFLOW_NAME,
+    ciEvent: environment.VKZ_CI_EVENT,
+    ciConclusion: environment.VKZ_CI_CONCLUSION,
+    ciVerifiedForSha,
+    headBranch: environment.VKZ_CI_HEAD_BRANCH,
+    headRepository: environment.VKZ_CI_HEAD_REPOSITORY,
+    repository,
+    candidateSha,
+    currentMainSha,
+  });
+}
+
 function isMainModule() {
   return Boolean(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]).href;
 }
 
 if (isMainModule()) {
-  const decision = decideFromEnvironment();
+  const decision = await decideWithRemoteFacts();
   const outputPath = process.env.GITHUB_OUTPUT;
   if (outputPath) {
     await appendFile(

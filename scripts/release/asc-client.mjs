@@ -12,6 +12,7 @@ import { sanitizeText } from "./redact.mjs";
 const API_ROOT = "https://api.appstoreconnect.apple.com/v1";
 const AUDIENCE = "appstoreconnect-v1";
 const TOKEN_LIFETIME_SECONDS = 15 * 60;
+const TOKEN_REFRESH_MARGIN_MS = 60 * 1000;
 
 export const TERMINAL_STATES = Object.freeze({
   VALID: "ready-for-testing",
@@ -52,6 +53,22 @@ export function createAscToken({ keyId, issuerId, privateKeyPem }, now = new Dat
   );
 
   return `${header}.${payload}.${signature.toString("base64url")}`;
+}
+
+// Polling can outlast a single token, so requests take their authorization
+// from a provider that mints a new one before the old one expires.
+export function createTokenProvider({ keyId, issuerId, privateKeyPem, now = () => Date.now() }) {
+  let token = null;
+  let expiresAt = 0;
+
+  return () => {
+    const currentTime = now();
+    if (!token || currentTime >= expiresAt - TOKEN_REFRESH_MARGIN_MS) {
+      token = createAscToken({ keyId, issuerId, privateKeyPem }, new Date(currentTime));
+      expiresAt = currentTime + TOKEN_LIFETIME_SECONDS * 1000;
+    }
+    return token;
+  };
 }
 
 export async function readPrivateKey(keyPath) {
@@ -114,7 +131,7 @@ function selectBuild(payload, { uploadedAfter, buildNumber }) {
 
 export async function pollProcessingState({
   fetchImpl = globalThis.fetch,
-  token,
+  tokenProvider,
   appId,
   version,
   buildNumber,
@@ -135,6 +152,10 @@ export async function pollProcessingState({
     throw new Error("Invalid build number");
   }
 
+  if (typeof tokenProvider !== "function") {
+    throw new Error("A token provider is required");
+  }
+
   const deadline = now() + timeoutMs;
   const url = buildsUrl({ appId, version, buildNumber });
   let delayMs = initialDelayMs;
@@ -145,7 +166,7 @@ export async function pollProcessingState({
     attempts += 1;
     let payload;
     try {
-      payload = await requestJson({ fetchImpl, url, token });
+      payload = await requestJson({ fetchImpl, url, token: await tokenProvider() });
     } catch (error) {
       if (!error.retryable) {
         throw new Error(sanitizeText(error.message));
@@ -188,7 +209,7 @@ export async function pollProcessingState({
 
 export async function resolveAppId({
   fetchImpl = globalThis.fetch,
-  token,
+  tokenProvider,
   bundleId,
 }) {
   const query = new URLSearchParams({
@@ -198,7 +219,7 @@ export async function resolveAppId({
   });
   const payload = await requestJson({
     fetchImpl,
-    token,
+    token: await tokenProvider(),
     url: `${API_ROOT}/apps?${query.toString()}`,
   });
   const apps = Array.isArray(payload?.data) ? payload.data : [];

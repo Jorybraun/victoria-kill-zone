@@ -14,6 +14,7 @@ export const RELEASE_STATES = Object.freeze([
   "processing-failed",
   "processing-invalid",
   "processing-timeout",
+  "skipped-stale",
   "failed",
 ]);
 
@@ -25,6 +26,7 @@ const STATE_HEADLINES = Object.freeze({
   "processing-failed": "PEW PEW processing failed",
   "processing-invalid": "PEW PEW build rejected as invalid",
   "processing-timeout": "PEW PEW processing timed out",
+  "skipped-stale": "PEW PEW promotion skipped — main moved on",
   failed: "PEW PEW promotion failed",
 });
 

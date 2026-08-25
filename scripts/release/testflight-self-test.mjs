@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { generateKeyPairSync } from "node:crypto";
 
-import { pollProcessingState, createAscToken } from "./asc-client.mjs";
-import { createEvidence, runPromotion } from "./promote-testflight.mjs";
-import { decidePromotion } from "./promotion-gate.mjs";
+import { pollProcessingState, createAscToken, createTokenProvider } from "./asc-client.mjs";
+import { fetchCurrentMainSha, hasSuccessfulCiPushRun } from "./github-api.mjs";
+import { createEvidence, runCommand, runPromotion } from "./promote-testflight.mjs";
+import { decidePromotion, decideWithRemoteFacts } from "./promotion-gate.mjs";
 import { sanitizeText } from "./redact.mjs";
 import { buildStatusMessage, postStatus } from "./slack-notify.mjs";
 
@@ -16,6 +18,7 @@ const greenRun = {
   ciWorkflowName: "CI",
   ciEvent: "push",
   ciConclusion: "success",
+  ciVerifiedForSha: true,
   headBranch: "main",
   headRepository: REPOSITORY,
   repository: REPOSITORY,
@@ -54,6 +57,137 @@ assert.equal(
 assert.equal(decidePromotion({ ...greenRun, eventName: "push" }).reasonKey, "unsupportedEvent");
 assert.equal(decidePromotion({ ...greenRun, candidateSha: "abc" }).reasonKey, "invalidCandidate");
 assert.equal(decidePromotion({ ...greenRun, currentMainSha: "" }).reasonKey, "invalidCurrent");
+
+// Gate: manual dispatch may not bypass CI. Without a recorded successful CI
+// push run for this exact revision, the signing runner is never queued.
+const manualDispatch = {
+  enabled: true,
+  eventName: "workflow_dispatch",
+  repository: REPOSITORY,
+  candidateSha: CURRENT_SHA,
+  currentMainSha: CURRENT_SHA,
+};
+assert.equal(decidePromotion(manualDispatch).reasonKey, "ciNotVerifiedForSha");
+assert.equal(
+  decidePromotion({ ...manualDispatch, ciVerifiedForSha: true }).reasonKey,
+  "promote",
+);
+assert.equal(decidePromotion({ ...greenRun, ciVerifiedForSha: false }).reasonKey, "ciNotVerifiedForSha");
+
+// Gate: currency and CI success come from the remote, not from the payload.
+const remoteEnvironment = {
+  VKZ_TESTFLIGHT_ENABLED: "true",
+  VKZ_EVENT_NAME: "workflow_dispatch",
+  VKZ_REPOSITORY: REPOSITORY,
+  VKZ_CANDIDATE_SHA: CURRENT_SHA,
+};
+assert.equal(
+  (
+    await decideWithRemoteFacts(remoteEnvironment, {
+      fetchCurrentMain: async () => CURRENT_SHA,
+      verifyCi: async () => true,
+    })
+  ).reasonKey,
+  "promote",
+);
+assert.equal(
+  (
+    await decideWithRemoteFacts(remoteEnvironment, {
+      fetchCurrentMain: async () => CURRENT_SHA,
+      verifyCi: async () => false,
+    })
+  ).reasonKey,
+  "ciNotVerifiedForSha",
+);
+assert.equal(
+  (
+    await decideWithRemoteFacts(remoteEnvironment, {
+      fetchCurrentMain: async () => STALE_SHA,
+      verifyCi: async () => true,
+    })
+  ).reasonKey,
+  "staleSha",
+);
+// A lookup failure fails closed rather than promoting on stale information.
+assert.equal(
+  (
+    await decideWithRemoteFacts(remoteEnvironment, {
+      fetchCurrentMain: async () => {
+        throw new Error("GitHub request failed with status 502");
+      },
+      verifyCi: async () => true,
+    })
+  ).reasonKey,
+  "remoteUnavailable",
+);
+assert.equal(
+  (await decideWithRemoteFacts({ ...remoteEnvironment, VKZ_TESTFLIGHT_ENABLED: "false" }, {
+    fetchCurrentMain: async () => {
+      throw new Error("the disabled lane must not reach the network");
+    },
+    verifyCi: async () => true,
+  })).reasonKey,
+  "disabled",
+);
+
+// GitHub facts: only a completed successful CI push run on this repository's
+// own main counts as proof for a revision.
+const runsFor = (runs) => async (url) => ({
+  ok: true,
+  status: 200,
+  json: async () => (String(url).includes("/actions/runs") ? { workflow_runs: runs } : {}),
+});
+const pushRun = {
+  name: "CI",
+  event: "push",
+  status: "completed",
+  conclusion: "success",
+  head_branch: "main",
+  head_sha: CURRENT_SHA,
+  repository: { full_name: REPOSITORY },
+};
+assert.equal(
+  await hasSuccessfulCiPushRun({
+    fetchImpl: runsFor([pushRun]),
+    repository: REPOSITORY,
+    sha: CURRENT_SHA,
+    token: "t",
+  }),
+  true,
+);
+for (const rejected of [
+  { ...pushRun, event: "pull_request" },
+  { ...pushRun, name: "Deploy" },
+  { ...pushRun, conclusion: "failure" },
+  { ...pushRun, head_sha: STALE_SHA },
+  { ...pushRun, repository: { full_name: "fork/victoria-kill-zone" } },
+]) {
+  assert.equal(
+    await hasSuccessfulCiPushRun({
+      fetchImpl: runsFor([rejected]),
+      repository: REPOSITORY,
+      sha: CURRENT_SHA,
+      token: "t",
+    }),
+    false,
+  );
+}
+assert.equal(
+  await fetchCurrentMainSha({
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ sha: CURRENT_SHA }) }),
+    repository: REPOSITORY,
+    token: "t",
+  }),
+  CURRENT_SHA,
+);
+await assert.rejects(
+  fetchCurrentMainSha({
+    fetchImpl: async () => ({ ok: false, status: 502 }),
+    repository: REPOSITORY,
+    token: "t",
+  }),
+  /status 502/u,
+);
 
 // Redaction: nothing sensitive survives sanitization. The credential-shaped
 // fixtures are assembled at runtime so this file never stores a literal that
@@ -148,7 +282,12 @@ function buildsResponse(
   };
 }
 
-const pollDefaults = { token: "token", appId: "1234567890", version: "0.1.0", buildNumber: "17" };
+const pollDefaults = {
+  tokenProvider: () => "token",
+  appId: "1234567890",
+  version: "0.1.0",
+  buildNumber: "17",
+};
 
 const pollDelays = [];
 const states = ["PROCESSING", "PROCESSING", "VALID"];
@@ -261,6 +400,70 @@ assert.throws(() => createAscToken({ keyId: "bad id", issuerId: "x", privateKeyP
 assert.throws(() =>
   createAscToken({ keyId: "ABC1234567", issuerId: "not-an-issuer", privateKeyPem: "" }),
 );
+await assert.rejects(
+  pollProcessingState({
+    ...pollDefaults,
+    tokenProvider: undefined,
+    fetchImpl: async () => buildsResponse("VALID"),
+  }),
+  /token provider/u,
+);
+
+// Token: polling that outlives one 15-minute token keeps authenticating.
+// Processing here takes 45 minutes of fake time and still reaches VALID.
+const signingKey = generateKeyPairSync("ec", { namedCurve: "prime256v1" })
+  .privateKey.export({ format: "pem", type: "pkcs8" })
+  .toString();
+let tokenClock = Date.parse("2026-08-25T12:00:00Z");
+const refreshingProvider = createTokenProvider({
+  keyId: "ABC1234567",
+  issuerId: "6a4b6dc0-0000-4000-8000-1c1d1e1f2021",
+  privateKeyPem: signingKey,
+  now: () => tokenClock,
+});
+const tokensSeen = new Set();
+const longPollStates = ["PROCESSING", "PROCESSING", "PROCESSING", "VALID"];
+const longPoll = await pollProcessingState({
+  ...pollDefaults,
+  tokenProvider: refreshingProvider,
+  fetchImpl: async (_url, init) => {
+    tokensSeen.add(init.headers.Authorization);
+    return buildsResponse(longPollStates.shift() ?? "VALID");
+  },
+  uploadedAfter: Date.parse("2026-08-25T11:00:00Z"),
+  timeoutMs: 60 * 60 * 1000,
+  initialDelayMs: 15 * 60 * 1000,
+  maxDelayMs: 15 * 60 * 1000,
+  now: () => tokenClock,
+  sleep: async (ms) => {
+    tokenClock += ms;
+  },
+});
+assert.equal(longPoll.state, "ready-for-testing");
+assert.ok(tokensSeen.size > 1, "a fresh token must be minted before expiry");
+
+// Command output: raw build output never reaches the log or the caller.
+const emitted = [];
+const leaky = await runCommand(
+  "node",
+  [
+    "-e",
+    [
+      'console.log("using /Users/runner/.appstoreconnect/private_keys/AuthKey_ABC1234567.p8");',
+      'console.log("posting to https://hooks.slack.com/services/T000/B000/abcdefghijklmnop");',
+      'console.error("device 00008120-000E4D8A0A88C01E rejected token " + "gh" + "p_0123456789abcdef0123456789abcdef0123");',
+      "process.exit(65);",
+    ].join(""),
+  ],
+  { write: (line) => emitted.push(line) },
+);
+assert.equal(leaky.code, 65);
+for (const sink of [emitted.join(""), leaky.output]) {
+  for (const fragment of ["AuthKey_", "/Users/", "hooks.slack.com", "00008120", "ghp_"]) {
+    assert.ok(!sink.includes(fragment), `leaked ${fragment} from build output`);
+  }
+  assert.ok(sink.includes("[redacted]"));
+}
 
 // Orchestration: a successful promotion posts every lifecycle state.
 function recorder() {
@@ -353,7 +556,7 @@ const flakySlackRun = await runPromotion({
     archiveAndUpload: async () => ({
       code: 0,
       output: "archive ok",
-      buildFacts: async () => ({ buildNumber: "18" }),
+      buildFacts: async () => ({ sha: CURRENT_SHA, marketingVersion: "0.1.0", buildNumber: "18" }),
     }),
     poll: async () => ({
       state: "ready-for-testing",
@@ -377,7 +580,7 @@ const timeoutRun = await runPromotion({
     archiveAndUpload: async () => ({
       code: 0,
       output: "archive ok",
-      buildFacts: async () => ({ buildNumber: "19" }),
+      buildFacts: async () => ({ sha: CURRENT_SHA, marketingVersion: "0.1.0", buildNumber: "19" }),
     }),
     poll: async () => ({
       state: "processing-timeout",
@@ -415,6 +618,167 @@ const unidentifiableRun = await runPromotion({
   },
 });
 assert.equal(unidentifiableRun.state, "failed");
+
+// Orchestration: an archive built from another revision never ships.
+const wrongShaRun = await runPromotion({
+  config: { sha: CURRENT_SHA, version: "0.1.0" },
+  deps: {
+    archiveAndUpload: async () => ({
+      code: 0,
+      output: "archive ok",
+      buildFacts: async () => ({ sha: STALE_SHA, marketingVersion: "0.1.0", buildNumber: "20" }),
+    }),
+    poll: async () => {
+      throw new Error("polling must not run for a foreign archive");
+    },
+    notify: recorder().notify,
+    now: () => new Date("2026-08-25T12:00:00Z"),
+  },
+});
+assert.equal(wrongShaRun.succeeded, false);
+assert.equal(wrongShaRun.state, "failed");
+
+// Orchestration: the archive's marketing version wins over a stale configured
+// one, so polling, Slack, and evidence all describe the same release train.
+const supersededRecorder = recorder();
+const supersededPolls = [];
+const supersededRun = await runPromotion({
+  config: { sha: CURRENT_SHA, version: "0.1.0" },
+  deps: {
+    archiveAndUpload: async () => ({
+      code: 0,
+      output: "archive ok",
+      buildFacts: async () => ({ sha: CURRENT_SHA, marketingVersion: "0.2.0", buildNumber: "21" }),
+    }),
+    poll: async (request) => {
+      supersededPolls.push(request);
+      return {
+        state: "ready-for-testing",
+        processingState: "VALID",
+        buildNumber: "21",
+        attempts: 1,
+        transientFailures: 0,
+        timedOut: false,
+      };
+    },
+    notify: supersededRecorder.notify,
+    now: () => new Date("2026-08-25T12:00:00Z"),
+  },
+});
+assert.equal(supersededPolls[0].version, "0.2.0");
+assert.equal(supersededRun.evidence.result.version, "0.2.0");
+assert.equal(supersededRecorder.posted.at(-1).version, "0.2.0");
+
+// Orchestration: main moving on while the Mac job queued skips the promotion
+// instead of shipping a superseded revision.
+const staleRecorder = recorder();
+const revalidatedStale = await runPromotion({
+  config: { sha: CURRENT_SHA, version: "0.1.0" },
+  deps: {
+    revalidate: async () => STALE_SHA,
+    archiveAndUpload: async () => {
+      throw new Error("archiving must not start for a superseded revision");
+    },
+    poll: async () => {
+      throw new Error("polling must not run for a superseded revision");
+    },
+    notify: staleRecorder.notify,
+    now: () => new Date("2026-08-25T12:00:00Z"),
+  },
+});
+assert.deepEqual(
+  staleRecorder.posted.map((status) => status.state),
+  ["queued", "skipped-stale"],
+);
+assert.equal(revalidatedStale.state, "skipped-stale");
+// An unanswerable currency check fails closed rather than archiving blind.
+const unknownCurrency = await runPromotion({
+  config: { sha: CURRENT_SHA, version: "0.1.0" },
+  deps: {
+    revalidate: async () => {
+      throw new Error("GitHub request failed with status 502");
+    },
+    archiveAndUpload: async () => {
+      throw new Error("archiving must not start without a currency check");
+    },
+    poll: async () => {
+      throw new Error("unreachable");
+    },
+    notify: recorder().notify,
+    now: () => new Date("2026-08-25T12:00:00Z"),
+  },
+});
+assert.equal(unknownCurrency.state, "failed");
+const revalidatedGood = await runPromotion({
+  config: { sha: CURRENT_SHA, version: "0.1.0" },
+  deps: {
+    revalidate: async () => CURRENT_SHA,
+    archiveAndUpload: async () => ({
+      code: 0,
+      output: "archive ok",
+      buildFacts: async () => ({ sha: CURRENT_SHA, marketingVersion: "0.1.0", buildNumber: "22" }),
+    }),
+    poll: async () => ({
+      state: "ready-for-testing",
+      processingState: "VALID",
+      buildNumber: "22",
+      attempts: 1,
+      transientFailures: 0,
+      timedOut: false,
+    }),
+    notify: recorder().notify,
+    now: () => new Date("2026-08-25T12:00:00Z"),
+  },
+});
+assert.equal(revalidatedGood.succeeded, true);
+
+// Orchestration: an unrecorded promotion is not a success, and evidence
+// failure never rewrites the promotion's own state.
+const unrecordedSuccess = await runPromotion({
+  config: { sha: CURRENT_SHA, version: "0.1.0" },
+  deps: {
+    archiveAndUpload: async () => ({
+      code: 0,
+      output: "archive ok",
+      buildFacts: async () => ({ sha: CURRENT_SHA, marketingVersion: "0.1.0", buildNumber: "23" }),
+    }),
+    poll: async () => ({
+      state: "ready-for-testing",
+      processingState: "VALID",
+      buildNumber: "23",
+      attempts: 1,
+      transientFailures: 0,
+      timedOut: false,
+    }),
+    notify: recorder().notify,
+    persistEvidence: async () => {
+      throw new Error("read-only file system");
+    },
+    now: () => new Date("2026-08-25T12:00:00Z"),
+  },
+});
+assert.equal(unrecordedSuccess.state, "ready-for-testing");
+assert.equal(unrecordedSuccess.evidencePersisted, false);
+assert.equal(unrecordedSuccess.succeeded, false);
+
+const unrecordedFailure = await runPromotion({
+  config: { sha: CURRENT_SHA, version: "0.1.0" },
+  deps: {
+    archiveAndUpload: async () => ({ code: 65, output: "archive failed" }),
+    poll: async () => {
+      throw new Error("unreachable");
+    },
+    notify: recorder().notify,
+    persistEvidence: async () => {
+      throw new Error("read-only file system");
+    },
+    now: () => new Date("2026-08-25T12:00:00Z"),
+  },
+});
+// The original failure is still the reported state, not an evidence error.
+assert.equal(unrecordedFailure.state, "failed");
+assert.match(unrecordedFailure.evidence.result.detail, /archive or upload failed/u);
+assert.equal(unrecordedFailure.succeeded, false);
 
 // Evidence: sanitized, revision-scoped, and never claims device evidence.
 const evidence = createEvidence({

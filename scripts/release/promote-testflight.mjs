@@ -11,17 +11,19 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
-  createAscToken,
+  createTokenProvider,
   pollProcessingState,
   readPrivateKey,
   resolveAppId,
 } from "./asc-client.mjs";
-import { decideFromEnvironment } from "./promotion-gate.mjs";
+import { fetchCurrentMainSha } from "./github-api.mjs";
 import { postStatus } from "./slack-notify.mjs";
 import { sanitizeText } from "./redact.mjs";
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/u;
+const VERSION_PATTERN = /^[0-9]+(\.[0-9]+){0,3}$/u;
 const SUCCESS_STATE = "ready-for-testing";
+const SKIPPED_STATE = "skipped-stale";
 
 export function createEvidence({
   sha,
@@ -65,21 +67,54 @@ export function createEvidence({
   };
 }
 
-export function runCommand(command, args, { cwd, env } = {}) {
+// Build output reaches the workflow log only after redaction: xcodebuild and
+// altool echo key paths, tokens, and device identifiers on failure, and a
+// workflow log is readable by anyone who can read the repository.
+export function runCommand(command, args, { cwd, env, write } = {}) {
+  const emit = write ?? ((line) => process.stdout.write(line));
+
   return new Promise((resolve) => {
     const child = spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
-    child.stdout.on("data", (chunk) => {
-      output += chunk;
-      process.stdout.write(chunk);
-    });
-    child.stderr.on("data", (chunk) => {
-      output += chunk;
-      process.stderr.write(chunk);
-    });
+    let pending = "";
+
+    const flush = (final) => {
+      const lines = pending.split("\n");
+      pending = final ? "" : lines.pop() ?? "";
+      for (const line of lines) {
+        if (line.trim()) {
+          emit(`${sanitizeText(line)}\n`);
+        }
+      }
+      if (final && pending.trim()) {
+        emit(`${sanitizeText(pending)}\n`);
+      }
+    };
+
+    const consume = (chunk) => {
+      const text = String(chunk);
+      output += text;
+      pending += text;
+      flush(false);
+    };
+
+    child.stdout.on("data", consume);
+    child.stderr.on("data", consume);
     child.on("error", (error) => resolve({ code: 1, output: String(error.message) }));
-    child.on("close", (code) => resolve({ code: code ?? 1, output }));
+    child.on("close", (code) => {
+      flush(true);
+      // The retained output is sanitized as well, so no caller can leak it.
+      resolve({ code: code ?? 1, output: sanitizeOutput(output) });
+    });
   });
+}
+
+function sanitizeOutput(output) {
+  return String(output ?? "")
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => sanitizeText(line))
+    .join("\n");
 }
 
 function lastLine(output) {
@@ -92,22 +127,42 @@ function lastLine(output) {
 
 export async function readBuildFacts(path) {
   const facts = JSON.parse(await readFile(path, "utf8"));
-  if (!/^[0-9]+(\.[0-9]+){0,3}$/u.test(String(facts.buildNumber ?? ""))) {
+  if (!VERSION_PATTERN.test(String(facts.buildNumber ?? ""))) {
     throw new Error("The archived build number could not be recovered");
   }
+  if (!VERSION_PATTERN.test(String(facts.marketingVersion ?? ""))) {
+    throw new Error("The archived marketing version could not be recovered");
+  }
   return facts;
+}
+
+// The archive is the authority on what was uploaded. A configured marketing
+// version that disagrees with it would send polling, Slack, and evidence at a
+// different release train.
+function reconcileFacts({ facts, sha, configuredVersion }) {
+  if (String(facts.sha ?? "").toLowerCase() !== sha) {
+    throw new Error("The archive was built from a different revision");
+  }
+  const version = String(facts.marketingVersion);
+  return {
+    version,
+    buildNumber: String(facts.buildNumber),
+    versionOverridden: Boolean(configuredVersion) && configuredVersion !== version,
+  };
 }
 
 export async function runPromotion({ config, deps }) {
   const {
     archiveAndUpload,
     poll,
+    revalidate,
     notify = postStatus,
     persistEvidence,
     now = () => new Date(),
   } = deps;
 
-  const { sha, version, runId = null } = config;
+  const { sha, version: configuredVersion, runId = null } = config;
+  let version = configuredVersion;
   const statuses = [];
 
   const announce = async (state, extra = {}) => {
@@ -133,19 +188,48 @@ export async function runPromotion({ config, deps }) {
       detail,
       recordedAtUtc: now().toISOString(),
     });
+    // Evidence is a gate, not a courtesy: an unrecorded promotion cannot be
+    // audited, so it does not count as a success. A persistence failure never
+    // rewrites the promotion's own state.
+    let evidencePersisted = true;
     if (persistEvidence) {
       try {
         await persistEvidence(evidence);
       } catch (error) {
+        evidencePersisted = false;
         process.stdout.write(
-          `Evidence not persisted (${sanitizeText(error.message)}); continuing.\n`,
+          `Evidence not persisted (${sanitizeText(error.message)}).\n`,
         );
       }
     }
-    return { state, succeeded: state === SUCCESS_STATE, evidence, statuses };
+
+    return {
+      state,
+      succeeded: (state === SUCCESS_STATE || state === SKIPPED_STATE) && evidencePersisted,
+      evidencePersisted,
+      evidence,
+      statuses,
+    };
   };
 
   await announce("queued");
+
+  // The hosted gate ran earlier; main can have moved on while this job queued
+  // for the Outpost runner.
+  if (revalidate) {
+    let currentMainSha;
+    try {
+      currentMainSha = await revalidate();
+    } catch (error) {
+      return finish("failed", {
+        detail: `current main could not be confirmed: ${sanitizeText(error.message)}`,
+      });
+    }
+    if (String(currentMainSha).toLowerCase() !== sha) {
+      return finish(SKIPPED_STATE, { detail: "a newer main revision exists" });
+    }
+  }
+
   await announce("archiving");
 
   const startedAt = now().getTime();
@@ -158,7 +242,18 @@ export async function runPromotion({ config, deps }) {
   // archived, not by whichever build App Store Connect saw most recently.
   let uploadedBuildNumber;
   try {
-    uploadedBuildNumber = String((await upload.buildFacts()).buildNumber);
+    const reconciled = reconcileFacts({
+      facts: await upload.buildFacts(),
+      sha,
+      configuredVersion,
+    });
+    uploadedBuildNumber = reconciled.buildNumber;
+    version = reconciled.version;
+    if (reconciled.versionOverridden) {
+      process.stdout.write(
+        `Configured marketing version ${sanitizeText(configuredVersion, 32)} superseded by archived ${sanitizeText(version, 32)}.\n`,
+      );
+    }
   } catch (error) {
     return finish("failed", {
       detail: `uploaded build could not be identified: ${sanitizeText(error.message)}`,
@@ -170,6 +265,7 @@ export async function runPromotion({ config, deps }) {
   let pollResult;
   try {
     pollResult = await poll({
+      version,
       buildNumber: uploadedBuildNumber,
       uploadedAfter: startedAt - 60 * 1000,
     });
@@ -191,14 +287,20 @@ export async function runPromotion({ config, deps }) {
 }
 
 async function main() {
-  const decision = decideFromEnvironment();
-  if (!decision.promote) {
-    process.stdout.write(`Promotion skipped: ${decision.reason}\n`);
+  if (process.env.VKZ_TESTFLIGHT_ENABLED !== "true") {
+    process.stdout.write("Promotion skipped: the TestFlight lane is disabled\n");
     return 0;
   }
 
-  const sha = decision.sha;
-  const version = process.env.VKZ_MARKETING_VERSION ?? "0.1.0";
+  const sha = String(process.env.VKZ_RELEASE_SHA ?? "").toLowerCase();
+  if (!SHA_PATTERN.test(sha)) {
+    process.stdout.write("Promotion refused: the promoted revision is not a full commit SHA\n");
+    return 1;
+  }
+
+  const repository = process.env.VKZ_REPOSITORY ?? "";
+  const githubToken = process.env.VKZ_GITHUB_TOKEN ?? "";
+  const version = process.env.VKZ_MARKETING_VERSION ?? "";
   const repoRoot = process.env.VKZ_REPO_ROOT ?? process.cwd();
   const keyId = process.env.VKZ_ASC_KEY_ID ?? "";
   const issuerId = process.env.VKZ_ASC_ISSUER_ID ?? "";
@@ -224,19 +326,23 @@ async function main() {
         });
         return { ...run, buildFacts: () => readBuildFacts(buildFactsPath) };
       },
-      poll: async ({ uploadedAfter, buildNumber: uploadedBuildNumber }) => {
-        const token = createAscToken({
+      // Re-read main from the remote on the Mac itself: the hosted gate's
+      // answer is only as fresh as the moment this job was queued.
+      revalidate: () => fetchCurrentMainSha({ repository, token: githubToken }),
+      poll: async ({ uploadedAfter, version: archivedVersion, buildNumber: uploadedBuildNumber }) => {
+        // Polling can outlive one 15-minute App Store Connect token.
+        const tokenProvider = createTokenProvider({
           keyId,
           issuerId,
           privateKeyPem: await readPrivateKey(join(keyDir, `AuthKey_${keyId}.p8`)),
         });
         const appId =
           process.env.VKZ_ASC_APP_ID ||
-          (await resolveAppId({ token, bundleId: process.env.VKZ_BUNDLE_ID ?? "" }));
+          (await resolveAppId({ tokenProvider, bundleId: process.env.VKZ_BUNDLE_ID ?? "" }));
         return pollProcessingState({
-          token,
+          tokenProvider,
           appId,
-          version,
+          version: archivedVersion,
           buildNumber: uploadedBuildNumber,
           uploadedAfter,
           timeoutMs: Number(process.env.VKZ_ASC_TIMEOUT_MS ?? 45 * 60 * 1000),

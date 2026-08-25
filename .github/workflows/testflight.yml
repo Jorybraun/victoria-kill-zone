@@ -61,17 +61,13 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      - name: Resolve the current main revision
-        id: current
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
-          echo "sha=${main_sha}" >> "$GITHUB_OUTPUT"
-
+      # The gate resolves current main and the candidate's CI history from the
+      # API itself, so a manual dispatch cannot promote a revision that never
+      # passed CI.
       - name: Decide whether the candidate may be promoted
         id: gate
         env:
+          VKZ_GITHUB_TOKEN: ${{ github.token }}
           VKZ_TESTFLIGHT_ENABLED: ${{ vars.VKZ_TESTFLIGHT_ENABLED }}
           VKZ_EVENT_NAME: ${{ github.event_name }}
           VKZ_CI_WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
@@ -81,7 +77,6 @@ jobs:
           VKZ_CI_HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
           VKZ_REPOSITORY: ${{ github.repository }}
           VKZ_CANDIDATE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
-          VKZ_CURRENT_MAIN_SHA: ${{ steps.current.outputs.sha }}
         run: node scripts/release/promotion-gate.mjs
 
       - name: Verify the promotion lane self-tests
@@ -114,10 +109,10 @@ jobs:
       - name: Promote to TestFlight
         env:
           VKZ_TESTFLIGHT_ENABLED: ${{ vars.VKZ_TESTFLIGHT_ENABLED }}
-          VKZ_EVENT_NAME: workflow_dispatch
           VKZ_REPOSITORY: ${{ github.repository }}
-          VKZ_CANDIDATE_SHA: ${{ needs.gate.outputs.sha }}
-          VKZ_CURRENT_MAIN_SHA: ${{ needs.gate.outputs.sha }}
+          # Used only to re-read authoritative current main from this runner
+          # immediately before archiving.
+          VKZ_GITHUB_TOKEN: ${{ github.token }}
           VKZ_RELEASE_SHA: ${{ needs.gate.outputs.sha }}
           VKZ_MARKETING_VERSION: ${{ vars.VKZ_MARKETING_VERSION }}
           VKZ_BUILD_NUMBER: ${{ github.run_number }}
