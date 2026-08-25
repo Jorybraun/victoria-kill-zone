@@ -1,0 +1,16 @@
+{
+  "name": "interpolated_miss_between_samples",
+  "description": "At 400 ms B is (0,0,10), and at 500 ms B is (1.2,0,10). For a claim at 475 ms, alpha=(475-400)/(500-400)=0.75 and x=0+1.2*0.75=0.9 m. Closest approach is 0.9 m > 0.35 m, so the shot misses; snapping to B@400 would incorrectly hit.",
+  "clock": { "tickMs": 50 },
+  "players": [{ "id": "player-a" }, { "id": "player-b" }],
+  "timeline": [
+    { "atMs": 400, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 400, "poseSample": { "player": "player-b", "pos": [0, 0, 10] } },
+    { "atMs": 500, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 500, "poseSample": { "player": "player-b", "pos": [1.2, 0, 10] } },
+    { "atMs": 500, "fire": { "shooter": "player-a", "target": "player-b", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 475, "shotId": "s1" } }
+  ],
+  "expect": [
+    { "verdict": { "shotId": "s1", "outcome": "miss", "rewindMs": 25 } }
+  ]
+}

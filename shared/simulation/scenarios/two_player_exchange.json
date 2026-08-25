@@ -1,0 +1,16 @@
+{
+  "name": "two_player_exchange",
+  "description": "At 100 ms player-a fires along +z from the origin to player-b at 10 m: separation is inside 3–15 m and closest approach is 0 m, so 34 damage applies. At 150 ms player-b returns the shot along -z under the same geometry. Both claims are fresh within the 100 ms pose age.",
+  "clock": { "tickMs": 50 },
+  "players": [{ "id": "player-a" }, { "id": "player-b" }],
+  "timeline": [
+    { "atMs": 50, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 50, "poseSample": { "player": "player-b", "pos": [0, 0, 10] } },
+    { "atMs": 100, "fire": { "shooter": "player-a", "target": "player-b", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 100, "shotId": "a-1" } },
+    { "atMs": 150, "fire": { "shooter": "player-b", "target": "player-a", "origin": [0, 0, 10], "dir": [0, 0, -1], "claimedAtMs": 150, "shotId": "b-1" } }
+  ],
+  "expect": [
+    { "verdict": { "shotId": "a-1", "outcome": "hit", "appliedDamage": 34, "rewindMs": 0 } },
+    { "verdict": { "shotId": "b-1", "outcome": "hit", "appliedDamage": 34, "rewindMs": 0 } }
+  ]
+}
