@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="PEW PEW is a markerless 1v1 augmented-reality duel for two iPhones."
+    />
+    <meta name="theme-color" content="#070b10" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="PEW PEW — Markerless 1v1 AR" />
+    <meta
+      property="og:description"
+      content="Turn a controlled field into an AR arena with two iPhones and no visible player markers."
+    />
+    <meta
+      property="og:url"
+      content="https://jorybraun.github.io/victoria-kill-zone/pitch/"
+    />
+    <meta
+      property="og:image"
+      content="https://jorybraun.github.io/victoria-kill-zone/pitch/assets/pew-pew-social-preview.png"
+    />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="PEW PEW — Markerless 1v1 AR Duel"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="PEW PEW — Markerless 1v1 AR" />
+    <meta
+      name="twitter:description"
+      content="Turn a controlled field into an AR arena with two iPhones and no visible player markers."
+    />
+    <meta
+      name="twitter:image"
+      content="https://jorybraun.github.io/victoria-kill-zone/pitch/assets/pew-pew-social-preview.png"
+    />
+    <meta
+      name="twitter:image:alt"
+      content="PEW PEW — Markerless 1v1 AR Duel"
+    />
+    <title>PEW PEW — Markerless 1v1 AR</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#dual-pov">Skip to the dual POV</a>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <img
+          class="hero__image"
+          src="./assets/pew-pew-hero.png"
+          alt="Two adults facing each other across a court while aiming through their phones"
+          width="1664"
+          height="945"
+          fetchpriority="high"
+        />
+        <div class="hero__shade" aria-hidden="true"></div>
+        <div class="hero__scan" aria-hidden="true"></div>
+
+        <header class="topbar shell">
+          <a class="brand" href="#top" aria-label="PEW PEW home">
+            <span class="brand__signal" aria-hidden="true"></span>
+            <span>PEW PEW</span>
+          </a>
+          <span class="topbar__label">CONCEPT PROTOTYPE / 01</span>
+        </header>
+
+        <div class="hero__content shell" id="top">
+          <p class="eyebrow">VICTORIA / MARKERLESS 1V1 DUEL</p>
+          <h1 id="hero-title">Turn a controlled field into an AR arena.</h1>
+          <p class="hero__lede">
+            Two iPhones. No visible player markers. Aim through the camera,
+            fire, and watch both players—and the spectator view—react in sync.
+          </p>
+          <a class="primary-link" href="#dual-pov">
+            <span>Watch the dual POV</span>
+            <span aria-hidden="true">↓</span>
+          </a>
+        </div>
+
+        <div class="target-lock" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+        </div>
+
+        <div class="hero__telemetry shell" aria-hidden="true">
+          <span>VISION / TRACKING</span>
+          <span>ARKIT / AIM VECTOR</span>
+          <span>CONVEX / LIVE STATE</span>
+        </div>
+      </section>
+
+      <section
+        class="dual-pov shell"
+        id="dual-pov"
+        aria-labelledby="dual-pov-title"
+      >
+        <div class="dual-pov__copy">
+          <p class="eyebrow eyebrow--cyan">DUAL POV / 02</p>
+          <h2 id="dual-pov-title">Watch both sides of the same duel.</h2>
+          <p>
+            Two recordings, synchronized on the shared countdown. One control
+            plays both players together, so every hit, elimination, and respawn
+            can be seen from both sides.
+          </p>
+          <div class="sync-note">
+            <span aria-hidden="true"></span>
+            ALIGNED TO THE SAME MATCH CLOCK
+          </div>
+        </div>
+
+        <figure class="dual-pov__figure">
+          <div class="dual-pov__labels" aria-hidden="true">
+            <span>PLAYER 1 / HOST</span>
+            <span>PLAYER 2 / JOIN</span>
+          </div>
+          <video
+            controls
+            playsinline
+            preload="metadata"
+            poster="./assets/pew-pew-dual-pov-poster.jpg"
+          >
+            <source src="./assets/pew-pew-dual-pov.mp4" type="video/mp4" />
+            Your browser does not support embedded video.
+          </video>
+          <figcaption>78 seconds / synchronized dual POV / Player 1 audio</figcaption>
+        </figure>
+      </section>
+
+      <section class="build-story" aria-labelledby="build-story-title">
+        <div class="shell build-story__inner">
+          <p class="eyebrow">THE BUILD SYSTEM / 03</p>
+          <h2 id="build-story-title">Not Cursor. Devin.</h2>
+          <p class="build-story__lede">
+            I ran PEW PEW through Devin, used Slack to stay in the loop, and
+            kept every change reviewable in GitHub. When the app needed macOS
+            and Xcode, I routed the work to a Devin Mac Outpost—bringing a
+            cloud workflow to a native iOS build.
+          </p>
+
+          <ol class="build-path" aria-label="PEW PEW cloud build workflow">
+            <li><span>01</span><strong>Slack</strong></li>
+            <li><span>02</span><strong>Devin Cloud</strong></li>
+            <li><span>03</span><strong>GitHub PR</strong></li>
+            <li><span>04</span><strong>Mac Outpost</strong></li>
+            <li><span>05</span><strong>Xcode</strong></li>
+            <li><span>06</span><strong>iPhone</strong></li>
+          </ol>
+
+          <p class="build-story__note">
+            Built through the cloud. Compiled on the connected Mac where Xcode
+            and the native toolchain live.
+          </p>
+        </div>
+      </section>
+
+      <footer class="footer shell">
+        <p>
+          PEW PEW is a native iOS concept prototype for controlled,
+          authorized play spaces.
+        </p>
+        <a
+          href="https://github.com/Jorybraun/victoria-kill-zone"
+          rel="noreferrer"
+        >
+          View the project on GitHub ↗
+        </a>
+      </footer>
+    </main>
+  </body>
+</html>

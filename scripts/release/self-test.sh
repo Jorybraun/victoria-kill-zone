@@ -37,8 +37,8 @@ PATH="$script_dir/test-fixtures:$PATH" \
   VKZ_PAGES_URL="https://pages-smoke.invalid" \
   bash "$script_dir/smoke-pages.sh" > "$http_log" 2>&1
 
-if [[ "$(< "$counter_file")" != "3" ]]; then
-  echo "ERROR: Pages smoke did not retry until a 2xx response." >&2
+if [[ "$(< "$counter_file")" != "4" ]]; then
+  echo "ERROR: Pages smoke did not retry until a 2xx response and probe both paths." >&2
   exit 1
 fi
 
@@ -60,6 +60,23 @@ fi
 
 if grep -Fq "pages-smoke.invalid" "$http_log"; then
   echo "ERROR: failing Pages smoke printed the deployment URL." >&2
+  exit 1
+fi
+
+rm -f -- "$counter_file"
+if PATH="$script_dir/test-fixtures:$PATH" \
+  VKZ_HTTP_SMOKE_COUNTER_FILE="$counter_file" \
+  VKZ_HTTP_SMOKE_DELAY_SECONDS=0 \
+  VKZ_HTTP_SMOKE_FAIL_SUFFIX="/pitch/" \
+  VKZ_HTTP_SMOKE_MAX_ATTEMPTS=3 \
+  VKZ_PAGES_URL="https://pages-smoke.invalid" \
+  bash "$script_dir/smoke-pages.sh" > "$http_log" 2>&1; then
+  echo "ERROR: Pages smoke passed while the pitch page never returned 2xx." >&2
+  exit 1
+fi
+
+if grep -Fq "pages-smoke.invalid" "$http_log"; then
+  echo "ERROR: failing pitch Pages smoke printed the deployment URL." >&2
   exit 1
 fi
 

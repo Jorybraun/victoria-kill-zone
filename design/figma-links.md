@@ -3,8 +3,10 @@
 ## Active file
 
 - [Victoria Pew Pew — iOS G1/G2](https://www.figma.com/design/3VdPoHHat7eq3KPEgJn8gB)
-- Scope authority: [Slice 001: Create, join, start, debug fire, synchronized health](slices/001-g1-g2-network-vertical-slice.md)
-- Last verified: 2026-08-22
+- Frozen scope authority: [Slice 001: Create, join, start, debug fire, synchronized health](slices/001-g1-g2-network-vertical-slice.md)
+- Proposed spatial scope: [Slice 002: Shared phone-proxy hit registration](slices/002-shared-phone-proxy-hit-registration.md)
+- First Slice 002 frame: [Firing · Predicted](https://www.figma.com/design/3VdPoHHat7eq3KPEgJn8gB?node-id=54-3)
+- Last verified: 2026-08-23
 
 ## File inventory
 

@@ -2,6 +2,8 @@
 set -euo pipefail
 
 counter_file="${VKZ_HTTP_SMOKE_COUNTER_FILE:?}"
+always_fail_suffix="${VKZ_HTTP_SMOKE_FAIL_SUFFIX:-}"
+request_url="${*: -1}"
 attempt=0
 
 if [[ -f "$counter_file" ]]; then
@@ -10,6 +12,11 @@ fi
 
 attempt=$((attempt + 1))
 printf '%s\n' "$attempt" > "$counter_file"
+
+if [[ -n "$always_fail_suffix" && "$request_url" == *"$always_fail_suffix" ]]; then
+  printf '503'
+  exit 22
+fi
 
 if ((attempt < 3)); then
   printf '503'
