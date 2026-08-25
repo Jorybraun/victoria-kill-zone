@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 
 import { pollProcessingState, createAscToken, createTokenProvider } from "./asc-client.mjs";
-import { fetchCurrentMainSha, hasSuccessfulCiPushRun } from "./github-api.mjs";
+import {
+  CI_WORKFLOW_FILE,
+  CI_WORKFLOW_PATH,
+  fetchCurrentMainSha,
+  hasSuccessfulCiPushRun,
+} from "./github-api.mjs";
 import { createEvidence, runCommand, runPromotion } from "./promote-testflight.mjs";
 import { decidePromotion, decideWithRemoteFacts } from "./promotion-gate.mjs";
 import { sanitizeText } from "./redact.mjs";
@@ -132,13 +137,14 @@ assert.equal(
 
 // GitHub facts: only a completed successful CI push run on this repository's
 // own main counts as proof for a revision.
-const runsFor = (runs) => async (url) => ({
-  ok: true,
-  status: 200,
-  json: async () => (String(url).includes("/actions/runs") ? { workflow_runs: runs } : {}),
-});
+const requestedUrls = [];
+const runsFor = (runs) => async (url) => {
+  requestedUrls.push(String(url));
+  return { ok: true, status: 200, json: async () => ({ workflow_runs: runs }) };
+};
 const pushRun = {
   name: "CI",
+  path: CI_WORKFLOW_PATH,
   event: "push",
   status: "completed",
   conclusion: "success",
@@ -155,9 +161,17 @@ assert.equal(
   }),
   true,
 );
+// The lookup is scoped to the canonical workflow file, not a display name.
+assert.equal(
+  requestedUrls[0],
+  `https://api.github.com/repos/${REPOSITORY}/actions/workflows/${CI_WORKFLOW_FILE}/runs` +
+    `?head_sha=${CURRENT_SHA}&event=push&status=success&branch=main&per_page=50`,
+);
 for (const rejected of [
   { ...pushRun, event: "pull_request" },
-  { ...pushRun, name: "Deploy" },
+  // A look-alike workflow that merely calls itself "CI" cannot vouch for a
+  // revision.
+  { ...pushRun, path: ".github/workflows/vendor-ci.yml" },
   { ...pushRun, conclusion: "failure" },
   { ...pushRun, head_sha: STALE_SHA },
   { ...pushRun, repository: { full_name: "fork/victoria-kill-zone" } },
@@ -187,6 +201,48 @@ await assert.rejects(
     token: "t",
   }),
   /status 502/u,
+);
+// Without `actions: read` the runs endpoint answers 403, which must fail closed
+// rather than read as "no CI run".
+await assert.rejects(
+  hasSuccessfulCiPushRun({
+    fetchImpl: async () => ({ ok: false, status: 403 }),
+    repository: REPOSITORY,
+    sha: CURRENT_SHA,
+    token: "t",
+  }),
+  /status 403/u,
+);
+assert.equal(
+  (
+    await decideWithRemoteFacts(remoteEnvironment, {
+      fetchCurrentMain: async () => CURRENT_SHA,
+      verifyCi: async () => {
+        const error = new Error("GitHub request failed with status 403");
+        throw error;
+      },
+    })
+  ).reasonKey,
+  "remoteUnavailable",
+);
+await assert.rejects(
+  hasSuccessfulCiPushRun({
+    fetchImpl: runsFor([pushRun]),
+    repository: REPOSITORY,
+    sha: CURRENT_SHA,
+    token: "t",
+    workflowFile: "../../etc/passwd",
+  }),
+  /workflow file/u,
+);
+assert.equal(
+  await hasSuccessfulCiPushRun({
+    fetchImpl: runsFor([]),
+    repository: REPOSITORY,
+    sha: CURRENT_SHA,
+    token: "t",
+  }),
+  false,
 );
 
 // Redaction: nothing sensitive survives sanitization. The credential-shaped
@@ -734,6 +790,7 @@ assert.equal(revalidatedGood.succeeded, true);
 
 // Orchestration: an unrecorded promotion is not a success, and evidence
 // failure never rewrites the promotion's own state.
+const unrecordedRecorder = recorder();
 const unrecordedSuccess = await runPromotion({
   config: { sha: CURRENT_SHA, version: "0.1.0" },
   deps: {
@@ -750,7 +807,7 @@ const unrecordedSuccess = await runPromotion({
       transientFailures: 0,
       timedOut: false,
     }),
-    notify: recorder().notify,
+    notify: unrecordedRecorder.notify,
     persistEvidence: async () => {
       throw new Error("read-only file system");
     },
@@ -760,6 +817,16 @@ const unrecordedSuccess = await runPromotion({
 assert.equal(unrecordedSuccess.state, "ready-for-testing");
 assert.equal(unrecordedSuccess.evidencePersisted, false);
 assert.equal(unrecordedSuccess.succeeded, false);
+// The channel must not be left claiming a release the lane cannot evidence:
+// the last posted state is a failure, and no success was ever posted.
+assert.equal(unrecordedRecorder.posted.at(-1).state, "failed");
+assert.ok(
+  unrecordedRecorder.posted.every((status) => status.state !== "ready-for-testing"),
+);
+assert.match(
+  buildStatusMessage(unrecordedRecorder.posted.at(-1)),
+  /ready-for-testing, but evidence could not be persisted/u,
+);
 
 const unrecordedFailure = await runPromotion({
   config: { sha: CURRENT_SHA, version: "0.1.0" },

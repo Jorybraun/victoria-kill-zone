@@ -12,6 +12,9 @@ on:
 
 permissions:
   contents: read
+  # Listing the CI workflow's runs, which the gate uses to prove this exact
+  # revision passed CI.
+  actions: read
 
 # One promotion at a time. Queued runs are not cancelled, because the gate
 # below skips any revision that is no longer the current main SHA.

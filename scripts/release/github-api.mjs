@@ -8,6 +8,10 @@
 const API_ROOT = "https://api.github.com";
 const SHA_PATTERN = /^[0-9a-f]{40}$/u;
 const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
+// The canonical CI definition. A display name is not an identity: any workflow
+// file in the repository may call itself "CI".
+export const CI_WORKFLOW_FILE = "ci.yml";
+export const CI_WORKFLOW_PATH = `.github/workflows/${CI_WORKFLOW_FILE}`;
 
 async function request({ fetchImpl, token, path }) {
   if (!REPOSITORY_PATTERN.test(String(path.repository))) {
@@ -44,13 +48,13 @@ export async function fetchCurrentMainSha({
 }
 
 // A green pull-request run does not count: it describes a merge commit that is
-// not on main.
+// not on main. Requires the `actions: read` permission.
 export async function hasSuccessfulCiPushRun({
   fetchImpl = globalThis.fetch,
   repository,
   sha,
   token,
-  workflowName = "CI",
+  workflowFile = CI_WORKFLOW_FILE,
 }) {
   const candidate = String(sha ?? "").toLowerCase();
   if (!SHA_PATTERN.test(candidate)) {
@@ -64,19 +68,25 @@ export async function hasSuccessfulCiPushRun({
     branch: "main",
     per_page: "50",
   });
+  if (!/^[a-z0-9_.-]+\.ya?ml$/u.test(String(workflowFile))) {
+    throw new Error("Invalid workflow file");
+  }
+
+  // Scoped to the workflow file, so a look-alike workflow named "CI" cannot
+  // vouch for a revision.
   const payload = await request({
     fetchImpl,
     token,
     path: {
       repository,
-      suffix: `/repos/${repository}/actions/runs?${query.toString()}`,
+      suffix: `/repos/${repository}/actions/workflows/${workflowFile}/runs?${query.toString()}`,
     },
   });
 
   const runs = Array.isArray(payload?.workflow_runs) ? payload.workflow_runs : [];
   return runs.some(
     (run) =>
-      run?.name === workflowName &&
+      run?.path === `.github/workflows/${workflowFile}` &&
       run?.event === "push" &&
       run?.status === "completed" &&
       run?.conclusion === "success" &&

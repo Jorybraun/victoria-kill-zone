@@ -81,3 +81,15 @@ This is the integration-owned, evidence-based status record. Append observed res
 - **Result:** PASS for lane logic; still BLOCKED for end-to-end promotion. Lane remains disabled by default (`VKZ_TESTFLIGHT_ENABLED` unset).
 - **Blocker and owner:** Hans — one-time Outpost runner, keychain identity, `.p8`, and repository secrets/variables.
 - **Next integration step:** review PR #31, merge disabled, complete one-time setup, then enable and observe one promotion.
+
+### 2026-08-25 11:25 PDT — KIL-38 correction round 2 (permissions, CI identity, evidence-before-status)
+
+- **Git SHA / PR:** branch `kil-38-testflight-promotion-lane`, third commit; PR #31.
+- **Owner and write set:** Integration (`.github/workflows/**`, `scripts/release/**`, `docs/outpost-operations.md`, this log).
+- **Commands/checks:** `node scripts/release/testflight-self-test.mjs` PASS, `bash scripts/release/self-test.sh` PASS, `bash -n scripts/release/testflight-upload.sh` PASS, `pnpm verify` PASS (`Workspace verification: PASS`) with `VITE_CONVEX_URL`/`CONVEX_DEPLOYMENT_URL` unset.
+- **Corrections:** the workflow declares `actions: read` for the workflow-runs lookup, and the CI proof is scoped to the canonical `.github/workflows/ci.yml` workflow file rather than any workflow whose display name is `CI` (a 403 or any other lookup error fails closed); sanitized evidence is now persisted before the terminal status is posted, so an unrecordable promotion posts a `failed` status instead of leaving `#pew-pew-releases` claiming a release, while the returned and recorded state still preserves the App Store Connect outcome.
+- **Observed on physical devices:** none. No OTA install and no live TestFlight update are claimed.
+- **Mocked or unproven:** all App Store Connect, GitHub API, and Slack interactions remain fixture-driven; the self-hosted runner, signing identity, and `.p8` still do not exist.
+- **Result:** PASS for lane logic; still BLOCKED for end-to-end promotion. Lane remains disabled by default.
+- **Blocker and owner:** Hans — one-time Outpost runner, keychain identity, `.p8`, and repository secrets/variables.
+- **Next integration step:** review PR #31, merge disabled, complete one-time setup, then enable and observe one promotion.

@@ -177,7 +177,6 @@ export async function runPromotion({ config, deps }) {
   };
 
   const finish = async (state, { detail = null, buildNumber = null, pollResult = null } = {}) => {
-    await announce(state, { detail, buildNumber });
     const evidence = createEvidence({
       sha,
       state,
@@ -188,19 +187,33 @@ export async function runPromotion({ config, deps }) {
       detail,
       recordedAtUtc: now().toISOString(),
     });
+
     // Evidence is a gate, not a courtesy: an unrecorded promotion cannot be
-    // audited, so it does not count as a success. A persistence failure never
-    // rewrites the promotion's own state.
+    // audited, so it does not count as a success. Persisting happens before the
+    // terminal status is posted, so the channel never ends on a success the
+    // lane cannot evidence.
     let evidencePersisted = true;
+    let evidenceError = null;
     if (persistEvidence) {
       try {
         await persistEvidence(evidence);
       } catch (error) {
         evidencePersisted = false;
-        process.stdout.write(
-          `Evidence not persisted (${sanitizeText(error.message)}).\n`,
-        );
+        evidenceError = sanitizeText(error.message);
+        process.stdout.write(`Evidence not persisted (${evidenceError}).\n`);
       }
+    }
+
+    if (evidencePersisted) {
+      await announce(state, { detail, buildNumber });
+    } else {
+      // The Apple outcome is preserved in the returned and recorded state; the
+      // channel is told the lane failed, because an unaudited promotion is not
+      // a promotion anyone may act on.
+      await announce("failed", {
+        buildNumber,
+        detail: `App Store Connect outcome ${state}, but evidence could not be persisted: ${evidenceError}`,
+      });
     }
 
     return {
