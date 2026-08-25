@@ -49,18 +49,50 @@ final class BoundedQueueBackpressureTests: XCTestCase {
   }
 
   func testLowWaterReleaseIsExposedByTopology() throws {
-    var topology = try HostRelayTopology(playerCount: 2)
+    var topology = try HostRelayTopology(playerCount: 2, peerTimeoutMs: 100_000)
     _ = topology.markReliableGapUnrecoverable(slot: 1)
     XCTAssertTrue(topology.fireLocked)
-    XCTAssertEqual(try topology.recover(slot: 1), [.peerRecovered(slot: 1)])
     XCTAssertEqual(
+      try topology.recover(slot: 1),
+      [.peerRecovered(slot: 1), .fireLockReleased]
+    )
+    XCTAssertFalse(topology.fireLocked)
+  }
+
+  func testUnrecoverableGapLockStaysLatchedAcrossAdvances() throws {
+    var topology = try HostRelayTopology(playerCount: 2, peerTimeoutMs: 100_000)
+    XCTAssertEqual(
+      topology.markReliableGapUnrecoverable(slot: 1),
+      [.reliableGapUnrecoverable(slot: 1), .fireLockEngaged]
+    )
+    for nowMs in stride(from: Int64(1), through: 10_000, by: 1_000) {
+      XCTAssertTrue(
+        topology.advance(
+          nowMs: nowMs,
+          poseQueueCount: 0,
+          reliableQueueCount: 0
+        ).isEmpty
+      )
+      XCTAssertTrue(topology.fireLocked)
+    }
+    XCTAssertEqual(try topology.recover(slot: 1), [.peerRecovered(slot: 1), .fireLockReleased])
+    XCTAssertFalse(topology.fireLocked)
+  }
+
+  func testReliableQueueLatchWaitsForLowWaterQueues() throws {
+    var topology = try HostRelayTopology(playerCount: 2)
+    _ = topology.rejectReliableQueueFull()
+    XCTAssertTrue(topology.fireLocked)
+    XCTAssertTrue(
       topology.advance(
         nowMs: 1,
-        reliableChannelsInOrder: true,
-        poseQueueCount: 0,
-        reliableQueueCount: 0,
-        lowWaterMark: 0
-      ),
+        poseQueueCount: 2,
+        reliableQueueCount: 2
+      ).isEmpty
+    )
+    XCTAssertTrue(topology.fireLocked)
+    XCTAssertEqual(
+      topology.advance(nowMs: 2, poseQueueCount: 1, reliableQueueCount: 1),
       [.fireLockReleased]
     )
     XCTAssertFalse(topology.fireLocked)

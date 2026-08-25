@@ -1,6 +1,6 @@
 import Foundation
 
-public final class TransportFieldHarness {
+public final class TransportFieldHarness: @unchecked Sendable {
   private let link: any PeerLink
   private var stats: TransportStats
   private var nowMs: Int64 = 0
@@ -8,10 +8,17 @@ public final class TransportFieldHarness {
   public init(link: any PeerLink) {
     self.link = link
     stats = TransportStats(evidenceTier: link.evidenceTier)
+    link.setReceiveHandler { [weak self] frame, arrivalMs, sentAtMs, accepted in
+      self?.recordReceived(
+        frame,
+        arrivalMs: arrivalMs,
+        sentAtMs: sentAtMs,
+        accepted: accepted
+      )
+    }
   }
 
-  public func startHostAndClient(playerCount: Int = 2) {
-    _ = playerCount
+  public func startHostAndClient() {
     link.start()
   }
 
@@ -30,10 +37,41 @@ public final class TransportFieldHarness {
       )
       stats.recordSent(channel: .pose, slot: senderSlot)
       try link.send(.pose(frame))
+      (link as? LoopbackEndpoint)?.advance(to: nowMs)
     }
   }
 
   public func sanitizedStatsSnapshot() throws -> Data {
     try stats.sanitizedSnapshotData(nowMs: nowMs)
+  }
+
+  private func recordReceived(
+    _ frame: TransportFrame,
+    arrivalMs: Int64,
+    sentAtMs: Int64,
+    accepted: Bool
+  ) {
+    switch frame {
+    case let .pose(value, _):
+      stats.recordReceived(
+        channel: .pose,
+        slot: value.senderSlot,
+        accepted: accepted,
+        arrivalMs: arrivalMs,
+        sentAtMs: sentAtMs,
+        sequence: value.sequence,
+        epoch: value.epoch
+      )
+    case let .reliable(value, _):
+      stats.recordReceived(
+        channel: .reliable,
+        slot: value.senderSlot,
+        accepted: accepted,
+        arrivalMs: arrivalMs,
+        sentAtMs: sentAtMs,
+        sequence: value.sequence,
+        epoch: value.epoch
+      )
+    }
   }
 }

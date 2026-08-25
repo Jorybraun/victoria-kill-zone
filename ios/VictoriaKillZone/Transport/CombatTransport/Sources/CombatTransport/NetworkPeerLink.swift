@@ -31,12 +31,16 @@ public struct NetworkPeerLinkConfiguration: Sendable, Equatable {
   }
 }
 
+public typealias PeerLinkReceiveHandler =
+  @Sendable (TransportFrame, Int64, Int64, Bool) -> Void
+
 public protocol PeerLink: AnyObject, Sendable {
   var remoteSlot: UInt8 { get }
   var evidenceTier: TransportEvidenceTier { get }
   func start()
   func stop()
   func send(_ frame: TransportFrame) throws
+  func setReceiveHandler(_ handler: PeerLinkReceiveHandler?)
 }
 
 /// Network I/O is confined to `queue`; callers never access NW objects directly.
@@ -50,13 +54,13 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
   private var listener: NWListener?
   private var browser: NWBrowser?
   private var reliableGroup: NWConnectionGroup?
-  private var receiveHandler: ((TransportFrame) -> Void)?
+  private var receiveHandler: PeerLinkReceiveHandler?
   private var failureHandler: (() -> Void)?
 
   public init(
     remoteSlot: UInt8,
     configuration: NetworkPeerLinkConfiguration,
-    receiveHandler: ((TransportFrame) -> Void)? = nil,
+    receiveHandler: PeerLinkReceiveHandler? = nil,
     failureHandler: (() -> Void)? = nil
   ) {
     self.remoteSlot = remoteSlot
@@ -114,6 +118,12 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
           if error != nil { self?.failureHandler?() }
         }
       )
+    }
+  }
+
+  public func setReceiveHandler(_ handler: PeerLinkReceiveHandler?) {
+    queue.async { [self] in
+      receiveHandler = handler
     }
   }
 
@@ -221,7 +231,8 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
   private func receive(on connection: NWConnection, for remoteSlot: UInt8) {
     connection.receiveMessage { [weak self] content, _, _, error in
       if let content, let frame = try? TransportFrameCodec.decode(content) {
-        self?.receiveHandler?(frame)
+        let nowMs = Int64(DispatchTime.now().uptimeNanoseconds / 1_000_000)
+        self?.receiveHandler?(frame, nowMs, nowMs, true)
       }
       if error == nil {
         self?.receive(on: connection, for: remoteSlot)

@@ -106,6 +106,9 @@ client) the host link is down. Released only when every expected peer is
 their low-water mark. Effects are returned from `advance(nowMs:)` so tests
 assert exact effect sequences instead of polling state.
 
+The documented low-water mark is one queued frame per channel. Callers may
+override it for deterministic fixtures, but the default is `1`.
+
 ## Backpressure
 
 - `PoseSendQueue` (capacity 3) drops the **oldest** sample on overflow —

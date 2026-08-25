@@ -22,11 +22,16 @@ public struct FaultProfile: Equatable, Sendable {
   }
 }
 
+public enum LoopbackEndpointError: Error, Equatable, Sendable {
+  case relayedFrameNotAllowed
+}
+
 public final class LoopbackEndpoint: PeerLink, @unchecked Sendable {
   public let slot: UInt8
   public let remoteSlot: UInt8
   public let evidenceTier: TransportEvidenceTier = .loopbackSimulated
   private let fabric: LoopbackFabric
+  private var receiveHandler: PeerLinkReceiveHandler?
 
   fileprivate init(slot: UInt8, remoteSlot: UInt8, fabric: LoopbackFabric) {
     self.slot = slot
@@ -45,14 +50,33 @@ public final class LoopbackEndpoint: PeerLink, @unchecked Sendable {
   public func send(_ frame: TransportFrame) throws {
     switch frame {
     case let .pose(value, relayed):
+      guard !relayed else { throw LoopbackEndpointError.relayedFrameNotAllowed }
       try fabric.schedule(.pose(value, relayed: relayed), from: slot)
     case let .reliable(value, relayed):
+      guard !relayed else { throw LoopbackEndpointError.relayedFrameNotAllowed }
       try fabric.schedule(.reliable(value, relayed: relayed), from: slot)
     }
   }
 
+  public func setReceiveHandler(_ handler: PeerLinkReceiveHandler?) {
+    receiveHandler = handler
+  }
+
+  public func advance(to targetMs: Int64) {
+    fabric.advance(to: targetMs)
+  }
+
   public func start() {}
   public func stop() {}
+
+  fileprivate func notify(
+    _ frame: TransportFrame,
+    arrivalMs: Int64,
+    sentAtMs: Int64,
+    accepted: Bool
+  ) {
+    receiveHandler?(frame, arrivalMs, sentAtMs, accepted)
+  }
 
   public func latestPose(for senderSlot: UInt8) -> PoseFrame? {
     fabric.latestPose(for: senderSlot, at: slot)
@@ -144,7 +168,7 @@ public final class LoopbackFabric {
     topology = host.topology
     let nextEpoch = (epochs[slot] ?? 1) &+ 1
     epochs[slot] = nextEpoch
-    host.resetEpoch(nextEpoch)
+    host.resetPeerEpoch(slot, nextEpoch)
     cores[0] = host
     return effects
   }
@@ -217,9 +241,8 @@ public final class LoopbackFabric {
 
   public func advance(to targetMs: Int64) {
     guard targetMs >= nowMs else { return }
-    nowMs = targetMs
     while let index = scheduled.enumerated()
-      .filter({ $0.element.dueMs <= nowMs })
+      .filter({ $0.element.dueMs <= targetMs })
       .min(by: {
         if $0.element.dueMs == $1.element.dueMs {
           return $0.element.ordinal < $1.element.ordinal
@@ -227,8 +250,10 @@ public final class LoopbackFabric {
         return $0.element.dueMs < $1.element.dueMs
       })?.offset {
       let event = scheduled.remove(at: index)
+      nowMs = max(nowMs, event.dueMs)
       deliver(event)
     }
+    nowMs = targetMs
     for slot in 0..<UInt8(playerCount) {
       guard var core = cores[slot] else { continue }
       _ = core.advance(nowMs: nowMs)
@@ -249,6 +274,12 @@ public final class LoopbackFabric {
         sentAtMs: event.sentAtMs
       )
       cores[event.destination] = destinationCore
+      endpoints[event.destination]?.notify(
+        .pose(frame, relayed: relayed),
+        arrivalMs: nowMs,
+        sentAtMs: event.sentAtMs,
+        accepted: admission.accepted
+      )
       if event.destination == HostRelayTopology.hostSlot {
         topology = destinationCore.topology
       }
@@ -262,12 +293,22 @@ public final class LoopbackFabric {
         sentAtMs: event.sentAtMs
       )
       cores[event.destination] = destinationCore
+      endpoints[event.destination]?.notify(
+        .reliable(frame, relayed: relayed),
+        arrivalMs: nowMs,
+        sentAtMs: event.sentAtMs,
+        accepted: delivery.status == .delivered
+      )
       if event.destination == HostRelayTopology.hostSlot {
         topology = destinationCore.topology
       }
-      if event.destination == HostRelayTopology.hostSlot, !relayed,
-         delivery.status != .unrecoverableGap {
-        relay(frame: .reliable(frame, relayed: true), origin: frame.senderSlot)
+      if event.destination == HostRelayTopology.hostSlot, !relayed {
+        for deliveredFrame in delivery.frames {
+          relay(
+            frame: .reliable(deliveredFrame, relayed: true),
+            origin: deliveredFrame.senderSlot
+          )
+        }
       }
     }
   }

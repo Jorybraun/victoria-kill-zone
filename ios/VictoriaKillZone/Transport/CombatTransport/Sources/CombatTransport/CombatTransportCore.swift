@@ -33,6 +33,13 @@ public struct CombatTransportCore: Equatable, Sendable {
     apply(topology.resetEpoch(newEpoch), at: 0)
   }
 
+  public mutating func resetPeerEpoch(_ peer: UInt8, _ newEpoch: UInt16) {
+    poseInbox.reset(senderSlot: peer)
+    reliableOrderers[peer] = nil
+    deliveredReliable[peer] = nil
+    apply(topology.resetEpoch(newEpoch), at: 0)
+  }
+
   @discardableResult
   public mutating func enqueuePose(_ frame: PoseFrame) -> PoseQueueEnqueueResult {
     stats.recordSent(channel: .pose, slot: frame.senderSlot)
@@ -99,10 +106,9 @@ public struct CombatTransportCore: Equatable, Sendable {
   }
 
   @discardableResult
-  public mutating func advance(nowMs: Int64, lowWaterMark: Int = 0) -> [TransportEffect] {
+  public mutating func advance(nowMs: Int64, lowWaterMark: Int = 1) -> [TransportEffect] {
     let effects = topology.advance(
       nowMs: nowMs,
-      reliableChannelsInOrder: true,
       poseQueueCount: poseQueue.count,
       reliableQueueCount: reliableQueue.count,
       lowWaterMark: lowWaterMark

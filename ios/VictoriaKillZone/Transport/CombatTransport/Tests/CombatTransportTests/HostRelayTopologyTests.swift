@@ -46,4 +46,52 @@ final class HostRelayTopologyTests: XCTestCase {
     XCTAssertEqual(fabric.latestPose(for: 1, at: 2)?.sequence, 1)
     XCTAssertEqual(fabric.latestPose(for: 1, at: 3)?.sequence, 1)
   }
+
+  func testRelayUsesHostDeliveryOrderUnderReorderAndDuplicates() throws {
+    let fabric = LoopbackFabric(
+      playerCount: 4,
+      faultProfile: FaultProfile(
+        jitterMs: 40,
+        reliableReorderPercent: 100,
+        reliableDuplicatePercent: 100
+      ),
+      seed: 123
+    )
+    for sequence in 1...40 {
+      try fabric.client(slot: 1).send(
+        ReliableEventFrame(
+          epoch: 1,
+          senderSlot: 1,
+          sequence: UInt32(sequence),
+          eventKind: .fire,
+          payload: Data()
+        )
+      )
+    }
+    fabric.advance(to: 5_000)
+    let expected = Array(UInt32(1)...UInt32(40))
+    for receiver in [2, 3] {
+      XCTAssertEqual(
+        fabric.deliveredReliableEvents(for: 1, at: UInt8(receiver)).map(\.sequence),
+        expected
+      )
+    }
+  }
+
+  func testEndpointRejectsExternallyRelayedFrames() throws {
+    let endpoint = LoopbackFabric(playerCount: 2).client(slot: 1)
+    let frame = TransportFrame.reliable(
+      ReliableEventFrame(
+        epoch: 1,
+        senderSlot: 1,
+        sequence: 1,
+        eventKind: .fire,
+        payload: Data()
+      ),
+      relayed: true
+    )
+    XCTAssertThrowsError(try endpoint.send(frame)) { error in
+      XCTAssertEqual(error as? LoopbackEndpointError, .relayedFrameNotAllowed)
+    }
+  }
 }

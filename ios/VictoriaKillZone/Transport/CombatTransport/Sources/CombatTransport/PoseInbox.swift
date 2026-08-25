@@ -89,6 +89,12 @@ public struct PoseInbox: Equatable, Sendable {
     latest[senderSlot]
   }
 
+  public mutating func reset(senderSlot: UInt8) {
+    cursors[senderSlot] = nil
+    latest[senderSlot] = nil
+    admittedHistory.removeAll { $0.senderSlot == senderSlot }
+  }
+
   public func cursor(for senderSlot: UInt8) -> (epoch: UInt16, sequence: UInt32, timestampMs: Int64)? {
     guard let cursor = cursors[senderSlot] else { return nil }
     return (cursor.epoch, cursor.sequence, cursor.timestampMs)

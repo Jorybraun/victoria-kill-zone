@@ -91,7 +91,8 @@ public struct HostRelayTopology: Equatable, Sendable {
   public static let validSlots: ClosedRange<UInt8> = 0...3
   public let playerCount: Int
   private var peers: [UInt8: PeerMembership]
-  private var reliableChannelsInOrder = true
+  private var reliableGapSlots: Set<UInt8> = []
+  private var reliableQueueRejected = false
   private var queuesAtLowWater = true
   private var hostLinkDown = false
   public let peerTimeoutMs: Int64
@@ -165,6 +166,7 @@ public struct HostRelayTopology: Equatable, Sendable {
     }
     peers[slot] = .active
     lastHeardMs[slot] = nowMs
+    reliableGapSlots.remove(slot)
     if slot == Self.hostSlot {
       hostLinkDown = false
     }
@@ -173,12 +175,12 @@ public struct HostRelayTopology: Equatable, Sendable {
   }
 
   public mutating func markReliableGapUnrecoverable(slot: UInt8) -> [TransportEffect] {
-    reliableChannelsInOrder = false
+    reliableGapSlots.insert(slot)
     return engageFireLock(.reliableGapUnrecoverable(slot: slot))
   }
 
   public mutating func rejectReliableQueueFull() -> [TransportEffect] {
-    queuesAtLowWater = false
+    reliableQueueRejected = true
     return engageFireLock(.rejectedReliableQueueFull)
   }
 
@@ -193,19 +195,20 @@ public struct HostRelayTopology: Equatable, Sendable {
     return []
   }
 
-  public mutating func resetEpoch(_ epoch: UInt16) -> [TransportEffect] {
+  public func resetEpoch(_ epoch: UInt16) -> [TransportEffect] {
     [.epochReset(epoch: epoch)]
   }
 
   public mutating func advance(
     nowMs: Int64,
-    reliableChannelsInOrder: Bool,
     poseQueueCount: Int,
     reliableQueueCount: Int,
-    lowWaterMark: Int
+    lowWaterMark: Int = 1
   ) -> [TransportEffect] {
-    self.reliableChannelsInOrder = reliableChannelsInOrder
     queuesAtLowWater = poseQueueCount <= lowWaterMark && reliableQueueCount <= lowWaterMark
+    if queuesAtLowWater {
+      reliableQueueRejected = false
+    }
     var effects: [TransportEffect] = []
     for slot in expectedPeerSlots where peers[slot] == .active {
       guard let lastHeard = lastHeardMs[slot],
@@ -228,7 +231,8 @@ public struct HostRelayTopology: Equatable, Sendable {
     guard fireLocked,
           !hostLinkDown,
           activeSlots.count == peers.count,
-          reliableChannelsInOrder,
+          reliableGapSlots.isEmpty,
+          !reliableQueueRejected,
           queuesAtLowWater
     else { return [] }
     fireLocked = false
