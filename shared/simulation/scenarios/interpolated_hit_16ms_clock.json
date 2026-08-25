@@ -1,0 +1,16 @@
+{
+  "name": "interpolated_hit_16ms_clock",
+  "description": "With a 16 ms tick, B is at (0.6,0,10) at 80 ms and (-0.6,0,10) at 96 ms. For a claim at 88 ms, alpha=(88-80)/(96-80)=0.5 and x=0.6+(-1.2)*0.5=0.0 m. Closest approach is 0.0 m ≤ 0.35 m, so the shot hits for 34 damage with an 8 ms rewind.",
+  "clock": { "tickMs": 16 },
+  "players": [{ "id": "player-a" }, { "id": "player-b" }],
+  "timeline": [
+    { "atMs": 80, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 80, "poseSample": { "player": "player-b", "pos": [0.6, 0, 10] } },
+    { "atMs": 96, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 96, "poseSample": { "player": "player-b", "pos": [-0.6, 0, 10] } },
+    { "atMs": 96, "fire": { "shooter": "player-a", "target": "player-b", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 88, "shotId": "s1" } }
+  ],
+  "expect": [
+    { "verdict": { "shotId": "s1", "outcome": "hit", "appliedDamage": 34, "rewindMs": 8 } }
+  ]
+}

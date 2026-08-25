@@ -1,0 +1,15 @@
+{
+  "name": "rewind_miss_outside_cap",
+  "description": "B is on A's ray at 700 ms, but the claim is evaluated at 1050 ms. Rewind is 350 ms, which exceeds the frozen 250 ms cap, so the claim is rejected as shotTooLate before geometry can produce a hit.",
+  "clock": { "tickMs": 50 },
+  "players": [{ "id": "player-a" }, { "id": "player-b" }],
+  "timeline": [
+    { "atMs": 700, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 700, "poseSample": { "player": "player-b", "pos": [0, 0, 10] } },
+    { "atMs": 1050, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 1050, "fire": { "shooter": "player-a", "target": "player-b", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 700, "shotId": "s1" } }
+  ],
+  "expect": [
+    { "verdict": { "shotId": "s1", "outcome": "rejected", "reason": "shotTooLate", "rewindMs": 350 } }
+  ]
+}
