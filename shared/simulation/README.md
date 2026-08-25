@@ -51,4 +51,5 @@ Executable scenario specifications live in `scenarios/*.json`. Each file uses:
 `{ "killed": { "target": "...", "by": "...", "atMs": 500 } }` events.
 
 The runner resolves every discovered JSON fixture, replays it twice, and checks
-that a same-tick arrival permutation produces byte-identical event output.
+all same-tick arrival permutations (or deterministic reverse and rotation
+orders for larger groups) for byte-identical event output.

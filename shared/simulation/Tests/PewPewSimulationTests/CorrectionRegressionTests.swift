@@ -164,24 +164,4 @@ final class CorrectionRegressionTests: XCTestCase {
     }
   }
 
-  private func permutations(_ inputs: [SimulationInput]) -> [[SimulationInput]] {
-    guard !inputs.isEmpty else { return [[]] }
-    var result: [[SimulationInput]] = []
-
-    func visit(_ prefix: [SimulationInput], _ remaining: [SimulationInput]) {
-      guard !remaining.isEmpty else {
-        result.append(prefix)
-        return
-      }
-      for index in remaining.indices {
-        visit(
-          prefix + [remaining[index]],
-          Array(remaining[..<index]) + Array(remaining[(index + 1)...])
-        )
-      }
-    }
-
-    visit([], inputs)
-    return result
-  }
 }

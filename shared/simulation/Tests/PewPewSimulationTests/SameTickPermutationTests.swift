@@ -94,21 +94,4 @@ final class SameTickPermutationTests: XCTestCase {
     return try encoder.encode(events)
   }
 
-  private func permutations(_ inputs: [SimulationInput]) -> [[SimulationInput]] {
-    var result: [[SimulationInput]] = []
-    func visit(_ prefix: [SimulationInput], _ remaining: [SimulationInput]) {
-      guard !remaining.isEmpty else {
-        result.append(prefix)
-        return
-      }
-      for index in remaining.indices {
-        visit(
-          prefix + [remaining[index]],
-          Array(remaining[..<index]) + Array(remaining[(index + 1)...])
-        )
-      }
-    }
-    visit([], inputs)
-    return result
-  }
 }

@@ -75,3 +75,24 @@ func verdicts(in events: [SimulationEvent]) -> [SpatialVerdict] {
     return nil
   }
 }
+
+func permutations<T>(_ values: [T]) -> [[T]] {
+  guard !values.isEmpty else { return [[]] }
+  var result: [[T]] = []
+
+  func visit(_ prefix: [T], _ remaining: [T]) {
+    guard !remaining.isEmpty else {
+      result.append(prefix)
+      return
+    }
+    for index in remaining.indices {
+      visit(
+        prefix + [remaining[index]],
+        Array(remaining[..<index]) + Array(remaining[(index + 1)...])
+      )
+    }
+  }
+
+  visit([], values)
+  return result
+}
