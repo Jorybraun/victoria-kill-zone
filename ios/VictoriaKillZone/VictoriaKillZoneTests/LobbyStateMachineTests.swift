@@ -221,6 +221,52 @@ final class LobbyStoreTests: XCTestCase {
     XCTAssertEqual(reconciledDuel.opponent?.health, 66)
   }
 
+  func testDebugFireOrdinaryFirstShotStaysPendingThenConfirmsFromAuthoritativeEvent() async throws {
+    let client = MockGameSessionClient()
+    let store = makeStore(client: client, shotIDs: ["ordinary-first-shot-id"])
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running, hostAmmo: 8, guestHealth: 100))
+    await settle()
+
+    client.debugResults = [
+      .success(
+        DebugFireResult(
+          accepted: true,
+          outcome: .hit,
+          clientShotId: "ordinary-first-shot-id",
+          replayed: false,
+          damage: 34,
+          shooterAmmo: 7,
+          targetHealth: 66,
+          eventId: "event-hit",
+          rejectReason: nil
+        )
+      ),
+    ]
+
+    await store.performDebugFire()
+    await settle()
+
+    XCTAssertEqual(store.debugShotState, .pending)
+    XCTAssertNil(store.errorMessage)
+    XCTAssertFalse(store.canDebugFire)
+    XCTAssertEqual(client.debugShotIDs, ["ordinary-first-shot-id"])
+
+    client.send(
+      snapshot(
+        phase: .running,
+        hostAmmo: 7,
+        guestHealth: 66,
+        events: [hitEvent]
+      )
+    )
+    await settle()
+
+    XCTAssertEqual(store.debugShotState, .confirmed(damage: 34))
+    XCTAssertEqual(client.debugShotIDs, ["ordinary-first-shot-id"])
+  }
+
   func testDebugFireAfterConfirmationUsesNewClientShotID() async throws {
     let client = MockGameSessionClient()
     let store = makeStore(client: client, shotIDs: ["first-shot-id", "second-shot-id"])
