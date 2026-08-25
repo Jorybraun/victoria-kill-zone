@@ -1,0 +1,703 @@
+{
+  "fixtureFormatVersion": 1,
+  "contractVersion": "match.v2",
+  "extends": "phase0.v1",
+  "enums": {
+    "matchPhase": ["lobby", "countdown", "running", "finished", "cancelled"],
+    "playerCapability": [
+      "canStartMatch",
+      "canEndMatch",
+      "canConfigureArena",
+      "authorityHost"
+    ],
+    "playerLifeState": ["alive", "dead", "respawning", "disconnected"],
+    "arenaState": ["inside", "warning", "uncertain", "outside"],
+    "hitZone": ["head", "torso", "limbs"],
+    "shotOutcome": ["miss", "hit", "kill", "rejected"],
+    "eventType": [
+      "joined",
+      "ready",
+      "started",
+      "hit",
+      "shot",
+      "eliminated",
+      "respawned",
+      "out_of_zone",
+      "finished",
+      "left"
+    ],
+    "fireRejectReason": [
+      "MATCH_NOT_RUNNING",
+      "CONNECTION_STALE",
+      "SHOOTER_NOT_ALIVE",
+      "RELOADING",
+      "OUT_OF_ARENA",
+      "LOCATION_STALE",
+      "OUT_OF_AMMO",
+      "FIRE_COOLDOWN",
+      "IDEMPOTENCY_CONFLICT",
+      "INVALID_TARGET",
+      "TARGET_NOT_ALIVE"
+    ],
+    "errorCode": [
+      "INVALID_DISPLAY_NAME",
+      "INVALID_CODE",
+      "INVALID_ARENA_RADIUS",
+      "MATCH_NOT_FOUND",
+      "MATCH_FULL",
+      "MATCH_ALREADY_STARTED",
+      "INVALID_SESSION",
+      "PLAYERS_NOT_READY",
+      "PLAYERS_NOT_CONNECTED",
+      "MATCH_NOT_RUNNING",
+      "CONNECTION_STALE",
+      "INVALID_ARENA",
+      "INVALID_LOCATION",
+      "MATCH_ALREADY_FINISHED",
+      "PLAYER_NOT_ALIVE",
+      "MAGAZINE_FULL",
+      "ALREADY_RELOADING",
+      "INVALID_CAPACITY",
+      "CAPABILITY_REQUIRED"
+    ]
+  },
+  "snapshots": [
+    {
+      "id": "matchv2.snapshot.lobby-four-players",
+      "wireName": "queriesV2:matchSnapshot",
+      "payload": {
+        "serverNow": 2000000,
+        "match": {
+          "id": "match_v2_001",
+          "code": "PEW201",
+          "phase": "lobby",
+          "durationMs": 180000,
+          "playerCapacity": 4
+        },
+        "arena": {
+          "latitude": 10.5,
+          "longitude": 20.25,
+          "radiusMeters": 30
+        },
+        "localPlayerId": "player_a",
+        "players": [
+          {
+            "id": "player_a",
+            "displayName": "ALPHA",
+            "capabilities": [
+              "canStartMatch",
+              "canEndMatch",
+              "canConfigureArena",
+              "authorityHost"
+            ],
+            "ready": true,
+            "connected": true,
+            "health": 100,
+            "ammo": 8,
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 0,
+            "shotsFired": 0,
+            "shotsHit": 0,
+            "headshots": 0,
+            "lifeState": "alive",
+            "arenaState": "inside",
+            "lastSeenAt": 1999000
+          },
+          {
+            "id": "player_b",
+            "displayName": "BRAVO",
+            "capabilities": [],
+            "ready": true,
+            "connected": true,
+            "health": 100,
+            "ammo": 8,
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 0,
+            "shotsFired": 0,
+            "shotsHit": 0,
+            "headshots": 0,
+            "lifeState": "alive",
+            "arenaState": "inside",
+            "lastSeenAt": 1999100
+          },
+          {
+            "id": "player_c",
+            "displayName": "CHARLIE",
+            "capabilities": [],
+            "ready": false,
+            "connected": true,
+            "health": 100,
+            "ammo": 8,
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 0,
+            "shotsFired": 0,
+            "shotsHit": 0,
+            "headshots": 0,
+            "lifeState": "alive",
+            "arenaState": "uncertain",
+            "lastSeenAt": 1999200
+          },
+          {
+            "id": "player_d",
+            "displayName": "DELTA",
+            "capabilities": [],
+            "ready": false,
+            "connected": false,
+            "health": 100,
+            "ammo": 8,
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 0,
+            "shotsFired": 0,
+            "shotsHit": 0,
+            "headshots": 0,
+            "lifeState": "disconnected",
+            "arenaState": "uncertain",
+            "lastSeenAt": 1984000
+          }
+        ],
+        "events": [
+          {
+            "id": "event_v2_004",
+            "type": "joined",
+            "message": "DELTA JOINED",
+            "createdAt": 1996000,
+            "actorPlayerId": "player_d"
+          },
+          {
+            "id": "event_v2_003",
+            "type": "joined",
+            "message": "CHARLIE JOINED",
+            "createdAt": 1995000,
+            "actorPlayerId": "player_c"
+          },
+          {
+            "id": "event_v2_002",
+            "type": "joined",
+            "message": "BRAVO JOINED",
+            "createdAt": 1994000,
+            "actorPlayerId": "player_b"
+          },
+          {
+            "id": "event_v2_001",
+            "type": "joined",
+            "message": "ALPHA JOINED",
+            "createdAt": 1993000,
+            "actorPlayerId": "player_a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "matchv2.snapshot.lobby-after-leave",
+      "wireName": "queriesV2:matchSnapshot",
+      "payload": {
+        "serverNow": 2050000,
+        "match": {
+          "id": "match_v2_001",
+          "code": "PEW201",
+          "phase": "lobby",
+          "durationMs": 180000,
+          "playerCapacity": 4
+        },
+        "arena": {
+          "latitude": 10.5,
+          "longitude": 20.25,
+          "radiusMeters": 30
+        },
+        "localPlayerId": "player_a",
+        "players": [
+          {
+            "id": "player_a",
+            "displayName": "ALPHA",
+            "capabilities": [
+              "canStartMatch",
+              "canEndMatch",
+              "canConfigureArena",
+              "authorityHost"
+            ],
+            "ready": true,
+            "connected": true,
+            "health": 100,
+            "ammo": 8,
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 0,
+            "shotsFired": 0,
+            "shotsHit": 0,
+            "headshots": 0,
+            "lifeState": "alive",
+            "arenaState": "inside",
+            "lastSeenAt": 2049000
+          },
+          {
+            "id": "player_b",
+            "displayName": "BRAVO",
+            "capabilities": [],
+            "ready": true,
+            "connected": true,
+            "health": 100,
+            "ammo": 8,
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 0,
+            "shotsFired": 0,
+            "shotsHit": 0,
+            "headshots": 0,
+            "lifeState": "alive",
+            "arenaState": "inside",
+            "lastSeenAt": 2049100
+          },
+          {
+            "id": "player_c",
+            "displayName": "CHARLIE",
+            "capabilities": [],
+            "ready": true,
+            "connected": true,
+            "health": 100,
+            "ammo": 8,
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 0,
+            "shotsFired": 0,
+            "shotsHit": 0,
+            "headshots": 0,
+            "lifeState": "alive",
+            "arenaState": "inside",
+            "lastSeenAt": 2049200
+          }
+        ],
+        "events": [
+          {
+            "id": "event_v2_005",
+            "type": "left",
+            "message": "DELTA LEFT",
+            "createdAt": 2048000,
+            "actorPlayerId": "player_d"
+          },
+          {
+            "id": "event_v2_004",
+            "type": "joined",
+            "message": "DELTA JOINED",
+            "createdAt": 1996000,
+            "actorPlayerId": "player_d"
+          },
+          {
+            "id": "event_v2_003",
+            "type": "joined",
+            "message": "CHARLIE JOINED",
+            "createdAt": 1995000,
+            "actorPlayerId": "player_c"
+          },
+          {
+            "id": "event_v2_002",
+            "type": "joined",
+            "message": "BRAVO JOINED",
+            "createdAt": 1994000,
+            "actorPlayerId": "player_b"
+          },
+          {
+            "id": "event_v2_001",
+            "type": "joined",
+            "message": "ALPHA JOINED",
+            "createdAt": 1993000,
+            "actorPlayerId": "player_a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "matchv2.snapshot.running-cross-fire",
+      "wireName": "queriesV2:matchSnapshot",
+      "payload": {
+        "serverNow": 2200000,
+        "match": {
+          "id": "match_v2_001",
+          "code": "PEW201",
+          "phase": "running",
+          "durationMs": 180000,
+          "playerCapacity": 4,
+          "startsAt": 2100000,
+          "endsAt": 2280000
+        },
+        "arena": {
+          "latitude": 10.5,
+          "longitude": 20.25,
+          "radiusMeters": 30
+        },
+        "localPlayerId": "player_a",
+        "players": [
+          {
+            "id": "player_a",
+            "displayName": "ALPHA",
+            "capabilities": [
+              "canStartMatch",
+              "canEndMatch",
+              "canConfigureArena",
+              "authorityHost"
+            ],
+            "ready": true,
+            "connected": true,
+            "health": 66,
+            "ammo": 7,
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 34,
+            "shotsFired": 1,
+            "shotsHit": 1,
+            "headshots": 0,
+            "lifeState": "alive",
+            "arenaState": "inside",
+            "lastSeenAt": 2199000,
+            "lastShotAt": 2150000
+          },
+          {
+            "id": "player_b",
+            "displayName": "BRAVO",
+            "capabilities": [],
+            "ready": true,
+            "connected": true,
+            "health": 100,
+            "ammo": 7,
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 34,
+            "shotsFired": 1,
+            "shotsHit": 1,
+            "headshots": 0,
+            "lifeState": "alive",
+            "arenaState": "inside",
+            "lastSeenAt": 2199100,
+            "lastShotAt": 2155000
+          },
+          {
+            "id": "player_c",
+            "displayName": "CHARLIE",
+            "capabilities": [],
+            "ready": true,
+            "connected": true,
+            "health": 66,
+            "ammo": 8,
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 0,
+            "shotsFired": 0,
+            "shotsHit": 0,
+            "headshots": 0,
+            "lifeState": "alive",
+            "arenaState": "warning",
+            "lastSeenAt": 2199200
+          }
+        ],
+        "events": [
+          {
+            "id": "event_v2_008",
+            "type": "hit",
+            "message": "BRAVO HIT ALPHA",
+            "createdAt": 2155000,
+            "actorPlayerId": "player_b",
+            "targetPlayerId": "player_a",
+            "zone": "torso",
+            "damage": 34
+          },
+          {
+            "id": "event_v2_007",
+            "type": "hit",
+            "message": "ALPHA HIT CHARLIE",
+            "createdAt": 2150000,
+            "actorPlayerId": "player_a",
+            "targetPlayerId": "player_c",
+            "zone": "torso",
+            "damage": 34
+          },
+          {
+            "id": "event_v2_006",
+            "type": "started",
+            "message": "MATCH STARTED",
+            "createdAt": 2100000,
+            "actorPlayerId": "player_a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "matchv2.snapshot.finished-with-winner",
+      "wireName": "queriesV2:matchSnapshot",
+      "payload": {
+        "serverNow": 2300000,
+        "match": {
+          "id": "match_v2_001",
+          "code": "PEW201",
+          "phase": "finished",
+          "durationMs": 180000,
+          "playerCapacity": 4,
+          "startsAt": 2100000,
+          "endsAt": 2280000,
+          "winnerPlayerId": "player_b"
+        },
+        "arena": {
+          "latitude": 10.5,
+          "longitude": 20.25,
+          "radiusMeters": 30
+        },
+        "localPlayerId": "player_a",
+        "players": [
+          {
+            "id": "player_a",
+            "displayName": "ALPHA",
+            "capabilities": [
+              "canStartMatch",
+              "canEndMatch",
+              "canConfigureArena",
+              "authorityHost"
+            ],
+            "ready": true,
+            "connected": true,
+            "health": 0,
+            "ammo": 7,
+            "kills": 0,
+            "deaths": 1,
+            "damageDealt": 34,
+            "shotsFired": 1,
+            "shotsHit": 1,
+            "headshots": 0,
+            "lifeState": "dead",
+            "arenaState": "inside",
+            "lastSeenAt": 2299000
+          },
+          {
+            "id": "player_b",
+            "displayName": "BRAVO",
+            "capabilities": [],
+            "ready": true,
+            "connected": true,
+            "health": 100,
+            "ammo": 5,
+            "kills": 1,
+            "deaths": 0,
+            "damageDealt": 100,
+            "shotsFired": 3,
+            "shotsHit": 2,
+            "headshots": 0,
+            "lifeState": "alive",
+            "arenaState": "inside",
+            "lastSeenAt": 2299100
+          },
+          {
+            "id": "player_c",
+            "displayName": "CHARLIE",
+            "capabilities": [],
+            "ready": true,
+            "connected": true,
+            "health": 66,
+            "ammo": 8,
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 0,
+            "shotsFired": 0,
+            "shotsHit": 0,
+            "headshots": 0,
+            "lifeState": "alive",
+            "arenaState": "inside",
+            "lastSeenAt": 2299200
+          }
+        ],
+        "events": [
+          {
+            "id": "event_v2_010",
+            "type": "finished",
+            "message": "MATCH FINISHED",
+            "createdAt": 2280000
+          },
+          {
+            "id": "event_v2_009",
+            "type": "eliminated",
+            "message": "BRAVO ELIMINATED ALPHA",
+            "createdAt": 2260000,
+            "actorPlayerId": "player_b",
+            "targetPlayerId": "player_a",
+            "zone": "head",
+            "damage": 66
+          }
+        ]
+      }
+    },
+    {
+      "id": "matchv2.snapshot.spectator-running",
+      "wireName": "queriesV2:spectatorSnapshot",
+      "payload": {
+        "serverNow": 2200000,
+        "match": {
+          "id": "match_v2_001",
+          "code": "PEW201",
+          "phase": "running",
+          "durationMs": 180000,
+          "playerCapacity": 4,
+          "startsAt": 2100000,
+          "endsAt": 2280000
+        },
+        "arena": { "radiusMeters": 30 },
+        "players": [
+          {
+            "id": "player_a",
+            "displayName": "ALPHA",
+            "capabilities": [
+              "canStartMatch",
+              "canEndMatch",
+              "canConfigureArena",
+              "authorityHost"
+            ],
+            "ready": true,
+            "connected": true,
+            "health": 66,
+            "ammo": 7,
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 34,
+            "shotsFired": 1,
+            "shotsHit": 1,
+            "headshots": 0,
+            "lifeState": "alive",
+            "arenaState": "inside",
+            "lastShotAt": 2150000,
+            "arenaPosition": {
+              "eastMeters": -4,
+              "northMeters": 6
+            }
+          },
+          {
+            "id": "player_b",
+            "displayName": "BRAVO",
+            "capabilities": [],
+            "ready": true,
+            "connected": true,
+            "health": 100,
+            "ammo": 7,
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 34,
+            "shotsFired": 1,
+            "shotsHit": 1,
+            "headshots": 0,
+            "lifeState": "alive",
+            "arenaState": "inside",
+            "lastShotAt": 2155000,
+            "arenaPosition": {
+              "eastMeters": 8,
+              "northMeters": -3,
+              "headingDegrees": 210
+            }
+          },
+          {
+            "id": "player_c",
+            "displayName": "CHARLIE",
+            "capabilities": [],
+            "ready": true,
+            "connected": true,
+            "health": 66,
+            "ammo": 8,
+            "kills": 0,
+            "deaths": 0,
+            "damageDealt": 0,
+            "shotsFired": 0,
+            "shotsHit": 0,
+            "headshots": 0,
+            "lifeState": "alive",
+            "arenaState": "warning"
+          }
+        ],
+        "events": [
+          {
+            "id": "event_v2_008",
+            "type": "hit",
+            "message": "BRAVO HIT ALPHA",
+            "createdAt": 2155000,
+            "actorPlayerId": "player_b",
+            "targetPlayerId": "player_a",
+            "zone": "torso",
+            "damage": 34
+          }
+        ]
+      }
+    }
+  ],
+  "mutationResults": [
+    {
+      "id": "matchv2.fire.hit-one-of-three-targets",
+      "wireName": "shotsV2:fire",
+      "payload": {
+        "accepted": true,
+        "outcome": "hit",
+        "clientShotId": "shot_v2_001",
+        "replayed": false,
+        "damage": 34,
+        "shooterAmmo": 7,
+        "targetHealth": 66,
+        "targetLifeState": "alive",
+        "eventId": "event_v2_007"
+      }
+    },
+    {
+      "id": "matchv2.fire.replayed-retry",
+      "wireName": "shotsV2:fire",
+      "payload": {
+        "accepted": true,
+        "outcome": "hit",
+        "clientShotId": "shot_v2_001",
+        "replayed": true,
+        "damage": 34,
+        "shooterAmmo": 7,
+        "targetHealth": 66,
+        "targetLifeState": "alive",
+        "eventId": "event_v2_007"
+      }
+    },
+    {
+      "id": "matchv2.fire.rejected-self-target",
+      "wireName": "shotsV2:fire",
+      "payload": {
+        "accepted": false,
+        "outcome": "rejected",
+        "clientShotId": "shot_v2_002",
+        "replayed": false,
+        "damage": 0,
+        "shooterAmmo": 7,
+        "rejectReason": "INVALID_TARGET"
+      }
+    },
+    {
+      "id": "matchv2.fire.rejected-respawning-target",
+      "wireName": "shotsV2:fire",
+      "payload": {
+        "accepted": false,
+        "outcome": "rejected",
+        "clientShotId": "shot_v2_003",
+        "replayed": false,
+        "damage": 0,
+        "shooterAmmo": 7,
+        "rejectReason": "TARGET_NOT_ALIVE"
+      }
+    }
+  ],
+  "connectionScenarios": [],
+  "errors": [
+    {
+      "id": "matchv2.error.invalid-capacity",
+      "wireName": "matchesV2:create",
+      "payload": { "code": "INVALID_CAPACITY" }
+    },
+    {
+      "id": "matchv2.error.match-full-at-four",
+      "wireName": "matchesV2:join",
+      "payload": { "code": "MATCH_FULL" }
+    },
+    {
+      "id": "matchv2.error.capability-required-start",
+      "wireName": "matchesV2:start",
+      "payload": { "code": "CAPABILITY_REQUIRED" }
+    }
+  ]
+}
