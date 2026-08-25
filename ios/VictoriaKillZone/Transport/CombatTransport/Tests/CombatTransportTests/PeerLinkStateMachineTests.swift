@@ -263,9 +263,17 @@ final class PeerLinkStateMachineTests: XCTestCase {
     try bind(&machine, connection: 2, slot: 2)
     _ = try machine.setFlowReady(.pose, for: 2, connection: .init(2))
     _ = try machine.setFlowReady(.reliable, for: 2, connection: .init(2))
+    XCTAssertFalse(machine.topology.expectedPeerSlots.contains(HostRelayTopology.hostSlot))
 
     let received = try machine.receive(.pose(pose(slot: 1)), on: .init(1))
     XCTAssertEqual(received, [.received(connection: .init(1), frame: .pose(pose(slot: 1)))])
+
+    let reliableFrame = TransportFrame.reliable(event(slot: 1, sequence: 1))
+    XCTAssertEqual(
+      try machine.receive(reliableFrame, on: .init(1)),
+      [.received(connection: .init(1), frame: reliableFrame)]
+    )
+    XCTAssertEqual(try machine.receive(reliableFrame, on: .init(1)), [])
 
     let relayedPose = try machine.relayOutcome(.pose(pose(slot: 1)), from: .init(1))
     XCTAssertEqual(

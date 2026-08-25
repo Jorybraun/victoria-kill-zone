@@ -93,7 +93,7 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
   private var bindingsBySlot: [UInt8: FlowBinding] = [:]
   private var slotsByConnection: [ConnectionID: UInt8] = [:]
   private var reliableQueues: [UInt8: ReliableSendQueue] = [:]
-  private var reliableQueueRelayed: [UInt8: [Bool]] = [:]
+  private var reliableOrderers: [UInt8: ReliableEventOrderer] = [:]
   private var disconnectedSlots: Set<UInt8> = []
 
   public init(
@@ -197,10 +197,24 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
     guard let boundSlot = slotsByConnection[connection] else {
       throw PeerLinkStateMachineError.unboundConnection
     }
-    guard frame.senderSlot == boundSlot else {
+    guard frame.senderSlot == boundSlot ||
+      (role == .client && boundSlot == HostRelayTopology.hostSlot && frame.relayed)
+    else {
       return reject(connection, .senderSlotMismatch)
     }
-    return [.received(connection: connection, frame: frame)]
+    guard case let .reliable(reliableFrame, relayed) = frame else {
+      return [.received(connection: connection, frame: frame)]
+    }
+    var orderer = reliableOrderers[reliableFrame.senderSlot] ?? ReliableEventOrderer()
+    let delivery = orderer.ingest(reliableFrame)
+    reliableOrderers[reliableFrame.senderSlot] = orderer
+    guard delivery.status == .delivered else { return [] }
+    return delivery.frames.map {
+      .received(
+        connection: connection,
+        frame: .reliable($0, relayed: relayed)
+      )
+    }
   }
 
   @discardableResult
@@ -224,14 +238,13 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
     bindingsBySlot[slot] = binding
     guard channel == .reliable else { return [] }
     var actions: [Action] = []
-    while var queue = reliableQueues[slot], let frame = queue.dequeue() {
+    while var queue = reliableQueues[slot], let queued = queue.dequeue() {
       reliableQueues[slot] = queue
-      let relayed = reliableQueueRelayed[slot]?.removeFirst() ?? false
       actions.append(
         .write(
           connection: connection,
           channel: .reliable,
-          frame: .reliable(frame, relayed: relayed)
+          frame: .reliable(queued.frame, relayed: queued.relayed)
         )
       )
     }
@@ -280,12 +293,13 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
       throw PeerLinkStateMachineError.relayedFrameNotAllowed
     }
     let targets = topology.expectedPeerSlots.filter { $0 != originSlot }
-    return try fanout(frame.relayedCopy, to: targets)
+    return try fanout(frame.relayedCopy, to: targets, allowEmptyPose: true)
   }
 
   private mutating func fanout(
     _ frame: TransportFrame,
-    to targets: [UInt8]
+    to targets: [UInt8],
+    allowEmptyPose: Bool = false
   ) throws -> SendOutcome {
     var actions: [Action] = []
     var issues: [SendIssue] = []
@@ -328,7 +342,11 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
           ))
           continue
         }
-        actions.append(.write(connection: binding.connection, channel: .pose, frame: frame))
+        actions.append(.write(
+          connection: binding.connection,
+          channel: .pose,
+          frame: frame
+        ))
       case .reliable:
         if binding.reliableReady {
           actions.append(contentsOf: flushAndWrite(frame, for: target, binding: binding))
@@ -346,7 +364,7 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
         throw PeerLinkStateMachineError.unboundConnection
       }
     }
-    if actions.isEmpty, case .pose = frame,
+    if !allowEmptyPose, actions.isEmpty, case .pose = frame,
        let issue = issues.first,
        case let .skipped(error) = issue.kind {
       throw error
@@ -408,12 +426,11 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
       throw PeerLinkStateMachineError.linkNotReady(channel: .pose, slot: slot)
     }
     var queue = reliableQueues[slot] ?? ReliableSendQueue()
-    guard queue.enqueue(value) == .enqueued else {
+    guard queue.enqueue(QueuedReliable(frame: value, relayed: frame.relayed)) == .enqueued else {
       lastEffects = topology.rejectReliableQueueFull()
       return false
     }
     reliableQueues[slot] = queue
-    reliableQueueRelayed[slot, default: []].append(frame.relayed)
     return true
   }
 
@@ -425,14 +442,17 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
     var actions: [Action] = []
     while var queue = reliableQueues[slot], let queued = queue.dequeue() {
       reliableQueues[slot] = queue
-      let relayed = reliableQueueRelayed[slot]?.removeFirst() ?? false
       actions.append(.write(
         connection: binding.connection,
         channel: .reliable,
-        frame: .reliable(queued, relayed: relayed)
+        frame: .reliable(queued.frame, relayed: queued.relayed)
       ))
     }
-    actions.append(.write(connection: binding.connection, channel: .reliable, frame: frame))
+    actions.append(.write(
+      connection: binding.connection,
+      channel: .reliable,
+      frame: frame
+    ))
     return actions
   }
 
@@ -446,6 +466,7 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
     }
     return [.rejected(connection: connection, error: error)]
   }
+
 }
 
 private extension TransportFrame {

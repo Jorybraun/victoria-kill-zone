@@ -365,15 +365,24 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
               if self.reliableReadyConnections.contains(id) {
                 self.markFlowReady(.reliable, for: id, slot: slot)
               }
-              if let endpoint = connection.currentPath?.remoteEndpoint {
-                self.formDatagramFlow(to: endpoint, for: id, slot: slot)
-              }
             case let .received(_, receivedFrame):
-              if configuration.role == .host,
-                 let relayActions = try? self.withStateLock({
-                   try self.stateMachine.relayOutcome(receivedFrame, from: id)
-                 }) {
-                self.write(relayActions.actions)
+              if configuration.role == .host {
+                do {
+                  let relayOutcome = try self.withStateLock {
+                    try self.stateMachine.relayOutcome(receivedFrame, from: id)
+                  }
+                  self.write(relayOutcome.actions)
+                  if relayOutcome.issues.contains(where: {
+                    if case .failed = $0.kind { return true }
+                    return false
+                  }) {
+                    self.failureHandler?()
+                  }
+                } catch {
+                  self.failureHandler?()
+                  connection.cancel()
+                  continue
+                }
               }
               let nowMs = Int64(DispatchTime.now().uptimeNanoseconds / 1_000_000)
               let handler = self.withStateLock { self.receiveHandler }

@@ -40,9 +40,23 @@ public enum ReliableQueueEnqueueResult: Equatable, Sendable {
   case rejectedQueueFull
 }
 
+public struct QueuedReliable: Equatable, Sendable {
+  public let frame: ReliableEventFrame
+  public let relayed: Bool
+
+  public init(frame: ReliableEventFrame, relayed: Bool = false) {
+    self.frame = frame
+    self.relayed = relayed
+  }
+
+  public var epoch: UInt16 { frame.epoch }
+  public var senderSlot: UInt8 { frame.senderSlot }
+  public var sequence: UInt32 { frame.sequence }
+}
+
 public struct ReliableSendQueue: Equatable, Sendable {
   public let capacity: Int
-  private var values: [ReliableEventFrame] = []
+  private var values: [QueuedReliable] = []
 
   public init(capacity: Int = 128) {
     self.capacity = max(1, capacity)
@@ -50,12 +64,17 @@ public struct ReliableSendQueue: Equatable, Sendable {
 
   @discardableResult
   public mutating func enqueue(_ frame: ReliableEventFrame) -> ReliableQueueEnqueueResult {
+    enqueue(QueuedReliable(frame: frame))
+  }
+
+  @discardableResult
+  public mutating func enqueue(_ queued: QueuedReliable) -> ReliableQueueEnqueueResult {
     guard values.count < capacity else { return .rejectedQueueFull }
-    values.append(frame)
+    values.append(queued)
     return .enqueued
   }
 
-  public mutating func dequeue() -> ReliableEventFrame? {
+  public mutating func dequeue() -> QueuedReliable? {
     guard !values.isEmpty else { return nil }
     return values.removeFirst()
   }
