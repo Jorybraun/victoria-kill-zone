@@ -7,6 +7,7 @@ final class TransportFieldHarnessTests: XCTestCase {
   private final class ConcurrentPeerLink: PeerLink, @unchecked Sendable {
     let remoteSlot: UInt8 = 1
     let evidenceTier: TransportEvidenceTier = .loopbackSimulated
+    let deliversOrderedReliableFrames = false
     private let lock = NSLock()
     private var handler: PeerLinkReceiveHandler?
 

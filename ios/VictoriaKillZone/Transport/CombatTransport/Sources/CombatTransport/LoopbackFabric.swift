@@ -31,6 +31,7 @@ public final class LoopbackEndpoint: PeerLink, @unchecked Sendable {
   public let slot: UInt8
   public let remoteSlot: UInt8
   public let evidenceTier: TransportEvidenceTier = .loopbackSimulated
+  public let deliversOrderedReliableFrames = false
   private let fabric: LoopbackFabric
   private var receiveHandler: PeerLinkReceiveHandler?
 
@@ -56,7 +57,7 @@ public final class LoopbackEndpoint: PeerLink, @unchecked Sendable {
     case let .reliable(value, relayed):
       guard !relayed else { throw LoopbackEndpointError.relayedFrameNotAllowed }
       try fabric.schedule(.reliable(value, relayed: relayed), from: slot)
-    case .slotClaim:
+    case .slotClaim, .pairingOffer, .pairingClaim:
       throw LoopbackEndpointError.slotClaimNotAllowed
     }
   }

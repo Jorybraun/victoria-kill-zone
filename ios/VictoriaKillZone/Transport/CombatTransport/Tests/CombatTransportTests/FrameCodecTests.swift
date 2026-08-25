@@ -26,9 +26,69 @@ final class FrameCodecTests: XCTestCase {
           payload: Data([1, 2, 3])
         )
       ),
+      .pairingOffer(
+        PairingOfferFrame(
+          slot: 1,
+          token: Data(repeating: 0xA, count: 16),
+          datagramPort: 4242
+        )
+      ),
+      .pairingClaim(
+        PairingClaimFrame(
+          claimedSlot: 2,
+          digest: Data(repeating: 0xB, count: 32)
+        )
+      ),
     ]
     for frame in frames {
       XCTAssertEqual(try TransportFrameCodec.decode(try TransportFrameCodec.encode(frame)), frame)
+    }
+  }
+
+  func testPairingFramesRejectMalformedLengthsAndSlots() throws {
+    let offer = try TransportFrameCodec.encode(
+      .pairingOffer(
+        PairingOfferFrame(
+          slot: 1,
+          token: Data(repeating: 0xA, count: 16),
+          datagramPort: 4242
+        )
+      )
+    )
+    XCTAssertThrowsError(try TransportFrameCodec.decode(offer.dropLast())) { error in
+      XCTAssertEqual(error as? TransportCodecError, .truncated)
+    }
+    var oversizedOffer = offer
+    oversizedOffer.append(0)
+    XCTAssertThrowsError(try TransportFrameCodec.decode(oversizedOffer)) { error in
+      XCTAssertEqual(error as? TransportCodecError, .payloadLengthMismatch)
+    }
+    var invalidOfferSlot = offer
+    invalidOfferSlot[6] = 4
+    XCTAssertThrowsError(try TransportFrameCodec.decode(invalidOfferSlot)) { error in
+      XCTAssertEqual(error as? TransportCodecError, .slotOutOfRange)
+    }
+
+    let claim = try TransportFrameCodec.encode(
+      .pairingClaim(
+        PairingClaimFrame(
+          claimedSlot: 1,
+          digest: Data(repeating: 0xB, count: 32)
+        )
+      )
+    )
+    XCTAssertThrowsError(try TransportFrameCodec.decode(claim.dropLast())) { error in
+      XCTAssertEqual(error as? TransportCodecError, .truncated)
+    }
+    var oversizedClaim = claim
+    oversizedClaim.append(0)
+    XCTAssertThrowsError(try TransportFrameCodec.decode(oversizedClaim)) { error in
+      XCTAssertEqual(error as? TransportCodecError, .payloadLengthMismatch)
+    }
+    var invalidClaimSlot = claim
+    invalidClaimSlot[6] = 4
+    XCTAssertThrowsError(try TransportFrameCodec.decode(invalidClaimSlot)) { error in
+      XCTAssertEqual(error as? TransportCodecError, .slotOutOfRange)
     }
   }
 

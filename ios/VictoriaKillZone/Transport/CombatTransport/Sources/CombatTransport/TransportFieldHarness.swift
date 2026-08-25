@@ -74,11 +74,20 @@ public final class TransportFieldHarness: @unchecked Sendable {
           epoch: value.epoch
         )
       case let .reliable(value, _):
-        let delivery = core.receiveReliable(
-          value,
-          receivedAtMs: arrivalMs,
-          sentAtMs: sentAtMs
-        )
+        let delivery: ReliableDelivery
+        if link.deliversOrderedReliableFrames {
+          delivery = core.receiveAlreadyOrderedReliable(
+            value,
+            receivedAtMs: arrivalMs,
+            sentAtMs: sentAtMs
+          )
+        } else {
+          delivery = core.receiveReliable(
+            value,
+            receivedAtMs: arrivalMs,
+            sentAtMs: sentAtMs
+          )
+        }
         stats.recordReceived(
           channel: .reliable,
           slot: value.senderSlot,
@@ -90,7 +99,7 @@ public final class TransportFieldHarness: @unchecked Sendable {
           sequence: value.sequence,
           epoch: value.epoch
         )
-      case .slotClaim:
+      case .slotClaim, .pairingOffer, .pairingClaim:
         break
       }
     }

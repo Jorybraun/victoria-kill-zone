@@ -48,10 +48,6 @@ public struct QueuedReliable: Equatable, Sendable {
     self.frame = frame
     self.relayed = relayed
   }
-
-  public var epoch: UInt16 { frame.epoch }
-  public var senderSlot: UInt8 { frame.senderSlot }
-  public var sequence: UInt32 { frame.sequence }
 }
 
 public struct ReliableSendQueue: Equatable, Sendable {

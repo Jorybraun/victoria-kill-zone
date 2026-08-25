@@ -105,6 +105,26 @@ public struct CombatTransportCore: Equatable, Sendable {
     return delivery
   }
 
+  public mutating func receiveAlreadyOrderedReliable(
+    _ frame: ReliableEventFrame,
+    receivedAtMs: Int64,
+    sentAtMs: Int64? = nil
+  ) -> ReliableDelivery {
+    let delivery = ReliableDelivery(status: .delivered, frames: [frame])
+    stats.recordReceived(
+      channel: .reliable,
+      slot: frame.senderSlot,
+      accepted: true,
+      arrivalMs: receivedAtMs,
+      sentAtMs: sentAtMs,
+      sequence: frame.sequence,
+      epoch: frame.epoch
+    )
+    apply(topology.markHeard(slot: frame.senderSlot, nowMs: receivedAtMs), at: receivedAtMs)
+    deliveredReliable[frame.senderSlot, default: []].append(frame)
+    return delivery
+  }
+
   @discardableResult
   public mutating func advance(nowMs: Int64, lowWaterMark: Int = 1) -> [TransportEffect] {
     let effects = topology.advance(

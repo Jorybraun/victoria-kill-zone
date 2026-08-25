@@ -72,16 +72,44 @@ public struct SlotClaimFrame: Equatable, Sendable {
   }
 }
 
+/// Host-issued proof-of-pairing for a slot whose reliable flow is already bound.
+/// The token authorises exactly one datagram flow for that slot.
+public struct PairingOfferFrame: Equatable, Sendable {
+  public let slot: UInt8
+  public let token: Data
+  public let datagramPort: UInt16
+
+  public init(slot: UInt8, token: Data, datagramPort: UInt16) {
+    self.slot = slot
+    self.token = token
+    self.datagramPort = datagramPort
+  }
+}
+
+/// Client's first frame on a datagram flow, binding it to the slot whose
+/// reliable flow received the matching `PairingOfferFrame`.
+public struct PairingClaimFrame: Equatable, Sendable {
+  public let claimedSlot: UInt8
+  public let digest: Data
+
+  public init(claimedSlot: UInt8, digest: Data) {
+    self.claimedSlot = claimedSlot
+    self.digest = digest
+  }
+}
+
 public enum TransportFrame: Equatable, Sendable {
   case pose(PoseFrame, relayed: Bool = false)
   case reliable(ReliableEventFrame, relayed: Bool = false)
   case slotClaim(SlotClaimFrame, relayed: Bool = false)
+  case pairingOffer(PairingOfferFrame, relayed: Bool = false)
+  case pairingClaim(PairingClaimFrame, relayed: Bool = false)
 
   public var epoch: UInt16 {
     switch self {
     case let .pose(frame, _): frame.epoch
     case let .reliable(frame, _): frame.epoch
-    case .slotClaim: 0
+    case .slotClaim, .pairingOffer, .pairingClaim: 0
     }
   }
 
@@ -90,12 +118,19 @@ public enum TransportFrame: Equatable, Sendable {
     case let .pose(frame, _): frame.senderSlot
     case let .reliable(frame, _): frame.senderSlot
     case let .slotClaim(frame, _): frame.claimedSlot
+    case .pairingOffer: HostRelayTopology.hostSlot
+    case let .pairingClaim(frame, _): frame.claimedSlot
     }
   }
 
   public var relayed: Bool {
     switch self {
-    case let .pose(_, relayed), let .reliable(_, relayed), let .slotClaim(_, relayed): relayed
+    case let .pose(_, relayed),
+         let .reliable(_, relayed),
+         let .slotClaim(_, relayed),
+         let .pairingOffer(_, relayed),
+         let .pairingClaim(_, relayed):
+      relayed
     }
   }
 }
@@ -122,6 +157,7 @@ public enum TransportFrameCodec {
   public static let version: UInt8 = 1
   public static let maxPayloadLength = 512
   public static let slotClaimDigestLength = 32
+  public static let pairingTokenLength = 16
   private static let headerLength = 8
 
   public static func encode(_ frame: TransportFrame) throws -> Data {
@@ -184,6 +220,33 @@ public enum TransportFrameCodec {
       data.append(relayed ? 1 : 0)
       data.append(value.claimedSlot)
       data.append(contentsOf: littleEndianBytes(value.nonce))
+      data.append(value.digest)
+    case let .pairingOffer(value, relayed):
+      try validateHeader(senderSlot: value.slot)
+      guard value.token.count == pairingTokenLength else {
+        throw TransportCodecError.payloadLengthMismatch
+      }
+      data.append(contentsOf: littleEndianBytes(magic))
+      data.append(version)
+      data.append(4)
+      data.append(contentsOf: littleEndianBytes(UInt16(0)))
+      data.append(0)
+      data.append(relayed ? 1 : 0)
+      data.append(value.slot)
+      data.append(contentsOf: littleEndianBytes(value.datagramPort))
+      data.append(value.token)
+    case let .pairingClaim(value, relayed):
+      try validateHeader(senderSlot: value.claimedSlot)
+      guard value.digest.count == slotClaimDigestLength else {
+        throw TransportCodecError.payloadLengthMismatch
+      }
+      data.append(contentsOf: littleEndianBytes(magic))
+      data.append(version)
+      data.append(5)
+      data.append(contentsOf: littleEndianBytes(UInt16(0)))
+      data.append(0)
+      data.append(relayed ? 1 : 0)
+      data.append(value.claimedSlot)
       data.append(value.digest)
     }
     return data
@@ -278,6 +341,33 @@ public enum TransportFrameCodec {
       let digest = try reader.readData(count: slotClaimDigestLength)
       return .slotClaim(
         SlotClaimFrame(claimedSlot: claimedSlot, nonce: nonce, digest: digest),
+        relayed: relayed
+      )
+    case 4:
+      let slot = try reader.read(UInt8.self)
+      guard slot <= 3 else { throw TransportCodecError.slotOutOfRange }
+      let datagramPort = try reader.read(UInt16.self)
+      guard reader.remaining == pairingTokenLength else {
+        throw reader.remaining < pairingTokenLength
+          ? TransportCodecError.truncated
+          : TransportCodecError.payloadLengthMismatch
+      }
+      let token = try reader.readData(count: pairingTokenLength)
+      return .pairingOffer(
+        PairingOfferFrame(slot: slot, token: token, datagramPort: datagramPort),
+        relayed: relayed
+      )
+    case 5:
+      let claimedSlot = try reader.read(UInt8.self)
+      guard claimedSlot <= 3 else { throw TransportCodecError.slotOutOfRange }
+      guard reader.remaining == slotClaimDigestLength else {
+        throw reader.remaining < slotClaimDigestLength
+          ? TransportCodecError.truncated
+          : TransportCodecError.payloadLengthMismatch
+      }
+      let digest = try reader.readData(count: slotClaimDigestLength)
+      return .pairingClaim(
+        PairingClaimFrame(claimedSlot: claimedSlot, digest: digest),
         relayed: relayed
       )
     default:

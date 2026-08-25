@@ -48,7 +48,9 @@ final class PeerLinkStateMachineTests: XCTestCase {
   private func bind(
     _ machine: inout PeerLinkStateMachine,
     connection: UInt64,
-    slot: UInt8
+    slot: UInt8,
+    datagramConnection: UInt64? = nil,
+    makeDatagramReady: Bool = true
   ) throws {
     let id = PeerLinkStateMachine.ConnectionID(connection)
     try machine.acceptConnection(id)
@@ -56,6 +58,32 @@ final class PeerLinkStateMachineTests: XCTestCase {
       try machine.receive(.slotClaim(claim(slot: slot)), on: id),
       [.bound(connection: id, slot: slot)]
     )
+    let datagramID = PeerLinkStateMachine.ConnectionID(
+      datagramConnection ?? connection + 100
+    )
+    let token = Data((0..<16).map { UInt8(truncatingIfNeeded: Int($0) + Int(slot)) })
+    _ = try machine.issuePairingOffer(
+      for: slot,
+      datagramPort: 42,
+      token: token
+    )
+    try machine.acceptConnection(datagramID)
+    XCTAssertEqual(
+      try machine.receive(
+        .pairingClaim(
+          PeerLinkStateMachine.makePairingClaim(
+            preSharedKey: key,
+            token: token,
+            claimedSlot: slot
+          )
+        ),
+        on: datagramID
+      ),
+      [.datagramBound(connection: datagramID, slot: slot)]
+    )
+    if makeDatagramReady {
+      _ = try machine.setFlowReady(.pose, for: slot, connection: datagramID)
+    }
   }
 
   func testThreeAndFourPeersHaveIndependentAuthenticatedFlows() throws {
@@ -64,7 +92,6 @@ final class PeerLinkStateMachineTests: XCTestCase {
       for slot in 1..<UInt8(playerCount) {
         try bind(&machine, connection: UInt64(slot), slot: slot)
         let id = PeerLinkStateMachine.ConnectionID(UInt64(slot))
-        _ = try machine.setFlowReady(.pose, for: slot, connection: id)
         _ = try machine.setFlowReady(.reliable, for: slot, connection: id)
       }
 
@@ -73,13 +100,21 @@ final class PeerLinkStateMachineTests: XCTestCase {
           guard case let .write(connection, .pose, _) = action else { return nil }
           return connection
         }
-      XCTAssertEqual(poseWrites, (1..<UInt64(playerCount)).map(PeerLinkStateMachine.ConnectionID.init))
+      XCTAssertEqual(
+        poseWrites,
+        (1..<UInt64(playerCount)).map {
+          PeerLinkStateMachine.ConnectionID($0 + 100)
+        }
+      )
       let reliableWrites = try machine.send(.reliable(event()))
         .compactMap { action -> PeerLinkStateMachine.ConnectionID? in
           guard case let .write(connection, .reliable, _) = action else { return nil }
           return connection
         }
-      XCTAssertEqual(reliableWrites, poseWrites)
+      XCTAssertEqual(
+        reliableWrites,
+        (1..<UInt64(playerCount)).map(PeerLinkStateMachine.ConnectionID.init)
+      )
     }
   }
 
@@ -119,7 +154,7 @@ final class PeerLinkStateMachineTests: XCTestCase {
 
   func testPoseRequiresReadyDatagramAndReliableQueuesThenFlushesInOrder() throws {
     var machine = try host(playerCount: 2)
-    try bind(&machine, connection: 1, slot: 1)
+    try bind(&machine, connection: 1, slot: 1, makeDatagramReady: false)
 
     XCTAssertThrowsError(try machine.send(.pose(pose()))) { error in
       XCTAssertEqual(
@@ -170,8 +205,6 @@ final class PeerLinkStateMachineTests: XCTestCase {
     var machine = try host()
     try bind(&machine, connection: 1, slot: 1)
     try bind(&machine, connection: 2, slot: 2)
-    _ = try machine.setFlowReady(.pose, for: 1, connection: .init(1))
-    _ = try machine.setFlowReady(.pose, for: 2, connection: .init(2))
     _ = try machine.setFlowReady(.reliable, for: 1, connection: .init(1))
     _ = try machine.setFlowReady(.reliable, for: 2, connection: .init(2))
 
@@ -181,7 +214,7 @@ final class PeerLinkStateMachineTests: XCTestCase {
         guard case let .write(connection, .pose, _) = action else { return nil }
         return connection.rawValue
       },
-      [1, 2]
+      [101, 102]
     )
     XCTAssertEqual(initialPose.issues.map(\.slot), [3])
 
@@ -192,7 +225,7 @@ final class PeerLinkStateMachineTests: XCTestCase {
         guard case let .write(connection, .pose, _) = action else { return nil }
         return connection.rawValue
       },
-      [1]
+      [101]
     )
     XCTAssertEqual(degradedPose.issues.map(\.slot), [2, 3])
     XCTAssertTrue(degradedPose.issues.allSatisfy {
@@ -261,7 +294,6 @@ final class PeerLinkStateMachineTests: XCTestCase {
     var machine = try host()
     try bind(&machine, connection: 1, slot: 1)
     try bind(&machine, connection: 2, slot: 2)
-    _ = try machine.setFlowReady(.pose, for: 2, connection: .init(2))
     _ = try machine.setFlowReady(.reliable, for: 2, connection: .init(2))
     XCTAssertFalse(machine.topology.expectedPeerSlots.contains(HostRelayTopology.hostSlot))
 
@@ -273,13 +305,16 @@ final class PeerLinkStateMachineTests: XCTestCase {
       try machine.receive(reliableFrame, on: .init(1)),
       [.received(connection: .init(1), frame: reliableFrame)]
     )
-    XCTAssertEqual(try machine.receive(reliableFrame, on: .init(1)), [])
+    XCTAssertEqual(
+      try machine.receive(reliableFrame, on: .init(1)),
+      [.dropped(slot: 1, status: .duplicate)]
+    )
 
     let relayedPose = try machine.relayOutcome(.pose(pose(slot: 1)), from: .init(1))
     XCTAssertEqual(
       relayedPose.actions,
       [.write(
-        connection: .init(2),
+        connection: .init(102),
         channel: .pose,
         frame: .pose(pose(slot: 1), relayed: true)
       )]
@@ -345,10 +380,11 @@ final class PeerLinkStateMachineTests: XCTestCase {
       preSharedKey: key
     )
     try machine.bindClientConnection(.init(42))
-    _ = try machine.setFlowReady(.pose, for: 0, connection: .init(42))
+    try machine.bindClientDatagramConnection(.init(142), to: 0)
+    _ = try machine.setFlowReady(.pose, for: 0, connection: .init(142))
     XCTAssertEqual(
       try machine.send(.pose(pose(slot: 1))),
-      [.write(connection: .init(42), channel: .pose, frame: .pose(pose(slot: 1)))]
+      [.write(connection: .init(142), channel: .pose, frame: .pose(pose(slot: 1)))]
     )
     XCTAssertNil(PeerLinkStateMachine.selectServiceName(from: ["wrong"], matching: "token"))
     XCTAssertEqual(
@@ -357,6 +393,146 @@ final class PeerLinkStateMachineTests: XCTestCase {
         matching: "token"
       ),
       "token"
+    )
+  }
+
+  func testPairingClaimsRequireMatchingBoundReliableSlotAndToken() throws {
+    var machine = try host(playerCount: 2)
+    try bind(&machine, connection: 1, slot: 1)
+
+    let token = Data(repeating: 7, count: 16)
+    _ = try machine.issuePairingOffer(for: 1, datagramPort: 9, token: token)
+    try machine.acceptConnection(.init(9))
+    XCTAssertEqual(
+      try machine.receive(
+        .pairingClaim(
+          PairingClaimFrame(claimedSlot: 1, digest: Data(repeating: 0, count: 32))
+        ),
+        on: .init(9)
+      ),
+      [.rejected(connection: .init(9), error: .pairingTokenMismatch)]
+    )
+    XCTAssertNil(machine.datagramConnection(for: 1))
+
+    try machine.acceptConnection(.init(10))
+    XCTAssertEqual(
+      try machine.receive(
+        .pairingClaim(
+          PeerLinkStateMachine.makePairingClaim(
+            preSharedKey: key,
+            token: token,
+            claimedSlot: 1
+          )
+        ),
+        on: .init(10)
+      ),
+      [.datagramBound(connection: .init(10), slot: 1)]
+    )
+    try machine.acceptConnection(.init(11))
+    XCTAssertEqual(
+      try machine.receive(
+        .pairingClaim(
+          PeerLinkStateMachine.makePairingClaim(
+            preSharedKey: key,
+            token: token,
+            claimedSlot: 1
+          )
+        ),
+        on: .init(11)
+      ),
+      [.rejected(connection: .init(11), error: .flowAlreadyBound)]
+    )
+  }
+
+  func testPairingClaimWithoutReliableBindingIsRejected() throws {
+    var machine = try host(playerCount: 2)
+    try machine.acceptConnection(.init(9))
+    let claim = PeerLinkStateMachine.makePairingClaim(
+      preSharedKey: key,
+      token: Data(repeating: 1, count: 16),
+      claimedSlot: 1
+    )
+    XCTAssertEqual(
+      try machine.receive(.pairingClaim(claim), on: .init(9)),
+      [.rejected(connection: .init(9), error: .pairingSlotUnbound)]
+    )
+  }
+
+  func testReliableDropsAndGapsAreVisibleAndLockFire() throws {
+    var machine = try host(playerCount: 2)
+    try bind(&machine, connection: 1, slot: 1)
+    XCTAssertEqual(
+      try machine.receive(.reliable(event(slot: 1, sequence: 2)), on: .init(1)),
+      [.dropped(slot: 1, status: .buffered)]
+    )
+    XCTAssertEqual(
+      try machine.receive(.reliable(event(slot: 1, sequence: 2)), on: .init(1)),
+      [.dropped(slot: 1, status: .duplicate)]
+    )
+    XCTAssertEqual(
+      try machine.receive(.reliable(event(slot: 1, sequence: 1)), on: .init(1)),
+      [
+        .received(connection: .init(1), frame: .reliable(event(slot: 1, sequence: 1))),
+        .received(connection: .init(1), frame: .reliable(event(slot: 1, sequence: 2)))
+      ]
+    )
+    var stale = event(slot: 1, sequence: 4)
+    stale = ReliableEventFrame(
+      epoch: 0,
+      senderSlot: stale.senderSlot,
+      sequence: stale.sequence,
+      eventKind: stale.eventKind,
+      payload: stale.payload
+    )
+    XCTAssertEqual(
+      try machine.receive(.reliable(stale), on: .init(1)),
+      [.dropped(slot: 1, status: .epochMismatch)]
+    )
+    XCTAssertEqual(
+      try machine.receive(
+        .reliable(event(slot: 1, sequence: 3)),
+        on: .init(1)
+      ),
+      [.received(connection: .init(1), frame: .reliable(event(slot: 1, sequence: 3)))]
+    )
+    for sequence in 5...132 {
+      _ = try machine.receive(
+        .reliable(event(slot: 1, sequence: UInt32(sequence))),
+        on: .init(1)
+      )
+    }
+    XCTAssertEqual(
+      try machine.receive(.reliable(event(slot: 1, sequence: 133)), on: .init(1)),
+      [.reliableGap(slot: 1)]
+    )
+    XCTAssertTrue(machine.fireLocked)
+  }
+
+  func testClientValidatesRelayedSenderSlot() throws {
+    var machine = try PeerLinkStateMachine(
+      role: .client,
+      localSlot: 1,
+      remoteSlot: 0,
+      playerCount: 3,
+      preSharedKey: key
+    )
+    try machine.bindClientConnection(.init(42))
+    let hostFrame = TransportFrame.pose(pose(slot: 0), relayed: true)
+    XCTAssertEqual(
+      try machine.receive(hostFrame, on: .init(42)),
+      [.rejected(connection: .init(42), error: .senderSlotMismatch)]
+    )
+    XCTAssertEqual(
+      try machine.receive(.pose(pose(slot: 1), relayed: true), on: .init(42)),
+      [.rejected(connection: .init(42), error: .senderSlotMismatch)]
+    )
+    XCTAssertEqual(
+      try machine.receive(.pose(pose(slot: 4), relayed: true), on: .init(42)),
+      [.rejected(connection: .init(42), error: .senderSlotMismatch)]
+    )
+    XCTAssertEqual(
+      try machine.receive(.pose(pose(slot: 2), relayed: true), on: .init(42)),
+      [.received(connection: .init(42), frame: .pose(pose(slot: 2), relayed: true))]
     )
   }
 }

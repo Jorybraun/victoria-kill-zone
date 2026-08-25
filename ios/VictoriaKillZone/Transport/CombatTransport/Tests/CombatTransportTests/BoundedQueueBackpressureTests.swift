@@ -34,7 +34,7 @@ final class BoundedQueueBackpressureTests: XCTestCase {
     XCTAssertEqual(queue.enqueue(event(1)), .enqueued)
     XCTAssertEqual(queue.enqueue(event(2)), .enqueued)
     XCTAssertEqual(queue.enqueue(event(3)), .rejectedQueueFull)
-    XCTAssertEqual(queue.dequeue()?.sequence, 1)
+    XCTAssertEqual(queue.dequeue()?.frame.sequence, 1)
   }
 
   func testCoreReliableQueueOverflowEngagesTopologyFireLock() {

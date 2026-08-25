@@ -58,7 +58,7 @@ Header, 8 bytes:
 |---|---|---|
 | magic | UInt16 | `0x564B` |
 | version | UInt8 | `1` |
-| kind | UInt8 | `1` pose, `2` reliable event, `3` authenticated slot claim |
+| kind | UInt8 | `1` pose, `2` reliable event, `3` slot claim, `4` pairing offer, `5` pairing claim |
 | epoch | UInt16 | session epoch; bumped on (re)join to invalidate old sequences |
 | senderSlot | UInt8 | `0...3`, the *original* sender even when relayed |
 | flags | UInt8 | bit0 `relayed`; other bits must be zero |
@@ -85,6 +85,19 @@ Slot-claim body (reliable handshake channel, kind `3`):
 little-endian. The pre-shared key is never transmitted. A host keeps each
 accepted connection pending until a valid claim binds it to one distinct client
 slot in `1...3`; later frames must use that bound sender slot.
+
+Pairing offer body (reliable handshake channel, kind `4`):
+
+`slot UInt8`, `datagramPort UInt16`, `token 16 × UInt8`. The host sends this
+after authenticating a reliable flow. The client uses the port to dial the
+host's separate datagram listener.
+
+Pairing claim body (datagram handshake channel, kind `5`):
+
+`claimedSlot UInt8`, `digest 32 × UInt8`. The digest is
+`SHA256(preSharedKey ‖ token ‖ claimedSlot)`. The host binds the datagram
+flow only when the token and digest match the authenticated reliable binding
+for the same slot. Both flows are client-initiated; the host never dials out.
 
 Decoding is strict and total: every malformed input throws a typed
 `TransportCodecError` (`magicMismatch`, `unsupportedVersion`, `unknownFrameKind`,
@@ -154,18 +167,20 @@ Network.framework only; no MultipeerConnectivity.
   `parameters.includePeerToPeer = true`. Clients select only an exact
   `serviceToken` match and keep browsing when no match is present.
 - The adapter configures QUIC (`NWProtocolQUIC.Options`, ALPN `vkz-combat-v1`)
-  and a caller-supplied match-scoped pre-shared key
-  (`TransportCredentials`). A kind-3 `slotClaim` is the transport-frame
-  authentication mechanism: each claim carries only
+  with a caller-supplied runtime certificate identity. Hosts install that
+  identity with `sec_protocol_options_set_local_identity`; clients install a
+  verify block that pins the expected leaf public-key bytes. The
+  `TransportCredentials.preSharedKey` is application-layer authentication
+  only, never a QUIC/TLS external PSK. A kind-3 `slotClaim` carries only
   `SHA256(preSharedKey ‖ nonce ‖ claimedSlot)`; the PSK is never transmitted.
   The advertised service name is a match-scoped random token, never a device
   name.
-- The intended live layout is an `NWMultiplexGroup` reliable fire/control flow
-  plus a separate QUIC datagram flow (`options.isDatagram = true`) for poses.
-  The pinned Xcode 26.4.1/macOS 26.4 loopback probe did not establish the
-  reliable baseline, so this layout is not claimed as a working adapter
-  session in this revision. In particular, no datagram limitation is inferred
-  from that failed baseline; the exact probe matrix is recorded below.
+- The live layout is a reliable QUIC stream with explicit UInt32
+  little-endian length-prefixed frames, plus a separate QUIC datagram flow
+  (`options.isDatagram = true`) for poses. The reliable flow carries the slot
+  claim and pairing offer; the client then dials the advertised datagram port
+  and sends the pairing claim. Host-originated poses use the accepted
+  datagram connection bound to each slot.
 - The pure `PeerLinkStateMachine` now owns authenticated-origin relay policy:
   host relays preserve the original sender slot, set `relayed`, exclude the
   origin and host, and retain per-target reliable queue semantics. The
@@ -173,48 +188,38 @@ Network.framework only; no MultipeerConnectivity.
 - Foreground drop: path/connection failure marks the peer disconnected and locks
   fire; recovery re-forms the link and bumps the epoch, with no app restart.
 
+Reliable ordering ownership is deliberately split by transport path. On the
+live Network.framework path, `PeerLinkStateMachine` owns wire-level reliable
+admission, duplicate suppression, buffering, and unrecoverable-gap detection;
+the adapter delivers only admitted ordered frames downstream. The core's
+orderer is bypassed for those frames, so duplicates and gaps are not counted
+twice. The loopback/harness path injects frames directly and
+`CombatTransportCore` owns ordering there.
+
 ### Pinned SDK QUIC probe (Tier 1 loopback, throwaway; 2026-08-25)
 
-The probe used `NWListener`, `NWConnection`, `NWConnectionGroup`,
-`NWMultiplexGroup`, `NWProtocolQUIC.Options`, matched ALPN
-`vkz-probe-v1`, and for PSK cases
-`sec_protocol_options_add_pre_shared_key`,
-`sec_protocol_options_append_tls_ciphersuite(TLS_AES_128_GCM_SHA256)`, and
-matching TLS 1.3 min/max versions. It used dummy credentials only.
+The direct probe reached `.ready` and exchanged bytes in both directions with
+a runtime self-signed certificate identity and a client public-key pin. The
+same recipe also reached `.ready` and exchanged datagrams in both directions
+with `isDatagram = true`.
 
-- **A, reliable-only PSK:** listener reached `ready`, but the client did not
-  produce a usable group flow; no bidirectional stream bytes were observed.
-  The direct authenticated control comparison reached
-  `client=waiting(-9858: handshake failed)`.
-- **B, reliable-only without PSK:** listener reached `ready` and the group
-  callback reported `acceptedGroup`; no stream flow or bidirectional bytes
-  were observed. A direct no-PSK comparison reached
-  `accepted`, `server=preparing`, then
-  `POSIXErrorCode(rawValue: 53): Software caused connection abort`; the client
-  reported `POSIXErrorCode(rawValue: 57): Socket is not connected`.
-- **C, datagram QUIC with the matched PSK configuration:** listener reached
-  `ready`; the client reported `-9858: handshake failed`. This is not a
-  datagram-availability conclusion because A and B did not establish a
-  working baseline.
-- **D, one-factor comparisons:** removing the TLS ciphersuite, removing ALPN,
-  disabling peer-to-peer, and mismatching the PSK identity all continued to
-  fail in direct comparisons with `-9858: handshake failed` or
-  `POSIXErrorCode(rawValue: 53): Software caused connection abort`. These
-  results identify a configuration/handshake blocker, not an SDK datagram
-  limitation.
+The only failing combination was `sec_protocol_options_add_pre_shared_key` as
+the QUIC credential (`-9858: handshake failed`). Thus external QUIC/TLS PSK is
+unsupported on this SDK; certificate-identity QUIC and QUIC datagrams work.
+The probe also showed that explicit TLS 1.3 min/max setters must not be
+installed.
 
-No real-adapter smoke test or physical-device evidence is claimed from this
-probe. The reliable and datagram flow pairing remains a follow-up once a
-working authenticated reliable baseline is established.
+The real-adapter smoke test is Tier 1 loopback/simulated evidence only.
+Physical-device evidence remains Tier 2 and pending.
 
 ## Tiers
 
 - **Tier 0 (`swift test`)** — codec/validation, pose admission, reliable
   ordering, queues, topology, stats math.
-- **Tier 1 (Outpost)** — `LoopbackFabric` fault-injection suites on a virtual
-  clock with a seeded PRNG: 2- and 4-player host/relay fixtures, 5% pose loss,
-  heavy jitter/reorder, peer loss and recovery, seed-stability of the stats
-  snapshot.
+- **Tier 1 (loopback/simulated)** — deterministic `LoopbackFabric` suites and
+  the macOS `NetworkPeerLink` loopback smoke test: 2- and 4-player host/relay
+  fixtures, authenticated paired flows, relay, peer loss and healthy-peer
+  continuity. This is not device evidence.
 - **Tier 2 (physical devices, human-run — NOT satisfied here)** — two-phone and
   four-phone outdoor cadence/loss/jitter. `TransportFieldHarness` exists to be
   called by a device build and to emit the sanitized stats artifact; simulator or

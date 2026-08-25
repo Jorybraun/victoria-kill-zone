@@ -22,9 +22,12 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
 
   public enum Action: Equatable, Sendable {
     case bound(connection: ConnectionID, slot: UInt8)
+    case datagramBound(connection: ConnectionID, slot: UInt8)
     case write(connection: ConnectionID, channel: Channel, frame: TransportFrame)
     case received(connection: ConnectionID, frame: TransportFrame)
     case rejected(connection: ConnectionID, error: PeerLinkStateMachineError)
+    case dropped(slot: UInt8, status: ReliableDeliveryStatus)
+    case reliableGap(slot: UInt8)
     case disconnected(slot: UInt8)
   }
 
@@ -69,10 +72,15 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
     case reliableQueueFull(slot: UInt8)
     case disconnected(slot: UInt8)
     case relayedFrameNotAllowed
+    case pairingTokenMismatch
+    case pairingSlotUnbound
+    case flowAlreadyBound
   }
 
   private struct FlowBinding: Equatable, Sendable {
     let connection: ConnectionID
+    var datagramConnection: ConnectionID?
+    var pairingToken: Data?
     var reliableReady = false
     var datagramReady = false
   }
@@ -86,6 +94,10 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
 
   public func boundSlot(for connection: ConnectionID) -> UInt8? {
     slotsByConnection[connection]
+  }
+
+  public func datagramConnection(for slot: UInt8) -> ConnectionID? {
+    bindingsBySlot[slot]?.datagramConnection
   }
 
   private let preSharedKey: Data
@@ -129,6 +141,32 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
     return Data(SHA256.hash(data: input))
   }
 
+  public static func pairingDigest(
+    preSharedKey: Data,
+    token: Data,
+    claimedSlot: UInt8
+  ) -> Data {
+    var input = Data(preSharedKey)
+    input.append(token)
+    input.append(claimedSlot)
+    return Data(SHA256.hash(data: input))
+  }
+
+  public static func makePairingClaim(
+    preSharedKey: Data,
+    token: Data,
+    claimedSlot: UInt8
+  ) -> PairingClaimFrame {
+    PairingClaimFrame(
+      claimedSlot: claimedSlot,
+      digest: pairingDigest(
+        preSharedKey: preSharedKey,
+        token: token,
+        claimedSlot: claimedSlot
+      )
+    )
+  }
+
   public static func makeSlotClaim(
     preSharedKey: Data,
     nonce: UInt32,
@@ -148,6 +186,52 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
   public mutating func acceptConnection(_ connection: ConnectionID) throws {
     guard role == .host else { throw PeerLinkStateMachineError.unboundConnection }
     pendingConnections.insert(connection)
+  }
+
+  /// Host: authorise exactly one datagram flow for an already-bound slot.
+  /// The caller supplies the random token and the accepted datagram port; the
+  /// token is retained so only a matching `pairingClaim` can bind that flow.
+  public mutating func issuePairingOffer(
+    for slot: UInt8,
+    datagramPort: UInt16,
+    token: Data
+  ) throws -> Action {
+    guard role == .host, var binding = bindingsBySlot[slot] else {
+      throw PeerLinkStateMachineError.pairingSlotUnbound
+    }
+    guard token.count == TransportFrameCodec.pairingTokenLength else {
+      throw PeerLinkStateMachineError.pairingTokenMismatch
+    }
+    binding.pairingToken = token
+    binding.datagramConnection = nil
+    binding.datagramReady = false
+    bindingsBySlot[slot] = binding
+    return .write(
+      connection: binding.connection,
+      channel: .reliable,
+      frame: .pairingOffer(
+        PairingOfferFrame(slot: slot, token: token, datagramPort: datagramPort)
+      )
+    )
+  }
+
+  /// Client: bind the datagram flow it dialled after an authenticated offer.
+  public mutating func bindClientDatagramConnection(
+    _ connection: ConnectionID,
+    to slot: UInt8
+  ) throws {
+    guard role == .client, var binding = bindingsBySlot[slot] else {
+      throw PeerLinkStateMachineError.pairingSlotUnbound
+    }
+    guard binding.datagramConnection == nil ||
+      binding.datagramConnection == connection
+    else {
+      throw PeerLinkStateMachineError.flowAlreadyBound
+    }
+    binding.datagramConnection = connection
+    bindingsBySlot[slot] = binding
+    slotsByConnection[connection] = slot
+    pendingConnections.remove(connection)
   }
 
   public mutating func bindClientConnection(
@@ -194,12 +278,48 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
       return [.bound(connection: connection, slot: claim.claimedSlot)]
     }
 
+    if case let .pairingClaim(claim, _) = frame {
+      guard role == .host, pendingConnections.contains(connection) else {
+        throw PeerLinkStateMachineError.unboundConnection
+      }
+      guard (1...3).contains(claim.claimedSlot),
+            var binding = bindingsBySlot[claim.claimedSlot],
+            let token = binding.pairingToken
+      else {
+        return reject(connection, .pairingSlotUnbound)
+      }
+      guard binding.datagramConnection == nil else {
+        return reject(connection, .flowAlreadyBound)
+      }
+      guard claim.digest == Self.pairingDigest(
+        preSharedKey: preSharedKey,
+        token: token,
+        claimedSlot: claim.claimedSlot
+      ) else {
+        return reject(connection, .pairingTokenMismatch)
+      }
+      pendingConnections.remove(connection)
+      binding.datagramConnection = connection
+      bindingsBySlot[claim.claimedSlot] = binding
+      slotsByConnection[connection] = claim.claimedSlot
+      return [.datagramBound(connection: connection, slot: claim.claimedSlot)]
+    }
+
     guard let boundSlot = slotsByConnection[connection] else {
       throw PeerLinkStateMachineError.unboundConnection
     }
-    guard frame.senderSlot == boundSlot ||
-      (role == .client && boundSlot == HostRelayTopology.hostSlot && frame.relayed)
-    else {
+    if frame.relayed {
+      // A relayed frame is only admissible from the host link, and its
+      // authenticated origin must be a different client slot. The relayed flag
+      // alone never authorises admission.
+      guard role == .client,
+            boundSlot == HostRelayTopology.hostSlot,
+            (1...3).contains(frame.senderSlot),
+            frame.senderSlot != localSlot
+      else {
+        return reject(connection, .senderSlotMismatch, unbind: false)
+      }
+    } else if frame.senderSlot != boundSlot {
       return reject(connection, .senderSlotMismatch)
     }
     guard case let .reliable(reliableFrame, relayed) = frame else {
@@ -208,12 +328,21 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
     var orderer = reliableOrderers[reliableFrame.senderSlot] ?? ReliableEventOrderer()
     let delivery = orderer.ingest(reliableFrame)
     reliableOrderers[reliableFrame.senderSlot] = orderer
-    guard delivery.status == .delivered else { return [] }
-    return delivery.frames.map {
-      .received(
-        connection: connection,
-        frame: .reliable($0, relayed: relayed)
+    switch delivery.status {
+    case .delivered:
+      return delivery.frames.map {
+        .received(
+          connection: connection,
+          frame: .reliable($0, relayed: relayed)
+        )
+      }
+    case .unrecoverableGap:
+      lastEffects = topology.markReliableGapUnrecoverable(
+        slot: reliableFrame.senderSlot
       )
+      return [.reliableGap(slot: reliableFrame.senderSlot)]
+    case .duplicate, .buffered, .epochMismatch:
+      return [.dropped(slot: reliableFrame.senderSlot, status: delivery.status)]
     }
   }
 
@@ -224,15 +353,18 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
     connection: ConnectionID
   ) throws -> [Action] {
     guard slotsByConnection[connection] == slot,
-          bindingsBySlot[slot]?.connection == connection
+          var binding = bindingsBySlot[slot]
     else { throw PeerLinkStateMachineError.unboundConnection }
-    guard var binding = bindingsBySlot[slot] else {
-      throw PeerLinkStateMachineError.unboundConnection
-    }
     switch channel {
     case .pose:
+      guard binding.datagramConnection == connection else {
+        throw PeerLinkStateMachineError.unboundConnection
+      }
       binding.datagramReady = true
     case .reliable:
+      guard binding.connection == connection else {
+        throw PeerLinkStateMachineError.unboundConnection
+      }
       binding.reliableReady = true
     }
     bindingsBySlot[slot] = binding
@@ -311,7 +443,7 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
           continue
         case .reliable:
           break
-        case .slotClaim:
+        case .slotClaim, .pairingOffer, .pairingClaim:
           throw PeerLinkStateMachineError.unboundConnection
         }
       }
@@ -335,7 +467,9 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
       }
       switch frame {
       case .pose:
-        guard binding.datagramReady else {
+        guard binding.datagramReady,
+              let datagramConnection = binding.datagramConnection
+        else {
           issues.append(.init(
             slot: target,
             kind: .skipped(.linkNotReady(channel: .pose, slot: target))
@@ -343,7 +477,7 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
           continue
         }
         actions.append(.write(
-          connection: binding.connection,
+          connection: datagramConnection,
           channel: .pose,
           frame: frame
         ))
@@ -360,7 +494,7 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
             ))
           }
         }
-      case .slotClaim:
+      case .slotClaim, .pairingOffer, .pairingClaim:
         throw PeerLinkStateMachineError.unboundConnection
       }
     }
@@ -392,7 +526,14 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
       pendingConnections.remove(connection)
       return []
     }
+    if let binding = bindingsBySlot[slot] {
+      slotsByConnection.removeValue(forKey: binding.connection)
+      if let datagram = binding.datagramConnection {
+        slotsByConnection.removeValue(forKey: datagram)
+      }
+    }
     bindingsBySlot[slot] = nil
+    reliableOrderers[slot] = nil
     disconnectedSlots.insert(slot)
     var effects: [TransportEffect] = []
     if role == .host, slot != HostRelayTopology.hostSlot {
@@ -414,7 +555,7 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
   private func channel(for frame: TransportFrame) -> Channel {
     switch frame {
     case .pose: .pose
-    case .reliable, .slotClaim: .reliable
+    case .reliable, .slotClaim, .pairingOffer, .pairingClaim: .reliable
     }
   }
 
@@ -458,8 +599,12 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
 
   private mutating func reject(
     _ connection: ConnectionID,
-    _ error: PeerLinkStateMachineError
+    _ error: PeerLinkStateMachineError,
+    unbind: Bool = true
   ) -> [Action] {
+    guard unbind else {
+      return [.rejected(connection: connection, error: error)]
+    }
     pendingConnections.remove(connection)
     if let slot = slotsByConnection.removeValue(forKey: connection) {
       bindingsBySlot[slot] = nil
@@ -478,6 +623,10 @@ private extension TransportFrame {
       .reliable(frame, relayed: true)
     case let .slotClaim(frame, _):
       .slotClaim(frame, relayed: true)
+    case let .pairingOffer(frame, _):
+      .pairingOffer(frame, relayed: true)
+    case let .pairingClaim(frame, _):
+      .pairingClaim(frame, relayed: true)
     }
   }
 }
