@@ -23,12 +23,15 @@ policy in it.
 | Instrumentation (`TransportStats`) | pure accumulator | Tier 0 |
 | Session orchestration (`CombatTransportCore`) | pure, clock-injected | Tier 0/1 |
 | In-process fabric + fault injection (`LoopbackFabric`, `FaultProfile`) | test double, seeded PRNG, virtual clock | Tier 1 |
-| Network.framework adapter (`NetworkPeerLink`) | I/O only, queue-confined | compile + Tier 2 |
+| Network.framework adapter (`NetworkPeerLink`) | I/O binding only, queue-confined | compile + Tier 2 |
 | Field harness (`TransportFieldHarness`) | callable by a device build | Tier 2 (human) |
 
 `CombatTransportCore` never touches `Network`; `NetworkPeerLink` and
 `LoopbackFabric` both satisfy the same `PeerLink` protocol. That is what makes
 the fault-injection suite meaningful rather than a mock of itself.
+The Network.framework binding delegates role, handshake, flow readiness, routing,
+and send backpressure to the pure `PeerLinkStateMachine`; the binding only
+translates Network callbacks and writes the selected flow.
 
 The standalone package manifest is at
 `ios/VictoriaKillZone/Transport/CombatTransport/Package.swift`; its sources and
@@ -55,7 +58,7 @@ Header, 8 bytes:
 |---|---|---|
 | magic | UInt16 | `0x564B` |
 | version | UInt8 | `1` |
-| kind | UInt8 | `1` pose, `2` reliable event |
+| kind | UInt8 | `1` pose, `2` reliable event, `3` authenticated slot claim |
 | epoch | UInt16 | session epoch; bumped on (re)join to invalidate old sequences |
 | senderSlot | UInt8 | `0...3`, the *original* sender even when relayed |
 | flags | UInt8 | bit0 `relayed`; other bits must be zero |
@@ -74,6 +77,14 @@ Reliable event body (reliable ordered channel):
 `payload payloadLength bytes` — **opaque** to this package. Fire/control DTOs
 belong to the shared contracts owned by Integration; the transport deliberately
 carries bytes so it does not couple to `match.v2` shapes.
+
+Slot-claim body (reliable handshake channel, kind `3`):
+
+`claimedSlot UInt8`, `nonce UInt32`, `digest 32 × UInt8`. The digest is
+`SHA256(preSharedKey ‖ nonce ‖ claimedSlot)` with the nonce encoded
+little-endian. The pre-shared key is never transmitted. A host keeps each
+accepted connection pending until a valid claim binds it to one distinct client
+slot in `1...3`; later frames must use that bound sender slot.
 
 Decoding is strict and total: every malformed input throws a typed
 `TransportCodecError` (`magicMismatch`, `unsupportedVersion`, `unknownFrameKind`,
@@ -138,9 +149,10 @@ identifier could enter the snapshot. A test pins the exact key set.
 
 Network.framework only; no MultipeerConnectivity.
 
-- Advertise `NWListener(service:using:)` and browse `NWBrowser(for: .bonjour(...))`
-  on `_vkz-combat._udp`, with `parameters.includePeerToPeer = true`, stopping
-  browse/advertise as soon as the set is formed.
+- Hosts advertise `NWListener(service:using:)`; clients browse
+  `NWBrowser(for: .bonjour(...))` on `_vkz-combat._udp`, with
+  `parameters.includePeerToPeer = true`. Clients select only an exact
+  `serviceToken` match and keep browsing when no match is present.
 - QUIC (`NWProtocolQUIC.Options`, ALPN `vkz-combat-v1`): an `NWMultiplexGroup`
   for the reliable fire/control stream, plus one datagram flow
   (`options.isDatagram = true`, `maxDatagramFrameSize = 512`) for poses. Verified

@@ -32,6 +32,20 @@ final class FrameCodecTests: XCTestCase {
     }
   }
 
+  func testRoundTripsAuthenticatedSlotClaim() throws {
+    let frame = TransportFrame.slotClaim(
+      SlotClaimFrame(
+        claimedSlot: 2,
+        nonce: 0xAABBCCDD,
+        digest: Data(repeating: 7, count: 32)
+      )
+    )
+    XCTAssertEqual(
+      try TransportFrameCodec.decode(try TransportFrameCodec.encode(frame)),
+      frame
+    )
+  }
+
   func testEveryPosePrefixIsTruncated() throws {
     let encoded = try TransportFrameCodec.encode(.pose(pose))
     for length in 0..<encoded.count {

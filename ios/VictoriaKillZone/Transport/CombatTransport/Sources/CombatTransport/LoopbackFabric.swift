@@ -24,6 +24,7 @@ public struct FaultProfile: Equatable, Sendable {
 
 public enum LoopbackEndpointError: Error, Equatable, Sendable {
   case relayedFrameNotAllowed
+  case slotClaimNotAllowed
 }
 
 public final class LoopbackEndpoint: PeerLink, @unchecked Sendable {
@@ -55,6 +56,8 @@ public final class LoopbackEndpoint: PeerLink, @unchecked Sendable {
     case let .reliable(value, relayed):
       guard !relayed else { throw LoopbackEndpointError.relayedFrameNotAllowed }
       try fabric.schedule(.reliable(value, relayed: relayed), from: slot)
+    case .slotClaim:
+      throw LoopbackEndpointError.slotClaimNotAllowed
     }
   }
 

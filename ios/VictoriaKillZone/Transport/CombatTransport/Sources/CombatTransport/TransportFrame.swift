@@ -60,14 +60,28 @@ public struct ReliableEventFrame: Equatable, Sendable {
   }
 }
 
+public struct SlotClaimFrame: Equatable, Sendable {
+  public let claimedSlot: UInt8
+  public let nonce: UInt32
+  public let digest: Data
+
+  public init(claimedSlot: UInt8, nonce: UInt32, digest: Data) {
+    self.claimedSlot = claimedSlot
+    self.nonce = nonce
+    self.digest = digest
+  }
+}
+
 public enum TransportFrame: Equatable, Sendable {
   case pose(PoseFrame, relayed: Bool = false)
   case reliable(ReliableEventFrame, relayed: Bool = false)
+  case slotClaim(SlotClaimFrame, relayed: Bool = false)
 
   public var epoch: UInt16 {
     switch self {
     case let .pose(frame, _): frame.epoch
     case let .reliable(frame, _): frame.epoch
+    case .slotClaim: 0
     }
   }
 
@@ -75,12 +89,13 @@ public enum TransportFrame: Equatable, Sendable {
     switch self {
     case let .pose(frame, _): frame.senderSlot
     case let .reliable(frame, _): frame.senderSlot
+    case let .slotClaim(frame, _): frame.claimedSlot
     }
   }
 
   public var relayed: Bool {
     switch self {
-    case let .pose(_, relayed), let .reliable(_, relayed): relayed
+    case let .pose(_, relayed), let .reliable(_, relayed), let .slotClaim(_, relayed): relayed
     }
   }
 }
@@ -106,6 +121,7 @@ public enum TransportFrameCodec {
   public static let magic: UInt16 = 0x564B
   public static let version: UInt8 = 1
   public static let maxPayloadLength = 512
+  public static let slotClaimDigestLength = 32
   private static let headerLength = 8
 
   public static func encode(_ frame: TransportFrame) throws -> Data {
@@ -156,6 +172,19 @@ public enum TransportFrameCodec {
       data.append(value.eventKind.rawValue)
       data.append(contentsOf: littleEndianBytes(UInt16(value.payload.count)))
       data.append(value.payload)
+    case let .slotClaim(value, relayed):
+      guard value.digest.count == slotClaimDigestLength else {
+        throw TransportCodecError.payloadLengthMismatch
+      }
+      data.append(contentsOf: littleEndianBytes(magic))
+      data.append(version)
+      data.append(3)
+      data.append(contentsOf: littleEndianBytes(UInt16(0)))
+      data.append(0)
+      data.append(relayed ? 1 : 0)
+      data.append(value.claimedSlot)
+      data.append(contentsOf: littleEndianBytes(value.nonce))
+      data.append(value.digest)
     }
     return data
   }
@@ -236,6 +265,19 @@ public enum TransportFrameCodec {
           eventKind: eventKind,
           payload: payload
         ),
+        relayed: relayed
+      )
+    case 3:
+      let claimedSlot = try reader.read(UInt8.self)
+      let nonce = try reader.read(UInt32.self)
+      guard reader.remaining == slotClaimDigestLength else {
+        throw reader.remaining < slotClaimDigestLength
+          ? TransportCodecError.truncated
+          : TransportCodecError.payloadLengthMismatch
+      }
+      let digest = try reader.readData(count: slotClaimDigestLength)
+      return .slotClaim(
+        SlotClaimFrame(claimedSlot: claimedSlot, nonce: nonce, digest: digest),
         relayed: relayed
       )
     default:

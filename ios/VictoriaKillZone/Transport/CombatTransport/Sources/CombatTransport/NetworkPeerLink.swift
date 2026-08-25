@@ -19,15 +19,21 @@ public struct NetworkPeerLinkConfiguration: Sendable, Equatable {
   public let serviceToken: String
   public let credentials: TransportCredentials
   public let role: Role
+  public let localSlot: UInt8
+  public let playerCount: Int
 
   public init(
     serviceToken: String,
     credentials: TransportCredentials,
-    role: Role = .client
+    role: Role = .client,
+    localSlot: UInt8 = 1,
+    playerCount: Int = 2
   ) {
     self.serviceToken = serviceToken
     self.credentials = credentials
     self.role = role
+    self.localSlot = localSlot
+    self.playerCount = playerCount
   }
 }
 
@@ -43,14 +49,19 @@ public protocol PeerLink: AnyObject, Sendable {
   func setReceiveHandler(_ handler: PeerLinkReceiveHandler?)
 }
 
-/// Network I/O is confined to `queue`; callers never access NW objects directly.
+/// Network I/O is confined to `queue`; state-machine access is confined to `stateLock`.
 public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
   public let remoteSlot: UInt8
   public let evidenceTier: TransportEvidenceTier = .device
+
   private let configuration: NetworkPeerLinkConfiguration
   private let queue = DispatchQueue(label: "vkz.combat-transport.network")
-  private var connections: [UInt8: NWConnection] = [:]
-  private var datagramConnections: [UInt8: NWConnection] = [:]
+  private let stateLock = NSLock()
+  private var stateMachine: PeerLinkStateMachine
+  private var nextConnectionID: UInt64 = 1
+  private var reliableReadyConnections: Set<PeerLinkStateMachine.ConnectionID> = []
+  private var connections: [PeerLinkStateMachine.ConnectionID: NWConnection] = [:]
+  private var datagramConnections: [PeerLinkStateMachine.ConnectionID: NWConnection] = [:]
   private var listener: NWListener?
   private var browser: NWBrowser?
   private var reliableGroup: NWConnectionGroup?
@@ -67,6 +78,13 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
     self.configuration = configuration
     self.receiveHandler = receiveHandler
     self.failureHandler = failureHandler
+    stateMachine = try! PeerLinkStateMachine(
+      role: configuration.role == .host ? .host : .client,
+      localSlot: configuration.role == .host ? 0 : configuration.localSlot,
+      remoteSlot: configuration.role == .host ? nil : remoteSlot,
+      playerCount: configuration.playerCount,
+      preSharedKey: configuration.credentials.preSharedKey
+    )
   }
 
   public func start() {
@@ -96,33 +114,15 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
   }
 
   public func send(_ frame: TransportFrame) throws {
-    let encoded = try TransportFrameCodec.encode(frame)
+    _ = try TransportFrameCodec.encode(frame)
+    let actions = try withStateLock { try stateMachine.send(frame) }
     queue.async { [weak self] in
-      guard let self else { return }
-      let connection: NWConnection?
-      switch frame {
-      case .pose:
-        connection = datagramConnections[remoteSlot]
-      case .reliable:
-        connection = connections[remoteSlot]
-      }
-      let context = NWConnection.ContentContext(
-        identifier: frame.relayed ? "vkz-combat-relayed" : "vkz-combat-v1",
-        metadata: []
-      )
-      connection?.send(
-        content: encoded,
-        contentContext: context,
-        isComplete: true,
-        completion: .contentProcessed { [weak self] error in
-          if error != nil { self?.failureHandler?() }
-        }
-      )
+      self?.write(actions)
     }
   }
 
   public func setReceiveHandler(_ handler: PeerLinkReceiveHandler?) {
-    queue.async { [self] in
+    withStateLock {
       receiveHandler = handler
     }
   }
@@ -139,8 +139,7 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
       if case .failed = state { self?.failureHandler?() }
     }
     listener?.newConnectionHandler = { [weak self] connection in
-      guard let self else { return }
-      attach(connection, for: remoteSlot)
+      self?.attachHostConnection(connection)
     }
     listener?.start(queue: queue)
   }
@@ -156,9 +155,20 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
       if case .failed = state { self?.failureHandler?() }
     }
     browser.browseResultsChangedHandler = { [weak self] results, _ in
-      guard let self, let endpoint = results.first?.endpoint else { return }
-      formReliableGroup(to: endpoint)
-      formDatagramConnection(to: endpoint)
+      guard let self else { return }
+      let matching = results.compactMap { result -> (String, NWEndpoint)? in
+        guard case let .service(name, _, _, _) = result.endpoint else { return nil }
+        return (name, result.endpoint)
+      }
+      guard let selectedName = PeerLinkStateMachine.selectServiceName(
+        from: matching.map(\.0),
+        matching: configuration.serviceToken
+      ),
+      let endpoint = matching.first(where: { $0.0 == selectedName })?.1
+      else {
+        return
+      }
+      formClientFlows(to: endpoint)
       self.browser?.cancel()
       self.browser = nil
     }
@@ -166,39 +176,214 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
     self.browser = browser
   }
 
-  private func attach(_ connection: NWConnection, for remoteSlot: UInt8) {
-    connections[remoteSlot] = connection
+  private func attachHostConnection(_ connection: NWConnection) {
+    let id = mintConnectionID()
+    do {
+      try withStateLock {
+        try stateMachine.acceptConnection(id)
+      }
+    } catch {
+      connection.cancel()
+      return
+    }
+    connections[id] = connection
     connection.stateUpdateHandler = { [weak self] state in
-      if case .failed = state { self?.failureHandler?() }
+      guard let self else { return }
+      switch state {
+      case .ready:
+        self.markFlowReady(.reliable, for: id)
+        if let endpoint = connection.currentPath?.remoteEndpoint {
+          self.formDatagramFlow(to: endpoint, for: id, slot: nil)
+        }
+      case .failed, .cancelled:
+        self.failConnection(id)
+      default:
+        break
+      }
     }
     connection.start(queue: queue)
-    receive(on: connection, for: remoteSlot)
+    receive(on: connection, id: id)
   }
 
-  private func formReliableGroup(to endpoint: NWEndpoint) {
-    guard reliableGroup == nil else { return }
+  private func formClientFlows(to endpoint: NWEndpoint) {
+    let id = mintConnectionID()
+    do {
+      try withStateLock {
+        try stateMachine.bindClientConnection(id, to: remoteSlot)
+      }
+    } catch {
+      failureHandler?()
+      return
+    }
     let parameters = NWParameters(quic: makeQUICOptions(datagram: false))
     parameters.includePeerToPeer = true
-    let descriptor = NWMultiplexGroup(to: endpoint)
-    let group = NWConnectionGroup(with: descriptor, using: parameters)
+    let group = NWConnectionGroup(
+      with: NWMultiplexGroup(to: endpoint),
+      using: parameters
+    )
     group.stateUpdateHandler = { [weak self] state in
       if case .failed = state { self?.failureHandler?() }
     }
     group.newConnectionHandler = { [weak self] connection in
-      self?.attach(connection, for: self?.remoteSlot ?? 0)
+      guard let self else { return }
+      self.connections[id] = connection
+      connection.stateUpdateHandler = { [weak self] state in
+        guard let self else { return }
+        switch state {
+        case .ready:
+          self.markFlowReady(.reliable, for: id)
+          self.sendClientSlotClaim(on: id)
+        case .failed, .cancelled:
+          self.failConnection(id)
+        default:
+          break
+        }
+      }
+      connection.start(queue: self.queue)
+      self.receive(on: connection, id: id)
     }
     group.start(queue: queue)
     reliableGroup = group
+    formDatagramFlow(to: endpoint, for: id, slot: remoteSlot)
   }
 
-  private func formDatagramConnection(to endpoint: NWEndpoint) {
+  private func formDatagramFlow(
+    to endpoint: NWEndpoint,
+    for id: PeerLinkStateMachine.ConnectionID,
+    slot: UInt8?
+  ) {
     let connection = NWConnection(
       to: endpoint,
       using: NWParameters(quic: makeQUICOptions(datagram: true))
     )
-    datagramConnections[remoteSlot] = connection
+    datagramConnections[id] = connection
+    connection.stateUpdateHandler = { [weak self] state in
+      guard let self else { return }
+      switch state {
+      case .ready:
+        self.markFlowReady(.pose, for: id, slot: slot)
+      case .failed, .cancelled:
+        self.failConnection(id)
+      default:
+        break
+      }
+    }
     connection.start(queue: queue)
-    receive(on: connection, for: remoteSlot)
+    receive(on: connection, id: id)
+  }
+
+  private func sendClientSlotClaim(on id: PeerLinkStateMachine.ConnectionID) {
+    let claim = PeerLinkStateMachine.makeSlotClaim(
+      preSharedKey: configuration.credentials.preSharedKey,
+      nonce: UInt32.random(in: 1...UInt32.max),
+      claimedSlot: configuration.localSlot
+    )
+    guard let action = try? withStateLock({
+      try stateMachine.sendSlotClaim(claim, on: id)
+    }) else { return }
+    write([action])
+  }
+
+  private func markFlowReady(
+    _ channel: PeerLinkStateMachine.Channel,
+    for id: PeerLinkStateMachine.ConnectionID,
+    slot: UInt8? = nil
+  ) {
+    if channel == .reliable {
+      reliableReadyConnections.insert(id)
+    }
+    let target = withStateLock {
+      slot
+        ?? (configuration.role == .client
+          ? remoteSlot
+          : stateMachine.boundSlot(for: id))
+    }
+    guard let target else { return }
+    guard let actions = try? withStateLock({
+      try stateMachine.setFlowReady(channel, for: target, connection: id)
+    }) else { return }
+    write(actions)
+  }
+
+  private func write(_ actions: [PeerLinkStateMachine.Action]) {
+    for action in actions {
+      guard case let .write(id, channel, frame) = action else { continue }
+      let connection = channel == .pose ? datagramConnections[id] : connections[id]
+      guard let connection, let encoded = try? TransportFrameCodec.encode(frame) else {
+        continue
+      }
+      let context = NWConnection.ContentContext(
+        identifier: frame.relayed ? "vkz-combat-relayed" : "vkz-combat-v1",
+        metadata: []
+      )
+      connection.send(
+        content: encoded,
+        contentContext: context,
+        isComplete: true,
+        completion: .contentProcessed { [weak self] error in
+          if error != nil { self?.failConnection(id) }
+        }
+      )
+    }
+  }
+
+  private func receive(
+    on connection: NWConnection,
+    id: PeerLinkStateMachine.ConnectionID
+  ) {
+    connection.receiveMessage { [weak self] content, _, _, error in
+      guard let self else { return }
+      if let content, let frame = try? TransportFrameCodec.decode(content) {
+        do {
+          let actions = try self.withStateLock {
+            try self.stateMachine.receive(frame, on: id)
+          }
+          for action in actions {
+            switch action {
+            case let .bound(_, slot):
+              if self.reliableReadyConnections.contains(id) {
+                self.markFlowReady(.reliable, for: id, slot: slot)
+              }
+              if let endpoint = connection.currentPath?.remoteEndpoint {
+                self.formDatagramFlow(to: endpoint, for: id, slot: slot)
+              }
+            case let .received(_, receivedFrame):
+              let nowMs = Int64(DispatchTime.now().uptimeNanoseconds / 1_000_000)
+              self.withStateLock {
+                self.receiveHandler?(receivedFrame, nowMs, nil)
+              }
+            case .rejected:
+              connection.cancel()
+            case .write, .disconnected:
+              break
+            }
+          }
+        } catch {
+          self.failConnection(id)
+        }
+      }
+      if error == nil {
+        self.receive(on: connection, id: id)
+      } else {
+        self.failConnection(id)
+      }
+    }
+  }
+
+  private func failConnection(_ id: PeerLinkStateMachine.ConnectionID) {
+    let actions = withStateLock { stateMachine.disconnect(id) }
+    connections[id]?.cancel()
+    datagramConnections[id]?.cancel()
+    connections[id] = nil
+    datagramConnections[id] = nil
+    if !actions.isEmpty {
+      failureHandler?()
+    }
+  }
+
+  private func mintConnectionID() -> PeerLinkStateMachine.ConnectionID {
+    defer { nextConnectionID &+= 1 }
+    return .init(nextConnectionID)
   }
 
   private func makeQUICOptions(datagram: Bool) -> NWProtocolQUIC.Options {
@@ -228,17 +413,9 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
     }
   }
 
-  private func receive(on connection: NWConnection, for remoteSlot: UInt8) {
-    connection.receiveMessage { [weak self] content, _, _, error in
-      if let content, let frame = try? TransportFrameCodec.decode(content) {
-        let nowMs = Int64(DispatchTime.now().uptimeNanoseconds / 1_000_000)
-        self?.receiveHandler?(frame, nowMs, nil)
-      }
-      if error == nil {
-        self?.receive(on: connection, for: remoteSlot)
-      } else {
-        self?.failureHandler?()
-      }
-    }
+  private func withStateLock<T>(_ body: () throws -> T) rethrows -> T {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+    return try body()
   }
 }
