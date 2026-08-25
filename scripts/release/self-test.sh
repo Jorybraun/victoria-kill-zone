@@ -37,8 +37,8 @@ PATH="$script_dir/test-fixtures:$PATH" \
   VKZ_PAGES_URL="https://pages-smoke.invalid" \
   bash "$script_dir/smoke-pages.sh" > "$http_log" 2>&1
 
-if [[ "$(< "$counter_file")" != "3" ]]; then
-  echo "ERROR: Pages smoke did not retry until a 2xx response." >&2
+if [[ "$(< "$counter_file")" != "4" ]]; then
+  echo "ERROR: Pages smoke did not retry until a 2xx response and probe both paths." >&2
   exit 1
 fi
 
