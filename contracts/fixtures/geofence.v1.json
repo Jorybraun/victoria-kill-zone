@@ -1,0 +1,270 @@
+{
+  "fixtureFormatVersion": 1,
+  "contractVersion": "geofence.v1",
+  "extends": "phase0.v1",
+  "notes": [
+    "Synthetic arena at the equator/prime meridian: 1 degree of longitude is 111194.9267 metres with the R=6371000 sphere. Sample points are chosen far from decision thresholds so any Earth-radius constant within 0.1% produces the same expected state.",
+    "Distances used: 10 m (clearly inside), 20 m (clear re-entry), 33 m (inside the 5 m exit hysteresis band for a 30 m arena; never an outside sample), 40 m (clearly beyond radius + hysteresis).",
+    "An authoritative state of uncertain or stale rejects fire with LOCATION_STALE; only outside rejects with OUT_OF_ARENA. warning does not lock fire.",
+    "All samples are trusted unless the step says otherwise: finite coordinates, accuracyMeters 5, capturedAtClient equal to the step time."
+  ],
+  "enums": {
+    "arenaState": ["inside", "warning", "uncertain", "outside"],
+    "geofenceFireReject": ["OUT_OF_ARENA", "LOCATION_STALE"]
+  },
+  "constants": {
+    "locationFreshnessMs": 5000,
+    "maxTrustedLocationAccuracyMeters": 20,
+    "arenaHysteresisMeters": 5,
+    "arenaUncertainGraceMs": 5000,
+    "consecutiveOutsideSamplesToExit": 2
+  },
+  "arena": {
+    "latitude": 0,
+    "longitude": 0,
+    "radiusMeters": 30
+  },
+  "geofenceVectors": [
+    {
+      "id": "geofence.initial-state-uncertain",
+      "description": "A player with no trusted sample starts uncertain with omitted location fields; fire is rejected LOCATION_STALE.",
+      "steps": [
+        {
+          "atMs": 0,
+          "expectedArenaState": "uncertain",
+          "expectedFire": { "rejectReason": "LOCATION_STALE" }
+        }
+      ]
+    },
+    {
+      "id": "geofence.trusted-inside-unlocks-fire",
+      "description": "One trusted sample 10 m from center establishes inside; fire is allowed.",
+      "steps": [
+        {
+          "atMs": 1000,
+          "sample": {
+            "latitude": 0,
+            "longitude": 0.000089932,
+            "accuracyMeters": 5,
+            "capturedAtClient": 1000
+          },
+          "expectedArenaState": "inside",
+          "expectedFire": { "allowed": true }
+        }
+      ]
+    },
+    {
+      "id": "geofence.untrusted-accuracy-rejected-sample",
+      "description": "A sample with accuracy above 20 m is untrusted and does not update state. A recently-inside player degrades to warning for at most the 5000 ms grace, then uncertain.",
+      "steps": [
+        {
+          "atMs": 1000,
+          "sample": {
+            "latitude": 0,
+            "longitude": 0.000089932,
+            "accuracyMeters": 5,
+            "capturedAtClient": 1000
+          },
+          "expectedArenaState": "inside",
+          "expectedFire": { "allowed": true }
+        },
+        {
+          "atMs": 3000,
+          "sample": {
+            "latitude": 0,
+            "longitude": 0.000089932,
+            "accuracyMeters": 45,
+            "capturedAtClient": 3000
+          },
+          "expectedArenaState": "warning",
+          "expectedFire": { "allowed": true }
+        },
+        {
+          "atMs": 8100,
+          "expectedArenaState": "uncertain",
+          "expectedFire": { "rejectReason": "LOCATION_STALE" }
+        }
+      ]
+    },
+    {
+      "id": "geofence.boundary-jitter-stays-inside",
+      "description": "A trusted sample at 33 m is beyond the 30 m radius but inside the 5 m exit hysteresis band; the state remains inside.",
+      "steps": [
+        {
+          "atMs": 1000,
+          "sample": {
+            "latitude": 0,
+            "longitude": 0.000089932,
+            "accuracyMeters": 5,
+            "capturedAtClient": 1000
+          },
+          "expectedArenaState": "inside",
+          "expectedFire": { "allowed": true }
+        },
+        {
+          "atMs": 2000,
+          "sample": {
+            "latitude": 0,
+            "longitude": 0.000296776,
+            "accuracyMeters": 5,
+            "capturedAtClient": 2000
+          },
+          "expectedArenaState": "inside",
+          "expectedFire": { "allowed": true }
+        }
+      ]
+    },
+    {
+      "id": "geofence.two-consecutive-outside-locks-fire",
+      "description": "One trusted sample at 40 m does not flip the state; the second consecutive outside sample does. Outside rejects fire with OUT_OF_ARENA and changes no gameplay state.",
+      "steps": [
+        {
+          "atMs": 1000,
+          "sample": {
+            "latitude": 0,
+            "longitude": 0.000089932,
+            "accuracyMeters": 5,
+            "capturedAtClient": 1000
+          },
+          "expectedArenaState": "inside",
+          "expectedFire": { "allowed": true }
+        },
+        {
+          "atMs": 2000,
+          "sample": {
+            "latitude": 0,
+            "longitude": 0.000359729,
+            "accuracyMeters": 5,
+            "capturedAtClient": 2000
+          },
+          "expectedArenaState": "inside",
+          "expectedFire": { "allowed": true }
+        },
+        {
+          "atMs": 3000,
+          "sample": {
+            "latitude": 0,
+            "longitude": 0.000359729,
+            "accuracyMeters": 5,
+            "capturedAtClient": 3000
+          },
+          "expectedArenaState": "outside",
+          "expectedFire": { "rejectReason": "OUT_OF_ARENA" }
+        }
+      ]
+    },
+    {
+      "id": "geofence.stale-after-freshness-window",
+      "description": "With no fresh sample for longer than 5000 ms, the state is no longer trusted and fire rejects with LOCATION_STALE.",
+      "steps": [
+        {
+          "atMs": 1000,
+          "sample": {
+            "latitude": 0,
+            "longitude": 0.000089932,
+            "accuracyMeters": 5,
+            "capturedAtClient": 1000
+          },
+          "expectedArenaState": "inside",
+          "expectedFire": { "allowed": true }
+        },
+        {
+          "atMs": 6100,
+          "expectedArenaState": "uncertain",
+          "expectedFire": { "rejectReason": "LOCATION_STALE" }
+        }
+      ]
+    },
+    {
+      "id": "geofence.re-entry-restores-fire",
+      "description": "From outside, one trusted sample clearly inside (20 m) restores inside and fire.",
+      "steps": [
+        {
+          "atMs": 1000,
+          "sample": {
+            "latitude": 0,
+            "longitude": 0.000359729,
+            "accuracyMeters": 5,
+            "capturedAtClient": 1000
+          },
+          "expectedArenaState": "uncertain",
+          "expectedFire": { "rejectReason": "LOCATION_STALE" }
+        },
+        {
+          "atMs": 2000,
+          "sample": {
+            "latitude": 0,
+            "longitude": 0.000359729,
+            "accuracyMeters": 5,
+            "capturedAtClient": 2000
+          },
+          "expectedArenaState": "outside",
+          "expectedFire": { "rejectReason": "OUT_OF_ARENA" }
+        },
+        {
+          "atMs": 3000,
+          "sample": {
+            "latitude": 0,
+            "longitude": 0.000179864,
+            "accuracyMeters": 5,
+            "capturedAtClient": 3000
+          },
+          "expectedArenaState": "inside",
+          "expectedFire": { "allowed": true }
+        }
+      ]
+    },
+    {
+      "id": "geofence.antimeridian-inside",
+      "description": "An arena centred near the antimeridian must measure distance across it: from center (0, 179.9999) to the sample at (0, -179.999955) is about 16 m eastward across the 180 meridian, clearly inside. A naive longitude subtraction would compute ~40,000 km and wrongly report outside.",
+      "arenaOverride": {
+        "latitude": 0,
+        "longitude": 179.9999,
+        "radiusMeters": 30
+      },
+      "steps": [
+        {
+          "atMs": 1000,
+          "sample": {
+            "latitude": 0,
+            "longitude": -179.999955,
+            "accuracyMeters": 5,
+            "capturedAtClient": 1000
+          },
+          "expectedArenaState": "inside",
+          "expectedFire": { "allowed": true }
+        }
+      ]
+    },
+    {
+      "id": "geofence.invalid-sample-rejected",
+      "description": "Non-finite coordinates or negative accuracy throw INVALID_LOCATION and never update state.",
+      "steps": [
+        {
+          "atMs": 1000,
+          "sample": {
+            "latitude": 91,
+            "longitude": 0,
+            "accuracyMeters": 5,
+            "capturedAtClient": 1000
+          },
+          "expectedError": "INVALID_LOCATION",
+          "expectedArenaState": "uncertain",
+          "expectedFire": { "rejectReason": "LOCATION_STALE" }
+        },
+        {
+          "atMs": 2000,
+          "sample": {
+            "latitude": 0,
+            "longitude": 0,
+            "accuracyMeters": -1,
+            "capturedAtClient": 2000
+          },
+          "expectedError": "INVALID_LOCATION",
+          "expectedArenaState": "uncertain",
+          "expectedFire": { "rejectReason": "LOCATION_STALE" }
+        }
+      ]
+    }
+  ]
+}
