@@ -1,0 +1,17 @@
+{
+  "name": "pose_gap_exceeds_max_age",
+  "description": "B has bracketing samples at 300 ms and 460 ms, a 160 ms gap greater than the 100 ms maximum pose age. The claim is evaluated at 500 ms for firedAt=400, so rewind is 100 ms and backward age is exactly 100 ms; only the bracket-gap rule rejects it as poseTooOld.",
+  "clock": { "tickMs": 50 },
+  "players": [{ "id": "player-a" }, { "id": "player-b" }],
+  "timeline": [
+    { "atMs": 300, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 300, "poseSample": { "player": "player-b", "pos": [0, 0, 10] } },
+    { "atMs": 400, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 500, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 500, "poseSample": { "player": "player-b", "pos": [0, 0, 10], "stampedAtMs": 460 } },
+    { "atMs": 500, "fire": { "shooter": "player-a", "target": "player-b", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 400, "shotId": "s1" } }
+  ],
+  "expect": [
+    { "verdict": { "shotId": "s1", "outcome": "rejected", "reason": "poseTooOld", "rewindMs": 100 } }
+  ]
+}

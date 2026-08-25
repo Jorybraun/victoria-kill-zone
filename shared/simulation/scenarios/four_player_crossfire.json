@@ -1,0 +1,18 @@
+{
+  "name": "four_player_crossfire",
+  "description": "At 50 ms the four-player set is placed at A=(0,0,0), B=(10,0,0), C=(0,0,10), D=(10,0,10). At 100 ms A→C and B→D are distinct 10 m +z hits, each applying 34 damage; canonical fire order is player-a before player-b.",
+  "clock": { "tickMs": 50 },
+  "players": [{ "id": "player-a" }, { "id": "player-b" }, { "id": "player-c" }, { "id": "player-d" }],
+  "timeline": [
+    { "atMs": 50, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 50, "poseSample": { "player": "player-b", "pos": [10, 0, 0] } },
+    { "atMs": 50, "poseSample": { "player": "player-c", "pos": [0, 0, 10] } },
+    { "atMs": 50, "poseSample": { "player": "player-d", "pos": [10, 0, 10] } },
+    { "atMs": 100, "fire": { "shooter": "player-b", "target": "player-d", "origin": [10, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 100, "shotId": "b-d" } },
+    { "atMs": 100, "fire": { "shooter": "player-a", "target": "player-c", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 100, "shotId": "a-c" } }
+  ],
+  "expect": [
+    { "verdict": { "shotId": "a-c", "outcome": "hit", "appliedDamage": 34, "rewindMs": 0 } },
+    { "verdict": { "shotId": "b-d", "outcome": "hit", "appliedDamage": 34, "rewindMs": 0 } }
+  ]
+}
