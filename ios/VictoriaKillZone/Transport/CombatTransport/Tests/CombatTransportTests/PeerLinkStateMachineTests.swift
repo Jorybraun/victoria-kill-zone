@@ -257,6 +257,77 @@ final class PeerLinkStateMachineTests: XCTestCase {
     }
   }
 
+  func testRelayUsesAuthenticatedOriginAndPreservesOrderedFanout() throws {
+    var machine = try host()
+    try bind(&machine, connection: 1, slot: 1)
+    try bind(&machine, connection: 2, slot: 2)
+    _ = try machine.setFlowReady(.pose, for: 2, connection: .init(2))
+    _ = try machine.setFlowReady(.reliable, for: 2, connection: .init(2))
+
+    let received = try machine.receive(.pose(pose(slot: 1)), on: .init(1))
+    XCTAssertEqual(received, [.received(connection: .init(1), frame: .pose(pose(slot: 1)))])
+
+    let relayedPose = try machine.relayOutcome(.pose(pose(slot: 1)), from: .init(1))
+    XCTAssertEqual(
+      relayedPose.actions,
+      [.write(
+        connection: .init(2),
+        channel: .pose,
+        frame: .pose(pose(slot: 1), relayed: true)
+      )]
+    )
+    XCTAssertEqual(relayedPose.issues.map(\.slot), [3])
+    XCTAssertThrowsError(
+      try machine.relayOutcome(.pose(pose(slot: 2)), from: .init(1))
+    ) { error in
+      XCTAssertEqual(
+        error as? PeerLinkStateMachine.PeerLinkStateMachineError,
+        .senderSlotMismatch
+      )
+    }
+
+    let first = try machine.relayOutcome(
+      .reliable(event(slot: 1, sequence: 1)),
+      from: .init(1)
+    )
+    XCTAssertEqual(
+      first.actions,
+      [.write(
+        connection: .init(2),
+        channel: .reliable,
+        frame: .reliable(event(slot: 1, sequence: 1), relayed: true)
+      )]
+    )
+    _ = machine.disconnect(.init(2))
+    let second = try machine.relayOutcome(
+      .reliable(event(slot: 1, sequence: 2)),
+      from: .init(1)
+    )
+    XCTAssertEqual(
+      second.issues.compactMap { issue -> UInt8? in
+        guard case .queuedReliable = issue.kind else { return nil }
+        return issue.slot
+      },
+      [2, 3]
+    )
+
+    try bind(&machine, connection: 4, slot: 2)
+    let flushed = try machine.setFlowReady(.reliable, for: 2, connection: .init(4))
+    XCTAssertEqual(
+      flushed.compactMap { action -> UInt32? in
+        guard case let .write(_, .reliable, .reliable(frame, _)) = action else {
+          return nil
+        }
+        return frame.sequence
+      },
+      [2]
+    )
+    guard case let .write(_, .reliable, .reliable(_, relayed)) = flushed[0] else {
+      return XCTFail("expected a flushed reliable relay")
+    }
+    XCTAssertEqual(relayed, true)
+  }
+
   func testClientUsesOnlyHostRouteAndBonjourSelectionRequiresExactToken() throws {
     var machine = try PeerLinkStateMachine(
       role: .client,

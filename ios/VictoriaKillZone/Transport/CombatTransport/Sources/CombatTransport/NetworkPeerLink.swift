@@ -369,6 +369,12 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
                 self.formDatagramFlow(to: endpoint, for: id, slot: slot)
               }
             case let .received(_, receivedFrame):
+              if configuration.role == .host,
+                 let relayActions = try? self.withStateLock({
+                   try self.stateMachine.relayOutcome(receivedFrame, from: id)
+                 }) {
+                self.write(relayActions.actions)
+              }
               let nowMs = Int64(DispatchTime.now().uptimeNanoseconds / 1_000_000)
               let handler = self.withStateLock { self.receiveHandler }
               handler?(receivedFrame, nowMs, nil)

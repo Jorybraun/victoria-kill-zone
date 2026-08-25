@@ -153,16 +153,59 @@ Network.framework only; no MultipeerConnectivity.
   `NWBrowser(for: .bonjour(...))` on `_vkz-combat._udp`, with
   `parameters.includePeerToPeer = true`. Clients select only an exact
   `serviceToken` match and keep browsing when no match is present.
-- QUIC (`NWProtocolQUIC.Options`, ALPN `vkz-combat-v1`): an `NWMultiplexGroup`
-  for the reliable fire/control stream, plus one datagram flow
-  (`options.isDatagram = true`, `maxDatagramFrameSize = 512`) for poses. Verified
-  present in the pinned SDK (`NWProtocolQUIC.Options.isDatagram`,
-  `maxDatagramFrameSize`, `nw_quic_get_stream_usable_datagram_frame_size`).
-- TLS via a caller-supplied match-scoped pre-shared key
-  (`TransportCredentials`), so no signing material and no committed secret. The
-  advertised service name is a match-scoped random token, never a device name.
+- The adapter configures QUIC (`NWProtocolQUIC.Options`, ALPN `vkz-combat-v1`)
+  and a caller-supplied match-scoped pre-shared key
+  (`TransportCredentials`). A kind-3 `slotClaim` is the transport-frame
+  authentication mechanism: each claim carries only
+  `SHA256(preSharedKey ‖ nonce ‖ claimedSlot)`; the PSK is never transmitted.
+  The advertised service name is a match-scoped random token, never a device
+  name.
+- The intended live layout is an `NWMultiplexGroup` reliable fire/control flow
+  plus a separate QUIC datagram flow (`options.isDatagram = true`) for poses.
+  The pinned Xcode 26.4.1/macOS 26.4 loopback probe did not establish the
+  reliable baseline, so this layout is not claimed as a working adapter
+  session in this revision. In particular, no datagram limitation is inferred
+  from that failed baseline; the exact probe matrix is recorded below.
+- The pure `PeerLinkStateMachine` now owns authenticated-origin relay policy:
+  host relays preserve the original sender slot, set `relayed`, exclude the
+  origin and host, and retain per-target reliable queue semantics. The
+  Network.framework binding invokes that policy for received host frames.
 - Foreground drop: path/connection failure marks the peer disconnected and locks
   fire; recovery re-forms the link and bumps the epoch, with no app restart.
+
+### Pinned SDK QUIC probe (Tier 1 loopback, throwaway; 2026-08-25)
+
+The probe used `NWListener`, `NWConnection`, `NWConnectionGroup`,
+`NWMultiplexGroup`, `NWProtocolQUIC.Options`, matched ALPN
+`vkz-probe-v1`, and for PSK cases
+`sec_protocol_options_add_pre_shared_key`,
+`sec_protocol_options_append_tls_ciphersuite(TLS_AES_128_GCM_SHA256)`, and
+matching TLS 1.3 min/max versions. It used dummy credentials only.
+
+- **A, reliable-only PSK:** listener reached `ready`, but the client did not
+  produce a usable group flow; no bidirectional stream bytes were observed.
+  The direct authenticated control comparison reached
+  `client=waiting(-9858: handshake failed)`.
+- **B, reliable-only without PSK:** listener reached `ready` and the group
+  callback reported `acceptedGroup`; no stream flow or bidirectional bytes
+  were observed. A direct no-PSK comparison reached
+  `accepted`, `server=preparing`, then
+  `POSIXErrorCode(rawValue: 53): Software caused connection abort`; the client
+  reported `POSIXErrorCode(rawValue: 57): Socket is not connected`.
+- **C, datagram QUIC with the matched PSK configuration:** listener reached
+  `ready`; the client reported `-9858: handshake failed`. This is not a
+  datagram-availability conclusion because A and B did not establish a
+  working baseline.
+- **D, one-factor comparisons:** removing the TLS ciphersuite, removing ALPN,
+  disabling peer-to-peer, and mismatching the PSK identity all continued to
+  fail in direct comparisons with `-9858: handshake failed` or
+  `POSIXErrorCode(rawValue: 53): Software caused connection abort`. These
+  results identify a configuration/handshake blocker, not an SDK datagram
+  limitation.
+
+No real-adapter smoke test or physical-device evidence is claimed from this
+probe. The reliable and datagram flow pairing remains a follow-up once a
+working authenticated reliable baseline is established.
 
 ## Tiers
 
