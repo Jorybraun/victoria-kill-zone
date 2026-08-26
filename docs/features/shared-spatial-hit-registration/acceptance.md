@@ -21,7 +21,8 @@ Every gate names the environment that can produce it. An environment may only cl
 - [ ] The packet defines a shot as one normalized camera ray with an optional candidate, states that a no-candidate shot is an authoritative `miss`, and reconciles this with the technical specification's existing "trigger without a valid zone means miss" rule.
 - [ ] The packet requires one deduplicated transient tracer per remote shot for every member, keyed by shot identity, and states that confirmation does not replay it.
 - [ ] Tracer behavior is described as hitscan presentation only — no projectile velocity, travel time, or swept collision enters KIL-18.
-- [ ] Contract and core work implied by the optional target and the remote tracer is assigned to KIL-19/20/21/22, and this packet changes no DTO or code.
+- [ ] Contract and core work implied by the optional target and the remote tracer is assigned correctly — the `shared/simulation` target-optional change to KIL-22 with an Integration handoff (never to KIL-19, an isolated iOS targeting/domain prototype that stops at shared-contract changes), measurement to KIL-20/21 — and this packet changes no DTO or code.
+- [ ] No document claims that current contracts require a target: `match.v2` already carries `targetId` as optional and the Convex fire path already resolves a no-target shot as `miss`; only `ShotClaim.targetID` in `shared/simulation` still requires one.
 - [ ] `shots:debugFire` and the screen-space Vision claim path are explicitly retained until physical-device evidence passes.
 - [ ] Persistent Projectile Worldlines, personal time, body-zone collision, and more than 4 players remain excluded.
 - [ ] Every must-decide-now item is resolved here, and every deferred threshold has an owner issue plus a fail-closed default.
@@ -65,7 +66,8 @@ Simulators can prove state machines, copy, and accessibility. They cannot prove 
 - [ ] Closing each fire gate in turn (dead, tracking lost, geofence, empty magazine, cooldown) disables the trigger and names that gate; no target condition ever disables it.
 - [ ] An injected remote shot draws exactly one transient `INCOMING SHOT` tracer along the received origin and direction, and injecting the same shot identity again draws none.
 - [ ] Every one of the eight rejection reasons renders its exact canonical label and corrective action from injected verdicts.
-- [ ] A predicted shot changes no health, ammunition, or score, and repeat fire is disabled while it is pending.
+- [ ] A predicted shot changes no health, ammunition, or score.
+- [ ] A pending verdict does not hold the trigger: once the cooldown elapses another shot fires while an earlier one is unresolved, both shot identities reconcile independently and out of order without collapsing into one result, and neither draws a duplicate tracer.
 - [ ] An authoritative verdict contradicting the prediction visibly replaces the predicted panel and never stacks a second result.
 - [ ] Injected tracking loss locks fire within one frame of the state change and shows stale positions only as dimmed, labelled diagnostics.
 - [ ] Recovery returns to `ready` without replaying any earlier shot animation.

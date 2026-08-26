@@ -11,7 +11,7 @@
 
 ## Outcome
 
-Two to four players calibrate one Shared Arena Frame, see every other member as a deliberate Phone Target Proxy, fire one Frame-Aligned Shot Claim at one named targetable player, and receive one understandable predicted, confirmed-hit, confirmed-miss, rejected, degraded, or recovered result. Persistent Projectile Worldlines and personal time are excluded.
+Two to four players calibrate one Shared Arena Frame, see every other member as a deliberate Phone Target Proxy, and fire one Frame-Aligned Shot Claim from the current camera ray — with **zero or one** advisory candidate, never a required target. Every shot receives one understandable predicted, confirmed-hit, confirmed-miss, rejected, degraded, or recovered result; a shot with no candidate is a recorded authoritative miss, not a suppressed input. Persistent Projectile Worldlines and personal time are excluded.
 
 ## 1. Production placement (the accepted pivot)
 
@@ -25,7 +25,7 @@ Shared spatial hit registration is production Phase 1 scope, not a post-MVP idea
 ## 2. Contract position
 
 - No current `phase0.v1` wire name, field, enum, constant, or fixture changes in this packet, and none may change as a consequence of accepting it. `g2.v1` and `geofence.v1` are likewise untouched.
-- `match.v2` is already frozen in [docs/interface-contracts.md](../../interface-contracts.md) and is consumed as-is: player sets of 2–4, server-assigned `PlayerCapability` values, and fire validated against "a targetable player". This packet invents no wire field.
+- `match.v2` is already frozen in [docs/interface-contracts.md](../../interface-contracts.md) and is consumed as-is: player sets of 2–4, server-assigned `PlayerCapability` values, and `targetId` **optional** on a fire — when it is present it must name a targetable player, and when it is absent the Convex fire path already resolves the shot as a `miss`. The accepted trigger mechanics in §3A therefore need no wire change, and this packet invents no wire field.
 - `spatial-hit.v1` is the vocabulary and semantics surface described here. **Integration freezes `spatial-hit.v1` in `docs/interface-contracts.md` before any cross-workstream implementation of it.** Until that freeze exists, `ios/**`, `convex/**`, and `spectator/**` may not encode or decode a spatial payload.
 - The merged deterministic simulation core (KIL-34, `shared/simulation/**`) already implements the semantics in §4 and §5 and cites this document as its authority. The two must stay bit-identical in meaning: a change to any predicate here requires a matching change there in the same accepted revision.
 
@@ -44,7 +44,7 @@ The following are **measure-later thresholds**. Each has an owner issue and a fa
 | Host verdict latency, Convex authoritative p50/p95/p99, and end-to-end reconciliation delay | KIL-21 | Provisional feedback may never change health, ammunition, or score; only authoritative state does |
 | Whether authority stays on the host phone or moves to a server process, and the transport | KIL-21 → ADR 0004 | Host-provisional plus Convex-authoritative (§6) is the Phase 1 behavior |
 | Proxy shape refinement (capsule or oriented box) and body-volume upgrade | Phase 2 | 0.35 m sphere (§5.1) |
-| Making a shot claim's target optional in the wire contract and in `shared/simulation`, so a target-agnostic ray can resolve as an authoritative miss (§5.0) | KIL-19 (core and contract), KIL-22 (client and spectator surfaces) | KIL-18 freezes the meaning only. Until the contract carries it, a no-candidate shot must still be recorded as a fired shot that consumed ammunition and resolved as `miss`; no path may swallow the input |
+| Carrying the optional target through `shared/simulation`, where `ShotClaim.targetID` is still required (§5.0) | KIL-22 (cross-workstream contract freeze), with an Integration handoff for `shared/simulation/**`. **Not KIL-19**, which is an isolated iOS targeting/domain prototype and stops at shared-contract changes | KIL-18 freezes the meaning only. `match.v2` and the Convex fire path already accept a shot with no target and resolve it as `miss`; until the simulation core matches, a no-candidate shot must still be recorded as a fired shot that consumed ammunition and resolved as `miss`, and no path may swallow the input |
 | Remote tracer transport, dedup keying, and the transient tracer's on-screen duration (§6.4) | KIL-21 (transport and latency), KIL-22 (presentation) | One tracer per shot identity per member, dropped rather than duplicated when identity is unknown or already seen |
 
 ## 3A. Trigger authority (product-owner correction, accepted)
@@ -104,7 +104,7 @@ A rejected sample is discarded and never interpolated across, never held, and ne
 - The authority resolves the claim by testing the ray (§5.1) against every **hittable candidate**: a member of the match other than the shooter, alive, with a resolvable pose (§5.4) inside the 3–15 m lane (§5.2) and normal Tracking Quality.
 - If one or more candidates are intersected, the candidate with the smallest forward intersection distance along the ray is the hit, and only that candidate takes damage.
 - If no candidate is intersected — including when there is no candidate at all — the Spatial Verdict is `miss`. A missing candidate set is never a rejection.
-- **Recommendation R7 (needs acceptance):** the merged core's `ShotClaim.targetID` is currently required, and its no-candidate outcomes are rejections rather than misses. KIL-18 freezes the meaning above; making `targetID` optional and returning `miss` is KIL-19 contract and core work, with the client and spectator surfaces in KIL-22. Until then a claim that does name a target keeps every §5.6 rejection reason exactly as written, and no client may treat a rejection as permission to suppress the trigger.
+- **Recommendation R7 (needs acceptance):** the target is already optional where the authority lives — `match.v2` carries `targetId` as optional, and the Convex fire path resolves a shot with no target as `miss`. The remaining required-target shape is `ShotClaim.targetID` in `shared/simulation`, whose no-candidate outcomes are rejections rather than misses. KIL-18 freezes the meaning above. Aligning the simulation core is a shared-contract change owned by **KIL-22** with an Integration handoff for `shared/simulation/**`; **KIL-19 is an isolated iOS targeting/domain prototype and must stop at shared-contract changes.** Until the core matches, a claim that does name a target keeps every §5.6 rejection reason exactly as written, and no client may treat a rejection as permission to suppress the trigger.
 
 Each limit below is a complete predicate. Bounds are inclusive as written, all arithmetic is on the synchronized match clock in integer milliseconds and in arena metres, and every comparison is evaluated in the fixed order given in §5.6.
 
@@ -183,7 +183,7 @@ These are deliberately the same member for Phase 1. There is no separate "spatia
 
 | Stage | Producer | What it may change | What it may never change |
 |---|---|---|---|
-| Predicted | The shooter's own phone, same frame as the trigger | Local ray, crosshair, `SHOT PREDICTED` panel, muzzle feedback, trigger disabled while pending | Health, ammunition, score, kill feed, or any announcement of a hit |
+| Predicted | The shooter's own phone, same frame as the trigger | Local ray, crosshair, `SHOT PREDICTED` panel, muzzle feedback | Health, ammunition, score, kill feed, or any announcement of a hit |
 | Provisional Spatial Verdict | `authorityHost` phone, using §5 semantics | Local presentation on the host and, once delivered, the shooter's pending panel | Authoritative match state; it is evidence submitted to Convex, never a damage instruction |
 | Authoritative Spatial Verdict | Convex | Health, ammunition, kills, deaths, damage, event feed, spectator projection — as one reconciled state change | Nothing may bypass it; no client applies damage |
 
@@ -191,6 +191,12 @@ These are deliberately the same member for Phase 1. There is no separate "spatia
 - A provisional verdict that the authoritative verdict contradicts must **visibly** correct the shooter's local prediction: the predicted panel is replaced by the authoritative result, never stacked beside it, and never silently dropped.
 - A predicted shot is never presented to the target or the spectator as damage.
 - If the authoritative verdict does not arrive, the shot stays visibly pending and then resolves as the authority's recorded outcome on reconnect. A pending shot never expires into a local hit.
+
+### 6.3 A pending verdict is not a fire gate
+
+- The fire gates in §3A.1 are the complete set, and an unresolved verdict is **not** among them. Once the cooldown has elapsed the trigger re-arms, even while one or more earlier shots are still awaiting an authoritative verdict. Rate of fire is governed by cooldown and ammunition alone.
+- Each shot identity is tracked and reconciled **independently**: verdicts may arrive out of order, and resolving one pending shot neither resolves nor discards another. The HUD may show that more than one shot is pending, but it may not collapse them into one result.
+- Independent reconciliation must not duplicate presentation: each shot identity draws its tracer at most once for each member (§6.4), and a late or reordered verdict updates that shot's labels, health, and event feed only.
 
 ### 6.4 Shot presentation for every member
 
@@ -200,7 +206,7 @@ These are deliberately the same member for Phase 1. There is no separate "spatia
 - Confirmation reconciles the outcome — hit, miss, or rejection — **without** replaying the tracer. A late authoritative result updates labels, health, and the event feed only.
 - The spectator follows the same rule: one tracer per shot identity, with `REWIND 0–250 MS` where a historical position is shown.
 
-### 6.3 Accepted trust limitation
+### 6.5 Accepted trust limitation
 
 The `authorityHost` phone is trusted to compute the provisional verdict honestly for Phase 1. Convex validates identity, capability, membership, the targetable set, sequence, cooldown, ammunition, the §5 bounds, and idempotency — but it does not independently reproduce the host's geometry in Phase 1. A compromised host could therefore submit a favourable provisional verdict within otherwise valid bounds. This is accepted explicitly and disclosed: **no production anti-cheat claim is made**. The two candidate hardenings — Convex recomputing the intersection from uploaded history, and requiring compatible shooter and target attestations — are recorded in [the research](../../research/shared-ar-hit-registration.md) and belong to ADR 0004 or later, not this packet.
 
@@ -312,7 +318,7 @@ No surface may invent a synonym, abbreviation, or sentence variant of any label 
 | R3 | Proxy radius is uniform for all players, devices, and distances (§5.1) | Per-distance or per-device sizing becomes a disclosed balance parameter |
 | R4 | `authorityHost` is non-transferable in Phase 1, matching `match.v2` (§6.1) | Host handover semantics must be designed before implementation |
 | R5 | Tangential shots (closest approach exactly 0.35 m) count as hits (§5.1) | The boundary predicate becomes strict, and the merged core changes with it |
-| R7 | A shot claim's target becomes optional so a target-agnostic ray resolves as `miss` (§5.0); the wire and core change lands in KIL-19 with surfaces in KIL-22 | KIL-18's frozen meaning cannot be implemented, and a no-candidate shot keeps surfacing as a rejection |
+| R7 | The optional target reaches `shared/simulation` under KIL-22 with an Integration handoff, not under KIL-19 (§5.0) | KIL-19 is asked to change a shared contract it does not own, and a no-candidate shot keeps surfacing from the core as a rejection |
 | R8 | Ready copy is `FIRE`, and target lock is advisory feedback only (§3A.1, §9.1) | Ready copy must state a lock precondition that the accepted mechanics no longer have |
 | R9 | Every member receives one deduplicated transient tracer per remote shot, including misses (§6.4) | Only the shooter sees shot presentation, and incoming fire stays invisible to targets |
 | R6 | Slice 002 remains the authority for the eight spatial states; Slice 003 (KIL-40) is its unaccepted N-player successor for lobby, multi-opponent HUD, and podium, and does not gate KIL-18 or KIL-19 | Slice 003 must be accepted first, widening KIL-18's acceptance surface |
