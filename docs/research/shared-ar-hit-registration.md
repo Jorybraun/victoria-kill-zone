@@ -1,8 +1,10 @@
 # Shared AR hit registration research
 
+> **Status: research, not authority.** This brief is the investigation that led to the frozen packet. Where it differs from [the requirements](../features/shared-spatial-hit-registration/requirements.md), the requirements win. Two things have changed since it was written: the player set is **2–4**, not two, and the product decisions it lists at the end are now mostly answered — see "Decisions taken since this brief". It still uses the older prototype name; the current product is Victoria Kill Zone.
+
 ## Question
 
-Can PEW PEW treat each phone as the player's networked target, place both phones in one shared 3D arena, and use FPS-style latency compensation to decide whether a shot hit?
+Can the game treat each phone as the player's networked target, place 2–4 phones in one shared 3D arena, and use FPS-style latency compensation to decide whether a shot hit?
 
 ## Conclusion
 
@@ -10,13 +12,13 @@ Yes. This is a credible first shared-space hit model and substantially simpler t
 
 The recommended first implementation is **phone-proxy hitscan with bounded server rewind**:
 
-1. Both phones relocalize into one shared ARKit arena frame.
+1. Every phone in the match relocalizes into one shared ARKit arena frame.
 2. Each phone samples its camera transform against a monotonic clock.
 3. Each phone sends a bounded history of timestamped transforms.
 4. The shooter submits a shot ray and shot timestamp.
 5. The authority estimates when the shot occurred in arena time.
-6. It rewinds the target phone proxy to its interpolated historical transform.
-7. It tests the shot ray against the historical proxy volume.
+6. It rewinds each candidate phone proxy to its interpolated historical transform.
+7. It tests the shot ray against the historical proxy volumes.
 8. It records one authoritative hit or miss.
 
 This is the established shape of latency-compensated hitscan: the server retains recent target history and temporarily evaluates a shot against the target state the shooter saw. Valve documents server rewind explicitly and reports retaining one second of player location and animation history by default.[1] A client/server shooter still keeps the server authoritative over simulation and rules while clients use prediction and interpolation to hide network delay.[2]
@@ -32,7 +34,7 @@ Split the system into two clocks:
 ### Local realtime plane
 
 - ARKit tracking and rendering: 60 fps when the device sustains it.
-- Phone transform exchange: prototype at 20–30 Hz over a nearby peer transport.
+- Phone transform exchange: prototype at 20–30 Hz over a nearby peer transport, for every member of the set.
 - Transform history, interpolation, rewind, ray intersection, and visible projectile reconstruction: local/host computation.
 - Muzzle flash, haptics, audio, and predicted tracer: immediate local feedback.
 
@@ -87,7 +89,7 @@ Relevant implementation:
 
 ## Why the phone can be the first target
 
-ARKit already estimates each phone camera's 6-DoF transform. After both devices share an `ARWorldMap`, they can render content at the same real-world positions. Apple describes using a host-provided world map, guest relocalization, and compact world-space action data after alignment.[3]
+ARKit already estimates each phone camera's 6-DoF transform. After the devices share an `ARWorldMap`, they can render content at the same real-world positions. Apple describes using a host-provided world map, guest relocalization, and compact world-space action data after alignment.[3]
 
 For the first shared hit model, define the target as a collision volume attached to the target phone transform:
 
@@ -190,7 +192,7 @@ Do not trust an arbitrary client timestamp. Estimate clock offset through repeat
 4. Apply range, cooldown, ammunition, tracking-quality, and rewind-window checks.
 5. Record one idempotent authoritative result.
 
-This follows the attacker-favoring logic of evaluating what the shooter saw. The trade-off is that the target may be hit after moving away, because the historical proxy still intersects the shot. That fairness policy needs an explicit maximum rewind and product decision.
+This follows the attacker-favoring logic of evaluating what the shooter saw. The trade-off is that the target may be hit after moving away, because the historical proxy still intersects the shot. That fairness policy needs an explicit maximum rewind and product decision; it is now 250 ms, and the consequence is disclosed to players.
 
 ## Hitscan versus visible projectiles
 
@@ -237,11 +239,13 @@ Before implementation, choose one authority model:
 
 Recommendation for Phase 0: prototype option 3, then compare option 1 once the transform contract and evidence format are stable. Do not imply production anti-cheat.
 
+**Accepted:** option 3 is the Phase 1 behavior. Whether authority stays on the host phone or moves to a server process is KIL-21 measurement work feeding ADR 0004.
+
 ## Proposed implementation sequence
 
 ### H1: Shared phone transforms
 
-- Align two phones to one AR world map.
+- Align every phone in the match to one AR world map.
 - Broadcast timestamped `arenaFromPhone` transforms at 10–20 Hz.
 - Retain a 1-second local ring buffer.
 - Render each phone's proxy on both devices.
@@ -292,6 +296,24 @@ Recommendation for Phase 0: prototype option 3, then compare option 1 once the t
 7. Does the phone proxy represent the player's whole body or a deliberate game objective?
 8. What minimum player separation prevents unsafe close-range play?
 
+## Decisions taken since this brief
+
+KIL-18 answers the questions that fix meaning. The requirements document is the authority for each; they are listed here only so this brief is not read as still open.
+
+| Question | Decision |
+|---|---|
+| 1, 2, 7 | Sphere of exactly 0.35 m radius, uniform for every player, device, and distance. It is a deliberate game objective, never a body claim. Capsule or oriented box is Phase 2. |
+| 3 | 250 ms maximum rewind, inclusive, never clamped or extended. This repository's own prototype cap, not a claim about any commercial title. |
+| 4 | Option 3: the `authorityHost` phone produces a provisional verdict, and Convex commits the authoritative state change exactly once. Host trust is disclosed, and no production anti-cheat is claimed. Option 1 stays the candidate hardening for ADR 0004. |
+| 5 | Anything short of a confidently relocalized, normally tracking frame is `lost` and locks fire on that phone only. The device-side signal that maps to "normal" is KIL-20 measurement work. |
+| 6 | Deliberately still open. It is measurement work owned by KIL-20; until then no tolerance is claimed and a perceptibly wrong verdict blocks the physical-device gate. |
+| 8 | 3 m minimum and 15 m maximum, as a property of a candidate target and as safety guidance — never as a trigger lock. |
+
+Two mechanics were settled by the product owner after this brief and are not reflected in the algorithm sketches above:
+
+- **A lock is never a precondition for firing.** While the fire gates are open, a trigger press always produces one shot from the current normalized camera ray, and a shot with no candidate is an authoritative **miss** that consumes ammunition and is recorded. Proxy or Vision detection is advisory feedback. The sketches above that pass a `targetId` with every claim describe an older contract shape, not the accepted mechanic: `match.v2` already carries `targetId` as optional and the Convex fire path already resolves a no-target shot as a miss. The one place that still requires a target is `ShotClaim.targetID` in `shared/simulation`, and aligning it is KIL-22 shared-contract work with an Integration handoff — not KIL-19, which is an isolated iOS targeting/domain prototype.
+- **Every member sees shot presentation.** The shooter gets an immediate predicted tracer, and every other member gets one transient incoming-shot tracer per shot identity, drawn from the shared-arena origin and direction, including for misses. It is deduplicated by shot identity, never replayed on confirmation or reconnect, and remains hitscan presentation — the persistent-projectile section below stays future work.
+
 ## Recommendation
 
 Build **shared phone-proxy hitscan with bounded rewind** first. It combines the useful part of FPS networking with what ARKit can actually measure:
@@ -302,7 +324,7 @@ Build **shared phone-proxy hitscan with bounded rewind** first. It combines the 
 - Convex owns the resulting game-state transition;
 - Vision remains optional for later body-zone refinement.
 
-Once this works on two phones, evolve the same spatial and temporal history into persistent visible bullets. Do not design personal time directly on top of the current screen-space hit claim.
+Once this works across the 2–4 phones in a match, evolve the same spatial and temporal history into persistent visible bullets. Do not design personal time directly on top of the current screen-space hit claim.
 
 ## Sources
 

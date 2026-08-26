@@ -10,6 +10,25 @@
 
 ---
 
+## 0. Amendments
+
+Amendments override the sections they name. Everything not named here stands as written.
+
+### A1 — Shared spatial hit registration is Phase 1 production scope
+
+Authority: [ADR 0003](docs/decisions/0003-multiplayer-first-refounding.md) (accepted), [docs/roadmap.md](docs/roadmap.md) Phase 1, and the frozen packet in [docs/features/shared-spatial-hit-registration/requirements.md](docs/features/shared-spatial-hit-registration/requirements.md).
+
+1. **Player count.** The product is multiplayer-first with a Phase 1 cap of **2–4 players**, per `match.v2`. The 1v1-only framing in the header, §1, §3, and §5.1 describes the original eight-hour prototype, not current scope. More than 4 players still requires a new accepted decision record.
+2. **Placement.** A shared, host-defined, right-handed, metre-scaled, gravity-aligned ARKit arena frame, phone-proxy targets, and bounded rewind are **Phase 1 scope**, not post-MVP. This supersedes the placement of the shared ARKit coordinate system in §19 "P2: do not risk P0" and §23.1 "Post-MVP architecture". Those sections remain accurate as history and as the design sketch they were.
+3. **Frozen semantics.** The 0.35 m phone-proxy sphere, the 3–15 m lane, the 250 ms rewind cap, the 100 ms maximum pose age, the fail-closed validation rules, host-provisional plus Convex-authoritative commitment, and the canonical player-visible copy are defined in the packet, which is the authority for all of them.
+4. **Trigger authority — reaffirmed, not changed.** §5.3's rule that pressing the trigger without a valid zone under the crosshair displays a **miss** is carried into the shared-3D path unchanged and generalized: while the fire gates are open (match live, shooter alive, tracking normal, geofence permitting, ammunition, cooldown), a trigger press always produces exactly one shot from the current normalized camera ray. Proxy or zone detection is advisory targeting feedback only. A shot with no candidate is an authoritative miss that consumes ammunition and is recorded in the shot ledger; it is never suppressed input, and no surface may require a lock to fire.
+5. **Firing model — reaffirmed, not changed.** The **hitscan with a visual tracer** decision in §3 and §5.3 stands, as does §5.4's reasoning for not simulating bullet velocity. The tracer is presentation of an instantaneous ray; it acquires no velocity, travel time, or swept collision in Phase 1, and §5.3's `projectileSpeedMetersPerSecond` stays `nil`. §23's persistent projectile worldlines and personal time remain later work.
+6. **Shot presentation is shared.** §6.5's local muzzle and tracer feedback is joined by a transient incoming-shot tracer on every other member's phone, drawn from the shared-arena origin and direction and deduplicated by shot identity — including for misses. Confirmation reconciles the outcome without replaying the tracer.
+7. **Fallback preserved.** The committed stack is unchanged, and the `shots:debugFire` path plus the screen-space Vision claim path remain in place until markerless spatial targeting replaces them with physical-device evidence.
+8. **Not decided here.** Transform-disagreement tolerance, tracking-quality thresholds, pose cadence, transport, and authority relocation are deferred to KIL-20/21 and, where they change authority, to ADR 0004. Carrying the optional target into `shared/simulation`, where `ShotClaim.targetID` is still required, is KIL-22 shared-contract work with an Integration handoff — not KIL-19, which is an isolated iOS targeting/domain prototype that stops at shared-contract changes. `match.v2` already carries `targetId` as optional and the Convex fire path already resolves a no-target shot as a miss. Amendment A1 records no measurement and no anti-cheat claim.
+
+---
+
 ## 1. Executive summary
 
 Victoria Kill Zone turns two iPhones and a controlled outdoor space into a markerless augmented-reality laser-tag arena.
