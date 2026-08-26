@@ -1433,3 +1433,1096 @@ private final class TestClock: @unchecked Sendable {
     set { lock.withLock { storedNow = newValue } }
   }
 }
+
+// MARK: - KIL-36 two-client convergence harness
+
+private enum HarnessRole: String {
+  case host
+  case guest
+
+  var playerID: String {
+    switch self {
+    case .host: MatchAuthority.hostPlayerID
+    case .guest: MatchAuthority.guestPlayerID
+    }
+  }
+
+  var displayName: String {
+    switch self {
+    case .host: "Host"
+    case .guest: "Guest"
+    }
+  }
+
+  var opponent: HarnessRole {
+    switch self {
+    case .host: .guest
+    case .guest: .host
+    }
+  }
+}
+
+private struct HarnessPlayer {
+  let id: String
+  let displayName: String
+  let role: PlayerRole
+  var ready = false
+  var connected = true
+  var health = MatchAuthority.startingHealth
+  var ammo = MatchAuthority.magazineSize
+  var kills = 0
+  var deaths = 0
+  var lifeState = PlayerLifeState.alive
+  var respawnAt: Double?
+  var lastShotAt: Double?
+}
+
+/// Deterministic in-process authoritative match shared by two independent
+/// `LobbyStore` clients. Shot resolution, respawn scheduling, idempotency and
+/// the recent-event window mirror `convex/domain/fire.ts`,
+/// `convex/domain/respawn.ts` and `convex/functions/shots.ts`, so both clients
+/// observe exactly one authoritative history under a controlled clock.
+private final class MatchAuthority: @unchecked Sendable {
+  static let matchID = "match-1"
+  static let matchCode = "ABC123"
+  static let hostPlayerID = "host-1"
+  static let guestPlayerID = "guest-1"
+  static let startingHealth = 100
+  static let magazineSize = 8
+  static let fireCooldownMs: Double = 350
+  static let respawnDelayMs: Double = 5_000
+  static let recentEventLimit = 40
+  static let matchDurationMs = 180_000
+
+  enum FireMode {
+    case debug
+    case markerless
+  }
+
+  private struct StoredShot {
+    let outcome: FireShotOutcome
+    let accepted: Bool
+    let damage: Int
+    let shooterAmmo: Int
+    let targetHealth: Int?
+    let targetLifeState: PlayerLifeState?
+    let eventID: String?
+    let fireRejectReason: FireRejectReason?
+    let debugRejectReason: BackendErrorCode?
+  }
+
+  private struct ClientChannel {
+    var continuations: [AsyncThrowingStream<MatchSnapshot, Error>.Continuation] = []
+    var subscriptionCount = 0
+    var deliveryEnabled = true
+    var withheldSnapshots: [MatchSnapshot] = []
+  }
+
+  private let lock = NSLock()
+  private let clock: TestClock
+  private var phase = MatchPhase.lobby
+  private var startsAt: Double?
+  private var endsAt: Double?
+  private var players: [HarnessPlayer]
+  private var events: [EventSnapshot] = []
+  private var shots: [String: StoredShot] = [:]
+  private var nextEventNumber = 1
+  private var channels: [String: ClientChannel] = [:]
+  private var storedTimeline: [String] = []
+  private let startedAtMs: Double
+
+  init(clock: TestClock) {
+    self.clock = clock
+    startedAtMs = clock.now.timeIntervalSince1970 * 1_000
+    players = [
+      HarnessPlayer(id: Self.hostPlayerID, displayName: "Host", role: .host),
+      HarnessPlayer(id: Self.guestPlayerID, displayName: "Guest", role: .guest),
+    ]
+  }
+
+  var nowMs: Double {
+    clock.now.timeIntervalSince1970 * 1_000
+  }
+
+  var timeline: [String] {
+    lock.withLock { storedTimeline }
+  }
+
+  func record(_ line: String) {
+    let offset = Int((nowMs - startedAtMs).rounded())
+    lock.withLock { storedTimeline.append("t=+\(offset)ms \(line)") }
+  }
+
+  func player(_ role: HarnessRole) -> HarnessPlayer {
+    lock.withLock { players.first(where: { $0.id == role.playerID })! }
+  }
+
+  func subscriptionCount(for role: HarnessRole) -> Int {
+    lock.withLock { channels[role.playerID]?.subscriptionCount ?? 0 }
+  }
+
+  // MARK: Lifecycle
+
+  func markReady(_ role: HarnessRole) {
+    lock.withLock {
+      guard let index = players.firstIndex(where: { $0.id == role.playerID }) else { return }
+      players[index].ready = true
+      _ = appendEventLocked(
+        type: .ready,
+        actorPlayerID: role.playerID,
+        targetPlayerID: nil,
+        zone: nil,
+        damage: nil,
+        message: "\(role.displayName) READY"
+      )
+    }
+    record("server phase=lobby \(role.rawValue) marked ready")
+  }
+
+  func startMatch() {
+    lock.withLock {
+      phase = .running
+      startsAt = nowMs
+      endsAt = nowMs + Double(Self.matchDurationMs)
+      _ = appendEventLocked(
+        type: .started,
+        actorPlayerID: nil,
+        targetPlayerID: nil,
+        zone: nil,
+        damage: nil,
+        message: "DUEL STARTED"
+      )
+    }
+    record("server phase=running match started")
+  }
+
+  /// Advances the shared clock and runs every respawn whose scheduled time has
+  /// passed, exactly like the server-side scheduled `players:respawn`.
+  func advance(milliseconds: Double) {
+    clock.now = clock.now.addingTimeInterval(milliseconds / 1_000)
+    let respawned: [String] = lock.withLock {
+      var names: [String] = []
+      let now = nowMs
+      for index in players.indices {
+        guard phase == .running, players[index].lifeState == .respawning,
+          let respawnAt = players[index].respawnAt, now >= respawnAt
+        else {
+          continue
+        }
+        players[index].health = Self.startingHealth
+        players[index].ammo = Self.magazineSize
+        players[index].lifeState = .alive
+        players[index].respawnAt = nil
+        players[index].lastShotAt = nil
+        _ = appendEventLocked(
+          type: .respawned,
+          actorPlayerID: players[index].id,
+          targetPlayerID: nil,
+          zone: nil,
+          damage: nil,
+          message: "\(players[index].displayName) RESPAWNED"
+        )
+        names.append(players[index].displayName)
+      }
+      return names
+    }
+    for name in respawned {
+      record("server respawn applied player=\(name) health=100 ammo=8 life=alive")
+    }
+  }
+
+  // MARK: Shot resolution
+
+  func debugFire(shooterID: String, clientShotID: String) -> DebugFireResult {
+    let (stored, replayed) = resolve(
+      shooterID: shooterID,
+      clientShotID: clientShotID,
+      zone: .torso,
+      poseConfidence: 1,
+      mode: .debug
+    )
+    let fallbackHealth = lock.withLock {
+      players.first(where: { $0.id != shooterID })?.health ?? Self.startingHealth
+    }
+    return DebugFireResult(
+      accepted: stored.accepted,
+      outcome: stored.accepted ? .hit : .rejected,
+      clientShotId: clientShotID,
+      replayed: replayed,
+      damage: stored.damage,
+      shooterAmmo: stored.shooterAmmo,
+      targetHealth: stored.targetHealth ?? fallbackHealth,
+      eventId: stored.eventID,
+      rejectReason: stored.debugRejectReason
+    )
+  }
+
+  func fire(shooterID: String, request: FireShotRequest) -> FireShotResult {
+    let validTarget =
+      request.targetId != nil && request.zone != nil && request.poseConfidence != nil
+    guard validTarget, let zone = request.zone, let confidence = request.poseConfidence else {
+      return FireShotResult(
+        accepted: false,
+        outcome: .rejected,
+        clientShotId: request.clientShotId,
+        replayed: false,
+        damage: 0,
+        shooterAmmo: player(shooterID == Self.hostPlayerID ? .host : .guest).ammo,
+        targetHealth: nil,
+        targetLifeState: nil,
+        eventId: nil,
+        rejectReason: .invalidTarget
+      )
+    }
+    let (stored, replayed) = resolve(
+      shooterID: shooterID,
+      clientShotID: request.clientShotId,
+      zone: zone,
+      poseConfidence: confidence,
+      mode: .markerless,
+      claimedTargetID: request.targetId
+    )
+    return FireShotResult(
+      accepted: stored.accepted,
+      outcome: stored.outcome,
+      clientShotId: request.clientShotId,
+      replayed: replayed,
+      damage: stored.damage,
+      shooterAmmo: stored.shooterAmmo,
+      targetHealth: stored.targetHealth,
+      targetLifeState: stored.targetLifeState,
+      eventId: stored.eventID,
+      rejectReason: stored.fireRejectReason
+    )
+  }
+
+  private func resolve(
+    shooterID: String,
+    clientShotID: String,
+    zone: HitZone,
+    poseConfidence: Double,
+    mode: FireMode,
+    claimedTargetID: String? = nil
+  ) -> (StoredShot, Bool) {
+    let outcome: (StoredShot, Bool) = lock.withLock {
+      let key = "\(shooterID)#\(clientShotID)"
+      if let existing = shots[key] {
+        return (existing, true)
+      }
+
+      let now = nowMs
+      guard let shooterIndex = players.firstIndex(where: { $0.id == shooterID }) else {
+        return (rejection(reason: .invalidTarget, shooterAmmo: 0), false)
+      }
+      let shooter = players[shooterIndex]
+      let targetIndex = players.firstIndex(where: { $0.id != shooterID })
+
+      func store(_ shot: StoredShot) -> (StoredShot, Bool) {
+        shots[key] = shot
+        return (shot, false)
+      }
+
+      guard phase == .running else {
+        return store(rejection(reason: .matchNotRunning, shooterAmmo: shooter.ammo))
+      }
+      guard shooter.connected else {
+        return store(rejection(reason: .connectionStale, shooterAmmo: shooter.ammo))
+      }
+      guard shooter.lifeState == .alive else {
+        return store(rejection(reason: .shooterNotAlive, shooterAmmo: shooter.ammo))
+      }
+      guard shooter.ammo > 0 else {
+        return store(rejection(reason: .outOfAmmo, shooterAmmo: shooter.ammo))
+      }
+      if let lastShotAt = shooter.lastShotAt, now - lastShotAt < Self.fireCooldownMs {
+        return store(rejection(reason: .fireCooldown, shooterAmmo: shooter.ammo))
+      }
+      let minimumConfidence = zone == .head ? 0.60 : 0.45
+      guard poseConfidence >= minimumConfidence else {
+        return store(rejection(reason: .invalidTarget, shooterAmmo: shooter.ammo))
+      }
+      guard let targetIndex,
+        claimedTargetID == nil || claimedTargetID == players[targetIndex].id
+      else {
+        return store(rejection(reason: .invalidTarget, shooterAmmo: shooter.ammo))
+      }
+      guard players[targetIndex].lifeState == .alive else {
+        return store(rejection(reason: .targetNotAlive, shooterAmmo: shooter.ammo))
+      }
+
+      let target = players[targetIndex]
+      let damage = min(Self.damage(for: zone), target.health)
+      let remainingHealth = max(0, target.health - damage)
+      let eliminated = remainingHealth == 0
+
+      players[shooterIndex].ammo = max(0, shooter.ammo - 1)
+      players[shooterIndex].lastShotAt = now
+      players[shooterIndex].kills = shooter.kills + (eliminated ? 1 : 0)
+      players[targetIndex].health = remainingHealth
+      players[targetIndex].lifeState = eliminated ? .respawning : .alive
+      if eliminated {
+        players[targetIndex].deaths = target.deaths + 1
+        players[targetIndex].respawnAt = now + Self.respawnDelayMs
+      }
+
+      // `shots:debugFire` always persists a G2 `hit` event, even for a kill.
+      let eventType: MatchEventType = mode == .debug ? .hit : (eliminated ? .eliminated : .hit)
+      let message: String
+      if mode == .debug {
+        message =
+          "\(shooter.displayName) HIT \(target.displayName) • \(zone.rawValue.uppercased()) −\(damage)"
+      } else {
+        message =
+          eliminated
+          ? "\(shooter.displayName) ELIMINATED \(target.displayName)"
+          : "\(shooter.displayName) HIT \(target.displayName)"
+      }
+      let eventID = appendEventLocked(
+        type: eventType,
+        actorPlayerID: shooter.id,
+        targetPlayerID: target.id,
+        zone: zone.rawValue,
+        damage: damage,
+        message: message
+      )
+
+      return store(
+        StoredShot(
+          outcome: eliminated ? .kill : .hit,
+          accepted: true,
+          damage: damage,
+          shooterAmmo: players[shooterIndex].ammo,
+          targetHealth: remainingHealth,
+          targetLifeState: eliminated ? .respawning : .alive,
+          eventID: eventID,
+          fireRejectReason: nil,
+          debugRejectReason: nil
+        )
+      )
+    }
+    return outcome
+  }
+
+  private func rejection(reason: FireRejectReason, shooterAmmo: Int) -> StoredShot {
+    StoredShot(
+      outcome: .rejected,
+      accepted: false,
+      damage: 0,
+      shooterAmmo: shooterAmmo,
+      targetHealth: nil,
+      targetLifeState: nil,
+      eventID: nil,
+      fireRejectReason: reason,
+      debugRejectReason: Self.debugErrorCode(for: reason)
+    )
+  }
+
+  /// Mirrors `debugErrorCode` in `convex/functions/shots.ts`.
+  private static func debugErrorCode(for reason: FireRejectReason) -> BackendErrorCode {
+    switch reason {
+    case .connectionStale: .connectionStale
+    default: .matchNotRunning
+    }
+  }
+
+  static func damage(for zone: HitZone) -> Int {
+    switch zone {
+    case .head: 75
+    case .torso: 34
+    case .limbs: 20
+    }
+  }
+
+  private func appendEventLocked(
+    type: MatchEventType,
+    actorPlayerID: String?,
+    targetPlayerID: String?,
+    zone: String?,
+    damage: Int?,
+    message: String
+  ) -> String {
+    let id = "event-\(nextEventNumber)"
+    nextEventNumber += 1
+    events.append(
+      EventSnapshot(
+        id: id,
+        type: type,
+        message: message,
+        createdAt: nowMs,
+        actorPlayerId: actorPlayerID,
+        targetPlayerId: targetPlayerID,
+        zone: zone,
+        damage: damage
+      )
+    )
+    return id
+  }
+
+  // MARK: Snapshot fan-out
+
+  func snapshot(for role: HarnessRole) -> MatchSnapshot {
+    lock.withLock { snapshotLocked(for: role.playerID) }
+  }
+
+  private func snapshotLocked(for playerID: String) -> MatchSnapshot {
+    let recentEvents =
+      events
+      .sorted { left, right in
+        left.createdAt == right.createdAt
+          ? left.id < right.id : left.createdAt > right.createdAt
+      }
+      .prefix(Self.recentEventLimit)
+    return MatchSnapshot(
+      serverNow: nowMs,
+      match: MatchSummary(
+        id: Self.matchID,
+        code: Self.matchCode,
+        phase: phase,
+        durationMs: Self.matchDurationMs,
+        startsAt: startsAt,
+        endsAt: endsAt
+      ),
+      localPlayerId: playerID,
+      players: players.map {
+        PlayerSnapshot(
+          id: $0.id,
+          displayName: $0.displayName,
+          role: $0.role,
+          ready: $0.ready,
+          connected: $0.connected,
+          health: $0.health,
+          ammo: $0.ammo,
+          kills: $0.kills,
+          deaths: $0.deaths,
+          lifeState: $0.lifeState,
+          respawnAt: $0.respawnAt
+        )
+      },
+      events: Array(recentEvents)
+    )
+  }
+
+  /// Publishes the current authoritative state to every connected client.
+  func publish() {
+    lock.withLock {
+      for playerID in channels.keys.sorted() {
+        let snapshot = snapshotLocked(for: playerID)
+        guard channels[playerID]?.deliveryEnabled == true else {
+          channels[playerID]?.withheldSnapshots.append(snapshot)
+          continue
+        }
+        channels[playerID]?.continuations.forEach { $0.yield(snapshot) }
+      }
+    }
+  }
+
+  func deliver(_ snapshot: MatchSnapshot, to role: HarnessRole) {
+    lock.withLock {
+      channels[role.playerID]?.continuations.forEach { $0.yield(snapshot) }
+    }
+  }
+
+  /// Simulates a client-side transport outage: publishes for that client are
+  /// withheld instead of delivered, and can be replayed in any order later.
+  func setDelivery(_ enabled: Bool, for role: HarnessRole) {
+    lock.withLock { channels[role.playerID]?.deliveryEnabled = enabled }
+  }
+
+  func withheldSnapshots(for role: HarnessRole) -> [MatchSnapshot] {
+    lock.withLock { channels[role.playerID]?.withheldSnapshots ?? [] }
+  }
+
+  func clearWithheldSnapshots(for role: HarnessRole) {
+    lock.withLock { channels[role.playerID]?.withheldSnapshots = [] }
+  }
+
+  func failSubscription(for role: HarnessRole) {
+    lock.withLock {
+      let continuations = channels[role.playerID]?.continuations ?? []
+      channels[role.playerID]?.continuations = []
+      continuations.forEach { $0.finish(throwing: GameSessionClientError.networkUnavailable) }
+    }
+  }
+
+  func snapshotStream(for playerID: String) -> AsyncThrowingStream<MatchSnapshot, Error> {
+    let (stream, continuation) = AsyncThrowingStream<MatchSnapshot, Error>.makeStream()
+    lock.withLock {
+      var channel = channels[playerID] ?? ClientChannel()
+      channel.continuations.append(continuation)
+      channel.subscriptionCount += 1
+      channels[playerID] = channel
+    }
+    return stream
+  }
+}
+
+private final class PeerGameSessionClient: GameSessionClient, @unchecked Sendable {
+  let availability = GameSessionAvailability.available
+  let playerSession: PlayerSession
+
+  private let authority: MatchAuthority
+  private let connectionStream: AsyncStream<GameSessionConnectionState>
+  private let connectionContinuation: AsyncStream<GameSessionConnectionState>.Continuation
+
+  init(authority: MatchAuthority, role: HarnessRole) {
+    self.authority = authority
+    playerSession = PlayerSession(
+      matchId: MatchAuthority.matchID,
+      code: MatchAuthority.matchCode,
+      playerId: role.playerID,
+      sessionSecret: UUID().uuidString
+    )
+    (connectionStream, connectionContinuation) = AsyncStream.makeStream()
+  }
+
+  func createDuel(_ request: CreateDuelRequest) async throws -> PlayerSession { playerSession }
+
+  func joinDuel(_ request: JoinDuelRequest) async throws -> PlayerSession { playerSession }
+
+  func setReady(session: PlayerSession, isReady: Bool) async throws {}
+
+  func startDuel(session: PlayerSession) async throws {}
+
+  func fire(session: PlayerSession, request: FireShotRequest) async throws -> FireShotResult {
+    authority.fire(shooterID: playerSession.playerId, request: request)
+  }
+
+  func debugFire(session: PlayerSession, clientShotId: String) async throws -> DebugFireResult {
+    authority.debugFire(shooterID: playerSession.playerId, clientShotID: clientShotId)
+  }
+
+  func snapshots(for session: PlayerSession) -> AsyncThrowingStream<MatchSnapshot, Error> {
+    authority.snapshotStream(for: playerSession.playerId)
+  }
+
+  func connectionStates() -> AsyncStream<GameSessionConnectionState> { connectionStream }
+
+  func sendConnection(_ state: GameSessionConnectionState) {
+    connectionContinuation.yield(state)
+  }
+}
+
+private final class ScriptedTargetingSession: TargetingSession, @unchecked Sendable {
+  let availability = TargetingAvailability.available
+
+  private let lock = NSLock()
+  private var stored: TargetingSnapshot
+  private var continuations: [AsyncStream<TargetingSnapshot>.Continuation] = []
+
+  init(initial: TargetingSnapshot) {
+    stored = initial
+  }
+
+  var currentSnapshot: TargetingSnapshot {
+    lock.withLock { stored }
+  }
+
+  func snapshots() -> AsyncStream<TargetingSnapshot> {
+    let (stream, continuation) = AsyncStream<TargetingSnapshot>.makeStream()
+    let snapshot: TargetingSnapshot = lock.withLock {
+      continuations.append(continuation)
+      return stored
+    }
+    continuation.yield(snapshot)
+    return stream
+  }
+
+  func start() async throws {}
+
+  func stop() async {}
+
+  func emit(_ snapshot: TargetingSnapshot) {
+    let targets: [AsyncStream<TargetingSnapshot>.Continuation] = lock.withLock {
+      stored = snapshot
+      return continuations
+    }
+    targets.forEach { $0.yield(snapshot) }
+  }
+}
+
+/// One authoritative match plus two independent `LobbyStore` clients, each with
+/// its own session, snapshot subscription, transport and shot-ID sequence.
+@MainActor
+private final class TwoClientRig {
+  let clock: TestClock
+  let authority: MatchAuthority
+  let hostClient: PeerGameSessionClient
+  let guestClient: PeerGameSessionClient
+  let hostTargeting: ScriptedTargetingSession
+  let guestTargeting: ScriptedTargetingSession
+  let hostStore: LobbyStore
+  let guestStore: LobbyStore
+
+  init() {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_750_000_000))
+    self.clock = clock
+    authority = MatchAuthority(clock: clock)
+    hostClient = PeerGameSessionClient(authority: authority, role: .host)
+    guestClient = PeerGameSessionClient(authority: authority, role: .guest)
+    hostTargeting = ScriptedTargetingSession(initial: .unavailable(at: clock.now))
+    guestTargeting = ScriptedTargetingSession(initial: .unavailable(at: clock.now))
+    let hostShotIDs = ShotIDSequence((1...64).map { "host-shot-\($0)" })
+    let guestShotIDs = ShotIDSequence((1...64).map { "guest-shot-\($0)" })
+    hostStore = LobbyStore(
+      environment: AppEnvironment(
+        gameSessionClient: hostClient,
+        targetingSession: hostTargeting
+      ),
+      now: { clock.now },
+      makeShotId: { hostShotIDs.next() }
+    )
+    guestStore = LobbyStore(
+      environment: AppEnvironment(
+        gameSessionClient: guestClient,
+        targetingSession: guestTargeting
+      ),
+      now: { clock.now },
+      makeShotId: { guestShotIDs.next() }
+    )
+  }
+
+  func store(_ role: HarnessRole) -> LobbyStore {
+    role == .host ? hostStore : guestStore
+  }
+
+  func targeting(_ role: HarnessRole) -> ScriptedTargetingSession {
+    role == .host ? hostTargeting : guestTargeting
+  }
+
+  func client(_ role: HarnessRole) -> PeerGameSessionClient {
+    role == .host ? hostClient : guestClient
+  }
+
+  /// Brings both clients from home screen to a running duel through the same
+  /// authoritative snapshots the app would receive.
+  func startRunningDuel() async {
+    hostStore.displayName = "Host"
+    await hostStore.performCreateDuel()
+    guestStore.displayName = "Guest"
+    guestStore.joinCode = MatchAuthority.matchCode
+    await guestStore.performJoinDuel()
+    await hostStore.startTargeting()
+    await guestStore.startTargeting()
+    authority.publish()
+    await settle()
+
+    authority.markReady(.host)
+    authority.markReady(.guest)
+    authority.publish()
+    await settle()
+
+    authority.startMatch()
+    authority.publish()
+    await settle()
+  }
+
+  func advance(milliseconds: Double) {
+    authority.advance(milliseconds: milliseconds)
+  }
+
+  func aim(_ role: HarnessRole, zone: TargetingHitZone = .torso, confidence: Double = 0.82) async {
+    let date = clock.now
+    targeting(role)
+      .emit(
+        TargetingSnapshot(
+          state: .torsoLock,
+          bodyDetected: true,
+          torsoDetected: true,
+          confidence: 0.88,
+          observedAt: date,
+          poseObservedAt: date,
+          bodyBounds: nil,
+          torsoBounds: nil,
+          headRegion: nil,
+          torsoRegion: nil,
+          aimClaim: TargetingAimClaim(zone: zone, confidence: confidence, capturedAt: date),
+          cameraRay: TargetingCameraRay(
+            origin: TargetingVector3(x: 1, y: 2, z: 3),
+            direction: TargetingVector3(x: 0, y: 0, z: -1),
+            capturedAt: date
+          ),
+          poseStaleAfter: 0.5
+        )
+      )
+    await settle()
+  }
+
+  /// Fires one authoritative shot from `attacker` and publishes the resulting
+  /// snapshot to both clients. The host uses the trusted debug path, the guest
+  /// uses the markerless claim path.
+  func fire(_ attacker: HarnessRole, publish: Bool = true) async {
+    advance(milliseconds: 400)  // clears the 350 ms server fire cooldown
+    switch attacker {
+    case .host:
+      await hostStore.performDebugFire()
+    case .guest:
+      await aim(.guest)
+      await guestStore.performMarkerlessFire()
+    }
+    if publish {
+      authority.publish()
+      await settle()
+    }
+  }
+
+  var projection: String {
+    let players = authority.player(.host)
+    let opponent = authority.player(.guest)
+    return
+      "host{hp=\(players.health) ammo=\(players.ammo) k=\(players.kills) d=\(players.deaths) "
+      + "life=\(players.lifeState.rawValue)} guest{hp=\(opponent.health) ammo=\(opponent.ammo) "
+      + "k=\(opponent.kills) d=\(opponent.deaths) life=\(opponent.lifeState.rawValue)}"
+  }
+
+  func clientProjection(_ role: HarnessRole) -> String? {
+    guard case .active(let duel) = store(role).route else { return nil }
+    return duel.players
+      .sorted { $0.id < $1.id }
+      .map {
+        "\($0.id){hp=\($0.health) ammo=\($0.ammo) k=\($0.kills) d=\($0.deaths) "
+          + "life=\($0.lifeState.rawValue) respawnAt=\($0.respawnAt.map { String($0) } ?? "nil")}"
+      }
+      .joined(separator: " ")
+      + " phase=\(duel.phase.rawValue)"
+  }
+
+  func authoritativeProjection() -> String {
+    [authority.player(.host), authority.player(.guest)]
+      .sorted { $0.id < $1.id }
+      .map {
+        "\($0.id){hp=\($0.health) ammo=\($0.ammo) k=\($0.kills) d=\($0.deaths) "
+          + "life=\($0.lifeState.rawValue) respawnAt=\($0.respawnAt.map { String($0) } ?? "nil")}"
+      }
+      .joined(separator: " ")
+      + " phase=running"
+  }
+
+  func settle() async {
+    for _ in 0..<20 { await Task.yield() }
+  }
+
+  /// Waits for a store-observable condition instead of assuming a fixed number
+  /// of scheduler hops, so results do not depend on simulator scheduling speed.
+  @discardableResult
+  func wait(until condition: () -> Bool, timeout: TimeInterval = 5) async -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+      if condition() { return true }
+      await settle()
+      try? await Task.sleep(for: .milliseconds(20))
+    }
+    return condition()
+  }
+}
+
+@MainActor
+final class KIL36TwoClientConvergenceTests: XCTestCase {
+  /// Five deterministic kill/respawn cycles, alternating attacker, asserting
+  /// that both clients hold identical authoritative shot, damage, death, score,
+  /// respawn and pending-shot state at every step.
+  func testFiveKillRespawnCyclesConvergeOnBothClients() async throws {
+    let rig = TwoClientRig()
+    await rig.startRunningDuel()
+    assertConverged(rig, label: "match-start")
+    var expectedKills: [HarnessRole: Int] = [.host: 0, .guest: 0]
+    var expectedDeaths: [HarnessRole: Int] = [.host: 0, .guest: 0]
+
+    for cycle in 1...5 {
+      let attacker: HarnessRole = cycle.isMultiple(of: 2) ? .guest : .host
+      let victim = attacker.opponent
+      rig.authority.record("cycle=\(cycle) attacker=\(attacker.rawValue)")
+
+      for (index, expectedHealth) in [66, 32, 0].enumerated() {
+        await rig.fire(attacker)
+        let expectedDamage = expectedHealth == 0 ? 32 : 34
+        rig.authority.record(
+          "cycle=\(cycle) shot=\(index + 1) attacker=\(attacker.rawValue) zone=torso "
+            + "damage=\(expectedDamage) \(rig.projection)"
+        )
+        XCTAssertEqual(
+          rig.authority.player(victim).health, expectedHealth,
+          "cycle \(cycle) shot \(index + 1) authoritative victim health"
+        )
+        assertShotConfirmed(rig, attacker: attacker, damage: expectedDamage, cycle: cycle)
+        assertConverged(rig, label: "cycle-\(cycle)-shot-\(index + 1)")
+      }
+
+      // Death: victim eliminated, attacker credited, respawn scheduled.
+      expectedKills[attacker, default: 0] += 1
+      expectedDeaths[victim, default: 0] += 1
+      XCTAssertEqual(rig.authority.player(victim).lifeState, .respawning)
+      XCTAssertEqual(rig.authority.player(victim).deaths, expectedDeaths[victim])
+      XCTAssertEqual(rig.authority.player(attacker).kills, expectedKills[attacker])
+      assertDeathVisibleToBothClients(rig, victim: victim, cycle: cycle)
+
+      // Firing again while the victim is respawning must not corrupt either
+      // client: the debug path is rejected by the server, and the markerless
+      // path never leaves the client because the target is not alive.
+      await rig.fire(attacker, publish: false)
+      switch attacker {
+      case .host:
+        XCTAssertEqual(
+          rig.hostStore.debugShotState, .failed,
+          "cycle \(cycle): debug fire at a respawning target must fail, not stay pending"
+        )
+        rig.authority.record(
+          "cycle=\(cycle) shot-at-respawning-target attacker=host serverRejected "
+            + "debugShotState=failed errorMessage=\(rig.hostStore.errorMessage ?? "nil")"
+        )
+      case .guest:
+        XCTAssertEqual(
+          rig.guestStore.markerlessShotState,
+          .confirmed(outcome: .kill, zone: .torso, damage: 32),
+          "cycle \(cycle): the markerless client guard must block the shot locally, "
+            + "leaving the previous confirmed kill state untouched"
+        )
+        XCTAssertEqual(rig.guestStore.errorMessage, "PUT THE CROSSHAIR ON YOUR OPPONENT")
+        rig.authority.record(
+          "cycle=\(cycle) shot-at-respawning-target attacker=guest blockedByClientGuard "
+            + "errorMessage=PUT THE CROSSHAIR ON YOUR OPPONENT"
+        )
+      }
+      rig.authority.publish()
+      await rig.settle()
+      assertConverged(rig, label: "cycle-\(cycle)-shot-at-respawning-target")
+
+      // Respawn: server-owned delay, then both clients observe the reset.
+      rig.advance(milliseconds: MatchAuthority.respawnDelayMs)
+      rig.authority.publish()
+      await rig.settle()
+      rig.authority.record("cycle=\(cycle) respawn victim=\(victim.rawValue) \(rig.projection)")
+      XCTAssertEqual(rig.authority.player(victim).health, 100)
+      XCTAssertEqual(rig.authority.player(victim).ammo, 8)
+      XCTAssertEqual(rig.authority.player(victim).lifeState, .alive)
+      assertConverged(rig, label: "cycle-\(cycle)-respawn")
+    }
+
+    XCTAssertEqual(rig.authority.player(.host).kills, 3)
+    XCTAssertEqual(rig.authority.player(.host).deaths, 2)
+    XCTAssertEqual(rig.authority.player(.guest).kills, 2)
+    XCTAssertEqual(rig.authority.player(.guest).deaths, 3)
+    XCTAssertEqual(expectedKills[.host], 3)
+    XCTAssertEqual(expectedDeaths[.guest], 3)
+    XCTAssertEqual(rig.hostStore.syncStatus, .connected)
+    XCTAssertEqual(rig.guestStore.syncStatus, .connected)
+    printTimeline(rig, label: "five-kill-respawn-cycles")
+  }
+
+  /// A client that misses snapshots stays input-locked until a fresh
+  /// authoritative snapshot lands, then converges on everything it missed.
+  func testReconnectingClientStaysLockedThenConvergesOnMissedKill() async throws {
+    let rig = TwoClientRig()
+    await rig.startRunningDuel()
+
+    rig.authority.setDelivery(false, for: .guest)
+    rig.guestClient.sendConnection(.connecting)
+    await rig.settle()
+    XCTAssertEqual(rig.guestStore.syncStatus, .stale)
+    XCTAssertTrue(rig.guestStore.isMatchInputLocked)
+    XCTAssertFalse(rig.guestStore.canFireMarkerless)
+    rig.authority.record("guest transport=connecting inputLocked=true")
+
+    for _ in 0..<3 {
+      await rig.fire(.host)
+    }
+    XCTAssertEqual(rig.authority.player(.guest).lifeState, .respawning)
+    XCTAssertEqual(rig.hostStore.debugShotState, .confirmed(damage: 32))
+    rig.authority.record("guest offline through host kill \(rig.projection)")
+
+    // Transport recovery alone must not unlock the guest.
+    rig.guestClient.sendConnection(.connected)
+    await rig.settle()
+    XCTAssertEqual(
+      rig.guestStore.syncStatus, .stale,
+      "transport recovery alone must not unlock a client"
+    )
+    XCTAssertTrue(rig.guestStore.isMatchInputLocked)
+
+    rig.authority.setDelivery(true, for: .guest)
+    rig.authority.publish()
+    await rig.settle()
+    XCTAssertEqual(rig.guestStore.syncStatus, .restored)
+    XCTAssertFalse(rig.guestStore.isMatchInputLocked)
+    assertConverged(rig, label: "guest-reconnected")
+    rig.authority.record("guest resynced \(rig.projection)")
+
+    rig.advance(milliseconds: MatchAuthority.respawnDelayMs)
+    rig.authority.publish()
+    await rig.settle()
+    assertConverged(rig, label: "guest-respawn-after-reconnect")
+    printTimeline(rig, label: "reconnect-convergence")
+  }
+
+  /// Snapshots replayed out of order after a reconnect: the newest snapshot
+  /// converges both clients, an older replayed snapshot is still applied (there
+  /// is no serverNow monotonic guard), and the next authoritative publish
+  /// re-converges both clients.
+  func testReorderedSnapshotReplayReconvergesBothClients() async throws {
+    let rig = TwoClientRig()
+    await rig.startRunningDuel()
+
+    rig.authority.setDelivery(false, for: .guest)
+    await rig.fire(.host)  // guest health 66, withheld from guest
+    await rig.fire(.host)  // guest health 32, withheld from guest
+    let withheld = rig.authority.withheldSnapshots(for: .guest)
+    XCTAssertEqual(withheld.count, 2)
+    rig.authority.setDelivery(true, for: .guest)
+
+    // Newest first.
+    rig.authority.deliver(withheld[1], to: .guest)
+    await rig.settle()
+    assertConverged(rig, label: "reorder-newest-first")
+
+    // Then the stale older snapshot.
+    rig.authority.deliver(withheld[0], to: .guest)
+    await rig.settle()
+    guard case .active(let staleDuel) = rig.guestStore.route else {
+      return XCTFail("Expected active duel on the guest client")
+    }
+    XCTAssertEqual(
+      staleDuel.localPlayer?.health, 66,
+      "an older replayed snapshot is applied as-is: LobbyStore has no serverNow monotonic guard"
+    )
+    rig.authority.record(
+      "guest applied stale snapshot serverNow=\(withheld[0].serverNow) health=66 (authoritative=32)"
+    )
+
+    // The next authoritative publish re-converges both clients.
+    rig.authority.publish()
+    await rig.settle()
+    assertConverged(rig, label: "reorder-reconverged")
+    printTimeline(rig, label: "reordered-snapshot-replay")
+  }
+
+  /// A pending debug shot is not confirmed by a stale snapshot that predates
+  /// the shot, and is confirmed as soon as the shot's own event arrives.
+  func testPendingShotSurvivesStaleSnapshotAndConfirmsOnItsOwnEvent() async throws {
+    let rig = TwoClientRig()
+    await rig.startRunningDuel()
+    let preShotSnapshot = rig.authority.snapshot(for: .host)
+
+    await rig.fire(.host, publish: false)
+    XCTAssertEqual(rig.hostStore.debugShotState, .pending)
+
+    rig.authority.deliver(preShotSnapshot, to: .host)
+    await rig.settle()
+    XCTAssertEqual(
+      rig.hostStore.debugShotState, .pending,
+      "a snapshot that predates the shot must not confirm it"
+    )
+
+    rig.authority.publish()
+    await rig.settle()
+    XCTAssertEqual(rig.hostStore.debugShotState, .confirmed(damage: 34))
+    XCTAssertTrue(rig.hostStore.canDebugFire)
+    assertConverged(rig, label: "pending-shot-confirmed")
+    printTimeline(rig, label: "pending-shot-lifecycle")
+  }
+
+  /// A dropped snapshot subscription re-subscribes on its own and re-converges.
+  func testDroppedSubscriptionResubscribesAndReconverges() async throws {
+    let rig = TwoClientRig()
+    await rig.startRunningDuel()
+
+    rig.authority.failSubscription(for: .guest)
+    await rig.wait(until: { rig.guestStore.syncStatus == .stale })
+    XCTAssertEqual(rig.guestStore.syncStatus, .stale)
+    XCTAssertTrue(rig.guestStore.isMatchInputLocked)
+
+    await rig.wait(until: { rig.authority.subscriptionCount(for: .guest) == 2 })
+    XCTAssertEqual(rig.authority.subscriptionCount(for: .guest), 2)
+
+    await rig.fire(.host)
+    await rig.wait(until: { rig.guestStore.syncStatus == .restored })
+    XCTAssertEqual(rig.guestStore.syncStatus, .restored)
+    XCTAssertFalse(rig.guestStore.isMatchInputLocked)
+    assertConverged(rig, label: "resubscribed")
+    printTimeline(rig, label: "dropped-subscription")
+  }
+
+  // MARK: Convergence helpers
+
+  private func assertConverged(
+    _ rig: TwoClientRig,
+    label: String,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    let expected = rig.authoritativeProjection()
+    let host = rig.clientProjection(.host)
+    let guest = rig.clientProjection(.guest)
+    XCTAssertEqual(host, expected, "\(label): host client diverged", file: file, line: line)
+    XCTAssertEqual(guest, expected, "\(label): guest client diverged", file: file, line: line)
+    rig.authority.record("converged(\(label)) both-clients=\(expected)")
+  }
+
+  private func assertShotConfirmed(
+    _ rig: TwoClientRig,
+    attacker: HarnessRole,
+    damage: Int,
+    cycle: Int,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    switch attacker {
+    case .host:
+      XCTAssertEqual(
+        rig.hostStore.debugShotState, .confirmed(damage: damage),
+        "cycle \(cycle): host pending shot must confirm from the authoritative snapshot",
+        file: file,
+        line: line
+      )
+    case .guest:
+      let state = rig.guestStore.markerlessShotState
+      let victimHealth = rig.authority.player(.host).health
+      XCTAssertEqual(
+        state,
+        .confirmed(outcome: victimHealth == 0 ? .kill : .hit, zone: .torso, damage: damage),
+        "cycle \(cycle): guest markerless shot must confirm with authoritative damage",
+        file: file,
+        line: line
+      )
+    }
+  }
+
+  private func assertDeathVisibleToBothClients(
+    _ rig: TwoClientRig,
+    victim: HarnessRole,
+    cycle: Int,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    for role in [HarnessRole.host, .guest] {
+      guard case .active(let duel) = rig.store(role).route else {
+        return XCTFail("cycle \(cycle): expected active duel on \(role.rawValue)", file: file, line: line)
+      }
+      let victimPlayer = duel.players.first { $0.id == victim.playerID }
+      XCTAssertEqual(victimPlayer?.health, 0, "cycle \(cycle) \(role.rawValue) view", file: file, line: line)
+      XCTAssertEqual(
+        victimPlayer?.lifeState, .respawning,
+        "cycle \(cycle) \(role.rawValue) view",
+        file: file,
+        line: line
+      )
+      XCTAssertNotNil(
+        victimPlayer?.respawnAt,
+        "cycle \(cycle) \(role.rawValue) view must carry the server respawn deadline",
+        file: file,
+        line: line
+      )
+    }
+  }
+
+  /// Emits the deterministic authority/client timeline both to stdout (SwiftPM
+  /// runs) and as a result-bundle attachment (simulator runs).
+  private func printTimeline(_ rig: TwoClientRig, label: String) {
+    let body = rig.authority.timeline
+      .map { "KIL36 | \(label) | \($0)" }
+      .joined(separator: "\n")
+    print(body)
+    let attachment = XCTAttachment(string: body)
+    attachment.name = "kil36-timeline-\(label)"
+    attachment.lifetime = .keepAlways
+    add(attachment)
+  }
+}
