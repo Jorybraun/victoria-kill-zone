@@ -449,6 +449,178 @@ final class TargetingStateMachineTests: XCTestCase {
     XCTAssertEqual(session.currentSnapshot.state, .targetingUnavailable)
   }
 
+  func testArenaTransformUsesColumnMajorPointAndDirectionSemantics() throws {
+    let transform = try ArenaRigidTransform(columnMajor: [
+      0, 1, 0, 0,
+      -1, 0, 0, 0,
+      0, 0, 1, 0,
+      10, 20, 30, 1,
+    ])
+
+    XCTAssertEqual(transform.applying(toPoint: .init(x: 1, y: 0, z: 2)), .init(x: 10, y: 21, z: 32))
+    XCTAssertEqual(transform.applying(toDirection: .init(x: 1, y: 0, z: 2)), .init(x: 0, y: 1, z: 2))
+    XCTAssertEqual(
+      try transform.inverse().applying(toPoint: .init(x: 10, y: 21, z: 32)),
+      .init(x: 1, y: 0, z: 2)
+    )
+  }
+
+  func testTwoPhoneFramesReconstructTheSameArenaPoint() throws {
+    let arenaFromPhoneA = try ArenaRigidTransform.translation(x: 2, y: 1, z: -1)
+    let arenaFromPhoneB = try ArenaRigidTransform.translation(x: -3, y: 1, z: -1)
+    let arenaPoint = ArenaVector3(x: 4, y: 1.5, z: 2)
+
+    let pointInA = try arenaFromPhoneA.inverse().applying(toPoint: arenaPoint)
+    let pointInB = try arenaFromPhoneB.inverse().applying(toPoint: arenaPoint)
+
+    XCTAssertEqual(arenaFromPhoneA.applying(toPoint: pointInA), arenaPoint)
+    XCTAssertEqual(arenaFromPhoneB.applying(toPoint: pointInB), arenaPoint)
+  }
+
+  func testArenaTransformRejectsInvalidGeometry() throws {
+    XCTAssertThrowsError(try ArenaRigidTransform(columnMajor: Array(repeating: 0, count: 16))) {
+      XCTAssertEqual($0 as? ArenaPrototypeError, .nonInvertibleTransform)
+    }
+
+    var scaled = ArenaRigidTransform.identityStorage
+    scaled[0] = 1.001
+    XCTAssertThrowsError(try ArenaRigidTransform(columnMajor: scaled)) {
+      XCTAssertEqual($0 as? ArenaPrototypeError, .nonUnitScale)
+    }
+
+    var skewed = ArenaRigidTransform.identityStorage
+    skewed[4] = 0.6
+    skewed[5] = 0.8
+    XCTAssertThrowsError(try ArenaRigidTransform(columnMajor: skewed)) {
+      XCTAssertEqual($0 as? ArenaPrototypeError, .nonOrthonormalTransform)
+    }
+
+    var nonFinite = ArenaRigidTransform.identityStorage
+    nonFinite[12] = .infinity
+    XCTAssertThrowsError(try ArenaRigidTransform(columnMajor: nonFinite)) {
+      XCTAssertEqual($0 as? ArenaPrototypeError, .nonFinite)
+    }
+  }
+
+  func testPoseHistoryInterpolatesAndHoldsOnlyInsideOneHundredMilliseconds() throws {
+    var history = ArenaPoseHistory(capacity: 4)
+    try history.append(sample(sequence: 1, at: 1_000, x: 3))
+    try history.append(sample(sequence: 2, at: 1_100, x: 5))
+
+    XCTAssertEqual(try history.resolvedOrigin(at: 1_050), .init(x: 4, y: 0, z: 0))
+    XCTAssertEqual(try history.resolvedOrigin(at: 1_200), .init(x: 5, y: 0, z: 0))
+    XCTAssertThrowsError(try history.resolvedOrigin(at: 1_201)) {
+      XCTAssertEqual($0 as? ArenaPrototypeError, .poseTooOld)
+    }
+  }
+
+  func testPoseHistoryRejectsWideBracketsAndNeverCrossesTrackingLoss() throws {
+    var wide = ArenaPoseHistory(capacity: 4)
+    try wide.append(sample(sequence: 1, at: 1_000, x: 3))
+    try wide.append(sample(sequence: 2, at: 1_101, x: 5))
+    XCTAssertThrowsError(try wide.resolvedOrigin(at: 1_050)) {
+      XCTAssertEqual($0 as? ArenaPrototypeError, .poseTooOld)
+    }
+
+    var interrupted = ArenaPoseHistory(capacity: 4)
+    try interrupted.append(sample(sequence: 1, at: 1_000, x: 3))
+    XCTAssertThrowsError(
+      try interrupted.append(sample(sequence: 2, at: 1_050, x: 4, tracking: .lost))
+    ) {
+      XCTAssertEqual($0 as? ArenaPrototypeError, .trackingLost)
+    }
+    try interrupted.append(sample(sequence: 3, at: 1_100, x: 5))
+    XCTAssertThrowsError(try interrupted.resolvedOrigin(at: 1_075)) {
+      XCTAssertEqual($0 as? ArenaPrototypeError, .missingHistory)
+    }
+  }
+
+  func testPoseHistoryRequiresIncreasingSequenceAndTimestampAndEvictsDeterministically() throws {
+    var history = ArenaPoseHistory(capacity: 2)
+    try history.append(sample(sequence: 1, at: 1_000, x: 3))
+    XCTAssertThrowsError(try history.append(sample(sequence: 1, at: 1_050, x: 4))) {
+      XCTAssertEqual($0 as? ArenaPrototypeError, .nonIncreasingSequence)
+    }
+    XCTAssertThrowsError(try history.append(sample(sequence: 2, at: 1_000, x: 4))) {
+      XCTAssertEqual($0 as? ArenaPrototypeError, .nonIncreasingTimestamp)
+    }
+    try history.append(sample(sequence: 2, at: 1_050, x: 4))
+    try history.append(sample(sequence: 3, at: 1_100, x: 5))
+
+    XCTAssertEqual(history.count, 2)
+    XCTAssertThrowsError(try history.resolvedOrigin(at: 1_000)) {
+      XCTAssertEqual($0 as? ArenaPrototypeError, .missingHistory)
+    }
+  }
+
+  func testShotRayRejectsNonFiniteAndZeroDirections() {
+    XCTAssertThrowsError(
+      try ArenaShotRay(origin: .zero, direction: .zero, firedAtMs: 1_000)
+    ) {
+      XCTAssertEqual($0 as? ArenaPrototypeError, .invalidDirection)
+    }
+    XCTAssertThrowsError(
+      try ArenaShotRay(origin: .zero, direction: .init(x: .nan, y: 0, z: 1), firedAtMs: 1_000)
+    ) {
+      XCTAssertEqual($0 as? ArenaPrototypeError, .nonFinite)
+    }
+  }
+
+  func testNoCandidateAndEmptySpaceAreAuthoritativeMisses() throws {
+    let shot = try ArenaShotRay(origin: .zero, direction: .init(x: 1, y: 0, z: 0), firedAtMs: 1_000)
+    XCTAssertEqual(ArenaHitEvaluator.evaluate(shot: shot, authorityNowMs: 1_000, candidates: []), .miss)
+
+    let offAxis = try candidate("B", at: .init(x: 4, y: 1, z: 0))
+    XCTAssertEqual(ArenaHitEvaluator.evaluate(shot: shot, authorityNowMs: 1_000, candidates: [offAxis]), .miss)
+  }
+
+  func testProxyTangencyAndLaneAndRewindBoundariesAreInclusive() throws {
+    let shotAtZero = try ArenaShotRay(origin: .zero, direction: .init(x: 1, y: 0, z: 0), firedAtMs: 1_000)
+    let tangent = try candidate("tangent", at: .init(x: 4, y: 0.35, z: 0))
+    XCTAssertEqual(ArenaHitEvaluator.evaluate(shot: shotAtZero, authorityNowMs: 1_250, candidates: [tangent]), .hit("tangent"))
+
+    let atThree = try candidate("three", at: .init(x: 3, y: 0, z: 0))
+    let atFifteen = try candidate("fifteen", at: .init(x: 15, y: 0, z: 0))
+    XCTAssertEqual(ArenaHitEvaluator.evaluate(shot: shotAtZero, authorityNowMs: 1_000, candidates: [atThree]), .hit("three"))
+    XCTAssertEqual(ArenaHitEvaluator.evaluate(shot: shotAtZero, authorityNowMs: 1_000, candidates: [atFifteen]), .hit("fifteen"))
+
+    XCTAssertEqual(
+      ArenaHitEvaluator.evaluate(shot: shotAtZero, authorityNowMs: 1_251, candidates: [atThree]),
+      .rejected(.shotTooLate)
+    )
+    XCTAssertEqual(
+      ArenaHitEvaluator.evaluate(shot: shotAtZero, authorityNowMs: 999, candidates: [atThree]),
+      .rejected(.shotTooLate)
+    )
+  }
+
+  func testTwoThreeAndFourPlayerCandidateSetsChooseNearestForwardIntersection() throws {
+    let shot = try ArenaShotRay(origin: .zero, direction: .init(x: 10, y: 0, z: 0), firedAtMs: 1_000)
+    let near = try candidate("near", at: .init(x: 4, y: 0, z: 0))
+    let middle = try candidate("middle", at: .init(x: 8, y: 0, z: 0))
+    let far = try candidate("far", at: .init(x: 12, y: 0, z: 0))
+
+    XCTAssertEqual(ArenaHitEvaluator.evaluate(shot: shot, authorityNowMs: 1_000, candidates: [middle]), .hit("middle"))
+    XCTAssertEqual(ArenaHitEvaluator.evaluate(shot: shot, authorityNowMs: 1_000, candidates: [middle, near]), .hit("near"))
+    XCTAssertEqual(ArenaHitEvaluator.evaluate(shot: shot, authorityNowMs: 1_000, candidates: [far, middle, near]), .hit("near"))
+
+    let tieA = try candidate("A", at: .init(x: 6, y: 0, z: 0))
+    let tieB = try candidate("B", at: .init(x: 6, y: 0, z: 0))
+    XCTAssertEqual(
+      ArenaHitEvaluator.evaluate(shot: shot, authorityNowMs: 1_000, candidates: [tieB, tieA]),
+      .hit("A")
+    )
+  }
+
+  func testCandidatesOutsideThreeToFifteenMetreLaneAreNotHittable() throws {
+    let shot = try ArenaShotRay(origin: .zero, direction: .init(x: 1, y: 0, z: 0), firedAtMs: 1_000)
+    let tooClose = try candidate("close", at: .init(x: 2.999, y: 0, z: 0))
+    let tooFar = try candidate("far", at: .init(x: 15.001, y: 0, z: 0))
+
+    XCTAssertEqual(ArenaHitEvaluator.evaluate(shot: shot, authorityNowMs: 1_000, candidates: [tooClose]), .miss)
+    XCTAssertEqual(ArenaHitEvaluator.evaluate(shot: shot, authorityNowMs: 1_000, candidates: [tooFar]), .miss)
+  }
+
   #if !os(iOS)
     func testFactoryFallsBackOutsideIOS() {
       XCTAssertEqual(TargetingSessionFactory.liveOrUnavailable().availability, .notConfigured)
@@ -460,6 +632,33 @@ final class TargetingStateMachineTests: XCTestCase {
     machine.sessionStarted(at: time(0.01))
     machine.cameraBecameReady(at: time(0.02))
     return machine
+  }
+
+  private func sample(
+    sequence: Int64,
+    at timestampMs: Int64,
+    x: Double,
+    tracking: ArenaTrackingQuality = .normal
+  ) throws -> ArenaPoseSample {
+    ArenaPoseSample(
+      sequence: sequence,
+      timestampMs: timestampMs,
+      tracking: tracking,
+      arenaFromPhone: try .translation(x: x, y: 0, z: 0)
+    )
+  }
+
+  private func candidate(_ id: String, at origin: ArenaVector3) throws -> ArenaCandidate {
+    var history = ArenaPoseHistory(capacity: 2)
+    try history.append(
+      ArenaPoseSample(
+        sequence: 1,
+        timestampMs: 1_000,
+        tracking: .normal,
+        arenaFromPhone: try .translation(x: origin.x, y: origin.y, z: origin.z)
+      )
+    )
+    return ArenaCandidate(id: id, poseHistory: history)
   }
 
   private func observation(
