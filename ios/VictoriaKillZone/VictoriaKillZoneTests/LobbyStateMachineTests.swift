@@ -2354,10 +2354,9 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
   }
 
   /// Snapshots replayed out of order after a reconnect: the newest snapshot
-  /// converges both clients, an older replayed snapshot is still applied (there
-  /// is no serverNow monotonic guard), and the next authoritative publish
-  /// re-converges both clients.
-  func testReorderedSnapshotReplayReconvergesBothClients() async throws {
+  /// converges both clients and an older replayed snapshot is ignored, so the
+  /// clients stay converged without waiting for a later authoritative publish.
+  func testReorderedSnapshotReplayKeepsBothClientsConverged() async throws {
     let rig = TwoClientRig()
     await rig.startRunningDuel()
 
@@ -2372,25 +2371,38 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
     rig.authority.deliver(withheld[1], to: .guest)
     await rig.settle()
     assertConverged(rig, label: "reorder-newest-first")
+    let convergedRoute = rig.guestStore.route
+    let convergedSyncStatus = rig.guestStore.syncStatus
+    let convergedBanner = rig.guestStore.killBanner
 
-    // Then the stale older snapshot.
+    // The older replayed snapshot must not move the guest backwards.
     rig.authority.deliver(withheld[0], to: .guest)
     await rig.settle()
-    guard case .active(let staleDuel) = rig.guestStore.route else {
+    guard case .active(let duel) = rig.guestStore.route else {
       return XCTFail("Expected active duel on the guest client")
     }
     XCTAssertEqual(
-      staleDuel.localPlayer?.health, 66,
-      "an older replayed snapshot is applied as-is: LobbyStore has no serverNow monotonic guard"
+      duel.localPlayer?.health, 32,
+      "a snapshot older than the latest applied serverNow must be ignored"
     )
+    XCTAssertEqual(rig.guestStore.route, convergedRoute)
+    XCTAssertEqual(rig.guestStore.syncStatus, convergedSyncStatus)
+    XCTAssertEqual(rig.guestStore.killBanner, convergedBanner)
+    assertConverged(rig, label: "reorder-stale-replay-ignored")
     rig.authority.record(
-      "guest applied stale snapshot serverNow=\(withheld[0].serverNow) health=66 (authoritative=32)"
+      "guest ignored stale snapshot serverNow=\(withheld[0].serverNow) "
+        + "latestApplied=\(withheld[1].serverNow)"
     )
 
-    // The next authoritative publish re-converges both clients.
+    // Re-delivering the newest snapshot is still accepted (equal timestamps are
+    // not rejected), and a later publish keeps both clients converged.
+    rig.authority.deliver(withheld[1], to: .guest)
+    await rig.settle()
+    assertConverged(rig, label: "reorder-equal-timestamp-replay")
+
     rig.authority.publish()
     await rig.settle()
-    assertConverged(rig, label: "reorder-reconverged")
+    assertConverged(rig, label: "reorder-next-publish")
     printTimeline(rig, label: "reordered-snapshot-replay")
   }
 
