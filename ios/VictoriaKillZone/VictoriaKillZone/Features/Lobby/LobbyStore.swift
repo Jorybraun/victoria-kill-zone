@@ -81,6 +81,7 @@ final class LobbyStore: ObservableObject {
   private var pendingShotReplayTask: Task<Void, Never>?
   private var seenKillEventIDs = Set<String>()
   private var snapshotSubscriptionStartedAt: Double?
+  private var latestAppliedServerNow: Double?
   private var transportState = GameSessionConnectionState.connecting
   private let now: @Sendable () -> Date
   private let makeShotId: @Sendable () -> String
@@ -305,6 +306,7 @@ final class LobbyStore: ObservableObject {
     setMarkerlessShotState(.idle)
     seenKillEventIDs.removeAll()
     snapshotSubscriptionStartedAt = nil
+    latestAppliedServerNow = nil
     killBanner = nil
     targetingSnapshot = .unavailable()
     lastSyncAt = nil
@@ -582,6 +584,7 @@ final class LobbyStore: ObservableObject {
     seenKillEventIDs.removeAll()
     killBanner = nil
     snapshotSubscriptionStartedAt = nil
+    latestAppliedServerNow = nil
     syncStatus = .connecting
 
     startSnapshotSubscription(for: newSession)
@@ -618,6 +621,17 @@ final class LobbyStore: ObservableObject {
       return
     }
 
+    // Reordered delivery must never move authoritative state backwards. Equal
+    // server timestamps are applied: the backend stamps snapshots with
+    // millisecond `Date.now()`, so two snapshots can share a timestamp.
+    if let appliedServerNow = latestAppliedServerNow, snapshot.serverNow < appliedServerNow {
+      gameLoopTrace(
+        "receive outcome=ignored reason=staleServerNow serverNow=\(snapshot.serverNow) "
+          + "latestAppliedServerNow=\(appliedServerNow)"
+      )
+      return
+    }
+
     let receivedAt = now()
     let previousSnapshot = latestSnapshot
     let previousSyncStatus = syncStatus
@@ -628,6 +642,7 @@ final class LobbyStore: ObservableObject {
       snapshotSubscriptionStartedAt = snapshot.serverNow
     }
     latestSnapshot = snapshot
+    latestAppliedServerNow = snapshot.serverNow
     lastSyncAt = receivedAt
     route = Self.route(for: snapshot, receivedAt: receivedAt)
     updateKillBanner(from: snapshot)
