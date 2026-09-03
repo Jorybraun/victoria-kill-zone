@@ -10,6 +10,6 @@
     { "atMs": 1000, "fire": { "shooter": "player-a", "target": "player-b", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 800, "shotId": "s1" } }
   ],
   "expect": [
-    { "verdict": { "shotId": "s1", "outcome": "hit", "appliedDamage": 34, "rewindMs": 200 } }
+    { "verdict": { "shotId": "s1", "outcome": "hit", "zone": "torso", "appliedDamage": 34, "rewindMs": 200 } }
   ]
 }

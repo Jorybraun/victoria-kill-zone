@@ -76,7 +76,7 @@ final class ScenarioFixtureTests: XCTestCase {
             ShotClaim(
               shotID: fire.shotId,
               shooterID: SimulationPlayerID(fire.shooter),
-              targetID: SimulationPlayerID(fire.target),
+              targetID: fire.target.map(SimulationPlayerID.init),
               origin: Vector3(fire.origin[0], fire.origin[1], fire.origin[2]),
               direction: Vector3(fire.dir[0], fire.dir[1], fire.dir[2]),
               firedAtMs: fire.claimedAtMs
@@ -97,7 +97,7 @@ final class ScenarioFixtureTests: XCTestCase {
 
   private struct FireEntry: Decodable, Equatable {
     let shooter: String
-    let target: String
+    let target: String?
     let origin: [Double]
     let dir: [Double]
     let claimedAtMs: Int64
@@ -112,6 +112,7 @@ final class ScenarioFixtureTests: XCTestCase {
   private struct ExpectedVerdict: Decodable {
     let shotId: String
     let outcome: String
+    let zone: String?
     let appliedDamage: Int?
     let reason: String?
     let rewindMs: Int64
@@ -124,8 +125,9 @@ final class ScenarioFixtureTests: XCTestCase {
   }
 
   private enum NormalizedEvent: Equatable {
-    case verdict(shotID: String, outcome: String, appliedDamage: Int?, reason: String?, rewindMs: Int64)
+    case verdict(shotID: String, outcome: String, zone: String?, appliedDamage: Int?, reason: String?, rewindMs: Int64)
     case killed(target: String, by: String, atMs: Int64)
+    case lifecycle(String)
   }
 
   func testEveryCommittedScenarioFixture() throws {
@@ -254,6 +256,7 @@ final class ScenarioFixtureTests: XCTestCase {
       return .verdict(
         shotID: verdict.shotId,
         outcome: verdict.outcome,
+        zone: verdict.zone,
         appliedDamage: verdict.appliedDamage,
         reason: verdict.reason,
         rewindMs: verdict.rewindMs
@@ -272,10 +275,11 @@ final class ScenarioFixtureTests: XCTestCase {
     switch event {
     case .verdict(let record):
       switch record.verdict {
-      case .hit(let appliedDamage):
+      case .hit(let zone, let appliedDamage):
         return .verdict(
           shotID: record.shot.shotID,
           outcome: "hit",
+          zone: zone.rawValue,
           appliedDamage: appliedDamage,
           reason: nil,
           rewindMs: record.rewindMilliseconds
@@ -284,6 +288,7 @@ final class ScenarioFixtureTests: XCTestCase {
         return .verdict(
           shotID: record.shot.shotID,
           outcome: "miss",
+          zone: nil,
           appliedDamage: nil,
           reason: nil,
           rewindMs: record.rewindMilliseconds
@@ -292,6 +297,7 @@ final class ScenarioFixtureTests: XCTestCase {
         return .verdict(
           shotID: record.shot.shotID,
           outcome: "rejected",
+          zone: nil,
           appliedDamage: nil,
           reason: reason.rawValue,
           rewindMs: record.rewindMilliseconds
@@ -299,6 +305,14 @@ final class ScenarioFixtureTests: XCTestCase {
       }
     case .playerKilled(let target, let by, let atTick):
       return .killed(target: target.rawValue, by: by.rawValue, atMs: atTick * tickMs)
+    case .fireRefused(let shotID, _, let reason, _):
+      return .lifecycle("fireRefused:\(shotID):\(reason.rawValue)")
+    case .reloadStarted(let player, _, _):
+      return .lifecycle("reloadStarted:\(player.rawValue)")
+    case .reloadCompleted(let player, _):
+      return .lifecycle("reloadCompleted:\(player.rawValue)")
+    case .playerRespawned(let player, _, _):
+      return .lifecycle("playerRespawned:\(player.rawValue)")
     }
   }
 

@@ -1,6 +1,6 @@
 {
   "name": "degraded_tracking_stale_pose_late_shot",
-  "description": "Player-c is lost at 100 ms, so the same-tick shot is trackingLost. A normal c pose at 150 ms then goes stale: at 300 ms its 150 ms age exceeds the 100 ms limit, producing poseTooOld. Replaying that 300 ms claim at 650 ms is 350 ms late, exceeding the 250 ms rewind cap, so shotTooLate wins the documented check order.",
+  "description": "Player-c is lost at 100 ms, so the same-tick named-target shot is trackingLost (the round is still spent, so a's next press must wait out the 350 ms cooldown). A normal c pose at 150 ms then goes stale: at 450 ms its 300 ms age exceeds the 100 ms limit, producing poseTooOld. Replaying that 450 ms claim at 800 ms is 350 ms late, exceeding the 250 ms rewind cap, so shotTooLate wins the documented check order before any weapon-state check.",
   "clock": { "tickMs": 50 },
   "players": [{ "id": "player-a" }, { "id": "player-b" }, { "id": "player-c" }],
   "timeline": [
@@ -14,12 +14,12 @@
     { "atMs": 150, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
     { "atMs": 150, "poseSample": { "player": "player-b", "pos": [10, 0, 0] } },
     { "atMs": 150, "poseSample": { "player": "player-c", "pos": [0, 0, 10] } },
-    { "atMs": 300, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
-    { "atMs": 300, "poseSample": { "player": "player-b", "pos": [10, 0, 0] } },
-    { "atMs": 300, "fire": { "shooter": "player-a", "target": "player-c", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 300, "shotId": "stale" } },
-    { "atMs": 650, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
-    { "atMs": 650, "poseSample": { "player": "player-b", "pos": [10, 0, 0] } },
-    { "atMs": 650, "fire": { "shooter": "player-a", "target": "player-c", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 300, "shotId": "late" } }
+    { "atMs": 450, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 450, "poseSample": { "player": "player-b", "pos": [10, 0, 0] } },
+    { "atMs": 450, "fire": { "shooter": "player-a", "target": "player-c", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 450, "shotId": "stale" } },
+    { "atMs": 800, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 800, "poseSample": { "player": "player-b", "pos": [10, 0, 0] } },
+    { "atMs": 800, "fire": { "shooter": "player-a", "target": "player-c", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 450, "shotId": "late" } }
   ],
   "expect": [
     { "verdict": { "shotId": "lost", "outcome": "rejected", "reason": "trackingLost", "rewindMs": 0 } },

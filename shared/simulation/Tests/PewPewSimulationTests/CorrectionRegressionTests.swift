@@ -32,7 +32,7 @@ final class CorrectionRegressionTests: XCTestCase {
       ),
     ])
 
-    XCTAssertEqual(verdicts(in: events), [.hit(appliedDamage: 34)])
+    XCTAssertEqual(verdicts(in: events), [.hit(zone: .torso, appliedDamage: 34)])
     XCTAssertEqual(simulation.player(playerB)?.health, 66)
   }
 

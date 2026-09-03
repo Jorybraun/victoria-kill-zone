@@ -96,7 +96,7 @@ final class MatchSimulationSetupTests: XCTestCase {
             shotID: "kill-\(shot)", shooter: playerA, target: playerB,
             origin: .zero, firedAtMs: simulation.clockMs))
       ])
-      advanceFeedingPoses(&simulation, ticks: 1, positions: positions)
+      advanceFeedingPoses(&simulation, ticks: 7, positions: positions)
     }
     XCTAssertEqual(simulation.player(playerB)?.lifeState, .dead)
 
