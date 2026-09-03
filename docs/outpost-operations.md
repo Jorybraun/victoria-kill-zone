@@ -168,7 +168,9 @@ Sanitized status lines (`queued`, `archiving`, `uploaded`, `ready-for-testing`, 
 One-time setup owned by the operator (never committed, never printed):
 
 - Register a self-hosted runner on the persistent Outpost Mac under the unprivileged worker account with the labels `self-hosted`, `macos`, and `vkz-outpost`, and run it as a user service so it holds the login keychain. Use a dedicated runner work directory outside the project checkout, and do not run it with `sudo`.
-- Unlock the login keychain for that account and confirm `security find-identity -v` lists an Apple Distribution identity.
+- Unlock the login keychain for that account. A local Apple Distribution identity is **not** required: the lane uses cloud signing through the Admin-role App Store Connect key (`-allowProvisioningUpdates -authenticationKey…`), which is how both the 2026-08-24 rehearsal and the first automated promotions signed.
+- In the LaunchAgent plist that `svc.sh install` generates (`~/Library/LaunchAgents/actions.runner.*.plist`), set `SessionCreate` to `false`. With `true` the runner gets its own security session and `CodeSign` fails with `errSecInternalComponent` even though the same archive succeeds from a Terminal.
+- If `xcode-select -p` on the Mac reports `/Library/Developer/CommandLineTools`, add `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` to the runner's `.env` file (in the runner directory) rather than changing the system default with `sudo`.
 - Place `~/.appstoreconnect/private_keys/AuthKey_<key id>.p8` (Admin role key) as above.
 - Repository secrets: `VKZ_ASC_KEY_ID`, `VKZ_ASC_ISSUER_ID`, `VKZ_SLACK_WEBHOOK_URL`.
 - Repository variables: `VKZ_TESTFLIGHT_ENABLED`, `VKZ_MARKETING_VERSION`, `VKZ_BUNDLE_ID`, `VKZ_ASC_APP_ID` (optional; the lane resolves it from the bundle id), `VKZ_SLACK_CHANNEL_ID`.
@@ -184,7 +186,8 @@ Lane recovery:
 
 - **Nothing promotes after a merge:** confirm `VKZ_TESTFLIGHT_ENABLED` is `true` and read the gate job's decision line. A `staleSha` skip is correct — the newest green revision promotes instead.
 - **Promote job queues forever:** the Outpost runner is offline. Restart it on the Outpost as the worker user; never reroute the job to a hosted macOS runner.
-- **Archive or signing fails:** unlock the login keychain, confirm the Distribution identity, then rerun `workflow_dispatch` on `main`.
+- **Archive or signing fails:** unlock the login keychain and check `SessionCreate` is `false` in the runner's LaunchAgent plist (`errSecInternalComponent`), then rerun `workflow_dispatch` on `main`. `xcode-select: error: tool 'xcodebuild' requires Xcode` means the runner's `DEVELOPER_DIR` is not set.
+- **Build ships but hides under "Previous Builds":** an earlier upload used a larger build number on the same marketing version (the lane uses the GitHub run number). Open a new marketing version train (`MARKETING_VERSION` in the Xcode project plus `VKZ_MARKETING_VERSION`); do not renumber.
 - **`processing-failed` / `processing-invalid`:** the upload reached Apple and was rejected. Fix the app on a branch and merge; do not retry the same revision.
 - **`processing-timeout`:** the upload succeeded but processing exceeded the timeout. Check App Store Connect directly; if it later turns valid, no rebuild is needed.
 - **No Slack status:** Slack is an observer, not a gate. Rotate `VKZ_SLACK_WEBHOOK_URL`; the promotion result stands in the evidence artifact.
