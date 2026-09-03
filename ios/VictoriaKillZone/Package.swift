@@ -6,7 +6,7 @@ let package = Package(
   name: "VictoriaKillZoneDomain",
   platforms: [
     .iOS(.v17),
-    .macOS(.v13),
+    .macOS(.v14),
   ],
   products: [
     .library(name: "VictoriaKillZone", targets: ["VictoriaKillZone"])
@@ -15,13 +15,17 @@ let package = Package(
     .package(
       url: "https://github.com/get-convex/convex-swift.git",
       exact: "0.8.1"
-    )
+    ),
+    .package(path: "../../shared/simulation"),
+    .package(path: "Transport/CombatTransport"),
   ],
   targets: [
     .target(
       name: "VictoriaKillZone",
       dependencies: [
-        .product(name: "ConvexMobile", package: "convex-swift")
+        .product(name: "ConvexMobile", package: "convex-swift"),
+        .product(name: "PewPewSimulation", package: "simulation"),
+        .product(name: "CombatTransport", package: "CombatTransport"),
       ],
       path: "VictoriaKillZone",
       exclude: [
