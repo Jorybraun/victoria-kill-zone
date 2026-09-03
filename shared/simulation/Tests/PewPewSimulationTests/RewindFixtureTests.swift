@@ -36,7 +36,7 @@ final class RewindFixtureTests: XCTestCase {
     guard case .verdict(let record) = events.first else {
       return XCTFail("expected a verdict event, got \(events)")
     }
-    XCTAssertEqual(record.verdict, .hit(appliedDamage: 34))
+    XCTAssertEqual(record.verdict, .hit(zone: .torso, appliedDamage: 34))
     XCTAssertEqual(record.rewindMilliseconds, 200)
     XCTAssertEqual(simulation.player(playerB)?.health, 66)
   }
@@ -180,7 +180,8 @@ final class RewindFixtureTests: XCTestCase {
 
   // Geometry graze.
   // B's rewound pose is (0.3, 0, 10); closest approach of the +z ray to the
-  // centre = 0.3 m ≤ 0.35 m proxy radius → HIT.
+  // centre = 0.3 m ≤ 0.35 m proxy radius → HIT. It clears the 0.17 m torso
+  // capsule and the head sphere, so the zone is the periphery: limbs, 20.
   func testRayInsideProxyRadiusIsHit() throws {
     var simulation = try makeDuel()
     advanceFeedingPoses(
@@ -193,6 +194,7 @@ final class RewindFixtureTests: XCTestCase {
       .fire(fireClaim(shooter: playerA, target: playerB, origin: .zero, firedAtMs: 1000))
     ])
 
-    XCTAssertEqual(verdicts(in: events), [.hit(appliedDamage: 34)])
+    XCTAssertEqual(verdicts(in: events), [.hit(zone: .limbs, appliedDamage: 20)])
+    XCTAssertEqual(simulation.player(playerB)?.health, 80)
   }
 }

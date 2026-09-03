@@ -1,6 +1,6 @@
 {
   "name": "simultaneous_lethal_same_tick",
-  "description": "Player-b starts at 100 health. Player-a deals 34 at 50 ms and 34 at 100 ms, leaving 32 health. At 150 ms two valid lethal claims arrive; canonical player-a order applies min(34,32)=32, kills b once, and the later player-c claim is targetNotAlive.",
+  "description": "Player-b starts at 100 health. Player-a deals 34 (torso) at 50 ms and 34 at 400 ms — one Sidearm cooldown (350 ms) apart — leaving 32 health. At 750 ms two valid lethal claims arrive; canonical player-a order applies min(34,32)=32, kills b once, schedules b's respawn, and the later player-c claim names a dead target so it is targetNotAlive.",
   "clock": { "tickMs": 50 },
   "players": [{ "id": "player-a" }, { "id": "player-b" }, { "id": "player-c" }],
   "timeline": [
@@ -8,15 +8,21 @@
     { "atMs": 50, "poseSample": { "player": "player-b", "pos": [0, 0, 10] } },
     { "atMs": 50, "poseSample": { "player": "player-c", "pos": [10, 0, 0] } },
     { "atMs": 50, "fire": { "shooter": "player-a", "target": "player-b", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 50, "shotId": "a-1" } },
-    { "atMs": 100, "fire": { "shooter": "player-a", "target": "player-b", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 100, "shotId": "a-2" } },
-    { "atMs": 150, "fire": { "shooter": "player-c", "target": "player-b", "origin": [10, 0, 0], "dir": [-1, 0, 1], "claimedAtMs": 150, "shotId": "c-lethal" } },
-    { "atMs": 150, "fire": { "shooter": "player-a", "target": "player-b", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 150, "shotId": "a-lethal" } }
+    { "atMs": 400, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 400, "poseSample": { "player": "player-b", "pos": [0, 0, 10] } },
+    { "atMs": 400, "poseSample": { "player": "player-c", "pos": [10, 0, 0] } },
+    { "atMs": 400, "fire": { "shooter": "player-a", "target": "player-b", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 400, "shotId": "a-2" } },
+    { "atMs": 750, "poseSample": { "player": "player-a", "pos": [0, 0, 0] } },
+    { "atMs": 750, "poseSample": { "player": "player-b", "pos": [0, 0, 10] } },
+    { "atMs": 750, "poseSample": { "player": "player-c", "pos": [10, 0, 0] } },
+    { "atMs": 750, "fire": { "shooter": "player-c", "target": "player-b", "origin": [10, 0, 0], "dir": [-1, 0, 1], "claimedAtMs": 750, "shotId": "c-lethal" } },
+    { "atMs": 750, "fire": { "shooter": "player-a", "target": "player-b", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 750, "shotId": "a-lethal" } }
   ],
   "expect": [
-    { "verdict": { "shotId": "a-1", "outcome": "hit", "appliedDamage": 34, "rewindMs": 0 } },
-    { "verdict": { "shotId": "a-2", "outcome": "hit", "appliedDamage": 34, "rewindMs": 0 } },
-    { "verdict": { "shotId": "a-lethal", "outcome": "hit", "appliedDamage": 32, "rewindMs": 0 } },
-    { "killed": { "target": "player-b", "by": "player-a", "atMs": 150 } },
+    { "verdict": { "shotId": "a-1", "outcome": "hit", "zone": "torso", "appliedDamage": 34, "rewindMs": 0 } },
+    { "verdict": { "shotId": "a-2", "outcome": "hit", "zone": "torso", "appliedDamage": 34, "rewindMs": 0 } },
+    { "verdict": { "shotId": "a-lethal", "outcome": "hit", "zone": "torso", "appliedDamage": 32, "rewindMs": 0 } },
+    { "killed": { "target": "player-b", "by": "player-a", "atMs": 750 } },
     { "verdict": { "shotId": "c-lethal", "outcome": "rejected", "reason": "targetNotAlive", "rewindMs": 0 } }
   ]
 }

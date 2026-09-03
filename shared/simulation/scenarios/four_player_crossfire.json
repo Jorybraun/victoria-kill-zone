@@ -12,7 +12,7 @@
     { "atMs": 100, "fire": { "shooter": "player-a", "target": "player-c", "origin": [0, 0, 0], "dir": [0, 0, 1], "claimedAtMs": 100, "shotId": "a-c" } }
   ],
   "expect": [
-    { "verdict": { "shotId": "a-c", "outcome": "hit", "appliedDamage": 34, "rewindMs": 0 } },
-    { "verdict": { "shotId": "b-d", "outcome": "hit", "appliedDamage": 34, "rewindMs": 0 } }
+    { "verdict": { "shotId": "a-c", "outcome": "hit", "zone": "torso", "appliedDamage": 34, "rewindMs": 0 } },
+    { "verdict": { "shotId": "b-d", "outcome": "hit", "zone": "torso", "appliedDamage": 34, "rewindMs": 0 } }
   ]
 }

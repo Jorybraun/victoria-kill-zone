@@ -20,10 +20,16 @@ public struct SimulationPlayerID: Hashable, Comparable, Sendable, Codable, Custo
 
 /// One Frame-Aligned Shot Claim (spatial-hit.v1 vocabulary): the shooter's ray
 /// in the Shared Arena Frame plus the match-clock instant it was fired.
+///
+/// `targetID` is optional (§5.0). When nil the authority tests the ray against
+/// every hittable candidate and the nearest forward intersection is the hit.
+/// When a target is named — the legacy contract shape — only that member is a
+/// candidate and its candidate-side failures are reported as rejections in the
+/// §5.6 order. Naming a target can never turn a geometric miss into a hit.
 public struct ShotClaim: Equatable, Sendable, Codable {
   public let shotID: String
   public let shooterID: SimulationPlayerID
-  public let targetID: SimulationPlayerID
+  public let targetID: SimulationPlayerID?
   public let origin: Vector3
   public let direction: Vector3
   public let firedAtMs: Int64
@@ -31,7 +37,7 @@ public struct ShotClaim: Equatable, Sendable, Codable {
   public init(
     shotID: String,
     shooterID: SimulationPlayerID,
-    targetID: SimulationPlayerID,
+    targetID: SimulationPlayerID? = nil,
     origin: Vector3,
     direction: Vector3,
     firedAtMs: Int64
@@ -61,22 +67,41 @@ public enum ShotRejectionReason: String, Equatable, Sendable, Codable {
 
 /// One Spatial Verdict (spatial-hit.v1 vocabulary) for one Frame-Aligned Shot Claim.
 public enum SpatialVerdict: Equatable, Sendable, Codable {
-  case hit(appliedDamage: Int)
+  case hit(zone: HitZone, appliedDamage: Int)
   case miss
   case rejected(ShotRejectionReason)
 }
 
-/// A verdict paired with the claim it judged and the tick that judged it.
+/// A verdict paired with the claim it judged, the member it resolved to (if any),
+/// and the tick that judged it.
 public struct ShotVerdictRecord: Equatable, Sendable, Codable {
   public let shot: ShotClaim
   public let verdict: SpatialVerdict
+  public let targetID: SimulationPlayerID?
   public let evaluatedAtTick: Int64
   public let rewindMilliseconds: Int64
 
-  public init(shot: ShotClaim, verdict: SpatialVerdict, evaluatedAtTick: Int64, rewindMilliseconds: Int64) {
+  public init(
+    shot: ShotClaim,
+    verdict: SpatialVerdict,
+    targetID: SimulationPlayerID? = nil,
+    evaluatedAtTick: Int64,
+    rewindMilliseconds: Int64
+  ) {
     self.shot = shot
     self.verdict = verdict
+    self.targetID = targetID
     self.evaluatedAtTick = evaluatedAtTick
     self.rewindMilliseconds = rewindMilliseconds
   }
+}
+
+/// Why a trigger press was refused by the shooter's own weapon or life state
+/// before any spatial claim was evaluated. Kept separate from
+/// `ShotRejectionReason` so the frozen spatial-hit.v1 vocabulary is untouched.
+public enum FireRefusalReason: String, Equatable, Sendable, Codable {
+  case spawnProtected
+  case reloading
+  case magazineEmpty
+  case cooldownActive
 }

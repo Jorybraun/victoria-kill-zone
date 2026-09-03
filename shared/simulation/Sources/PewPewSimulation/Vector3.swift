@@ -43,6 +43,10 @@ public struct Vector3: Equatable, Hashable, Sendable, Codable {
     (other - self).length
   }
 
+  public var isFinite: Bool {
+    x.isFinite && y.isFinite && z.isFinite
+  }
+
   /// Returns nil for a zero-length vector instead of dividing by zero.
   public var normalized: Vector3? {
     let magnitude = length

@@ -38,7 +38,7 @@ func advanceFeedingPoses(
 func fireClaim(
   shotID: String = "shot-1",
   shooter: SimulationPlayerID,
-  target: SimulationPlayerID,
+  target: SimulationPlayerID? = nil,
   origin: Vector3,
   direction: Vector3 = Vector3(0, 0, 1),
   firedAtMs: Int64

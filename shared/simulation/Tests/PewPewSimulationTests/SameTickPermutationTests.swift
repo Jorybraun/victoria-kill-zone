@@ -38,18 +38,20 @@ final class SameTickPermutationTests: XCTestCase {
   }
 
   func testSimultaneousLethalCreditsOneCanonicalKiller() throws {
-    let poses = [
-      SimulationInput.poseSample(playerA, PoseSample(timestampMs: 50, position: .zero)),
-      SimulationInput.poseSample(playerB, PoseSample(timestampMs: 50, position: Vector3(0, 0, 10))),
-      SimulationInput.poseSample(playerC, PoseSample(timestampMs: 50, position: Vector3(10, 0, 0))),
-    ]
-    let setup: [[SimulationInput]] = [
-      poses + [.fire(fireClaim(shotID: "a-1", shooter: playerA, target: playerB, origin: .zero, firedAtMs: 50))],
-      [.fire(fireClaim(shotID: "a-2", shooter: playerA, target: playerB, origin: .zero, firedAtMs: 100))],
-    ]
-    let lethal: [SimulationInput] = [
-      .fire(fireClaim(shotID: "c-lethal", shooter: playerC, target: playerB, origin: Vector3(10, 0, 0), direction: Vector3(-1, 0, 1), firedAtMs: 150)),
-      .fire(fireClaim(shotID: "a-lethal", shooter: playerA, target: playerB, origin: .zero, firedAtMs: 150)),
+    func poses(at timestampMs: Int64) -> [SimulationInput] {
+      [
+        .poseSample(playerA, PoseSample(timestampMs: timestampMs, position: .zero)),
+        .poseSample(playerB, PoseSample(timestampMs: timestampMs, position: Vector3(0, 0, 10))),
+        .poseSample(playerC, PoseSample(timestampMs: timestampMs, position: Vector3(10, 0, 0))),
+      ]
+    }
+    // A's shots are 350 ms apart (ticks 1, 8, 15) so each clears the Sidearm cooldown.
+    var setup: [[SimulationInput]] = Array(repeating: [], count: 14)
+    setup[0] = poses(at: 50) + [.fire(fireClaim(shotID: "a-1", shooter: playerA, target: playerB, origin: .zero, firedAtMs: 50))]
+    setup[7] = poses(at: 400) + [.fire(fireClaim(shotID: "a-2", shooter: playerA, target: playerB, origin: .zero, firedAtMs: 400))]
+    let lethal: [SimulationInput] = poses(at: 750) + [
+      .fire(fireClaim(shotID: "c-lethal", shooter: playerC, target: playerB, origin: Vector3(10, 0, 0), direction: Vector3(-1, 0, 1), firedAtMs: 750)),
+      .fire(fireClaim(shotID: "a-lethal", shooter: playerA, target: playerB, origin: .zero, firedAtMs: 750)),
     ]
 
     let expected = try replay(playerIDs: [playerA, playerB, playerC], log: setup + [lethal])
@@ -85,7 +87,7 @@ final class SameTickPermutationTests: XCTestCase {
     let second = try replay(playerIDs: [playerA, playerB], log: warmup + [Array(secondOrder)])
 
     XCTAssertEqual(try encoded(first), try encoded(second))
-    XCTAssertEqual(verdicts(in: first), [.hit(appliedDamage: 34)])
+    XCTAssertEqual(verdicts(in: first), [.hit(zone: .torso, appliedDamage: 34)])
   }
 
   private func encoded(_ events: [SimulationEvent]) throws -> Data {

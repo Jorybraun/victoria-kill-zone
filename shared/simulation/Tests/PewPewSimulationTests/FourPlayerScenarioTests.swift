@@ -4,7 +4,8 @@ import XCTest
 
 /// Player-set scenarios at the Phase 1 cap of 4. Arena layout used throughout:
 ///   A (0,0,0)   B (10,0,0)   C (0,0,10)   D (10,0,10)
-/// so A→C and B→D are both 10 m shots along +z.
+/// so A→C and B→D are both 10 m shots along +z. Repeated shots by one shooter are
+/// spaced 8 ticks (400 ms) apart to clear the 350 ms Sidearm cooldown.
 final class FourPlayerScenarioTests: XCTestCase {
   private let layout: [(SimulationPlayerID, Vector3)] = [
     (playerA, .zero),
@@ -36,7 +37,7 @@ final class FourPlayerScenarioTests: XCTestCase {
 
     XCTAssertEqual(
       verdicts(in: events),
-      [.hit(appliedDamage: 34), .hit(appliedDamage: 34)]
+      [.hit(zone: .torso, appliedDamage: 34), .hit(zone: .torso, appliedDamage: 34)]
     )
     XCTAssertEqual(simulation.player(playerC)?.health, 66)
     XCTAssertEqual(simulation.player(playerD)?.health, 66)
@@ -55,7 +56,7 @@ final class FourPlayerScenarioTests: XCTestCase {
             shotID: "kill-\(shot)", shooter: playerA, target: playerC,
             origin: .zero, firedAtMs: firedAtMs))
       ])
-      advanceFeedingPoses(&simulation, ticks: 1, positions: layout)
+      advanceFeedingPoses(&simulation, ticks: 7, positions: layout)
     }
     XCTAssertEqual(simulation.player(playerC)?.lifeState, .dead)
 
@@ -69,7 +70,9 @@ final class FourPlayerScenarioTests: XCTestCase {
 
     XCTAssertEqual(verdicts(in: events), [.rejected(.targetNotAlive)])
     XCTAssertEqual(simulation.player(playerC)?.deaths, 1)
-    XCTAssertEqual(simulation.player(playerB)?.shotsFired, 0)
+    // Always-fire: the trigger cleared the shooter-side checks, so the round is spent.
+    XCTAssertEqual(simulation.player(playerB)?.shotsFired, 1)
+    XCTAssertEqual(simulation.player(playerB)?.ammo, SidearmRules.magazineSize - 1)
   }
 
   func testFireAtStalePoseTargetIsRejectedPoseTooOld() throws {
@@ -102,16 +105,16 @@ final class FourPlayerScenarioTests: XCTestCase {
               shotID: "kill-\(shot)", shooter: playerA, target: playerC,
               origin: .zero, firedAtMs: firedAtMs))
         ]))
-      advanceFeedingPoses(&simulation, ticks: 1, positions: layout)
+      advanceFeedingPoses(&simulation, ticks: 7, positions: layout)
     }
 
     XCTAssertEqual(
       verdicts(in: allEvents),
-      [.hit(appliedDamage: 34), .hit(appliedDamage: 34), .hit(appliedDamage: 32)]
+      [.hit(zone: .torso, appliedDamage: 34), .hit(zone: .torso, appliedDamage: 34), .hit(zone: .torso, appliedDamage: 32)]
     )
     XCTAssertEqual(
       allEvents.last,
-      .playerKilled(target: playerC, by: playerA, atTick: 25)
+      .playerKilled(target: playerC, by: playerA, atTick: 37)
     )
 
     let shooter = try XCTUnwrap(simulation.player(playerA))
