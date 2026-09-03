@@ -29,6 +29,13 @@
 		B00100000000000000000014 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00100000000000000000016 /* AVFoundation.framework */; };
 		B00100000000000000000015 /* Speech.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00100000000000000000017 /* Speech.framework */; };
 		B00100000000000000000016 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000018 /* Assets.xcassets */; };
+		B00200000000000000000001 /* SharedArenaModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000001 /* SharedArenaModels.swift */; };
+		B00200000000000000000002 /* SharedArenaLockPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000002 /* SharedArenaLockPolicy.swift */; };
+		B00200000000000000000003 /* ArenaFrameMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000003 /* ArenaFrameMetrics.swift */; };
+		B00200000000000000000004 /* ArenaLinkMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000004 /* ArenaLinkMessage.swift */; };
+		B00200000000000000000005 /* ArenaPeerLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000005 /* ArenaPeerLink.swift */; };
+		B00200000000000000000006 /* SharedArenaSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000006 /* SharedArenaSession.swift */; };
+		B00200000000000000000007 /* SharedArenaHarnessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000007 /* SharedArenaHarnessView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -66,6 +73,13 @@
 		F00100000000000000000016 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		F00100000000000000000017 /* Speech.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Speech.framework; path = System/Library/Frameworks/Speech.framework; sourceTree = SDKROOT; };
 		F00100000000000000000018 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F00200000000000000000001 /* SharedArenaModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedArenaModels.swift; sourceTree = "<group>"; };
+		F00200000000000000000002 /* SharedArenaLockPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedArenaLockPolicy.swift; sourceTree = "<group>"; };
+		F00200000000000000000003 /* ArenaFrameMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArenaFrameMetrics.swift; sourceTree = "<group>"; };
+		F00200000000000000000004 /* ArenaLinkMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArenaLinkMessage.swift; sourceTree = "<group>"; };
+		F00200000000000000000005 /* ArenaPeerLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArenaPeerLink.swift; sourceTree = "<group>"; };
+		F00200000000000000000006 /* SharedArenaSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedArenaSession.swift; sourceTree = "<group>"; };
+		F00200000000000000000007 /* SharedArenaHarnessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedArenaHarnessView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -157,6 +171,7 @@
 			isa = PBXGroup;
 			children = (
 				F00100000000000000000006 /* TargetingSession.swift */,
+				G00200000000000000000001 /* SharedArena */,
 			);
 			path = Targeting;
 			sourceTree = "<group>";
@@ -221,6 +236,20 @@
 				F00100000000000000000010 /* VictoriaKillZoneTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		G00200000000000000000001 /* SharedArena */ = {
+			isa = PBXGroup;
+			children = (
+				F00200000000000000000001 /* SharedArenaModels.swift */,
+				F00200000000000000000002 /* SharedArenaLockPolicy.swift */,
+				F00200000000000000000003 /* ArenaFrameMetrics.swift */,
+				F00200000000000000000004 /* ArenaLinkMessage.swift */,
+				F00200000000000000000005 /* ArenaPeerLink.swift */,
+				F00200000000000000000006 /* SharedArenaSession.swift */,
+				F00200000000000000000007 /* SharedArenaHarnessView.swift */,
+			);
+			path = SharedArena;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -337,6 +366,13 @@
 				B00100000000000000000005 /* GameSessionClient.swift in Sources */,
 				B0010000000000000000000F /* ConvexGameSessionClient.swift in Sources */,
 				B00100000000000000000006 /* TargetingSession.swift in Sources */,
+				B00200000000000000000001 /* SharedArenaModels.swift in Sources */,
+				B00200000000000000000002 /* SharedArenaLockPolicy.swift in Sources */,
+				B00200000000000000000003 /* ArenaFrameMetrics.swift in Sources */,
+				B00200000000000000000004 /* ArenaLinkMessage.swift in Sources */,
+				B00200000000000000000005 /* ArenaPeerLink.swift in Sources */,
+				B00200000000000000000006 /* SharedArenaSession.swift in Sources */,
+				B00200000000000000000007 /* SharedArenaHarnessView.swift in Sources */,
 				B00100000000000000000007 /* LobbyStore.swift in Sources */,
 				B00100000000000000000008 /* HomeView.swift in Sources */,
 				B00100000000000000000009 /* JoinDuelView.swift in Sources */,

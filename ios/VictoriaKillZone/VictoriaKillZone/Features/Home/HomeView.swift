@@ -54,6 +54,12 @@ struct HomeView: View {
         .font(.footnote)
         .foregroundStyle(VKZPalette.textMuted)
 
+      NavigationLink("SHARED ARENA HARNESS (KIL-20)") {
+        SharedArenaHarnessView()
+      }
+      .font(.caption.weight(.semibold).monospaced())
+      .foregroundStyle(VKZPalette.telemetry)
+
       Spacer()
     }
     .padding(24)
