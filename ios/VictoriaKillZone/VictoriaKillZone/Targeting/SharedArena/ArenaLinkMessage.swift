@@ -24,6 +24,8 @@ enum ArenaLinkMessage: Equatable, Sendable {
   /// Named arena anchors the host placed, so both phones render the same IDs
   /// even before (or without) anchor propagation through the frame method.
   case anchorSet([ArenaNamedAnchor])
+  /// One shot, broadcast once by the shooter; receivers dedup by `shotId`.
+  case shotTracer(ArenaShotTracer)
 
   var kind: UInt8 {
     switch self {
@@ -32,6 +34,7 @@ enum ArenaLinkMessage: Equatable, Sendable {
     case .collaboration: 3
     case .worldMap: 4
     case .anchorSet: 5
+    case .shotTracer: 6
     }
   }
 }
@@ -78,6 +81,12 @@ enum ArenaLinkCodec {
       payload = data
     case .anchorSet(let anchors):
       payload = try JSONEncoder().encode(anchors)
+    case .shotTracer(let tracer):
+      do {
+        payload = try ArenaShotTracerCodec.encode(tracer)
+      } catch {
+        throw ArenaLinkCodecError.malformedPayload
+      }
     }
     guard payload.count + 1 <= maxPayloadLength else { throw ArenaLinkCodecError.payloadTooLarge }
 
@@ -128,6 +137,11 @@ enum ArenaLinkCodec {
         throw ArenaLinkCodecError.malformedPayload
       }
       return .anchorSet(anchors)
+    case 6:
+      guard let tracer = try? ArenaShotTracerCodec.decode(Data(payload)) else {
+        throw ArenaLinkCodecError.malformedPayload
+      }
+      return .shotTracer(tracer)
     default:
       throw ArenaLinkCodecError.unknownKind
     }

@@ -38,6 +38,7 @@
 		B00200000000000000000005 /* ArenaPeerLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000005 /* ArenaPeerLink.swift */; };
 		B00200000000000000000006 /* SharedArenaSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000006 /* SharedArenaSession.swift */; };
 		B00200000000000000000007 /* SharedArenaHarnessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000007 /* SharedArenaHarnessView.swift */; };
+		B00200000000000000000008 /* ArenaShotTracer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000008 /* ArenaShotTracer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -82,6 +83,7 @@
 		F00200000000000000000005 /* ArenaPeerLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArenaPeerLink.swift; sourceTree = "<group>"; };
 		F00200000000000000000006 /* SharedArenaSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedArenaSession.swift; sourceTree = "<group>"; };
 		F00200000000000000000007 /* SharedArenaHarnessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedArenaHarnessView.swift; sourceTree = "<group>"; };
+		F00200000000000000000008 /* ArenaShotTracer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArenaShotTracer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -249,6 +251,7 @@
 				F00200000000000000000002 /* SharedArenaLockPolicy.swift */,
 				F00200000000000000000003 /* ArenaFrameMetrics.swift */,
 				F00200000000000000000004 /* ArenaLinkMessage.swift */,
+				F00200000000000000000008 /* ArenaShotTracer.swift */,
 				F00200000000000000000005 /* ArenaPeerLink.swift */,
 				F00200000000000000000006 /* SharedArenaSession.swift */,
 				F00200000000000000000007 /* SharedArenaHarnessView.swift */,
@@ -378,6 +381,7 @@
 				B00200000000000000000002 /* SharedArenaLockPolicy.swift in Sources */,
 				B00200000000000000000003 /* ArenaFrameMetrics.swift in Sources */,
 				B00200000000000000000004 /* ArenaLinkMessage.swift in Sources */,
+				B00200000000000000000008 /* ArenaShotTracer.swift in Sources */,
 				B00200000000000000000005 /* ArenaPeerLink.swift in Sources */,
 				B00200000000000000000006 /* SharedArenaSession.swift in Sources */,
 				B00200000000000000000007 /* SharedArenaHarnessView.swift in Sources */,

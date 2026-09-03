@@ -13,6 +13,17 @@ struct SharedArenaPeerStatus: Equatable, Sendable {
   let arenaFromPhone: ArenaRigidTransform
 }
 
+/// Tracer counters and the last fire outcome for the HUD.
+struct SharedArenaTracerStatus: Equatable, Sendable {
+  var predictedDrawn = 0
+  var incomingDrawn = 0
+  var duplicatesIgnored = 0
+  var droppedWhileUnlocked = 0
+  var lastRefusal: ArenaFireRefusal?
+  var lastEvent: String?
+  var lastEventAtMs: Int64?
+}
+
 struct SharedArenaSnapshot: Equatable, Sendable {
   var role: ArenaRole
   var method: ArenaFrameMethod
@@ -33,6 +44,7 @@ struct SharedArenaSnapshot: Equatable, Sendable {
   var thermalState = "nominal"
   var errorMessage: String?
   var elapsedMs: Int64 = 0
+  var tracers = SharedArenaTracerStatus()
 
   /// Calibration ritual copy from the research §6.2; pending design freeze.
   var ritualStep: String {
@@ -97,6 +109,11 @@ struct SharedArenaSnapshot: Equatable, Sendable {
       lock.withLock { renderPeerTransform }
     }
 
+    /// Live tracer segments for the renderer; lock-guarded copy like the proxy.
+    var activeTracers: [ArenaTracerSegment] {
+      lock.withLock { renderTracers }
+    }
+
     private let link: any ArenaPeerLinking
     private let sessionQueue = DispatchQueue(
       label: "com.victoriakillzone.arena.session",
@@ -110,6 +127,9 @@ struct SharedArenaSnapshot: Equatable, Sendable {
     private var latestPeer: ArenaPeerSample?
     private var latestPeerArrivalMs: Int64?
     private var renderPeerTransform: ArenaRigidTransform?
+    private var renderTracers: [ArenaTracerSegment] = []
+    private var fireGate = ArenaTracerFireGate()
+    private var tracerLedger = ArenaTracerLedger()
     private var participantTransform: ArenaRigidTransform?
     private var localCameraTransform: ArenaRigidTransform?
     private var ownSequence: Int64 = 0
@@ -203,6 +223,46 @@ struct SharedArenaSnapshot: Equatable, Sendable {
             }
           }
         }
+      }
+    }
+
+    /// Trigger press. Fires whenever local tracking is normal and off cooldown
+    /// (a lock is not permission to fire — requirements §3A.1); draws the
+    /// shooter's predicted tracer and broadcasts one `shotTracer` so every other
+    /// member draws exactly one incoming tracer. No verdict, damage, or ammo.
+    func fire() {
+      sessionQueue.async { [self] in
+        let nowMs = ArenaClock.nowMs()
+        if let refusal = fireGate.refusal(
+          localTracking: state.localTracking,
+          hasLocalPose: localCameraTransform != nil,
+          nowMs: nowMs
+        ) {
+          state.tracers.lastRefusal = refusal
+          state.tracers.lastEvent = "FIRE LOCKED — \(refusal.rawValue)"
+          state.tracers.lastEventAtMs = nowMs
+          publish()
+          return
+        }
+        guard let camera = localCameraTransform,
+          let ray = try? ArenaShotRay(
+            origin: camera.translation,
+            direction: camera.applying(toDirection: ArenaVector3(x: 0, y: 0, z: -1)),
+            firedAtMs: max(1, nowMs)
+          )
+        else { return }
+        let sequence = fireGate.recordFire(nowMs: nowMs)
+        let tracer = ArenaShotTracer(
+          shotId: ArenaTracerFireGate.shotId(shooterPlayerId: playerId, sequence: sequence),
+          shooterPlayerId: playerId,
+          ray: ray
+        )
+        tracerLedger.present(own: tracer, nowMs: nowMs)
+        link.send(.shotTracer(tracer))
+        state.tracers.lastRefusal = nil
+        state.tracers.lastEvent = "SHOT PREDICTED"
+        state.tracers.lastEventAtMs = nowMs
+        publish()
       }
     }
 
@@ -400,6 +460,16 @@ struct SharedArenaSnapshot: Equatable, Sendable {
 
       case .anchorSet(let anchors):
         state.sharedAnchorNames = anchors.map(\.name).sorted()
+
+      case .shotTracer(let tracer):
+        guard tracer.shooterPlayerId != playerId else { return }
+        let before = tracerLedger.incomingDrawn
+        tracerLedger.present(incoming: tracer, lockState: state.lockState, nowMs: arrivalMs)
+        if tracerLedger.incomingDrawn > before {
+          state.tracers.lastEvent = "INCOMING SHOT"
+          state.tracers.lastEventAtMs = arrivalMs
+        }
+        publish()
       }
     }
 
@@ -487,9 +557,19 @@ struct SharedArenaSnapshot: Equatable, Sendable {
     }
 
     private func publish() {
+      let nowMs = ArenaClock.nowMs()
+      tracerLedger.expire(nowMs: nowMs)
+      state.tracers.predictedDrawn = tracerLedger.predictedDrawn
+      state.tracers.incomingDrawn = tracerLedger.incomingDrawn
+      state.tracers.duplicatesIgnored = tracerLedger.duplicatesIgnored
+      state.tracers.droppedWhileUnlocked = tracerLedger.droppedWhileUnlocked
       let value = state
       let renderTransform = state.lockState.isLocked ? latestPeer?.arenaFromPhone : nil
-      lock.withLock { renderPeerTransform = renderTransform }
+      let tracers = tracerLedger.active
+      lock.withLock {
+        renderPeerTransform = renderTransform
+        renderTracers = tracers
+      }
       DispatchQueue.main.async { [weak self] in
         self?.snapshot = value
       }
