@@ -93,3 +93,18 @@ This is the integration-owned, evidence-based status record. Append observed res
 - **Result:** PASS for lane logic; still BLOCKED for end-to-end promotion. Lane remains disabled by default.
 - **Blocker and owner:** Hans — one-time Outpost runner, keychain identity, `.p8`, and repository secrets/variables.
 - **Next integration step:** review PR #31, merge disabled, complete one-time setup, then enable and observe one promotion.
+
+### 2026-09-02 18:20 PDT — KIL-20 shared-arena harness (Tier 0 + compile only; physical run pending)
+
+- **Git SHA / PR:** branch `kil-20-shared-arena-harness` (`46d9ad7`, `b78b44f`) on top of `main` `332efe0`; draft PR to follow.
+- **Owner and write set:** iOS targeting (`ios/VictoriaKillZone/VictoriaKillZone/Targeting/SharedArena/**`, `VictoriaKillZoneTests/SharedArenaFrameTests.swift`). Integration handoff items in the same PR: `Package.swift` sources list, `project.pbxproj` file registration, `Info.plist` (`NSLocalNetworkUsageDescription`, `NSBonjourServices`), one `HomeView` navigation link to the harness.
+- **Environment/artifact:** Xcode 26.6 (17F113), macOS host; no phones attached to this session.
+- **Commands/checks:** `pnpm verify` PASS (`Repository contract: PASS`, `Workspace verification: PASS`); `pnpm verify:ios` PASS (92 SwiftPM tests incl. 13 new `SharedArenaFrameTests`; unsigned simulator builds of `VictoriaKillZone` and `VictoriaKillZoneTests`).
+- **What landed:** fail-closed `SharedArenaLockPolicy` (clears peer transform history on loss; re-lock requires 10 consecutive clean evaluations; 0.10 m / 0.5° residual gate from research §3.2 as configurable thresholds), `ArenaPeerSample` codec, `ArenaFrameMetrics` (interval p50/p95/p99, loss, out-of-order, pose age, recovery time), §6.3 CSV log, Bonjour/Network.framework harness link, `SharedArenaSession` running either `collaborative` (primary; `ARParticipantAnchor` residual) or `worldMap` (control) behind one surface, harness screen rendering three named anchors and the 0.35 m peer proxy only while `lockReady`.
+- **Observed on browser/simulator:** compile only. No simulator run claimed (ARKit world tracking and Bonjour peer discovery require devices).
+- **Observed on physical devices:** none.
+- **Mocked or unproven:** collaborative merge outdoors, world-map relocalization, alignment error at 3/8/15 m, interruption/re-lock recovery, update-interval percentiles, bandwidth, thermal — all of KIL-20's physical acceptance. The harness link is scoped to the proof; it is not the KIL-35 `CombatTransport` (512-byte reliable payload cap cannot carry map/collaboration blobs).
+- **Result:** PASS for Tier 0 and compile; BLOCKED for KIL-20 acceptance until the two-phone run.
+- **Blocker and owner:** Hans — two signed iPhones (record models + iOS), park site with tape measure, run the §7 protocol from `docs/research/shared-arena-frame-options.md` in both methods, export both CSVs.
+- **Next integration step:** review/merge the draft PR, install via TestFlight or cable, run the protocol, record device evidence here; then decide whether the §3.2 thresholds hold or need re-cutting before KIL-22 freezes `spatial-hit.v1`.
+- **Cut/deferred or risk change:** chunked bulk channel in `CombatTransport` deferred to KIL-35 follow-up; NI/UWB cross-check (research Option C) not built in this slice.
