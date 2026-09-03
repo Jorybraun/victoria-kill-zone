@@ -97,11 +97,26 @@ import SwiftUI
           pills
           telemetry
           Spacer()
+          if let event = session.snapshot.tracers.lastEvent {
+            Text(event)
+              .font(.title3.weight(.black).monospaced())
+              .foregroundStyle(eventColor(event))
+              .frame(maxWidth: .infinity)
+              .padding(.bottom, 4)
+              .id(session.snapshot.tracers.lastEventAtMs)
+              .transition(.opacity)
+          }
+          fireButton
           controls
         }
         .padding(16)
       }
       .foregroundStyle(VKZPalette.text)
+      .onChange(of: session.snapshot.tracers.lastEventAtMs) { _, _ in
+        guard let event = session.snapshot.tracers.lastEvent else { return }
+        let generator = UIImpactFeedbackGenerator(style: event == "SHOT PREDICTED" ? .heavy : .light)
+        generator.impactOccurred()
+      }
       .alert("Export failed", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
         Button("OK") { exportError = nil }
       } message: {
@@ -135,12 +150,36 @@ import SwiftUI
         line("packets", "ok \(m.samplesAccepted) · lost \(m.samplesLost) · ooo \(m.samplesOutOfOrder)")
         line("relock", "losses \(m.lockLosses) · max \(fmt(m.recoveryMsMax)) · mean \(fmt(m.recoveryMsMean)) ms")
         line("bytes", "in \(s.linkStats.bytesIn) · out \(s.linkStats.bytesOut)" + (s.worldMapBytesSent.map { " · map sent \($0)" } ?? "") + (s.worldMapBytesReceived.map { " · map recv \($0)" } ?? ""))
+        line("tracers", "out \(s.tracers.predictedDrawn) · in \(s.tracers.incomingDrawn) · dup \(s.tracers.duplicatesIgnored) · dropped(unlocked) \(s.tracers.droppedWhileUnlocked)")
         line("thermal", "\(s.thermalState) · t+\(s.elapsedMs / 1000)s")
       }
       .font(.caption2.monospaced())
       .padding(10)
       .background(VKZPalette.panel.opacity(0.82))
       .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var fireButton: some View {
+      let locked = session.snapshot.lockState.isLocked
+      return Button {
+        session.fire()
+      } label: {
+        Text(locked ? "FIRE" : "FIRE LOCKED")
+          .font(.title2.weight(.black).monospaced())
+          .frame(maxWidth: .infinity)
+          .frame(height: 64)
+      }
+      .buttonStyle(VKZPrimaryButtonStyle())
+      .tint(locked ? VKZPalette.danger : VKZPalette.textMuted)
+      .accessibilityHint(locked ? "Fires a hitscan tracer visible on both phones" : "Spatial lock is not ready")
+    }
+
+    private func eventColor(_ event: String) -> Color {
+      switch event {
+      case "SHOT PREDICTED": VKZPalette.pending
+      case "INCOMING SHOT": VKZPalette.danger
+      default: VKZPalette.textMuted
+      }
     }
 
     private var controls: some View {
@@ -217,6 +256,8 @@ import SwiftUI
     final class Coordinator: NSObject, ARSCNViewDelegate {
       let session: SharedArenaSession
       let proxyNode: SCNNode
+      private var drawnShotIds: Set<String> = []
+      private var drawnOrder: [String] = []
 
       init(session: SharedArenaSession) {
         self.session = session
@@ -252,13 +293,73 @@ import SwiftUI
       }
 
       func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
-        guard let transform = session.peerProxyTransform else {
+        if let transform = session.peerProxyTransform {
+          let t = transform.translation
+          proxyNode.position = SCNVector3(Float(t.x), Float(t.y), Float(t.z))
+          proxyNode.isHidden = false
+        } else {
           proxyNode.isHidden = true
-          return
         }
-        let t = transform.translation
-        proxyNode.position = SCNVector3(Float(t.x), Float(t.y), Float(t.z))
-        proxyNode.isHidden = false
+        guard let root = proxyNode.parent else { return }
+        for segment in session.activeTracers where !drawnShotIds.contains(segment.shotId) {
+          rememberDrawn(segment.shotId)
+          drawTracer(segment, in: root)
+        }
+      }
+
+      /// The ledger already dedups by identity; this set only stops the same
+      /// live segment from spawning a node on every frame it stays in `active`.
+      private func rememberDrawn(_ shotId: String) {
+        drawnShotIds.insert(shotId)
+        drawnOrder.append(shotId)
+        if drawnOrder.count > 256 {
+          drawnShotIds.remove(drawnOrder.removeFirst())
+        }
+      }
+
+      /// Same beam-and-bullet look as `LaserFXEngine`, but in arena coordinates
+      /// from the shot's shared origin and direction — so both phones draw the
+      /// same line through the same space. Amber = own predicted, red = incoming.
+      private func drawTracer(_ segment: ArenaTracerSegment, in root: SCNNode) {
+        let origin = SIMD3<Float>(Float(segment.origin.x), Float(segment.origin.y), Float(segment.origin.z))
+        let end = SIMD3<Float>(Float(segment.end.x), Float(segment.end.y), Float(segment.end.z))
+        let delta = end - origin
+        let length = simd_length(delta)
+        guard length > 0.01 else { return }
+        let direction = delta / length
+        let color: UIColor = segment.kind == .predicted
+          ? UIColor(red: 1, green: 0.7, blue: 0.25, alpha: 1)
+          : UIColor(red: 1, green: 0.32, blue: 0.39, alpha: 1)
+
+        let beam = SCNCylinder(radius: 0.008, height: CGFloat(length))
+        let beamMaterial = SCNMaterial()
+        beamMaterial.diffuse.contents = color
+        beamMaterial.emission.contents = color
+        beamMaterial.lightingModel = .constant
+        beam.firstMaterial = beamMaterial
+        let beamNode = SCNNode(geometry: beam)
+        let mid = (origin + end) / 2
+        beamNode.position = SCNVector3(mid.x, mid.y, mid.z)
+        beamNode.simdOrientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: direction)
+        root.addChildNode(beamNode)
+        beamNode.runAction(.sequence([
+          .fadeOut(duration: Double(ArenaTracerSegment.durationMs) / 1_000),
+          .removeFromParentNode(),
+        ]))
+
+        let bullet = SCNSphere(radius: 0.015)
+        let bulletMaterial = SCNMaterial()
+        bulletMaterial.diffuse.contents = UIColor.white
+        bulletMaterial.emission.contents = color
+        bulletMaterial.lightingModel = .constant
+        bullet.firstMaterial = bulletMaterial
+        let bulletNode = SCNNode(geometry: bullet)
+        bulletNode.position = SCNVector3(origin.x, origin.y, origin.z)
+        root.addChildNode(bulletNode)
+        bulletNode.runAction(.sequence([
+          .move(to: SCNVector3(end.x, end.y, end.z), duration: 0.4),
+          .removeFromParentNode(),
+        ]))
       }
     }
   }
