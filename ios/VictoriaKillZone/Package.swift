@@ -36,6 +36,7 @@ let package = Package(
         "Features",
         "Services",
         "Targeting/TargetingSession.swift",
+        "Targeting/SharedArena",
       ],
       linkerSettings: [
         .linkedFramework("AVFoundation", .when(platforms: [.iOS])),

@@ -26,8 +26,14 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_pewpew-arena._tcp</string>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Pew Pew uses the rear camera to detect the opposing player and render the live duel view.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Pew Pew connects directly to a nearby player's phone to share the arena frame during a match.</string>
 	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
 	<dict>
 		<key>VictoriaKillZoneArena</key>
