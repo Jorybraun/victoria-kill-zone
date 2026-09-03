@@ -8,6 +8,9 @@ public enum PoseTracking: UInt8, Codable, Sendable {
 public enum ReliableEventKind: UInt8, Codable, Sendable {
   case fire = 1
   case control = 2
+  /// One chunk of a bulk transfer (AR collaboration data, world maps). Payload
+  /// layout is owned by `BulkChunkCodec`; see `BulkTransfer.swift`.
+  case bulkChunk = 3
 }
 
 public struct PoseFrame: Equatable, Sendable {
