@@ -226,14 +226,15 @@ struct SharedArenaSnapshot: Equatable, Sendable {
       }
     }
 
-    /// Trigger press. Fires only while `lockReady` and off cooldown; draws the
+    /// Trigger press. Fires whenever local tracking is normal and off cooldown
+    /// (a lock is not permission to fire — requirements §3A.1); draws the
     /// shooter's predicted tracer and broadcasts one `shotTracer` so every other
     /// member draws exactly one incoming tracer. No verdict, damage, or ammo.
     func fire() {
       sessionQueue.async { [self] in
         let nowMs = ArenaClock.nowMs()
         if let refusal = fireGate.refusal(
-          lockState: state.lockState,
+          localTracking: state.localTracking,
           hasLocalPose: localCameraTransform != nil,
           nowMs: nowMs
         ) {

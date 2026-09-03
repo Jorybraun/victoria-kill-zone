@@ -160,18 +160,18 @@ import SwiftUI
     }
 
     private var fireButton: some View {
-      let locked = session.snapshot.lockState.isLocked
+      let canFire = session.snapshot.localTracking == .normal
       return Button {
         session.fire()
       } label: {
-        Text(locked ? "FIRE" : "FIRE LOCKED")
+        Text(canFire ? "FIRE" : "TRACKING LOST — FIRE LOCKED")
           .font(.title2.weight(.black).monospaced())
           .frame(maxWidth: .infinity)
           .frame(height: 64)
       }
       .buttonStyle(VKZPrimaryButtonStyle())
-      .tint(locked ? VKZPalette.danger : VKZPalette.textMuted)
-      .accessibilityHint(locked ? "Fires a hitscan tracer visible on both phones" : "Spatial lock is not ready")
+      .tint(canFire ? VKZPalette.danger : VKZPalette.textMuted)
+      .accessibilityHint(canFire ? "Fires a hitscan tracer visible on both phones" : "Tracking lost. Fire locked.")
     }
 
     private func eventColor(_ event: String) -> Color {

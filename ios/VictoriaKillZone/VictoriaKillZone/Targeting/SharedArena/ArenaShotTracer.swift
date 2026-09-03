@@ -35,13 +35,15 @@ enum ArenaTracerKind: String, Equatable, Sendable {
 /// Why the fire gate refused a trigger press. Surfaced verbatim in the HUD so
 /// the operator can tell a locked frame from a cooldown.
 enum ArenaFireRefusal: String, Equatable, Sendable {
-  case spatialLockNotReady
+  case trackingLost
   case cooldown
   case noLocalPose
 }
 
-/// Trigger gate for the harness: fire requires `lockReady` and an elapsed
-/// cooldown. Cooldown, not target state, governs the next press (§7 step 5).
+/// Trigger gate per requirements §3A.1: a lock is not permission to fire. The
+/// shooter fires whenever *its own* tracking is normal and the cooldown has
+/// elapsed; frame alignment governs what receivers draw, not whether you can
+/// pull the trigger. Cooldown, not target state, governs the next press.
 struct ArenaTracerFireGate: Equatable, Sendable {
   static let defaultCooldownMs: Int64 = 400
 
@@ -53,8 +55,8 @@ struct ArenaTracerFireGate: Equatable, Sendable {
     self.cooldownMs = cooldownMs
   }
 
-  func refusal(lockState: ArenaLockState, hasLocalPose: Bool, nowMs: Int64) -> ArenaFireRefusal? {
-    guard lockState.isLocked else { return .spatialLockNotReady }
+  func refusal(localTracking: ArenaLocalTracking, hasLocalPose: Bool, nowMs: Int64) -> ArenaFireRefusal? {
+    guard localTracking == .normal else { return .trackingLost }
     guard hasLocalPose else { return .noLocalPose }
     if let lastFiredAtMs, nowMs - lastFiredAtMs < cooldownMs { return .cooldown }
     return nil

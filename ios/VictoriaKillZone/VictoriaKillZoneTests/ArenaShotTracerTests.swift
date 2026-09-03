@@ -4,22 +4,22 @@ import XCTest
 @testable import VictoriaKillZone
 
 final class ArenaShotTracerTests: XCTestCase {
-  func testFireGateRequiresLockPoseAndCooldown() {
+  func testFireGateRequiresLocalTrackingPoseAndCooldownNotALock() {
     var gate = ArenaTracerFireGate(cooldownMs: 400)
     XCTAssertEqual(
-      gate.refusal(lockState: .aligning(.stabilizing), hasLocalPose: true, nowMs: 0),
-      .spatialLockNotReady
+      gate.refusal(localTracking: .limited(.relocalizing), hasLocalPose: true, nowMs: 0),
+      .trackingLost
     )
-    XCTAssertEqual(
-      gate.refusal(lockState: .trackingLost(.peerStale), hasLocalPose: true, nowMs: 0),
-      .spatialLockNotReady
+    XCTAssertEqual(gate.refusal(localTracking: .notAvailable, hasLocalPose: true, nowMs: 0), .trackingLost)
+    XCTAssertEqual(gate.refusal(localTracking: .normal, hasLocalPose: false, nowMs: 0), .noLocalPose)
+    XCTAssertNil(
+      gate.refusal(localTracking: .normal, hasLocalPose: true, nowMs: 0),
+      "A lock is not permission to fire (requirements §3A.1): normal local tracking is enough"
     )
-    XCTAssertEqual(gate.refusal(lockState: .lockReady, hasLocalPose: false, nowMs: 0), .noLocalPose)
-    XCTAssertNil(gate.refusal(lockState: .lockReady, hasLocalPose: true, nowMs: 0))
 
     XCTAssertEqual(gate.recordFire(nowMs: 1_000), 1)
-    XCTAssertEqual(gate.refusal(lockState: .lockReady, hasLocalPose: true, nowMs: 1_399), .cooldown)
-    XCTAssertNil(gate.refusal(lockState: .lockReady, hasLocalPose: true, nowMs: 1_400))
+    XCTAssertEqual(gate.refusal(localTracking: .normal, hasLocalPose: true, nowMs: 1_399), .cooldown)
+    XCTAssertNil(gate.refusal(localTracking: .normal, hasLocalPose: true, nowMs: 1_400))
     XCTAssertEqual(gate.recordFire(nowMs: 1_400), 2)
     XCTAssertEqual(ArenaTracerFireGate.shotId(shooterPlayerId: "host-ab12", sequence: 2), "host-ab12#2")
   }
