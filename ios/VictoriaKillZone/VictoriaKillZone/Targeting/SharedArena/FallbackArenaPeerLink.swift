@@ -1,3 +1,4 @@
+import CombatTransport
 import Foundation
 
 enum ArenaLinkPath: Equatable {
