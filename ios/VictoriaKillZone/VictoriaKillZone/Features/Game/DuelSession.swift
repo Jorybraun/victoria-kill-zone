@@ -42,12 +42,15 @@ final class DuelSession: ObservableObject {
     var isBusy: @MainActor () -> Bool = { false }
   }
 
+  // Mirrors FIRE_COOLDOWN_MS = 350 in Convex.
+  static let fireCooldown: TimeInterval = 0.35
   static let pendingShotConfirmationBudget: TimeInterval = 2.5
   static let incomingShotDedupCapacity = 256
   static let peerTracerSuppressionWindow: TimeInterval = 2
 
   @Published private(set) var debugShotState = DebugShotState.idle
   @Published private(set) var markerlessShotState = MarkerlessShotState.idle
+  @Published private(set) var lastAcceptedShotAt: Date?
   @Published private(set) var killBanner: KillBanner?
   @Published private(set) var incomingShot: IncomingShot?
 
@@ -115,6 +118,7 @@ final class DuelSession: ObservableObject {
     pendingShotDispatchedAt = nil
     pendingShotAutomaticReplayStarted = false
     pendingMarkerlessRequest = nil
+    lastAcceptedShotAt = nil
     setDebugShotState(.idle)
     setMarkerlessShotState(.idle)
     seenKillEventIDs.removeAll()
@@ -158,6 +162,7 @@ final class DuelSession: ObservableObject {
     pendingShotDispatchedAt = nil
     pendingShotAutomaticReplayStarted = false
     pendingMarkerlessRequest = nil
+    lastAcceptedShotAt = nil
     seenKillEventIDs.removeAll()
     seenIncomingShotEventIDs.removeAll()
     seenIncomingShotEventOrder.removeAll()
@@ -213,6 +218,16 @@ final class DuelSession: ObservableObject {
     let minimumConfidence = targetZone == .head ? 0.60 : 0.45
     guard targetingSnapshot.hitConfidence >= minimumConfidence else { return false }
     return true
+  }
+
+  func fireCooldownRemaining(at date: Date) -> TimeInterval {
+    guard let lastAcceptedShotAt else { return 0 }
+    return max(0, Self.fireCooldown - date.timeIntervalSince(lastAcceptedShotAt))
+  }
+
+  func fireCooldownProgress(at date: Date) -> Double {
+    guard Self.fireCooldown > 0 else { return 1 }
+    return min(1, max(0, 1 - fireCooldownRemaining(at: date) / Self.fireCooldown))
   }
 
   var markerlessAimZone: HitZone? {
@@ -345,7 +360,13 @@ final class DuelSession: ObservableObject {
       guard result.accepted, result.outcome != .rejected else {
         pendingMarkerlessRequest = nil
         setMarkerlessShotState(.failed(reason: result.rejectReason))
-        onErrorMessage?(Self.message(for: result.rejectReason))
+        if result.rejectReason == .fireCooldown {
+          if lastAcceptedShotAt == nil {
+            lastAcceptedShotAt = now()
+          }
+        } else {
+          onErrorMessage?(Self.message(for: result.rejectReason))
+        }
         return
       }
 
@@ -355,6 +376,7 @@ final class DuelSession: ObservableObject {
         zone: zone,
         damage: result.damage
       ))
+      lastAcceptedShotAt = now()
     } catch {
       guard !Task.isCancelled else { return }
       setMarkerlessShotState(.failed(reason: nil))
@@ -582,6 +604,7 @@ final class DuelSession: ObservableObject {
 
     gameLoopTrace("reconcilePendingShot outcome=confirmed")
     setDebugShotState(.confirmed(damage: result.damage))
+    lastAcceptedShotAt = now()
     clearPendingShot()
   }
 
@@ -668,6 +691,7 @@ final class DuelSession: ObservableObject {
       gameLoopTrace("reconcilePendingShot reason=eventAgedOut outcome=replayConfirmed")
       clearPendingShot()
       setDebugShotState(.confirmed(damage: result.damage))
+      lastAcceptedShotAt = now()
     } catch {
       guard !Task.isCancelled, session == expectedSession, pendingShotId == shotId else {
         return
