@@ -965,6 +965,7 @@ enum TargetingSessionFactory {
       if usesBodyTracking {
         let bodyConfiguration = ARBodyTrackingConfiguration()
         bodyConfiguration.worldAlignment = .gravity
+        bodyConfiguration.automaticSkeletonScaleEstimationEnabled = true
         configuration = bodyConfiguration
       } else {
         let worldConfiguration = ARWorldTrackingConfiguration()
@@ -1220,119 +1221,24 @@ enum TargetingSessionFactory {
           z: Double(world.columns.3.z)
         )
       }
-      guard let root = positions["root"] else { return nil }
-      let neck = positions["neck_1_joint"]
-      let head = positions["head"] ?? neck.map {
-        TargetingVector3(x: $0.x, y: $0.y + 0.15, z: $0.z)
-      }
       let ray = cameraRay(from: frame, capturedAt: capturedAt)
-      let aimZone3D: TargetingHitZone?
-      if let head, rayIntersectsSphere(ray, center: head, radius: 0.12) {
-        aimZone3D = .head
-      } else if let neck, rayIntersectsCapsule(ray, start: root, end: neck, radius: 0.18) {
-        aimZone3D = .torso
-      } else {
-        aimZone3D = nil
-      }
-
-      let projected = [head, positions["root"]].compactMap { point -> CGPoint? in
-        guard let point else { return nil }
-        let result = frame.camera.projectPoint(
-          SIMD3<Float>(Float(point.x), Float(point.y), Float(point.z)),
-          orientation: .portrait,
-          viewportSize: CGSize(width: 1, height: 1)
-        )
-        return CGPoint(x: min(1, max(0, result.x)), y: min(1, max(0, result.y)))
-      }
-      let bodyBounds: NormalizedTargetingRect
-      if let minX = projected.map(\.x).min(), let maxX = projected.map(\.x).max(),
-        let minY = projected.map(\.y).min(), let maxY = projected.map(\.y).max()
-      {
-        let x = max(0, minX - 0.15)
-        let y = max(0, minY - 0.15)
-        bodyBounds = NormalizedTargetingRect(
-          minX: x,
-          minY: y,
-          width: min(1, maxX + 0.15) - x,
-          height: min(1, maxY + 0.15) - y
-        )
-      } else {
-        bodyBounds = NormalizedTargetingRect(minX: 0, minY: 0, width: 1, height: 1)
-      }
-
-      let joints = positions.map { TargetingSkeletonJoint(name: $0.key, position: $0.value) }
-        .sorted { $0.name < $1.name }
-      let boneNames = [
-        ("head", "neck_1_joint"), ("neck_1_joint", "spine_7_joint"),
-        ("spine_7_joint", "root"), ("neck_1_joint", "leftShoulder"),
-        ("leftShoulder", "left_arm_joint"), ("left_arm_joint", "left_forearm_joint"),
-        ("left_forearm_joint", "leftHand"), ("neck_1_joint", "rightShoulder"),
-        ("rightShoulder", "right_arm_joint"), ("right_arm_joint", "right_forearm_joint"),
-        ("right_forearm_joint", "rightHand"), ("root", "left_upLeg_joint"),
-        ("left_upLeg_joint", "left_leg_joint"), ("left_leg_joint", "leftFoot"),
-        ("root", "right_upLeg_joint"), ("right_upLeg_joint", "right_leg_joint"),
-        ("right_leg_joint", "rightFoot"),
-      ]
-      return TargetingObservation(
-        capturedAt: capturedAt,
-        bodyConfidence: anchor.isTracked ? 0.9 : 0.5,
-        headConfidence: positions["head"] == nil ? nil : 0.9,
-        torsoConfidence: 0.9,
-        bodyBounds: bodyBounds,
-        torsoBounds: nil,
-        aimZone3D: aimZone3D,
-        skeleton: TargetingSkeleton(
-          joints: joints,
-          bones: boneNames.map { TargetingSkeletonBone(from: $0.0, to: $0.1) },
-          capturedAt: capturedAt
-        )
+      return BodyTargetingGeometry.observation(
+        joints: positions,
+        isTracked: anchor.isTracked,
+        ray: ray,
+        project: { point in
+          let result = frame.camera.projectPoint(
+            SIMD3<Float>(Float(point.x), Float(point.y), Float(point.z)),
+            orientation: .portrait,
+            viewportSize: CGSize(width: 1, height: 1)
+          )
+          return NormalizedTargetingPoint(
+            x: min(1, max(0, Double(result.x))),
+            y: min(1, max(0, Double(result.y))),
+            confidence: 1
+          )
+        }
       )
-    }
-
-    private static func rayIntersectsSphere(
-      _ ray: TargetingCameraRay,
-      center: TargetingVector3,
-      radius: Double
-    ) -> Bool {
-      let offset = ray.origin - center
-      let b = offset.x * ray.direction.x + offset.y * ray.direction.y + offset.z * ray.direction.z
-      let c = offset.x * offset.x + offset.y * offset.y + offset.z * offset.z - radius * radius
-      let discriminant = b * b - c
-      return discriminant >= 0 && -b + sqrt(discriminant) >= 0
-    }
-
-    private static func rayIntersectsCapsule(
-      _ ray: TargetingCameraRay,
-      start: TargetingVector3,
-      end: TargetingVector3,
-      radius: Double
-    ) -> Bool {
-      let segment = end - start
-      let lengthSquared = segment.dot(segment)
-      guard lengthSquared > .ulpOfOne else {
-        return rayIntersectsSphere(ray, center: start, radius: radius)
-      }
-      let directionSegment = ray.direction.dot(segment)
-      let originSegment = (ray.origin - start).dot(segment)
-      let directionOrigin = ray.direction.dot(ray.origin - start)
-      let denominator = lengthSquared - directionSegment * directionSegment
-      let rayDistance: Double
-      let segmentFraction: Double
-      if abs(denominator) < .ulpOfOne {
-        rayDistance = max(0, -directionOrigin)
-        segmentFraction = min(1, max(0, originSegment / lengthSquared))
-      } else {
-        let rawRayDistance =
-          (directionSegment * originSegment - directionOrigin * lengthSquared) / denominator
-        rayDistance = max(0, rawRayDistance)
-        let rawFraction =
-          (originSegment - directionSegment * directionOrigin) / denominator
-        segmentFraction = min(1, max(0, rawFraction))
-      }
-      let rayPoint = ray.origin + ray.direction * rayDistance
-      let segmentPoint = start + segment * segmentFraction
-      let delta = rayPoint - segmentPoint
-      return delta.dot(delta) <= radius * radius
     }
   }
 

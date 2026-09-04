@@ -31,6 +31,7 @@
 		B00100000000000000000014 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00100000000000000000016 /* AVFoundation.framework */; };
 		B00100000000000000000015 /* Speech.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00100000000000000000017 /* Speech.framework */; };
 		B00100000000000000000016 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000018 /* Assets.xcassets */; };
+		B00100000000000000000018 /* BodyTargetingGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000019 /* BodyTargetingGeometry.swift */; };
 		B00200000000000000000001 /* SharedArenaModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000001 /* SharedArenaModels.swift */; };
 		B00200000000000000000002 /* SharedArenaLockPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000002 /* SharedArenaLockPolicy.swift */; };
 		B00200000000000000000003 /* ArenaFrameMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000003 /* ArenaFrameMetrics.swift */; };
@@ -76,6 +77,7 @@
 		F00100000000000000000016 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		F00100000000000000000017 /* Speech.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Speech.framework; path = System/Library/Frameworks/Speech.framework; sourceTree = SDKROOT; };
 		F00100000000000000000018 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F00100000000000000000019 /* BodyTargetingGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BodyTargetingGeometry.swift; sourceTree = "<group>"; };
 		F00200000000000000000001 /* SharedArenaModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedArenaModels.swift; sourceTree = "<group>"; };
 		F00200000000000000000002 /* SharedArenaLockPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedArenaLockPolicy.swift; sourceTree = "<group>"; };
 		F00200000000000000000003 /* ArenaFrameMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArenaFrameMetrics.swift; sourceTree = "<group>"; };
@@ -177,6 +179,7 @@
 			isa = PBXGroup;
 			children = (
 				F00100000000000000000006 /* TargetingSession.swift */,
+				F00100000000000000000019 /* BodyTargetingGeometry.swift */,
 				G00200000000000000000001 /* SharedArena */,
 			);
 			path = Targeting;
@@ -377,6 +380,7 @@
 				B00100000000000000000005 /* GameSessionClient.swift in Sources */,
 				B0010000000000000000000F /* ConvexGameSessionClient.swift in Sources */,
 				B00100000000000000000006 /* TargetingSession.swift in Sources */,
+				B00100000000000000000018 /* BodyTargetingGeometry.swift in Sources */,
 				B00200000000000000000001 /* SharedArenaModels.swift in Sources */,
 				B00200000000000000000002 /* SharedArenaLockPolicy.swift in Sources */,
 				B00200000000000000000003 /* ArenaFrameMetrics.swift in Sources */,
