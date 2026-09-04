@@ -45,7 +45,7 @@
 		<string>_vkz-combat._udp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>Pew Pew uses the rear camera to track the opposing player's body pose so your shots can be aimed and rendered in the live duel view.</string>
+	<string>Pew Pew uses the rear camera to track the opposing player's body pose, aim and render shots in the live duel view, and scan QR codes to join a duel.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Pew Pew connects directly to a nearby player's phone to share the arena frame during a match.</string>
 	<key>NSMicrophoneUsageDescription</key>
