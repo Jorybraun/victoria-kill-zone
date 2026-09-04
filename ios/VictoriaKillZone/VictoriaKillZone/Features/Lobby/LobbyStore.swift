@@ -827,7 +827,7 @@ final class LobbyStore: ObservableObject {
       if snapshot.match.phase == .running, duelPeerLink == nil,
         let role = snapshot.players.first(where: { $0.id == snapshot.localPlayerId })?.role
       {
-        let link = ArenaPeerLink()
+        let link = CombatTransportArenaLink(matchId: snapshot.match.id, playerId: snapshot.localPlayerId, joinSecret: session?.code ?? "")
         link.onMessage = { [weak self] message, _ in
           guard case .shotTracer(let tracer) = message,
             tracer.shooterPlayerId != snapshot.localPlayerId
