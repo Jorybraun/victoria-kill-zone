@@ -180,7 +180,8 @@ final class DuelSession: ObservableObject {
       let session, let snapshot = latestSnapshot,
       snapshot.match.phase == .running,
       snapshot.localPlayerId == session.playerId,
-      snapshot.players.first(where: { $0.id == session.playerId })?.role == .host
+      let localPlayer = snapshot.players.first(where: { $0.id == session.playerId }),
+      localPlayer.role == .host, localPlayer.ammo > 0
     else {
       return false
     }
@@ -291,11 +292,7 @@ final class DuelSession: ObservableObject {
         pendingShotDispatchedAt = nil
         pendingShotAutomaticReplayStarted = false
         setDebugShotState(.failed)
-        if let reason = result.rejectReason {
-          present(GameSessionClientError.backend(reason))
-        } else {
-          present(GameSessionClientError.unknown)
-        }
+        presentDebugRejection(result)
         return
       }
       pendingShotResult = result
@@ -673,11 +670,7 @@ final class DuelSession: ObservableObject {
         gameLoopTrace("reconcilePendingShot reason=eventAgedOut outcome=replayRejected")
         clearPendingShot()
         setDebugShotState(.failed)
-        if let reason = result.rejectReason {
-          present(GameSessionClientError.backend(reason))
-        } else {
-          present(GameSessionClientError.unknown)
-        }
+        presentDebugRejection(result)
         return
       }
       guard result.replayed else {
@@ -728,6 +721,23 @@ final class DuelSession: ObservableObject {
 
   private func gameLoopTrace(_ message: @autoclosure () -> String) {
     GameLoopTrace.trace(message())
+  }
+
+  /// The debug-fire contract collapses most rejections to `MATCH_NOT_RUNNING`;
+  /// while the duel is visibly running the only local cause is an empty
+  /// magazine, so surface that instead of a misleading phase message.
+  private func presentDebugRejection(_ result: DebugFireResult) {
+    guard let reason = result.rejectReason else {
+      present(GameSessionClientError.unknown)
+      return
+    }
+    if reason == .matchNotRunning, latestSnapshot?.match.phase == .running,
+      result.shooterAmmo <= 0
+    {
+      onErrorMessage?("OUT OF AMMO")
+      return
+    }
+    present(GameSessionClientError.backend(reason))
   }
 
   private func present(_ error: Error) {

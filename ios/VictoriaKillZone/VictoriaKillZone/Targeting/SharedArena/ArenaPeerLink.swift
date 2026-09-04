@@ -77,6 +77,37 @@ protocol ArenaPeerLinking: AnyObject {
       self.serviceName = serviceName
     }
 
+    private static var permissionPrimer: NWBrowser?
+    private static let primerQueue = DispatchQueue(label: "com.victoriakillzone.arena.link.primer")
+
+    /// iOS shows the Local Network prompt the first time an app browses or
+    /// advertises Bonjour. Doing that briefly in the lobby means the prompt
+    /// lands before the duel instead of over a live AR camera.
+    static func primeLocalNetworkPermission() {
+      primerQueue.async {
+        guard permissionPrimer == nil else { return }
+        let browser = NWBrowser(
+          for: .bonjour(type: serviceType, domain: nil),
+          using: parameters()
+        )
+        permissionPrimer = browser
+        browser.stateUpdateHandler = { state in
+          switch state {
+          case .failed, .cancelled:
+            primerQueue.async {
+              if permissionPrimer === browser { permissionPrimer = nil }
+            }
+          default: break
+          }
+        }
+        browser.start(queue: primerQueue)
+        primerQueue.asyncAfter(deadline: .now() + 8) {
+          browser.cancel()
+          if permissionPrimer === browser { permissionPrimer = nil }
+        }
+      }
+    }
+
     var stats: ArenaPeerLinkStats {
       lock.withLock { _stats }
     }

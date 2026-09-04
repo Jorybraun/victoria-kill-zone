@@ -39,6 +39,24 @@ final class BodyTargetingGeometryTests: XCTestCase {
     )
   }
 
+  func testRayAtLegsOrOuterBodyReturnsLimbs() {
+    XCTAssertEqual(
+      BodyTargetingGeometry.aimZone(joints: joints(headY: 1, neckY: 0.7), ray: ray(y: -0.5)),
+      .limbs
+    )
+    XCTAssertEqual(
+      BodyTargetingGeometry.aimZone(
+        joints: joints(headY: 1, neckY: 0.7),
+        ray: TargetingCameraRay(
+          origin: TargetingVector3(x: 0.3, y: 0.4, z: 0),
+          direction: TargetingVector3(x: 0, y: 0, z: -1),
+          capturedAt: capturedAt
+        )
+      ),
+      .limbs
+    )
+  }
+
   func testDegenerateCapsuleFallsBackToSphere() {
     let point = TargetingVector3(x: 0, y: 0.5, z: -2)
     XCTAssertTrue(
