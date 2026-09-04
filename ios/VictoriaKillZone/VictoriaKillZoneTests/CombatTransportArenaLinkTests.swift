@@ -47,6 +47,9 @@ final class CombatTransportArenaLinkTests: XCTestCase {
 
     pair.guest.send(.shotTracer(guestShot))
     pair.host.send(.shotTracer(hostShot))
+    waitUntil {
+      pair.guest.stats.bytesOut > 0 && pair.host.stats.bytesOut > 0
+    }
     pump(pair.fabric, until: {
       pair.hostRecorder.containsShot(guestShot) &&
         pair.guestRecorder.containsShot(hostShot)
@@ -66,6 +69,7 @@ final class CombatTransportArenaLinkTests: XCTestCase {
     }
 
     pair.host.send(.shotRetracted(shotId: "host#1"))
+    waitUntil { pair.host.stats.bytesOut > 0 }
     pump(pair.fabric, until: {
       pair.guestRecorder.contains(message: .shotRetracted(shotId: "host#1"))
     })
@@ -84,6 +88,7 @@ final class CombatTransportArenaLinkTests: XCTestCase {
     }
 
     pair.host.send(.worldMap(worldMap))
+    waitUntil { pair.host.stats.bytesOut > 0 }
     pump(pair.fabric, until: {
       pair.guestRecorder.contains(message: .worldMap(worldMap))
     })
@@ -132,6 +137,7 @@ final class CombatTransportArenaLinkTests: XCTestCase {
       if case .shotTracer = message { received.fulfill() }
     }
     pair.guest.send(.shotTracer(try tracer(shotId: "guest#1", shooter: "guest")))
+    waitUntil { pair.guest.stats.bytesOut > 0 }
     pump(pair.fabric, until: { pair.hostRecorder.messageCount > 0 })
     wait(for: [received], timeout: 1)
 
