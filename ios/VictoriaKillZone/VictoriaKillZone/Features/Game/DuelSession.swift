@@ -88,7 +88,7 @@ final class DuelSession: ObservableObject {
     gameSessionClient: any GameSessionClient,
     now: @escaping @Sendable () -> Date = { Date() },
     makeShotId: @escaping @Sendable () -> String = { UUID().uuidString },
-    makePeerLink: (@escaping @MainActor (_ serviceName: String) -> (any DuelPeerLink)?)? = nil
+    makePeerLink: (@MainActor (_ serviceName: String) -> (any DuelPeerLink)?)? = nil
   ) {
     self.gameSessionClient = gameSessionClient
     self.now = now
