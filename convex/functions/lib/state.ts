@@ -121,6 +121,7 @@ const ERROR_BY_REJECT_REASON: Record<RejectReason, BackendErrorCode> = {
   cooldown_active: "FIRE_COOLDOWN",
   invalid_target: "INVALID_TARGET",
   target_not_alive: "TARGET_NOT_ALIVE",
+  host_rejected: "INVALID_TARGET",
   duplicate_shot: "IDEMPOTENCY_CONFLICT",
 };
 
