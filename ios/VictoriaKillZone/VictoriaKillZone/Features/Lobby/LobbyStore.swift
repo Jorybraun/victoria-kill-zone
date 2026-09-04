@@ -78,6 +78,8 @@ struct IncomingShot: Equatable, Sendable {
 
 @MainActor
 final class LobbyStore: ObservableObject {
+  // Mirrors FIRE_COOLDOWN_MS = 350 in Convex.
+  static let fireCooldown: TimeInterval = 0.35
   private static let pendingShotConfirmationBudget: TimeInterval = 2.5
 
   @Published private(set) var route: LobbyRoute
@@ -94,6 +96,7 @@ final class LobbyStore: ObservableObject {
   @Published private(set) var lastSyncAt: Date?
   @Published private(set) var debugShotState = DebugShotState.idle
   @Published private(set) var markerlessShotState = MarkerlessShotState.idle
+  @Published private(set) var lastAcceptedShotAt: Date?
   @Published private(set) var targetingSnapshot: TargetingSnapshot
   @Published private(set) var targetingBlocker: TargetingBlocker?
   @Published private(set) var killBanner: KillBanner?
@@ -245,6 +248,16 @@ final class LobbyStore: ObservableObject {
     return HitZone(rawValue: zone.rawValue)
   }
 
+  func fireCooldownRemaining(at date: Date) -> TimeInterval {
+    guard let lastAcceptedShotAt else { return 0 }
+    return max(0, Self.fireCooldown - date.timeIntervalSince(lastAcceptedShotAt))
+  }
+
+  func fireCooldownProgress(at date: Date) -> Double {
+    guard Self.fireCooldown > 0 else { return 1 }
+    return min(1, max(0, 1 - fireCooldownRemaining(at: date) / Self.fireCooldown))
+  }
+
   func showJoin() {
     guard !isBusy else { return }
     transition(.showJoin)
@@ -367,6 +380,7 @@ final class LobbyStore: ObservableObject {
     pendingShotDispatchedAt = nil
     pendingShotAutomaticReplayStarted = false
     pendingMarkerlessRequest = nil
+    lastAcceptedShotAt = nil
     seenIncomingShotEventIDs.removeAll()
     lastPeerShotAt = nil
     incomingShot = nil
@@ -626,7 +640,13 @@ final class LobbyStore: ObservableObject {
       guard result.accepted, result.outcome != .rejected else {
         pendingMarkerlessRequest = nil
         setMarkerlessShotState(.failed(reason: result.rejectReason))
-        errorMessage = Self.message(for: result.rejectReason)
+        if result.rejectReason == .fireCooldown {
+          if lastAcceptedShotAt == nil {
+            lastAcceptedShotAt = now()
+          }
+        } else {
+          errorMessage = Self.message(for: result.rejectReason)
+        }
         return
       }
 
@@ -636,6 +656,7 @@ final class LobbyStore: ObservableObject {
         zone: zone,
         damage: result.damage
       ))
+      lastAcceptedShotAt = now()
     } catch {
       guard !Task.isCancelled else { return }
       setMarkerlessShotState(.failed(reason: nil))
@@ -658,6 +679,7 @@ final class LobbyStore: ObservableObject {
     pendingShotDispatchedAt = nil
     pendingShotAutomaticReplayStarted = false
     pendingMarkerlessRequest = nil
+    lastAcceptedShotAt = nil
     setDebugShotState(.idle)
     setMarkerlessShotState(.idle)
     seenKillEventIDs.removeAll()
@@ -997,6 +1019,7 @@ final class LobbyStore: ObservableObject {
 
     gameLoopTrace("reconcilePendingShot outcome=confirmed")
     setDebugShotState(.confirmed(damage: result.damage))
+    lastAcceptedShotAt = now()
     clearPendingShot()
   }
 
@@ -1083,6 +1106,7 @@ final class LobbyStore: ObservableObject {
       gameLoopTrace("reconcilePendingShot reason=eventAgedOut outcome=replayConfirmed")
       clearPendingShot()
       setDebugShotState(.confirmed(damage: result.damage))
+      lastAcceptedShotAt = now()
     } catch {
       guard !Task.isCancelled, session == expectedSession, pendingShotId == shotId else {
         return

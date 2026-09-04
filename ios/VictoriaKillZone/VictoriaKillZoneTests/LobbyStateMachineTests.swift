@@ -2286,6 +2286,35 @@ private final class TwoClientRig {
 
 @MainActor
 final class KIL36TwoClientConvergenceTests: XCTestCase {
+  func testMarkerlessFireCooldownUsesInlineStateInsteadOfErrorAlert() async throws {
+    let rig = TwoClientRig()
+    await rig.startRunningDuel()
+
+    await rig.aim(.guest)
+    await rig.guestStore.performMarkerlessFire()
+    await rig.settle()
+    XCTAssertEqual(
+      rig.guestStore.markerlessShotState,
+      .confirmed(outcome: .hit, zone: .torso, damage: 34)
+    )
+
+    await rig.aim(.guest)
+    await rig.guestStore.performMarkerlessFire()
+    await rig.settle()
+    XCTAssertNil(rig.guestStore.errorMessage)
+    XCTAssertEqual(
+      rig.guestStore.markerlessShotState,
+      .failed(reason: .fireCooldown)
+    )
+    XCTAssertGreaterThan(
+      rig.guestStore.fireCooldownRemaining(at: rig.clock.now),
+      0
+    )
+
+    rig.advance(milliseconds: 400)
+    XCTAssertEqual(rig.guestStore.fireCooldownRemaining(at: rig.clock.now), 0)
+  }
+
   /// Five deterministic kill/respawn cycles, alternating attacker, asserting
   /// that both clients hold identical authoritative shot, damage, death, score,
   /// respawn and pending-shot state at every step.
