@@ -125,7 +125,6 @@ This is the integration-owned, evidence-based status record. Append observed res
 ### 2026-09-04 — ADR 0005 proposed
 
 - ADR 0005 proposed; fire-path trace found every markerless `shots:fire` rejected `LOCATION_STALE` on the current client (no location sent); PR implements ADR 0005; physical-device evidence pending.
-
 ### 2026-09-04 11:30 UTC — ADR 0004 §3 backend slice: shots:recordVerdict durable ledger (Tier 0)
 
 - **Git SHA / PR:** branch `devin/1788521140-record-verdict`; PR to follow.
@@ -136,3 +135,5 @@ This is the integration-owned, evidence-based status record. Append observed res
 - **Mocked or unproven:** host-to-Convex round trip (ADR 0004 p95 ≤ 500 ms), receiver confirmation flow, live schema push against the deployment (runtime validator not exercisable offline; compatibility asserted at type level).
 - **Result:** PASS for Tier 0; BLOCKED for ADR 0004 acceptance until the iOS host authority posts verdicts and the two-phone TestFlight run records fire→confirmation latency.
 - **Next integration step:** iOS slice wires `AuthorityHost` verdicts to `shots:recordVerdict`; then measure on two phones.
+
+- Follow-up hardening PR (match-scoped peer link, skeleton scale estimation, pure hit-geometry tests)

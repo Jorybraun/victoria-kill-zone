@@ -12,6 +12,14 @@
     private let audioState = LaserAudioState()
     private var audioSource: AVAudioSourceNode?
     private var skeletonRoot: SCNNode?
+    private var skeletonJointNodes: [String: SCNNode] = [:]
+    private var skeletonBoneNodes: [String: SCNNode] = [:]
+    private let skeletonMaterial: SCNMaterial = {
+      let material = SCNMaterial()
+      material.lightingModel = .constant
+      material.transparency = 0.85
+      return material
+    }()
     private var lastSkeletonUpdate = Date.distantPast
 
     init() {
@@ -133,7 +141,7 @@
       ))
       let start = origin ?? cameraPosition + forward * 3 + up * 0.6
       let end = hit
-        ? cameraPosition
+        ? cameraPosition + forward * 0.3
         : cameraPosition + right * 0.6 - up * 0.4
       let beam = SCNCylinder(radius: 0.008, height: CGFloat(simd_length(end - start)))
       let material = SCNMaterial()
@@ -171,7 +179,6 @@
       guard let sceneView else { return }
       if skeleton == nil {
         skeletonRoot?.removeFromParentNode()
-        skeletonRoot = nil
         return
       }
       guard Date().timeIntervalSince(lastSkeletonUpdate) >= 0.05 else { return }
@@ -181,36 +188,55 @@
         sceneView.scene.rootNode.addChildNode(root)
         skeletonRoot = root
       }
-      root.childNodes.forEach { $0.removeFromParentNode() }
       guard let skeleton else { return }
       let color: UIColor = zone == .head ? .systemRed : .systemGreen
-      let material = SCNMaterial()
-      material.diffuse.contents = color
-      material.emission.contents = color
-      material.lightingModel = .constant
-      material.transparency = 0.85
+      skeletonMaterial.diffuse.contents = color
+      skeletonMaterial.emission.contents = color
       let byName = Dictionary(uniqueKeysWithValues: skeleton.joints.map { ($0.name, $0.position) })
+      let jointNames = Set(skeleton.joints.map(\.name))
+      for name in Array(skeletonJointNodes.keys) where !jointNames.contains(name) {
+        skeletonJointNodes.removeValue(forKey: name)?.removeFromParentNode()
+      }
       for joint in skeleton.joints {
-        let sphere = SCNSphere(radius: 0.03)
-        sphere.firstMaterial = material
-        let node = SCNNode(geometry: sphere)
+        let node: SCNNode
+        if let existing = skeletonJointNodes[joint.name] {
+          node = existing
+        } else {
+          let sphere = SCNSphere(radius: 0.03)
+          sphere.firstMaterial = skeletonMaterial
+          node = SCNNode(geometry: sphere)
+          skeletonJointNodes[joint.name] = node
+          root.addChildNode(node)
+        }
         node.position = SCNVector3(
           joint.position.x, joint.position.y, joint.position.z
         )
-        root.addChildNode(node)
+      }
+      let boneNames = Set(skeleton.bones.map { "\($0.from)>\($0.to)" })
+      for name in Array(skeletonBoneNodes.keys) where !boneNames.contains(name) {
+        skeletonBoneNodes.removeValue(forKey: name)?.removeFromParentNode()
       }
       for bone in skeleton.bones {
         guard let from = byName[bone.from], let to = byName[bone.to] else { continue }
+        let name = "\(bone.from)>\(bone.to)"
         let start = SIMD3<Float>(Float(from.x), Float(from.y), Float(from.z))
         let end = SIMD3<Float>(Float(to.x), Float(to.y), Float(to.z))
-        let cylinder = SCNCylinder(radius: 0.012, height: CGFloat(simd_length(end - start)))
-        cylinder.firstMaterial = material
-        let node = SCNNode(geometry: cylinder)
+        let node: SCNNode
+        if let existing = skeletonBoneNodes[name] {
+          node = existing
+        } else {
+          let cylinder = SCNCylinder(radius: 0.012, height: 0)
+          cylinder.firstMaterial = skeletonMaterial
+          node = SCNNode(geometry: cylinder)
+          skeletonBoneNodes[name] = node
+          root.addChildNode(node)
+        }
+        guard let cylinder = node.geometry as? SCNCylinder else { continue }
+        cylinder.height = CGFloat(simd_length(end - start))
         node.position = midpoint(start, end)
         node.simdOrientation = simd_quatf(
           from: SIMD3<Float>(0, 1, 0), to: normalized(end - start)
         )
-        root.addChildNode(node)
       }
     }
 
