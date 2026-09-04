@@ -25,6 +25,7 @@ struct HomeView: View {
           .padding(14)
           .background(VKZPalette.panel)
           .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+          .accessibilityLabel("Callsign")
       }
 
       VStack(spacing: 12) {
@@ -33,17 +34,19 @@ struct HomeView: View {
         }
         .buttonStyle(VKZPrimaryButtonStyle())
         .disabled(store.isBusy)
+        .accessibilityLabel("Create duel")
 
         Button("JOIN DUEL") {
           store.showJoin()
         }
         .buttonStyle(VKZSecondaryButtonStyle())
         .disabled(store.isBusy)
+        .accessibilityLabel("Join duel")
       }
 
+      #if DEBUG
       HStack(spacing: 8) {
         VKZStatusPill(label: store.networkingStatus, color: VKZPalette.telemetry)
-        VKZStatusPill(label: "PERMISSIONS DECLARED", color: VKZPalette.ready)
       }
 
       Text(
@@ -53,12 +56,15 @@ struct HomeView: View {
       )
         .font(.footnote)
         .foregroundStyle(VKZPalette.textMuted)
+      #endif
 
+      #if DEBUG
       NavigationLink("SHARED ARENA HARNESS (KIL-20)") {
         SharedArenaHarnessView()
       }
       .font(.caption.weight(.semibold).monospaced())
       .foregroundStyle(VKZPalette.telemetry)
+      #endif
 
       Spacer()
     }
