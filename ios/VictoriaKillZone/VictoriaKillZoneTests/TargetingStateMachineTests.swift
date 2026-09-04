@@ -42,6 +42,41 @@ final class TargetingStateMachineTests: XCTestCase {
     XCTAssertTrue(machine.snapshot.isPoseFresh(at: time(0.2)))
   }
 
+  func testThreeDimensionalHeadAimLocksWithoutTwoDimensionalRegions() {
+    var machine = readyMachine()
+    machine.ingest(
+      observation(at: 0.05, bodyConfidence: 0.8, aimZone3D: .head),
+      evaluatedAt: time(0.06)
+    )
+    machine.ingest(
+      observation(at: 0.1, bodyConfidence: 0.82, aimZone3D: .head),
+      evaluatedAt: time(0.11)
+    )
+
+    XCTAssertEqual(machine.snapshot.hitZone, .head)
+  }
+
+  func testFreshSkeletonFlowsIntoSnapshotAndDisappearsAfterTrackingLoss() {
+    let skeleton = TargetingSkeleton(
+      joints: [TargetingSkeletonJoint(name: "head", position: TargetingVector3(x: 0, y: 1, z: 0))],
+      bones: [],
+      capturedAt: time(0.1)
+    )
+    var machine = readyMachine()
+    machine.ingest(
+      observation(at: 0.05, bodyConfidence: 0.8, skeleton: skeleton),
+      evaluatedAt: time(0.06)
+    )
+    machine.ingest(
+      observation(at: 0.1, bodyConfidence: 0.82, skeleton: skeleton),
+      evaluatedAt: time(0.11)
+    )
+    XCTAssertEqual(machine.snapshot.skeleton, skeleton)
+
+    machine.noBodyObserved(capturedAt: time(0.5), evaluatedAt: time(0.5))
+    XCTAssertNil(machine.snapshot.skeleton)
+  }
+
   func testValidShouldersAndLowerAnchorProduceTorsoLock() {
     var machine = readyMachine()
     machine.ingest(
@@ -667,7 +702,9 @@ final class TargetingStateMachineTests: XCTestCase {
     headConfidence: Double? = nil,
     torsoConfidence: Double? = nil,
     headRegion: NormalizedTargetingEllipse? = nil,
-    torsoRegion: NormalizedTargetingPolygon? = nil
+    torsoRegion: NormalizedTargetingPolygon? = nil,
+    aimZone3D: TargetingHitZone? = nil,
+    skeleton: TargetingSkeleton? = nil
   ) -> TargetingObservation {
     let resolvedTorsoRegion =
       torsoConfidence == nil
@@ -687,7 +724,9 @@ final class TargetingStateMachineTests: XCTestCase {
       bodyBounds: bounds,
       torsoBounds: resolvedTorsoRegion?.bounds,
       headRegion: headRegion,
-      torsoRegion: resolvedTorsoRegion
+      torsoRegion: resolvedTorsoRegion,
+      aimZone3D: aimZone3D,
+      skeleton: skeleton
     )
   }
 

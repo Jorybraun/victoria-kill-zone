@@ -304,6 +304,7 @@ export interface FireShotArgs {
   poseConfidence?: number;
   origin?: [number, number, number];
   direction?: [number, number, number];
+  impact?: [number, number, number];
   firedAtClient: number;
 }
 
@@ -339,15 +340,15 @@ export interface FireShotResult {
 }
 ~~~
 
-Phase 0 iOS always sends arenaCenter on create. During the migration window the backend may continue accepting the smaller G2 create shape, but a match without a valid center cannot use shots:fire.
+Phase 0 iOS always sends arenaCenter on create. During the migration window the backend may continue accepting the smaller G2 create shape. On a centerless match, shots:fire is not location-gated (the same rule as debugFire); arena-centered matches retain the full location gate.
 
 For shots:fire only, shooterId is the technical-spec wire name for PlayerSession.playerId. It must name the player bound to the supplied sessionSecret; it is not a second identity.
 
 Location ranges, accuracy, and finite numbers are validated. Convex records receipt time as locationAt and uses capturedAtClient only for age validation; client time never becomes authoritative. Location is sent through players:heartbeat when meaningfully changed at approximately 2–5 Hz, with a presence-only heartbeat at least every 5 seconds.
 
-A player with no trusted location sample starts with arenaState uncertain and omitted location fields. shots:fire returns LOCATION_STALE until a trusted fresh sample establishes an authoritative arena state.
+A player with no trusted location sample starts with arenaState uncertain and omitted location fields. On an arena-centered match, shots:fire returns LOCATION_STALE until a trusted fresh sample establishes an authoritative arena state. Centerless matches do not apply this gate.
 
-For a claimed hit, targetId, zone, and poseConfidence are all required. Head confidence must be at least 0.60; torso and limbs confidence must be at least 0.45. A miss omits those three fields. Damage is never accepted from the client. origin and direction are optional reduced evidence for the active match only and never enter public snapshots.
+For a claimed hit, targetId, zone, and poseConfidence are all required. Head confidence must be at least 0.60; torso and limbs confidence must be at least 0.45. A miss omits those three fields. Damage is never accepted from the client. origin, direction, and impact are optional reduced evidence for the active match only and never enter public snapshots. The shot ledger persists origin, direction, and impact.
 
 ## Phase 0 snapshots
 

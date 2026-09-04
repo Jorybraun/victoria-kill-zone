@@ -236,6 +236,42 @@ struct TargetingVector3: Equatable, Sendable {
   let x: Double
   let y: Double
   let z: Double
+
+  static func + (lhs: TargetingVector3, rhs: TargetingVector3) -> TargetingVector3 {
+    TargetingVector3(x: lhs.x + rhs.x, y: lhs.y + rhs.y, z: lhs.z + rhs.z)
+  }
+
+  static func - (lhs: TargetingVector3, rhs: TargetingVector3) -> TargetingVector3 {
+    TargetingVector3(x: lhs.x - rhs.x, y: lhs.y - rhs.y, z: lhs.z - rhs.z)
+  }
+
+  static func * (lhs: TargetingVector3, rhs: Double) -> TargetingVector3 {
+    TargetingVector3(x: lhs.x * rhs, y: lhs.y * rhs, z: lhs.z * rhs)
+  }
+
+  func dot(_ other: TargetingVector3) -> Double {
+    x * other.x + y * other.y + z * other.z
+  }
+}
+
+struct TargetingSkeletonJoint: Equatable, Sendable {
+  let name: String
+  let position: TargetingVector3
+}
+
+struct TargetingSkeletonBone: Equatable, Sendable {
+  let from: String
+  let to: String
+}
+
+struct TargetingSkeleton: Equatable, Sendable {
+  let joints: [TargetingSkeletonJoint]
+  let bones: [TargetingSkeletonBone]
+  let capturedAt: Date
+
+  func position(of name: String) -> TargetingVector3? {
+    joints.first(where: { $0.name == name })?.position
+  }
 }
 
 struct TargetingCameraRay: Equatable, Sendable {
@@ -253,6 +289,8 @@ struct TargetingObservation: Equatable, Sendable {
   let torsoBounds: NormalizedTargetingRect?
   let headRegion: NormalizedTargetingEllipse?
   let torsoRegion: NormalizedTargetingPolygon?
+  let aimZone3D: TargetingHitZone?
+  let skeleton: TargetingSkeleton?
 
   init(
     capturedAt: Date,
@@ -262,7 +300,9 @@ struct TargetingObservation: Equatable, Sendable {
     bodyBounds: NormalizedTargetingRect,
     torsoBounds: NormalizedTargetingRect?,
     headRegion: NormalizedTargetingEllipse? = nil,
-    torsoRegion: NormalizedTargetingPolygon? = nil
+    torsoRegion: NormalizedTargetingPolygon? = nil,
+    aimZone3D: TargetingHitZone? = nil,
+    skeleton: TargetingSkeleton? = nil
   ) {
     self.capturedAt = capturedAt
     self.bodyConfidence = bodyConfidence
@@ -272,6 +312,8 @@ struct TargetingObservation: Equatable, Sendable {
     self.torsoBounds = torsoBounds
     self.headRegion = headRegion
     self.torsoRegion = torsoRegion
+    self.aimZone3D = aimZone3D
+    self.skeleton = skeleton
   }
 }
 
@@ -339,10 +381,14 @@ struct TargetingSnapshot: Equatable, Sendable {
   let aimClaim: TargetingAimClaim?
   let cameraRay: TargetingCameraRay?
   let poseStaleAfter: TimeInterval
+  let skeleton: TargetingSkeleton?
 
   /// Compatibility/readability conveniences for HUD and fire-path callers.
   var hitZone: TargetingHitZone? { aimClaim?.zone }
   var hitConfidence: Double { aimClaim?.confidence ?? 0 }
+  var isLocked: Bool {
+    [.bodyLock, .torsoLock, .targetReacquired].contains(state)
+  }
 
   init(
     state: TargetingTrackingState,
@@ -357,7 +403,8 @@ struct TargetingSnapshot: Equatable, Sendable {
     torsoRegion: NormalizedTargetingPolygon?,
     aimClaim: TargetingAimClaim?,
     cameraRay: TargetingCameraRay?,
-    poseStaleAfter: TimeInterval
+    poseStaleAfter: TimeInterval,
+    skeleton: TargetingSkeleton? = nil
   ) {
     self.state = state
     self.bodyDetected = bodyDetected
@@ -372,6 +419,7 @@ struct TargetingSnapshot: Equatable, Sendable {
     self.aimClaim = aimClaim
     self.cameraRay = cameraRay
     self.poseStaleAfter = poseStaleAfter
+    self.skeleton = skeleton
   }
 
   // Keeps the Phase 0 shell initializer source-compatible while callers move to
@@ -390,7 +438,8 @@ struct TargetingSnapshot: Equatable, Sendable {
       torsoRegion: nil,
       aimClaim: nil,
       cameraRay: nil,
-      poseStaleAfter: TargetingThresholds.phaseZero.poseStaleAfter
+      poseStaleAfter: TargetingThresholds.phaseZero.poseStaleAfter,
+      skeleton: nil
     )
   }
 
@@ -476,18 +525,27 @@ struct TargetingStateMachine: Sendable {
     }
 
     let aimCandidate: (zone: TargetingHitZone, confidence: Double)?
-    if let headConfidence = observation.headConfidence,
-      headConfidence >= thresholds.headConfidence,
-      observation.headRegion?.contains(x: 0.5, y: 0.5) == true
-    {
-      aimCandidate = (.head, min(observation.bodyConfidence, headConfidence))
-    } else if let torsoConfidence = observation.torsoConfidence,
-      torsoConfidence >= thresholds.torsoConfidence,
-      observation.torsoRegion?.contains(x: 0.5, y: 0.5) == true
-    {
-      aimCandidate = (.torso, min(observation.bodyConfidence, torsoConfidence))
+    if let zone3D = observation.aimZone3D {
+      let headIsConfident =
+        observation.headConfidence.map { $0 >= thresholds.headConfidence } ?? true
+      aimCandidate =
+        zone3D == .head && !headIsConfident
+        ? nil
+        : (zone3D, observation.bodyConfidence)
     } else {
-      aimCandidate = nil
+      if let headConfidence = observation.headConfidence,
+        headConfidence >= thresholds.headConfidence,
+        observation.headRegion?.contains(x: 0.5, y: 0.5) == true
+      {
+        aimCandidate = (.head, min(observation.bodyConfidence, headConfidence))
+      } else if let torsoConfidence = observation.torsoConfidence,
+        torsoConfidence >= thresholds.torsoConfidence,
+        observation.torsoRegion?.contains(x: 0.5, y: 0.5) == true
+      {
+        aimCandidate = (.torso, min(observation.bodyConfidence, torsoConfidence))
+      } else {
+        aimCandidate = nil
+      }
     }
     updateAimTracking(with: aimCandidate, capturedAt: observation.capturedAt)
     let lockState: TargetingTrackingState = aimCandidate?.zone == .torso ? .torsoLock : .bodyLock
@@ -617,7 +675,9 @@ struct TargetingStateMachine: Sendable {
   private mutating func rebuildSnapshot(state: TargetingTrackingState, at date: Date) {
     let reportsBody = state == .bodyLock || state == .torsoLock || state == .targetReacquired
     let observation = lastValidObservation
-    let reportsTorso = reportsBody && observation?.torsoRegion != nil
+    let reportsTorso =
+      reportsBody
+      && (observation?.torsoRegion != nil || observation?.aimZone3D == .torso)
     let poseAge = observation.map { max(0, date.timeIntervalSince($0.capturedAt)) }
     let reportsFreshAim =
       reportsBody
@@ -636,7 +696,8 @@ struct TargetingStateMachine: Sendable {
       torsoRegion: observation?.torsoRegion,
       aimClaim: reportsFreshAim ? confirmedAimClaim : nil,
       cameraRay: cameraRay,
-      poseStaleAfter: thresholds.poseStaleAfter
+      poseStaleAfter: thresholds.poseStaleAfter,
+      skeleton: reportsFreshAim ? observation?.skeleton : nil
     )
   }
 }
@@ -704,6 +765,7 @@ enum TargetingSessionFactory {
     var currentSnapshot: TargetingSnapshot { snapshotHub.currentSnapshot() }
 
     private let thresholds: TargetingThresholds
+    private let usesBodyTracking = ARBodyTrackingConfiguration.isSupported
     private let snapshotHub: TargetingSnapshotHub
     private let sessionQueue = DispatchQueue(
       label: "com.victoriakillzone.targeting.session",
@@ -727,7 +789,7 @@ enum TargetingSessionFactory {
     override init() {
       let now = Date()
       let initialSnapshot = TargetingSnapshot.unavailable(at: now)
-      let supported = ARWorldTrackingConfiguration.isSupported
+      let supported = ARWorldTrackingConfiguration.isSupported || ARBodyTrackingConfiguration.isSupported
 
       availability = supported ? .available : .notConfigured
       thresholds = .phaseZero
@@ -899,8 +961,16 @@ enum TargetingSessionFactory {
       machine.sessionStarted(at: Date())
       publish(machine.snapshot)
 
-      let configuration = ARWorldTrackingConfiguration()
-      configuration.worldAlignment = .gravity
+      let configuration: ARConfiguration
+      if usesBodyTracking {
+        let bodyConfiguration = ARBodyTrackingConfiguration()
+        bodyConfiguration.worldAlignment = .gravity
+        configuration = bodyConfiguration
+      } else {
+        let worldConfiguration = ARWorldTrackingConfiguration()
+        worldConfiguration.worldAlignment = .gravity
+        configuration = worldConfiguration
+      }
       let options: ARSession.RunOptions =
         resetTracking
         ? [.resetTracking, .removeExistingAnchors]
@@ -923,6 +993,19 @@ enum TargetingSessionFactory {
       machine.updateCameraRay(Self.cameraRay(from: frame, capturedAt: now), at: now)
       machine.tick(at: now)
       publish(machine.snapshot)
+
+      if usesBodyTracking {
+        let capturedAt = now
+        let observation = frame.anchors.compactMap { $0 as? ARBodyAnchor }.first
+          .flatMap { Self.bodyObservation(from: $0, frame: frame, capturedAt: capturedAt) }
+        if let observation {
+          machine.ingest(observation, evaluatedAt: now)
+        } else {
+          machine.noBodyObserved(capturedAt: capturedAt, evaluatedAt: now)
+        }
+        publish(machine.snapshot)
+        return
+      }
 
       guard !visionInFlight else { return }
       guard frame.timestamp - lastVisionFrameTimestamp >= thresholds.visionInterval else { return }
@@ -1102,6 +1185,154 @@ enum TargetingSessionFactory {
         ),
         capturedAt: capturedAt
       )
+    }
+
+    static func bodyObservation(
+      from anchor: ARBodyAnchor,
+      frame: ARFrame,
+      capturedAt: Date
+    ) -> TargetingObservation? {
+      let requestedJoints: [(String, ARSkeleton.JointName)] = [
+        ("head", .head), ("root", .root), ("leftShoulder", .leftShoulder),
+        ("rightShoulder", .rightShoulder), ("leftHand", .leftHand),
+        ("rightHand", .rightHand), ("leftFoot", .leftFoot), ("rightFoot", .rightFoot),
+        ("neck_1_joint", ARSkeleton.JointName(rawValue: "neck_1_joint")),
+        ("spine_7_joint", ARSkeleton.JointName(rawValue: "spine_7_joint")),
+        ("left_forearm_joint", ARSkeleton.JointName(rawValue: "left_forearm_joint")),
+        ("right_forearm_joint", ARSkeleton.JointName(rawValue: "right_forearm_joint")),
+        ("left_leg_joint", ARSkeleton.JointName(rawValue: "left_leg_joint")),
+        ("right_leg_joint", ARSkeleton.JointName(rawValue: "right_leg_joint")),
+        ("left_upLeg_joint", ARSkeleton.JointName(rawValue: "left_upLeg_joint")),
+        ("right_upLeg_joint", ARSkeleton.JointName(rawValue: "right_upLeg_joint")),
+        ("left_arm_joint", ARSkeleton.JointName(rawValue: "left_arm_joint")),
+        ("right_arm_joint", ARSkeleton.JointName(rawValue: "right_arm_joint")),
+      ]
+      var positions: [String: TargetingVector3] = [:]
+      for (name, joint) in requestedJoints {
+        let index = anchor.skeleton.definition.index(for: joint)
+        guard anchor.skeleton.isJointTracked(index),
+          let model = anchor.skeleton.modelTransform(for: joint)
+        else { continue }
+        let world = anchor.transform * model
+        positions[name] = TargetingVector3(
+          x: Double(world.columns.3.x),
+          y: Double(world.columns.3.y),
+          z: Double(world.columns.3.z)
+        )
+      }
+      guard let root = positions["root"] else { return nil }
+      let neck = positions["neck_1_joint"]
+      let head = positions["head"] ?? neck.map {
+        TargetingVector3(x: $0.x, y: $0.y + 0.15, z: $0.z)
+      }
+      let ray = cameraRay(from: frame, capturedAt: capturedAt)
+      let aimZone3D: TargetingHitZone?
+      if let head, rayIntersectsSphere(ray, center: head, radius: 0.12) {
+        aimZone3D = .head
+      } else if let neck, rayIntersectsCapsule(ray, start: root, end: neck, radius: 0.18) {
+        aimZone3D = .torso
+      } else {
+        aimZone3D = nil
+      }
+
+      let projected = [head, positions["root"]].compactMap { point -> CGPoint? in
+        guard let point else { return nil }
+        let result = frame.camera.projectPoint(
+          SIMD3<Float>(Float(point.x), Float(point.y), Float(point.z)),
+          orientation: .portrait,
+          viewportSize: CGSize(width: 1, height: 1)
+        )
+        return CGPoint(x: min(1, max(0, result.x)), y: min(1, max(0, result.y)))
+      }
+      let bodyBounds: NormalizedTargetingRect
+      if let minX = projected.map(\.x).min(), let maxX = projected.map(\.x).max(),
+        let minY = projected.map(\.y).min(), let maxY = projected.map(\.y).max()
+      {
+        let x = max(0, minX - 0.15)
+        let y = max(0, minY - 0.15)
+        bodyBounds = NormalizedTargetingRect(
+          minX: x,
+          minY: y,
+          width: min(1, maxX + 0.15) - x,
+          height: min(1, maxY + 0.15) - y
+        )
+      } else {
+        bodyBounds = NormalizedTargetingRect(minX: 0, minY: 0, width: 1, height: 1)
+      }
+
+      let joints = positions.map { TargetingSkeletonJoint(name: $0.key, position: $0.value) }
+        .sorted { $0.name < $1.name }
+      let boneNames = [
+        ("head", "neck_1_joint"), ("neck_1_joint", "spine_7_joint"),
+        ("spine_7_joint", "root"), ("neck_1_joint", "leftShoulder"),
+        ("leftShoulder", "left_arm_joint"), ("left_arm_joint", "left_forearm_joint"),
+        ("left_forearm_joint", "leftHand"), ("neck_1_joint", "rightShoulder"),
+        ("rightShoulder", "right_arm_joint"), ("right_arm_joint", "right_forearm_joint"),
+        ("right_forearm_joint", "rightHand"), ("root", "left_upLeg_joint"),
+        ("left_upLeg_joint", "left_leg_joint"), ("left_leg_joint", "leftFoot"),
+        ("root", "right_upLeg_joint"), ("right_upLeg_joint", "right_leg_joint"),
+        ("right_leg_joint", "rightFoot"),
+      ]
+      return TargetingObservation(
+        capturedAt: capturedAt,
+        bodyConfidence: anchor.isTracked ? 0.9 : 0.5,
+        headConfidence: positions["head"] == nil ? nil : 0.9,
+        torsoConfidence: 0.9,
+        bodyBounds: bodyBounds,
+        torsoBounds: nil,
+        aimZone3D: aimZone3D,
+        skeleton: TargetingSkeleton(
+          joints: joints,
+          bones: boneNames.map { TargetingSkeletonBone(from: $0.0, to: $0.1) },
+          capturedAt: capturedAt
+        )
+      )
+    }
+
+    private static func rayIntersectsSphere(
+      _ ray: TargetingCameraRay,
+      center: TargetingVector3,
+      radius: Double
+    ) -> Bool {
+      let offset = ray.origin - center
+      let b = offset.x * ray.direction.x + offset.y * ray.direction.y + offset.z * ray.direction.z
+      let c = offset.x * offset.x + offset.y * offset.y + offset.z * offset.z - radius * radius
+      let discriminant = b * b - c
+      return discriminant >= 0 && -b + sqrt(discriminant) >= 0
+    }
+
+    private static func rayIntersectsCapsule(
+      _ ray: TargetingCameraRay,
+      start: TargetingVector3,
+      end: TargetingVector3,
+      radius: Double
+    ) -> Bool {
+      let segment = end - start
+      let lengthSquared = segment.dot(segment)
+      guard lengthSquared > .ulpOfOne else {
+        return rayIntersectsSphere(ray, center: start, radius: radius)
+      }
+      let directionSegment = ray.direction.dot(segment)
+      let originSegment = (ray.origin - start).dot(segment)
+      let directionOrigin = ray.direction.dot(ray.origin - start)
+      let denominator = lengthSquared - directionSegment * directionSegment
+      let rayDistance: Double
+      let segmentFraction: Double
+      if abs(denominator) < .ulpOfOne {
+        rayDistance = max(0, -directionOrigin)
+        segmentFraction = min(1, max(0, originSegment / lengthSquared))
+      } else {
+        let rawRayDistance =
+          (directionSegment * originSegment - directionOrigin * lengthSquared) / denominator
+        rayDistance = max(0, rawRayDistance)
+        let rawFraction =
+          (originSegment - directionSegment * directionOrigin) / denominator
+        segmentFraction = min(1, max(0, rawFraction))
+      }
+      let rayPoint = ray.origin + ray.direction * rayDistance
+      let segmentPoint = start + segment * segmentFraction
+      let delta = rayPoint - segmentPoint
+      return delta.dot(delta) <= radius * radius
     }
   }
 

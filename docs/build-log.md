@@ -121,3 +121,7 @@ This is the integration-owned, evidence-based status record. Append observed res
 - **Result:** PASS — every green merge to `main` now promotes to TestFlight automatically. Tier 2 closes when an OTA install is observed on both phones and recorded here.
 - **Blocker and owner:** none for the lane. The Outpost Mac must stay logged in and awake; a queued promote job is the intended fail-closed state when it is not.
 - **Next integration step:** record the two OTA installs (model + iOS version only); optionally add `VKZ_SLACK_WEBHOOK_URL`/`VKZ_SLACK_CHANNEL_ID`.
+
+### 2026-09-04 — ADR 0005 proposed
+
+- ADR 0005 proposed; fire-path trace found every markerless `shots:fire` rejected `LOCATION_STALE` on the current client (no location sent); PR implements ADR 0005; physical-device evidence pending.

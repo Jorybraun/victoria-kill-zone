@@ -143,6 +143,7 @@ export const fire = mutation({
     poseConfidence: v.optional(v.number()),
     origin: v.optional(v.array(v.number())),
     direction: v.optional(v.array(v.number())),
+    impact: v.optional(v.array(v.number())),
     firedAtClient: v.number(),
   },
   returns: v.object({
@@ -167,7 +168,8 @@ export const fire = mutation({
     if (
       args.clientShotId.trim().length === 0 ||
       !validVector(args.origin) ||
-      !validVector(args.direction)
+      !validVector(args.direction) ||
+      !validVector(args.impact)
     ) {
       return conflictResult(args.clientShotId, shooter.ammo);
     }
@@ -181,6 +183,7 @@ export const fire = mutation({
       ...(args.poseConfidence === undefined ? {} : { poseConfidence: args.poseConfidence }),
       ...(args.origin === undefined ? {} : { origin: args.origin }),
       ...(args.direction === undefined ? {} : { direction: args.direction }),
+      ...(args.impact === undefined ? {} : { impact: args.impact }),
     };
     const fingerprint = fireClaimFingerprint(request);
     const existing = await loadShot(ctx, shooter._id, args.clientShotId);
@@ -194,16 +197,15 @@ export const fire = mutation({
     const players = await listPlayers(ctx, match._id);
     const opponent = players.find((player) => player._id !== shooter._id) ?? null;
     const now = Date.now();
-    // shots:fire is always geofence-gated. On a centerless match a shooter can
-    // never establish a trusted inside state, so fire stays LOCATION_STALE per
-    // the contract: "a match without a valid center cannot use shots:fire".
+    // Centerless matches follow the same ungated migration rule as debug fire;
+    // arena-centered matches retain the authoritative geofence gate.
     const plan = resolveFire(
       toMatchState(match),
       toPlayerState(shooter),
       opponent === null ? null : toPlayerState(opponent),
       request,
       now,
-      shooterLocationGate(shooter, now),
+      arenaGeometryOf(match) === null ? null : shooterLocationGate(shooter, now),
     );
     const eventId = await persistPlan(ctx, match, shooter, opponent, request, plan, "fire", fingerprint, false);
     return fireResult(plan, args.clientShotId, eventId);
@@ -262,6 +264,9 @@ async function persistPlan(
     outcome: plan.shot.outcome,
     rejectReason,
     poseConfidence: plan.shot.poseConfidence,
+    ...(request.origin === undefined ? {} : { origin: [...request.origin] }),
+    ...(request.direction === undefined ? {} : { direction: [...request.direction] }),
+    ...(request.impact === undefined ? {} : { impact: [...request.impact] }),
     firedAtClient: plan.shot.firedAtClient,
     mode,
     claimFingerprint,

@@ -189,6 +189,7 @@ struct FireShotRequest: Equatable, Sendable {
   let poseConfidence: Double?
   let origin: [Double]?
   let direction: [Double]?
+  let impact: [Double]?
   let firedAtClient: Double
 }
 

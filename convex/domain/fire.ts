@@ -19,6 +19,7 @@ export interface FireRequest {
   poseConfidence?: number;
   origin?: readonly number[];
   direction?: readonly number[];
+  impact?: readonly number[];
   firedAtClient: number;
 }
 
@@ -40,6 +41,9 @@ export interface ShotLedgerDraft {
   outcome: ShotOutcome;
   rejectReason: RejectReason | null;
   poseConfidence: number | null;
+  origin: readonly number[] | null;
+  direction: readonly number[] | null;
+  impact: readonly number[] | null;
   firedAtClient: number;
 }
 
@@ -259,6 +263,7 @@ export function fireClaimFingerprint(request: FireRequest): string {
     request.poseConfidence ?? null,
     request.origin ?? null,
     request.direction ?? null,
+    request.impact ?? null,
     request.firedAtClient,
   ]);
 }
@@ -309,6 +314,9 @@ function ledger(
     outcome: resolution.outcome,
     rejectReason: resolution.rejectReason ?? null,
     poseConfidence: request.poseConfidence ?? null,
+    origin: request.origin ?? null,
+    direction: request.direction ?? null,
+    impact: request.impact ?? null,
     firedAtClient: request.firedAtClient,
   };
 }
