@@ -9,6 +9,7 @@ struct ActiveDuelView: View {
   @ObservedObject var combat: DuelSession
   @ObservedObject var store: LobbyStore
   @Environment(\.scenePhase) private var scenePhase
+  @Environment(\.openURL) private var openURL
   @StateObject private var fx = LaserFXEngine()
   @StateObject private var voiceFire = VoiceFireController()
   @State private var muzzleFlash = false
@@ -54,6 +55,9 @@ struct ActiveDuelView: View {
         VStack(spacing: 14) {
           topTelemetry(at: context.date)
           connectionBanner
+          if let blocker = store.targetingBlocker {
+            targetingBlockerPanel(blocker)
+          }
           Spacer(minLength: 12)
           reticle
           targetReadout
@@ -65,8 +69,10 @@ struct ActiveDuelView: View {
             store.leave()
           }
           .font(.caption.bold().monospaced())
+          .accessibilityLabel("Leave duel")
         }
         .padding(18)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .opacity(store.isMatchInputLocked ? 0.58 : 1)
 
         if isLocalRespawning {
@@ -286,14 +292,17 @@ struct ActiveDuelView: View {
         .buttonStyle(VKZPrimaryButtonStyle())
         .accessibilityLabel("Fire markerless shot")
 
-        if duel.localRole == .host {
-          Button("DEBUG TORSO FALLBACK") {
-            combat.debugFire()
+        #if VKZ_DEBUG_FIRE
+          if duel.localRole == .host {
+            Button("DEBUG · TORSO FALLBACK FIRE") {
+              combat.debugFire()
+            }
+            .font(.caption2.bold().monospaced())
+            .foregroundStyle(VKZPalette.textMuted)
+            .disabled(!combat.canDebugFire)
+            .accessibilityLabel("Debug torso fallback fire")
           }
-          .font(.caption2.bold().monospaced())
-          .foregroundStyle(VKZPalette.textMuted)
-          .disabled(!combat.canDebugFire)
-        }
+        #endif
       }
     case .finished:
       Text("DUEL COMPLETE")
@@ -329,6 +338,32 @@ struct ActiveDuelView: View {
     .padding(12)
     .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 12))
     .accessibilityLabel("Voice Fire")
+  }
+
+  private func targetingBlockerPanel(_ blocker: TargetingBlocker) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text(blocker.title)
+        .font(.caption.weight(.bold).monospaced())
+        .foregroundStyle(VKZPalette.danger)
+      Text(blocker.message)
+        .font(.footnote)
+        .foregroundStyle(VKZPalette.text)
+        .fixedSize(horizontal: false, vertical: true)
+      if blocker.offersSettings {
+        Button("OPEN SETTINGS") {
+          #if os(iOS)
+            if let url = URL(string: UIApplication.openSettingsURLString) {
+              openURL(url)
+            }
+          #endif
+        }
+        .buttonStyle(VKZSecondaryButtonStyle())
+        .accessibilityLabel("Open Settings to allow camera access")
+      }
+    }
+    .padding(14)
+    .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 14))
+    .accessibilityElement(children: .contain)
   }
 
   private func fireShot() {

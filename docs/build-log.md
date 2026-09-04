@@ -137,6 +137,20 @@ This is the integration-owned, evidence-based status record. Append observed res
 - **Result:** PASS for Tier 0; BLOCKED for ADR 0004 acceptance until the iOS host authority posts verdicts and the two-phone TestFlight run records fire→confirmation latency.
 - **Next integration step:** iOS slice wires `AuthorityHost` verdicts to `shots:recordVerdict`; then measure on two phones.
 
+### 2026-09-04 — App Store readiness audit (Info.plist, privacy manifest, Release gating of debug UI)
+
+- **Git SHA / PR:** Branch `devin/1788521289-app-store-readiness`; PR pending.
+- **Owner and write set:** Integration (Xcode project, Info.plist, docs) + iOS targeting (Targeting/SharedArena gating).
+- **Environment/artifact:** Linux repository workspace; iOS source and Xcode project metadata.
+- **Commands/checks:** `pnpm verify` PASS (`Repository contract: PASS`; workspace lint, typecheck, tests, build, and `Workspace verification: PASS`).
+- **Observed on browser/simulator:** None.
+- **Observed on physical devices:** None. Needed two-phone TestFlight checks: camera-denied panel; harness link absent in the TestFlight build; Bonjour prompt still works for both `_pewpew-arena._tcp` and `_vkz-combat._udp`.
+- **Mocked or unproven:** Physical-device camera-denied flow, Release/TestFlight UI, and Bonjour prompts.
+- **Result:** BLOCKED pending physical-device TestFlight checks.
+- **Blocker and owner:** Integration / iOS targeting — two-phone TestFlight validation.
+- **Next integration step:** Install the pushed build on two phones and run the listed TestFlight checks.
+- **Cut/deferred or risk change:** Release excludes debug-only harness and shell controls; debug-fire paths remain available. The torso-fallback fire button is gated by `VKZ_DEBUG_FIRE`, set in both Debug and Release so TestFlight keeps it; remove it from Release only after two-phone markerless fire evidence lands here.
+
 ### 2026-09-04 — ADR 0006 duel shared frame proposed (docs only)
 
 - **Git SHA / PR:** this PR (docs-only; no product code, no tests changed).
