@@ -11,6 +11,8 @@
     private let audioEngine = AVAudioEngine()
     private let audioState = LaserAudioState()
     private var audioSource: AVAudioSourceNode?
+    private var skeletonRoot: SCNNode?
+    private var lastSkeletonUpdate = Date.distantPast
 
     init() {
       configureAudio()
@@ -114,6 +116,104 @@
 
     }
 
+    func renderIncomingLaser(from origin: SIMD3<Float>?, hit: Bool) {
+      guard let sceneView, let frame = sceneView.session.currentFrame else { return }
+      let transform = frame.camera.transform
+      let cameraPosition = SIMD3<Float>(
+        transform.columns.3.x, transform.columns.3.y, transform.columns.3.z
+      )
+      let forward = normalized(SIMD3<Float>(
+        -transform.columns.2.x, -transform.columns.2.y, -transform.columns.2.z
+      ))
+      let right = normalized(SIMD3<Float>(
+        transform.columns.0.x, transform.columns.0.y, transform.columns.0.z
+      ))
+      let up = normalized(SIMD3<Float>(
+        transform.columns.1.x, transform.columns.1.y, transform.columns.1.z
+      ))
+      let start = origin ?? cameraPosition + forward * 3 + up * 0.6
+      let end = hit
+        ? cameraPosition
+        : cameraPosition + right * 0.6 - up * 0.4
+      let beam = SCNCylinder(radius: 0.008, height: CGFloat(simd_length(end - start)))
+      let material = SCNMaterial()
+      material.diffuse.contents = UIColor.systemOrange
+      material.emission.contents = UIColor.systemOrange
+      material.lightingModel = .constant
+      beam.firstMaterial = material
+      let node = SCNNode(geometry: beam)
+      node.position = midpoint(start, end)
+      node.simdOrientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: normalized(end - start))
+      sceneView.scene.rootNode.addChildNode(node)
+      node.runAction(.sequence([.fadeOut(duration: 0.35), .removeFromParentNode()]))
+
+      if hit {
+        let spark = SCNSphere(radius: 0.07)
+        let sparkMaterial = SCNMaterial()
+        sparkMaterial.diffuse.contents = UIColor.red
+        sparkMaterial.emission.contents = UIColor.red
+        sparkMaterial.lightingModel = .constant
+        spark.firstMaterial = sparkMaterial
+        let sparkNode = SCNNode(geometry: spark)
+        sparkNode.position = SCNVector3(end.x, end.y, end.z)
+        sceneView.scene.rootNode.addChildNode(sparkNode)
+        sparkNode.runAction(.sequence([
+          .group([.scale(to: 1.8, duration: 0.12), .fadeOut(duration: 0.18)]),
+          .removeFromParentNode(),
+        ]))
+        let feedback = UIImpactFeedbackGenerator(style: .rigid)
+        feedback.prepare()
+        feedback.impactOccurred()
+      }
+    }
+
+    func updateSkeleton(_ skeleton: TargetingSkeleton?, zone: TargetingHitZone?) {
+      guard let sceneView else { return }
+      if skeleton == nil {
+        skeletonRoot?.removeFromParentNode()
+        skeletonRoot = nil
+        return
+      }
+      guard Date().timeIntervalSince(lastSkeletonUpdate) >= 0.05 else { return }
+      lastSkeletonUpdate = Date()
+      let root = skeletonRoot ?? SCNNode()
+      if root.parent == nil {
+        sceneView.scene.rootNode.addChildNode(root)
+        skeletonRoot = root
+      }
+      root.childNodes.forEach { $0.removeFromParentNode() }
+      guard let skeleton else { return }
+      let color: UIColor = zone == .head ? .systemRed : .systemGreen
+      let material = SCNMaterial()
+      material.diffuse.contents = color
+      material.emission.contents = color
+      material.lightingModel = .constant
+      material.transparency = 0.85
+      let byName = Dictionary(uniqueKeysWithValues: skeleton.joints.map { ($0.name, $0.position) })
+      for joint in skeleton.joints {
+        let sphere = SCNSphere(radius: 0.03)
+        sphere.firstMaterial = material
+        let node = SCNNode(geometry: sphere)
+        node.position = SCNVector3(
+          joint.position.x, joint.position.y, joint.position.z
+        )
+        root.addChildNode(node)
+      }
+      for bone in skeleton.bones {
+        guard let from = byName[bone.from], let to = byName[bone.to] else { continue }
+        let start = SIMD3<Float>(Float(from.x), Float(from.y), Float(from.z))
+        let end = SIMD3<Float>(Float(to.x), Float(to.y), Float(to.z))
+        let cylinder = SCNCylinder(radius: 0.012, height: CGFloat(simd_length(end - start)))
+        cylinder.firstMaterial = material
+        let node = SCNNode(geometry: cylinder)
+        node.position = midpoint(start, end)
+        node.simdOrientation = simd_quatf(
+          from: SIMD3<Float>(0, 1, 0), to: normalized(end - start)
+        )
+        root.addChildNode(node)
+      }
+    }
+
     private func configureAudio() {
       let session = AVAudioSession.sharedInstance()
       try? session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
@@ -212,5 +312,7 @@
   @MainActor
   final class LaserFXEngine: ObservableObject {
     func fireLaser(hit: Bool) {}
+    func renderIncomingLaser(from origin: SIMD3<Float>?, hit: Bool) {}
+    func updateSkeleton(_ skeleton: TargetingSkeleton?, zone: TargetingHitZone?) {}
   }
 #endif

@@ -1027,6 +1027,75 @@ final class LobbyStoreTests: XCTestCase {
     XCTAssertEqual(store.killBanner, firstBanner)
   }
 
+  func testOpponentShotAndHitPublishIncomingShotsButOwnEventsDoNot() async throws {
+    let client = MockGameSessionClient()
+    let store = makeStore(client: client)
+    store.displayName = "Host"
+    await store.performCreateDuel()
+    client.send(snapshot(phase: .running))
+    await settle()
+
+    client.send(
+      snapshot(
+        phase: .running,
+        events: [
+          EventSnapshot(
+            id: "opponent-shot",
+            type: .shot,
+            message: "Guest fired",
+            createdAt: 1_750_000_000_100,
+            actorPlayerId: "guest-1",
+            targetPlayerId: "host-1",
+            zone: "head",
+            damage: nil
+          ),
+          EventSnapshot(
+            id: "own-shot",
+            type: .shot,
+            message: "Host fired",
+            createdAt: 1_750_000_000_101,
+            actorPlayerId: "host-1",
+            targetPlayerId: "guest-1",
+            zone: "torso",
+            damage: nil
+          ),
+        ]
+      )
+    )
+    await settle()
+    XCTAssertEqual(
+      store.incomingShot,
+      IncomingShot(
+        eventID: "opponent-shot",
+        hit: false,
+        zone: "head",
+        timestamp: 1_750_000_000_100,
+        source: .convex
+      )
+    )
+
+    client.send(
+      snapshot(
+        phase: .running,
+        events: [
+          EventSnapshot(
+            id: "opponent-hit",
+            type: .hit,
+            message: "Guest hit Host",
+            createdAt: 1_750_000_000_200,
+            actorPlayerId: "guest-1",
+            targetPlayerId: "host-1",
+            zone: "torso",
+            damage: 34
+          )
+        ]
+      )
+    )
+    await settle()
+    XCTAssertEqual(store.incomingShot?.eventID, "opponent-hit")
+    XCTAssertTrue(store.incomingShot?.hit == true)
+  }
+
   func testKillBannerUsesFirstSnapshotServerClock() async throws {
     let client = MockGameSessionClient()
     let store = makeStore(

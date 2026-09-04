@@ -97,6 +97,28 @@ struct ActiveDuelView: View {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
       #endif
     }
+    .onChange(of: store.incomingShot) { shot in
+      guard let shot else { return }
+      #if os(iOS)
+        let opponentOrigin: SIMD3<Float>?
+        if store.targetingSnapshot.isPoseFresh(at: Date()),
+          let position = store.targetingSnapshot.skeleton?.position(of: "head")
+        {
+          opponentOrigin = SIMD3<Float>(Float(position.x), Float(position.y), Float(position.z))
+        } else {
+          opponentOrigin = nil
+        }
+        fx.renderIncomingLaser(from: opponentOrigin, hit: shot.hit)
+      #endif
+    }
+    .onChange(of: store.targetingSnapshot) { snapshot in
+      #if os(iOS)
+        let skeleton = snapshot.isLocked && snapshot.isPoseFresh(at: Date())
+          ? snapshot.skeleton
+          : nil
+        fx.updateSkeleton(skeleton, zone: snapshot.hitZone)
+      #endif
+    }
   }
 
   @ViewBuilder
@@ -211,6 +233,12 @@ struct ActiveDuelView: View {
       VKZStatusPill(label: store.targetingStatus, color: reticleColor)
       if let zone = store.markerlessAimZone {
         VKZStatusPill(label: zone.rawValue.uppercased(), color: reticleColor)
+      }
+      if store.targetingSnapshot.isLocked,
+        store.targetingSnapshot.isPoseFresh(at: Date()),
+        store.targetingSnapshot.skeleton != nil
+      {
+        VKZStatusPill(label: "SKELETON", color: VKZPalette.ready)
       }
     }
   }

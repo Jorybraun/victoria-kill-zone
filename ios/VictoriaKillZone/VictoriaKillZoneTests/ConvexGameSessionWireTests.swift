@@ -28,6 +28,26 @@ final class ConvexGameSessionWireTests: XCTestCase {
       Set(ConvexGameSessionArguments.debugFire(session: session, clientShotId: "shot-1").keys),
       ["matchId", "playerId", "sessionSecret", "clientShotId"]
     )
+    let fire = ConvexGameSessionArguments.fire(
+      session: session,
+      request: FireShotRequest(
+        clientShotId: "shot-1",
+        targetId: "target-1",
+        zone: .head,
+        poseConfidence: 0.9,
+        origin: [1, 2, 3],
+        direction: [0, 0, -1],
+        impact: [1, 2, -22],
+        firedAtClient: 1_750_000_000_000
+      )
+    )
+    XCTAssertEqual(
+      Set(fire.keys),
+      [
+        "matchId", "shooterId", "sessionSecret", "clientShotId", "firedAtClient",
+        "targetId", "zone", "poseConfidence", "origin", "direction", "impact",
+      ]
+    )
   }
 
   func testPlayerSessionDecodesExactCreateAndJoinEnvelope() throws {

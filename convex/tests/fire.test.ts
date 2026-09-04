@@ -188,6 +188,9 @@ describe("debugFire authority", () => {
     expect(fireClaimFingerprint(request())).not.toBe(
       fireClaimFingerprint(request({ zone: "head" })),
     );
+    expect(fireClaimFingerprint(request())).not.toBe(
+      fireClaimFingerprint(request({ impact: [1, 2, 3] })),
+    );
   });
 
   it("drains a magazine to exactly zero over eight accepted shots", () => {
@@ -305,6 +308,22 @@ describe("geofence fire gate", () => {
     // Compatibility: the adapter passes a null gate when the match has no
     // recorded arenaCenter, so today's playable build fires exactly as before.
     const plan = resolveDebugFire(match(), player("host"), player("guest"), request(), now, null);
+    expect(plan.result).toMatchObject({
+      accepted: true,
+      outcome: "hit",
+      damage: ZONE_DAMAGE.torso,
+    });
+  });
+
+  it("keeps centerless fire ungated (null gate accepted)", () => {
+    const plan = resolveFire(
+      match(),
+      player("host"),
+      player("guest"),
+      request(),
+      now,
+      null,
+    );
     expect(plan.result).toMatchObject({
       accepted: true,
       outcome: "hit",

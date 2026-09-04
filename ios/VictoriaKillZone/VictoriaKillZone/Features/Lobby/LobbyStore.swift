@@ -40,6 +40,19 @@ struct KillBanner: Equatable, Sendable {
   let isLocalKill: Bool
 }
 
+struct IncomingShot: Equatable, Sendable {
+  let eventID: String
+  let hit: Bool
+  let zone: String?
+  let timestamp: Double
+  let source: Source
+
+  enum Source: Equatable, Sendable {
+    case convex
+    case peer
+  }
+}
+
 @MainActor
 final class LobbyStore: ObservableObject {
   private static let pendingShotConfirmationBudget: TimeInterval = 2.5
@@ -60,6 +73,7 @@ final class LobbyStore: ObservableObject {
   @Published private(set) var markerlessShotState = MarkerlessShotState.idle
   @Published private(set) var targetingSnapshot: TargetingSnapshot
   @Published private(set) var killBanner: KillBanner?
+  @Published private(set) var incomingShot: IncomingShot?
 
   let environment: AppEnvironment
 
@@ -80,6 +94,11 @@ final class LobbyStore: ObservableObject {
   private var killBannerTask: Task<Void, Never>?
   private var pendingShotReplayTask: Task<Void, Never>?
   private var seenKillEventIDs = Set<String>()
+  private var seenIncomingShotEventIDs = Set<String>()
+  private var lastPeerShotAt: Date?
+  #if canImport(Network)
+    private var duelPeerLink: ArenaPeerLinking?
+  #endif
   private var snapshotSubscriptionStartedAt: Double?
   private var latestAppliedServerNow: Double?
   private var transportState = GameSessionConnectionState.connecting
@@ -301,6 +320,13 @@ final class LobbyStore: ObservableObject {
     pendingShotDispatchedAt = nil
     pendingShotAutomaticReplayStarted = false
     pendingMarkerlessRequest = nil
+    seenIncomingShotEventIDs.removeAll()
+    lastPeerShotAt = nil
+    incomingShot = nil
+    #if canImport(Network)
+      duelPeerLink?.stop()
+      duelPeerLink = nil
+    #endif
     operation = nil
     setDebugShotState(.idle)
     setMarkerlessShotState(.idle)
@@ -531,12 +557,16 @@ final class LobbyStore: ObservableObject {
         poseConfidence: targetingSnapshot.hitConfidence,
         origin: ray.map { [$0.origin.x, $0.origin.y, $0.origin.z] },
         direction: ray.map { [$0.direction.x, $0.direction.y, $0.direction.z] },
+        impact: impactPoint(for: zone, ray: ray),
         firedAtClient: now().timeIntervalSince1970 * 1_000
       )
       pendingMarkerlessRequest = request
     }
     setMarkerlessShotState(.pending(zone: zone))
     errorMessage = nil
+    #if canImport(Network)
+      sendPeerTracer(for: request)
+    #endif
 
     do {
       let result = try await environment.gameSessionClient.fire(session: session, request: request)
@@ -582,6 +612,13 @@ final class LobbyStore: ObservableObject {
     setDebugShotState(.idle)
     setMarkerlessShotState(.idle)
     seenKillEventIDs.removeAll()
+    seenIncomingShotEventIDs.removeAll()
+    lastPeerShotAt = nil
+    incomingShot = nil
+    #if canImport(Network)
+      duelPeerLink?.stop()
+      duelPeerLink = nil
+    #endif
     killBanner = nil
     snapshotSubscriptionStartedAt = nil
     latestAppliedServerNow = nil
@@ -646,6 +683,8 @@ final class LobbyStore: ObservableObject {
     lastSyncAt = receivedAt
     route = Self.route(for: snapshot, receivedAt: receivedAt)
     updateKillBanner(from: snapshot)
+    updateIncomingShot(from: snapshot)
+    updateDuelPeerLink(for: snapshot, previous: previousSnapshot)
     let nextSyncStatus: LobbySyncStatus = wasStale ? .restored : .connected
     gameLoopTrace(
       "receive phase=\(snapshot.match.phase.rawValue) players=\(snapshot.players.count) "
@@ -705,6 +744,94 @@ final class LobbyStore: ObservableObject {
       self.killBannerTask = nil
     }
   }
+
+  private func updateIncomingShot(from snapshot: MatchSnapshot) {
+    let opponentID = snapshot.players.first(where: { $0.id != snapshot.localPlayerId })?.id
+    let newEvents = snapshot.events.filter { event in
+      guard [.shot, .hit, .eliminated].contains(event.type),
+        event.actorPlayerId == opponentID,
+        !seenIncomingShotEventIDs.contains(event.id)
+      else { return false }
+      seenIncomingShotEventIDs.insert(event.id)
+      return true
+    }
+    guard let startedAt = snapshotSubscriptionStartedAt,
+      let event = newEvents
+        .filter({ $0.createdAt >= startedAt })
+        .max(by: { $0.createdAt < $1.createdAt }),
+      lastPeerShotAt.map({ now().timeIntervalSince($0) < 2 }) != true
+    else { return }
+    incomingShot = IncomingShot(
+      eventID: event.id,
+      hit: event.type != .shot,
+      zone: event.zone,
+      timestamp: event.createdAt,
+      source: .convex
+    )
+  }
+
+  private func impactPoint(
+    for zone: HitZone,
+    ray: TargetingCameraRay?
+  ) -> [Double]? {
+    if let skeleton = targetingSnapshot.skeleton {
+      let jointName = zone == .head ? "head" : "root"
+      if let point = skeleton.position(of: jointName) {
+        return [point.x, point.y, point.z]
+      }
+    }
+    guard let ray else { return nil }
+    let point = ray.origin + ray.direction * 25
+    return [point.x, point.y, point.z]
+  }
+
+  #if canImport(Network)
+    private func sendPeerTracer(for request: FireShotRequest) {
+      guard let link = duelPeerLink,
+        let origin = request.origin, origin.count == 3,
+        let direction = request.direction, direction.count == 3,
+        let ray = try? ArenaShotRay(
+          origin: ArenaVector3(x: origin[0], y: origin[1], z: origin[2]),
+          direction: ArenaVector3(x: direction[0], y: direction[1], z: direction[2]),
+          firedAtMs: Int64(request.firedAtClient.rounded())
+        )
+      else { return }
+      link.send(.shotTracer(ArenaShotTracer(
+        shotId: request.clientShotId,
+        shooterPlayerId: session?.playerId ?? "",
+        ray: ray
+      )))
+    }
+
+    private func updateDuelPeerLink(for snapshot: MatchSnapshot, previous: MatchSnapshot?) {
+      if snapshot.match.phase == .running, duelPeerLink == nil,
+        let role = snapshot.players.first(where: { $0.id == snapshot.localPlayerId })?.role
+      {
+        let link = ArenaPeerLink()
+        link.onMessage = { [weak self] message, _ in
+          guard case .shotTracer(let tracer) = message,
+            tracer.shooterPlayerId != snapshot.localPlayerId
+          else { return }
+          Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.lastPeerShotAt = self.now()
+            self.incomingShot = IncomingShot(
+              eventID: "peer:" + tracer.shotId,
+              hit: false,
+              zone: nil,
+              timestamp: self.now().timeIntervalSince1970 * 1_000,
+              source: .peer
+            )
+          }
+        }
+        duelPeerLink = link
+        link.start(role: role == .host ? .host : .guest)
+      } else if snapshot.match.phase != .running, previous?.match.phase == .running {
+        duelPeerLink?.stop()
+        duelPeerLink = nil
+      }
+    }
+  #endif
 
   private func makeKillBanner(for event: EventSnapshot, in snapshot: MatchSnapshot)
     -> KillBanner?
