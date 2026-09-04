@@ -11,6 +11,10 @@ public enum ReliableEventKind: UInt8, Codable, Sendable {
   /// One chunk of a bulk transfer (AR collaboration data, world maps). Payload
   /// layout is owned by `BulkChunkCodec`; see `BulkTransfer.swift`.
   case bulkChunk = 3
+  /// Verdict payload layout is owned by `AuthorityWireCodec` in CombatAuthority.
+  case verdict = 4
+  /// Snapshot payload layout is owned by `AuthorityWireCodec` in CombatAuthority.
+  case snapshot = 5
 }
 
 public struct PoseFrame: Equatable, Sendable {
