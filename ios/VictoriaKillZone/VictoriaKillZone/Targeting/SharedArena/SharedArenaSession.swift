@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 // MARK: - Shared-arena session snapshot (KIL-20)
@@ -623,4 +624,5 @@ struct SharedArenaSnapshot: Equatable, Sendable {
       }
     }
   }
+#endif
 #endif
