@@ -77,7 +77,8 @@ protocol ArenaPeerLinking: AnyObject {
       self.serviceName = serviceName
     }
 
-    private static var permissionPrimer: NWBrowser?
+    // Only touched on `primerQueue`.
+    nonisolated(unsafe) private static var permissionPrimer: NWBrowser?
     private static let primerQueue = DispatchQueue(label: "com.victoriakillzone.arena.link.primer")
 
     /// iOS shows the Local Network prompt the first time an app browses or
