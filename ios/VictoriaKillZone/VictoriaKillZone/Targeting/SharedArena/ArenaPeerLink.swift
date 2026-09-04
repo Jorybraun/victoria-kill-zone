@@ -106,12 +106,12 @@ import Foundation
         }
       }
       browser.browseResultsChangedHandler = { [weak self] results, _ in
-        guard let self, connection == nil else { return }
+        guard let self, self.connection == nil else { return }
         guard let first = results.first(where: { result in
           guard case let .service(name, _, _, _) = result.endpoint else { return false }
-          return name == serviceName
+          return name == self.serviceName
         }) else { return }
-        adopt(NWConnection(to: first.endpoint, using: Self.parameters()))
+        self.adopt(NWConnection(to: first.endpoint, using: Self.parameters()))
         browser.cancel()
         self.browser = nil
       }
