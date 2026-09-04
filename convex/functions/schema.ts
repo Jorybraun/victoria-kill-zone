@@ -126,8 +126,14 @@ export default defineSchema({
     direction: v.optional(v.array(v.number())),
     impact: v.optional(v.array(v.number())),
     firedAtClient: v.number(),
-    mode: v.optional(v.union(v.literal("debug"), v.literal("fire"))),
+    mode: v.optional(v.union(v.literal("debug"), v.literal("fire"), v.literal("verdict"))),
     claimFingerprint: v.optional(v.string()),
+    rewindMs: v.optional(v.number()),
+    hostDamage: v.optional(v.number()),
+    verdict: v.optional(v.string()),
+    hostRejectionReason: v.optional(v.union(v.string(), v.null())),
+    adjudicatedBy: v.optional(v.id("players")),
+    targetConfirmed: v.optional(v.union(v.boolean(), v.null())),
     shooterAmmo: v.optional(v.number()),
     targetHealth: v.optional(nullableNumber),
     targetLifeState: v.optional(v.union(lifeState, v.null())),
@@ -135,7 +141,8 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_match_and_created_at", ["matchId", "createdAt"])
-    .index("by_shooter_and_client_shot_id", ["shooterId", "clientShotId"]),
+    .index("by_shooter_and_client_shot_id", ["shooterId", "clientShotId"])
+    .index("by_match_and_client_shot_id", ["matchId", "clientShotId"]),
 
   events: defineTable({
     matchId: v.id("matches"),
@@ -154,6 +161,7 @@ export default defineSchema({
     targetPlayerId: v.union(v.id("players"), v.null()),
     zone: v.union(hitZone, v.null()),
     damage: nullableNumber,
+    targetConfirmed: v.optional(v.union(v.boolean(), v.null())),
     message: v.string(),
     createdAt: v.number(),
   }).index("by_match_and_created_at", ["matchId", "createdAt"]),
