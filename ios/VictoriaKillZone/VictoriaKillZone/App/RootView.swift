@@ -42,5 +42,8 @@ struct RootView: View {
         Text(store.errorMessage ?? "SOMETHING WENT WRONG")
       }
     }
+    .onOpenURL { url in
+      store.openInviteLink(url)
+    }
   }
 }

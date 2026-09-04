@@ -40,6 +40,9 @@
 		B00200000000000000000006 /* SharedArenaSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000006 /* SharedArenaSession.swift */; };
 		B00200000000000000000007 /* SharedArenaHarnessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000007 /* SharedArenaHarnessView.swift */; };
 		B00200000000000000000008 /* ArenaShotTracer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000008 /* ArenaShotTracer.swift */; };
+		B00300000000000000000001 /* DuelInvite.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000001 /* DuelInvite.swift */; };
+		B00300000000000000000002 /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000002 /* QRScannerView.swift */; };
+		B00300000000000000000003 /* DuelInviteLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000003 /* DuelInviteLinkTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -86,6 +89,9 @@
 		F00200000000000000000006 /* SharedArenaSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedArenaSession.swift; sourceTree = "<group>"; };
 		F00200000000000000000007 /* SharedArenaHarnessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedArenaHarnessView.swift; sourceTree = "<group>"; };
 		F00200000000000000000008 /* ArenaShotTracer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArenaShotTracer.swift; sourceTree = "<group>"; };
+		F00300000000000000000001 /* DuelInvite.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuelInvite.swift; sourceTree = "<group>"; };
+		F00300000000000000000002 /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
+		F00300000000000000000003 /* DuelInviteLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuelInviteLinkTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -209,6 +215,8 @@
 				F00100000000000000000007 /* LobbyStore.swift */,
 				F00100000000000000000009 /* JoinDuelView.swift */,
 				F0010000000000000000000A /* WaitingRoomView.swift */,
+				F00300000000000000000001 /* DuelInvite.swift */,
+				F00300000000000000000002 /* QRScannerView.swift */,
 			);
 			path = Lobby;
 			sourceTree = "<group>";
@@ -234,6 +242,7 @@
 			isa = PBXGroup;
 			children = (
 				F0010000000000000000000E /* LobbyStateMachineTests.swift */,
+				F00300000000000000000003 /* DuelInviteLinkTests.swift */,
 			);
 			path = VictoriaKillZoneTests;
 			sourceTree = "<group>";
@@ -397,6 +406,8 @@
 				B00100000000000000000012 /* LaserFX.swift in Sources */,
 				B00100000000000000000013 /* VoiceFireController.swift in Sources */,
 				B0010000000000000000000C /* VKZTheme.swift in Sources */,
+				B00300000000000000000001 /* DuelInvite.swift in Sources */,
+				B00300000000000000000002 /* QRScannerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -405,6 +416,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B0010000000000000000000D /* LobbyStateMachineTests.swift in Sources */,
+				B00300000000000000000003 /* DuelInviteLinkTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

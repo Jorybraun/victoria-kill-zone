@@ -226,6 +226,25 @@ final class LobbyStore: ObservableObject {
     transition(.showJoin)
   }
 
+  func openInviteLink(_ url: URL) {
+    guard let code = DuelInviteLink.code(from: url) else {
+      errorMessage = "INVITE LINK NOT RECOGNIZED"
+      return
+    }
+
+    switch route {
+    case .home:
+      guard !isBusy else { return }
+      joinCode = code
+      transition(.showJoin)
+    case .join:
+      guard !isBusy else { return }
+      joinCode = code
+    case .waiting, .active:
+      return
+    }
+  }
+
   func cancelJoin() {
     guard !isBusy else { return }
     transition(.cancelJoin)
@@ -1230,7 +1249,7 @@ final class LobbyStore: ObservableObject {
     }
   }
 
-  private static func normalizedJoinCode(_ value: String) -> String {
+  nonisolated static func normalizedJoinCode(_ value: String) -> String {
     String(
       value.uppercased().unicodeScalars.filter { scalar in
         ("A"..."Z").contains(Character(String(scalar)))
