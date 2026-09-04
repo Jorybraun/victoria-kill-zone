@@ -95,9 +95,9 @@ final class DuelSession: ObservableObject {
 
   static func defaultPeerLink() -> (any DuelPeerLink)? {
     #if canImport(Network)
-      ArenaPeerLink()
+      return ArenaPeerLink()
     #else
-      nil
+      return nil
     #endif
   }
 
