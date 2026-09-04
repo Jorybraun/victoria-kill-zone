@@ -14,6 +14,7 @@ import Foundation
     var onStateChange: ((ArenaPeerLinkState) -> Void)?
 
     private let queue = DispatchQueue(label: "com.victoriakillzone.arena.link", qos: .userInitiated)
+    private let serviceName: String?
     private let lock = NSLock()
     private var _stats = ArenaPeerLinkStats()
     private var listener: NWListener?
@@ -22,7 +23,7 @@ import Foundation
     private var receiveBuffer = Data()
     private var state: ArenaPeerLinkState = .idle
 
-    init(serviceName: String) {
+    init(serviceName: String? = nil) {
       self.serviceName = serviceName
     }
 
@@ -63,11 +64,9 @@ import Foundation
     private func startListenerLocked() {
       do {
         let listener = try NWListener(using: Self.parameters())
-        listener.service = NWListener.Service(
-          name: serviceName,
-          type: Self.serviceType,
-          domain: nil
-        )
+        listener.service = serviceName.map {
+          NWListener.Service(name: $0, type: Self.serviceType)
+        } ?? NWListener.Service(type: Self.serviceType)
         listener.stateUpdateHandler = { [weak self] listenerState in
           switch listenerState {
           case .ready: self?.setState(.advertising)
@@ -106,12 +105,14 @@ import Foundation
         }
       }
       browser.browseResultsChangedHandler = { [weak self] results, _ in
-        guard let self, self.connection == nil else { return }
-        guard let first = results.first(where: { result in
-          guard case let .service(name, _, _, _) = result.endpoint else { return false }
-          return name == self.serviceName
-        }) else { return }
-        self.adopt(NWConnection(to: first.endpoint, using: Self.parameters()))
+        guard let self, connection == nil else { return }
+        let result = results.first { result in
+          guard let serviceName = self.serviceName else { return true }
+          guard case let .service(name, type, _, _) = result.endpoint else { return false }
+          return name == serviceName && type == Self.serviceType
+        }
+        guard let result else { return }
+        adopt(NWConnection(to: result.endpoint, using: Self.parameters()))
         browser.cancel()
         self.browser = nil
       }
