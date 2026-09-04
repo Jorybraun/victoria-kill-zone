@@ -125,3 +125,15 @@ This is the integration-owned, evidence-based status record. Append observed res
 ### 2026-09-04 — ADR 0005 proposed
 
 - ADR 0005 proposed; fire-path trace found every markerless `shots:fire` rejected `LOCATION_STALE` on the current client (no location sent); PR implements ADR 0005; physical-device evidence pending.
+- Follow-up hardening PR (match-scoped peer link, skeleton scale estimation, pure hit-geometry tests)
+
+### 2026-09-04 11:30 UTC — ADR 0004 §3 backend slice: shots:recordVerdict durable ledger (Tier 0)
+
+- **Git SHA / PR:** branch `devin/1788521140-record-verdict`; PR #49.
+- **Owner and write set:** Backend (`convex/**`); Integration handoff items in the same PR: `docs/interface-contracts.md` (verdict-ledger.v1 section), this log.
+- **Commands/checks:** `pnpm verify` PASS (backend lint/typecheck/tests incl. new `record-verdict.test.ts`; spectator untouched and green).
+- **What landed:** `shots:recordVerdict` host-only mutation, idempotent per (matchId, clientShotId); `resolveFire`/`resolveDebugFire` and the verdict path share one `applyVerdict`; additive `shots`/`events` schema fields and `by_match_and_client_shot_id` index; `targetConfirmed` surfaced on snapshot events. `shots:fire` and `shots:debugFire` behaviour unchanged (existing fire tests untouched and passing).
+- **Observed on physical devices:** none. No client calls the new mutation yet.
+- **Mocked or unproven:** host-to-Convex round trip (ADR 0004 p95 ≤ 500 ms), receiver confirmation flow, live schema push against the deployment (runtime validator not exercisable offline; compatibility asserted at type level).
+- **Result:** PASS for Tier 0; BLOCKED for ADR 0004 acceptance until the iOS host authority posts verdicts and the two-phone TestFlight run records fire→confirmation latency.
+- **Next integration step:** iOS slice wires `AuthorityHost` verdicts to `shots:recordVerdict`; then measure on two phones.
