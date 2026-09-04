@@ -20,6 +20,19 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.pewpewpew.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>pewpew</string>
+			</array>
+		</dict>
+	</array>
 	<key>CONVEX_DEPLOYMENT_URL</key>
 	<string>$(CONVEX_DEPLOYMENT_URL)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
