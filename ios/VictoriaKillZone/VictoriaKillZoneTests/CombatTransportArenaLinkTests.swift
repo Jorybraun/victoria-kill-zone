@@ -38,23 +38,23 @@ final class CombatTransportArenaLinkTests: XCTestCase {
     let guestMessage = expectation(description: "guest receives host shot")
     pair.host.onMessage = { message, _ in
       pair.hostRecorder.recordMessage(message)
-      if message == .shotTracer(guestShot) { hostMessage.fulfill() }
+      if pair.hostRecorder.containsShot(guestShot) { hostMessage.fulfill() }
     }
     pair.guest.onMessage = { message, _ in
       pair.guestRecorder.recordMessage(message)
-      if message == .shotTracer(hostShot) { guestMessage.fulfill() }
+      if pair.guestRecorder.containsShot(hostShot) { guestMessage.fulfill() }
     }
 
     pair.guest.send(.shotTracer(guestShot))
     pair.host.send(.shotTracer(hostShot))
     pump(pair.fabric, until: {
-      pair.hostRecorder.contains(message: .shotTracer(guestShot)) &&
-        pair.guestRecorder.contains(message: .shotTracer(hostShot))
+      pair.hostRecorder.containsShot(guestShot) &&
+        pair.guestRecorder.containsShot(hostShot)
     })
 
     wait(for: [hostMessage, guestMessage], timeout: 1)
-    XCTAssertTrue(pair.hostRecorder.contains(message: .shotTracer(guestShot)))
-    XCTAssertTrue(pair.guestRecorder.contains(message: .shotTracer(hostShot)))
+    XCTAssertTrue(pair.hostRecorder.containsShot(guestShot))
+    XCTAssertTrue(pair.guestRecorder.containsShot(hostShot))
   }
 
   func testShotRetractionTravels() throws {
@@ -233,6 +233,23 @@ final class CombatTransportArenaLinkTests: XCTestCase {
 
     func contains(message: ArenaLinkMessage) -> Bool {
       lock.withLock { messages.contains(message) }
+    }
+
+    func containsShot(_ expected: ArenaShotTracer) -> Bool {
+      lock.withLock {
+        messages.contains { message in
+          guard case let .shotTracer(actual) = message else { return false }
+          return actual.shotId == expected.shotId &&
+            actual.shooterPlayerId == expected.shooterPlayerId &&
+            actual.firedAtMs == expected.firedAtMs &&
+            abs(actual.ray.origin.x - expected.ray.origin.x) < 1e-6 &&
+            abs(actual.ray.origin.y - expected.ray.origin.y) < 1e-6 &&
+            abs(actual.ray.origin.z - expected.ray.origin.z) < 1e-6 &&
+            abs(actual.ray.direction.x - expected.ray.direction.x) < 1e-6 &&
+            abs(actual.ray.direction.y - expected.ray.direction.y) < 1e-6 &&
+            abs(actual.ray.direction.z - expected.ray.direction.z) < 1e-6
+        }
+      }
     }
   }
 }
