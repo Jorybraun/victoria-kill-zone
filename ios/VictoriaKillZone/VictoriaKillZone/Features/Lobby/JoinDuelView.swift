@@ -1,7 +1,14 @@
 import SwiftUI
 
+#if os(iOS)
+import VisionKit
+#endif
+
 struct JoinDuelView: View {
   @ObservedObject var store: LobbyStore
+  #if os(iOS)
+  @State private var isShowingScanner = false
+  #endif
 
   var body: some View {
     VStack(alignment: .leading, spacing: 24) {
@@ -38,10 +45,54 @@ struct JoinDuelView: View {
       .buttonStyle(VKZPrimaryButtonStyle())
       .disabled(store.isBusy)
 
+      #if os(iOS)
+        Button("SCAN QR CODE") {
+          isShowingScanner = true
+        }
+        .buttonStyle(VKZSecondaryButtonStyle())
+        .disabled(store.isBusy)
+      #endif
+
       Spacer()
     }
     .padding(24)
     .frame(maxWidth: 560)
     .frame(maxWidth: .infinity)
+    #if os(iOS)
+    .sheet(isPresented: $isShowingScanner) {
+      QRScannerSheet { code in
+        store.joinCode = code
+        isShowingScanner = false
+      }
+    }
+    #endif
   }
 }
+
+#if os(iOS)
+private struct QRScannerSheet: View {
+  let onCode: (String) -> Void
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    VStack(spacing: 20) {
+      if DataScannerViewController.isSupported && DataScannerViewController.isAvailable {
+        QRScannerView(onCode: onCode)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else {
+        Text("QR SCANNING UNAVAILABLE ON THIS DEVICE — ENTER THE CODE INSTEAD")
+          .font(.caption.weight(.semibold).monospaced())
+          .foregroundStyle(VKZPalette.textMuted)
+          .multilineTextAlignment(.center)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
+
+      Button("CANCEL") {
+        dismiss()
+      }
+      .buttonStyle(VKZSecondaryButtonStyle())
+    }
+    .padding(24)
+  }
+}
+#endif

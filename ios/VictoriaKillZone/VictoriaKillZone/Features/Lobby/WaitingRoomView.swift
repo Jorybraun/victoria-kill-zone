@@ -40,6 +40,40 @@ struct WaitingRoomView: View {
           .frame(maxWidth: .infinity)
         }
 
+        #if canImport(UIKit)
+          if room.localRole == .host,
+            let qrImage = DuelQRCode.image(for: DuelInviteLink.url(for: room.code))
+          {
+            VKZPanel {
+              VStack(spacing: 12) {
+                Image(uiImage: qrImage)
+                  .interpolation(.none)
+                  .resizable()
+                  .scaledToFit()
+                  .frame(width: 200, height: 200)
+                  .padding(8)
+                  .background(Color.white)
+                  .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                  .accessibilityLabel("QR code to join duel \(room.code)")
+
+                ShareLink(
+                  item: DuelInviteLink.url(for: room.code),
+                  subject: Text("Pew Pew duel"),
+                  message: Text("Join my Pew Pew duel — code \(room.code)")
+                ) {
+                  Label("TEXT INVITE", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(VKZSecondaryButtonStyle())
+
+                Text("SCAN OR TAP THE LINK TO JOIN")
+                  .font(.caption2.weight(.semibold).monospaced())
+                  .foregroundStyle(VKZPalette.textMuted)
+              }
+              .frame(maxWidth: .infinity)
+            }
+          }
+        #endif
+
         VStack(alignment: .leading, spacing: 10) {
           Text("PLAYERS")
             .font(.caption.weight(.semibold).monospaced())
