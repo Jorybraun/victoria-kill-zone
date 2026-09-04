@@ -144,7 +144,10 @@ final class CombatTransportArenaLinkTests: XCTestCase {
     guest.send(.shotTracer(try tracer(shotId: "guest#1", shooter: "guest")))
     pump(fabric, until: { hostRecorder.messageCount > 0 || fabric.nowMs >= 500 })
 
-    XCTAssertTrue(hostRecorder.contains(state: .failed("peer belongs to another match")))
+    XCTAssertTrue(
+      hostRecorder.contains(state: .failed("peer belongs to another match")),
+      "host states: \(hostRecorder.stateSnapshot)"
+    )
     XCTAssertEqual(hostRecorder.messageCount, 0)
   }
 
@@ -246,6 +249,10 @@ final class CombatTransportArenaLinkTests: XCTestCase {
 
     var messageCount: Int {
       lock.withLock { messages.count }
+    }
+
+    var stateSnapshot: [ArenaPeerLinkState] {
+      lock.withLock { states }
     }
 
     func recordState(_ state: ArenaPeerLinkState) {
