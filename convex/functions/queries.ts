@@ -94,6 +94,7 @@ async function recentEvents(ctx: QueryCtx, matchId: Doc<"matches">["_id"]): Prom
     targetPlayerId: event.targetPlayerId,
     zone: event.zone,
     damage: event.damage,
+    targetConfirmed: event.targetConfirmed ?? null,
     message: event.message,
     createdAt: event.createdAt,
   }));
