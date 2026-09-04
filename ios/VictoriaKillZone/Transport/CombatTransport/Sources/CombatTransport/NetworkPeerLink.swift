@@ -659,9 +659,15 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
     on connection: NWConnection,
     id: PeerLinkStateMachine.ConnectionID
   ) {
+    let previouslyBoundSlot = withStateLock { stateMachine.boundSlot(for: id) }
     do {
       let actions = try withStateLock { try stateMachine.receive(frame, on: id) }
-      handle(actions, on: connection, id: id)
+      handle(
+        actions,
+        on: connection,
+        id: id,
+        previouslyBoundSlot: previouslyBoundSlot
+      )
     } catch {
       failConnection(id)
     }
@@ -670,7 +676,8 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
   private func handle(
     _ actions: [PeerLinkStateMachine.Action],
     on connection: NWConnection,
-    id: PeerLinkStateMachine.ConnectionID
+    id: PeerLinkStateMachine.ConnectionID,
+    previouslyBoundSlot: UInt8?
   ) {
     for action in actions {
       switch action {
@@ -683,10 +690,14 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
       case let .received(_, receivedFrame):
         deliver(receivedFrame, on: connection, id: id)
       case .rejected:
-        let slot = withStateLock { stateMachine.boundSlot(for: id) }
-        linkEventHandler?(.rejected(slot: slot))
+        linkEventHandler?(.rejected(slot: previouslyBoundSlot))
         connection.cancel()
         failConnection(id, reportFailure: false)
+        if let slot = previouslyBoundSlot {
+          emittedBoundSlots.remove(slot)
+          linkEventHandler?(.peerDisconnected(slot: slot))
+          fail("peer rejected")
+        }
       case .reliableGap:
         fail("reliable gap")
       case .dropped, .write, .disconnected:
