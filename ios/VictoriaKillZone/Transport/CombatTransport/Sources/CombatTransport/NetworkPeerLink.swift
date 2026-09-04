@@ -220,17 +220,22 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
     let parameters = NWParameters(quic: makeQUICOptions(datagram: false))
     parameters.includePeerToPeer = true
     if configuration.advertisesService {
-      reliableListener = try? NWListener(
-        service: NWListener.Service(
+      let service: NWListener.Service
+      if configuration.txtEntries.isEmpty {
+        service = NWListener.Service(
+          name: configuration.serviceToken,
+          type: Self.serviceType,
+          domain: nil
+        )
+      } else {
+        service = NWListener.Service(
           name: configuration.serviceToken,
           type: Self.serviceType,
           domain: nil,
-          txtRecord: configuration.txtEntries.isEmpty
-            ? nil
-            : NWTXTRecord(configuration.txtEntries)
-        ),
-        using: parameters
-      )
+          txtRecord: NWTXTRecord(configuration.txtEntries)
+        )
+      }
+      reliableListener = try? NWListener(service: service, using: parameters)
     } else {
       reliableListener = try? NWListener(using: parameters)
     }
