@@ -1,12 +1,5 @@
 import Foundation
 
-enum ArenaClock {
-  /// Milliseconds on the same monotonic base as `ARFrame.timestamp`.
-  static func nowMs() -> Int64 {
-    Int64((ProcessInfo.processInfo.systemUptime * 1_000).rounded())
-  }
-}
-
 #if canImport(Network)
   import Network
 
