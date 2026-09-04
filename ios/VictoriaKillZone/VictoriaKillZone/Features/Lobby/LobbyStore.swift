@@ -584,7 +584,9 @@ final class LobbyStore: ObservableObject {
     setMarkerlessShotState(.pending(zone: zone))
     errorMessage = nil
     #if canImport(Network)
-      sendPeerTracer(for: request)
+      if snapshot.players.first(where: { $0.id == session.playerId })?.ammo ?? 0 > 0 {
+        sendPeerTracer(for: request)
+      }
     #endif
 
     do {
@@ -772,6 +774,9 @@ final class LobbyStore: ObservableObject {
         !seenIncomingShotEventIDs.contains(event.id)
       else { return false }
       seenIncomingShotEventIDs.insert(event.id)
+      if seenIncomingShotEventIDs.count > 512 {
+        seenIncomingShotEventIDs.removeAll(keepingCapacity: true)
+      }
       return true
     }
     guard let startedAt = snapshotSubscriptionStartedAt,
@@ -813,7 +818,7 @@ final class LobbyStore: ObservableObject {
         let ray = try? ArenaShotRay(
           origin: ArenaVector3(x: origin[0], y: origin[1], z: origin[2]),
           direction: ArenaVector3(x: direction[0], y: direction[1], z: direction[2]),
-          firedAtMs: Int64(request.firedAtClient.rounded())
+          firedAtMs: ArenaClock.nowMs()
         )
       else { return }
       link.send(.shotTracer(ArenaShotTracer(
@@ -825,12 +830,14 @@ final class LobbyStore: ObservableObject {
 
     private func updateDuelPeerLink(for snapshot: MatchSnapshot, previous: MatchSnapshot?) {
       if snapshot.match.phase == .running, duelPeerLink == nil,
-        let role = snapshot.players.first(where: { $0.id == snapshot.localPlayerId })?.role
+        let role = snapshot.players.first(where: { $0.id == snapshot.localPlayerId })?.role,
+        let opponentID = snapshot.players.first(where: { $0.id != snapshot.localPlayerId })?.id
       {
-        let link = ArenaPeerLink()
+        let serviceName = "vkz-" + String(snapshot.match.id.prefix(48))
+        let link = ArenaPeerLink(serviceName: serviceName)
         link.onMessage = { [weak self] message, _ in
           guard case .shotTracer(let tracer) = message,
-            tracer.shooterPlayerId != snapshot.localPlayerId
+            tracer.shooterPlayerId == opponentID
           else { return }
           Task { @MainActor [weak self] in
             guard let self else { return }
