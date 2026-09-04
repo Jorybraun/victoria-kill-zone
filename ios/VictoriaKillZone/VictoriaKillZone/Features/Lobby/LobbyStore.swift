@@ -79,6 +79,7 @@ final class LobbyStore: ObservableObject {
     duelCancellable = duel.objectWillChange.sink { [weak self] _ in
       self?.objectWillChange.send()
     }
+    duel.updateTargeting(targetingSnapshot)
     startConnectionMonitoring()
   }
 
