@@ -8,8 +8,6 @@ import Foundation
     /// Single-read ceiling; frames larger than this arrive across several reads
     /// and are reassembled by `ArenaLinkCodec.drainFrames`.
     private static let readChunk = 256 * 1024
-    private let serviceName: String
-
     var onMessage: ((ArenaLinkMessage, Int64) -> Void)?
     var onStateChange: ((ArenaPeerLinkState) -> Void)?
 
@@ -77,11 +75,11 @@ import Foundation
         listener.newConnectionHandler = { [weak self] incoming in
           guard let self else { return }
           // The proof is two phones: the first peer wins, later ones are refused.
-          guard connection == nil else {
+          guard self.connection == nil else {
             incoming.cancel()
             return
           }
-          adopt(incoming)
+          self.adopt(incoming)
         }
         self.listener = listener
         listener.start(queue: queue)
@@ -105,14 +103,14 @@ import Foundation
         }
       }
       browser.browseResultsChangedHandler = { [weak self] results, _ in
-        guard let self, connection == nil else { return }
+        guard let self, self.connection == nil else { return }
         let result = results.first { result in
           guard let serviceName = self.serviceName else { return true }
           guard case let .service(name, type, _, _) = result.endpoint else { return false }
           return name == serviceName && type == Self.serviceType
         }
         guard let result else { return }
-        adopt(NWConnection(to: result.endpoint, using: Self.parameters()))
+        self.adopt(NWConnection(to: result.endpoint, using: Self.parameters()))
         browser.cancel()
         self.browser = nil
       }
@@ -130,10 +128,10 @@ import Foundation
         guard let self else { return }
         switch connectionState {
         case .ready:
-          setState(.connected)
-          receiveNext()
+          self.setState(.connected)
+          self.receiveNext()
         case .failed(let error):
-          fail("connection:\(error.localizedDescription)")
+          self.fail("connection:\(error.localizedDescription)")
         case .cancelled:
           if self.connection === connection { self.connection = nil }
         default:
@@ -150,24 +148,24 @@ import Foundation
         guard let self else { return }
         if let content, !content.isEmpty {
           let arrivalMs = ArenaClock.nowMs()
-          lock.withLock { self._stats.bytesIn += content.count }
-          receiveBuffer.append(content)
+          self.lock.withLock { self._stats.bytesIn += content.count }
+          self.receiveBuffer.append(content)
           do {
-            for message in try ArenaLinkCodec.drainFrames(from: &receiveBuffer) {
-              onMessage?(message, arrivalMs)
+            for message in try ArenaLinkCodec.drainFrames(from: &self.receiveBuffer) {
+              self.onMessage?(message, arrivalMs)
             }
           } catch {
-            lock.withLock { self._stats.framingErrors += 1 }
-            fail("framing:\(String(describing: error))")
+            self.lock.withLock { self._stats.framingErrors += 1 }
+            self.fail("framing:\(String(describing: error))")
             return
           }
         }
         if let error {
-          fail("receive:\(error.localizedDescription)")
+          self.fail("receive:\(error.localizedDescription)")
         } else if isComplete {
-          fail("peer closed")
+          self.fail("peer closed")
         } else {
-          receiveNext()
+          self.receiveNext()
         }
       }
     }
