@@ -6,6 +6,7 @@ import UIKit
 
 struct ActiveDuelView: View {
   let duel: ActiveDuel
+  @ObservedObject var combat: DuelSession
   @ObservedObject var store: LobbyStore
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.openURL) private var openURL
@@ -60,7 +61,7 @@ struct ActiveDuelView: View {
             .allowsHitTesting(false)
         }
 
-        if let killBanner = store.killBanner {
+        if let killBanner = combat.killBanner {
           killBannerView(killBanner)
             .transition(.scale(scale: 0.72).combined(with: .opacity))
             .zIndex(2)
@@ -110,7 +111,7 @@ struct ActiveDuelView: View {
     .onChange(of: voiceFire.fireRequestSequence) { _ in
       fireShot()
     }
-    .onChange(of: store.killBanner) { banner in
+    .onChange(of: combat.killBanner) { banner in
       guard banner?.isLocalKill == true else { return }
       #if os(iOS)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
@@ -131,7 +132,7 @@ struct ActiveDuelView: View {
         }
       }
     }
-    .onChange(of: store.incomingShot) { shot in
+    .onChange(of: combat.incomingShot) { shot in
       guard let shot else { return }
       withAnimation(.easeOut(duration: 0.08)) {
         incomingFlash = true
@@ -299,7 +300,7 @@ struct ActiveDuelView: View {
       }
       HStack(spacing: 8) {
         VKZStatusPill(label: store.targetingStatus, color: reticleColor)
-        if let zone = store.markerlessAimZone {
+        if let zone = combat.markerlessAimZone {
           VKZStatusPill(label: zone.rawValue.uppercased(), color: reticleColor)
         }
         if store.targetingSnapshot.isLocked,
@@ -314,7 +315,7 @@ struct ActiveDuelView: View {
 
   @ViewBuilder
   private var reticle: some View {
-    if !store.targetingSnapshot.isLocked, store.markerlessAimZone == nil {
+    if !store.targetingSnapshot.isLocked, combat.markerlessAimZone == nil {
       TimelineView(.animation(minimumInterval: 1 / 20)) { context in
         reticleGraphic(
           opacity: 0.775
@@ -352,7 +353,7 @@ struct ActiveDuelView: View {
     }
     .opacity(opacity)
     .shadow(color: .black.opacity(0.8), radius: 3)
-    .accessibilityLabel(store.markerlessAimZone == nil ? "No target lock" : "Target locked")
+    .accessibilityLabel(combat.markerlessAimZone == nil ? "No target lock" : "Target locked")
   }
 
   private var hitMarkerView: some View {
@@ -382,21 +383,21 @@ struct ActiveDuelView: View {
   private var bottomStack: some View {
     VStack(spacing: 8) {
       latestEvent
-      DuelCooldownBar(store: store)
+      DuelCooldownBar(combat: combat)
       HStack(spacing: 12) {
         voiceToggle
         Button {
           fireShot()
         } label: {
-          Text(store.fireCooldownRemaining(at: Date()) > 0 ? "RECHARGING" : shotButtonLabel)
+          Text(combat.fireCooldownRemaining(at: Date()) > 0 ? "RECHARGING" : shotButtonLabel)
         }
         .buttonStyle(VKZPrimaryButtonStyle())
-        .disabled(store.fireCooldownRemaining(at: Date()) > 0)
+        .disabled(combat.fireCooldownRemaining(at: Date()) > 0)
         .accessibilityLabel("Fire markerless shot")
         #if VKZ_DEBUG_FIRE
           if duel.localRole == .host {
             Button {
-              store.debugFire()
+              combat.debugFire()
             } label: {
               Image(systemName: "wrench.and.screwdriver")
                 .font(.title3)
@@ -404,7 +405,7 @@ struct ActiveDuelView: View {
                 .frame(width: 56, height: 56)
                 .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 12))
             }
-            .disabled(!store.canDebugFire)
+            .disabled(!combat.canDebugFire)
             .accessibilityLabel("Debug torso fallback fire")
           }
         #endif
@@ -495,15 +496,15 @@ struct ActiveDuelView: View {
   }
 
   private func fireShot() {
-    guard store.fireCooldownRemaining(at: Date()) == 0 else { return }
-    let canFireMarkerless = store.canFireMarkerless
-    let canFireDebug = store.canDebugFire
+    guard combat.fireCooldownRemaining(at: Date()) == 0 else { return }
+    let canFireMarkerless = combat.canFireMarkerless
+    let canFireDebug = combat.canDebugFire
     guard canFireMarkerless || canFireDebug else { return }
     fx.fireLaser(hit: canFireMarkerless)
     if canFireMarkerless {
-      store.fireMarkerless()
+      combat.fireMarkerless()
     } else {
-      store.debugFire()
+      combat.debugFire()
     }
     withAnimation(.easeOut(duration: 0.12)) {
       muzzleFlash = true
@@ -566,8 +567,8 @@ struct ActiveDuelView: View {
     if duel.opponent?.lifeState == .respawning || duel.opponent?.health == 0 {
       return "OPPONENT RESPAWNING"
     }
-    switch store.markerlessShotState {
-    case .idle: return store.markerlessAimZone == nil ? "ACQUIRE TARGET" : "FIRE"
+    switch combat.markerlessShotState {
+    case .idle: return combat.markerlessAimZone == nil ? "ACQUIRE TARGET" : "FIRE"
     case .pending(let zone): return "\(zone.rawValue.uppercased()) SHOT…"
     case .confirmed(.kill, _, _): return "ELIMINATION CONFIRMED"
     case .confirmed(_, let zone, let damage):
@@ -595,7 +596,7 @@ struct ActiveDuelView: View {
   }
 
   private var reticleColor: Color {
-    switch store.markerlessAimZone {
+    switch combat.markerlessAimZone {
     case .head: VKZPalette.danger
     case .torso, .limbs: VKZPalette.ready
     case nil: .white
@@ -644,16 +645,16 @@ struct ActiveDuelView: View {
 }
 
 private struct DuelCooldownBar: View {
-  @ObservedObject var store: LobbyStore
+  @ObservedObject var combat: DuelSession
 
   var body: some View {
     TimelineView(
       .animation(
         minimumInterval: 1 / 60,
-        paused: store.fireCooldownRemaining(at: Date()) == 0
+        paused: combat.fireCooldownRemaining(at: Date()) == 0
       )
     ) { context in
-      let remaining = store.fireCooldownRemaining(at: context.date)
+      let remaining = combat.fireCooldownRemaining(at: context.date)
       VStack(alignment: .trailing, spacing: 4) {
         if remaining > 0 {
           Text("RECHARGING")
@@ -667,7 +668,7 @@ private struct DuelCooldownBar: View {
               Capsule()
                 .fill(remaining == 0 ? VKZPalette.ready : VKZPalette.telemetry)
                 .frame(
-                  width: proxy.size.width * store.fireCooldownProgress(at: context.date)
+                  width: proxy.size.width * combat.fireCooldownProgress(at: context.date)
                 )
             }
         }

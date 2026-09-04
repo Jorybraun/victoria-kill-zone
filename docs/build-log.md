@@ -164,3 +164,11 @@ This is the integration-owned, evidence-based status record. Append observed res
 - **Blocker and owner:** two body-tracking-capable iPhones + operator time for the S0 spike (Hardware/Operator).
 - **Next integration step:** dispatch S0 (iOS targeting) per ADR 0006 §9; record §7 rows 1–3 here with model + iOS version only.
 - **Cut/deferred or risk change:** roadmap ADR index renumbered — personal-time semantics → 0007, street-scale spatial provider → 0008. Collaborative ARKit sessions are no longer the duel's primary frame; retirement list in ADR 0006 §8 executes only in its named slices, never before S0 evidence.
+
+### 2026-09-04 — DuelSession combat split
+
+- **Owner and write set:** Integration+iOS (`ios/VictoriaKillZone/VictoriaKillZone/Features/Game/**`, `Features/Lobby/LobbyStore.swift`, `ActiveDuelView.swift`, `RootView.swift`, iOS tests, Xcode project registration, this log).
+- **What moved:** Duel combat state, fire actions, pending-shot reconciliation, kill/incoming event presentation, peer tracer handling, and shared game-loop tracing moved from `LobbyStore` into `@MainActor DuelSession`; combat views now observe the dedicated session.
+- **What hardened:** Peer tracers are accepted only from the current opponent, and Convex incoming-event deduplication is bounded to 256 IDs with ordered eviction.
+- **Observed on physical devices:** none.
+- **Two-phone TestFlight confirmation required:** peer tracer renders on the other phone; Convex miss suppression works while hit/eliminated events still render; peer link starts and stops across phase changes; debug fire remains unchanged.
