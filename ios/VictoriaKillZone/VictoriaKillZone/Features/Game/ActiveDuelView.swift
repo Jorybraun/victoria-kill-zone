@@ -6,6 +6,7 @@ import UIKit
 
 struct ActiveDuelView: View {
   let duel: ActiveDuel
+  @ObservedObject var combat: DuelSession
   @ObservedObject var store: LobbyStore
   @Environment(\.scenePhase) private var scenePhase
   @StateObject private var fx = LaserFXEngine()
@@ -44,7 +45,7 @@ struct ActiveDuelView: View {
             .allowsHitTesting(false)
         }
 
-        if let killBanner = store.killBanner {
+        if let killBanner = combat.killBanner {
           killBannerView(killBanner)
             .transition(.scale(scale: 0.72).combined(with: .opacity))
             .zIndex(2)
@@ -91,13 +92,13 @@ struct ActiveDuelView: View {
     .onChange(of: voiceFire.fireRequestSequence) { _ in
       fireShot()
     }
-    .onChange(of: store.killBanner) { banner in
+    .onChange(of: combat.killBanner) { banner in
       guard banner?.isLocalKill == true else { return }
       #if os(iOS)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
       #endif
     }
-    .onChange(of: store.incomingShot) { shot in
+    .onChange(of: combat.incomingShot) { shot in
       guard let shot else { return }
       #if os(iOS)
         let opponentOrigin: SIMD3<Float>?
@@ -225,13 +226,13 @@ struct ActiveDuelView: View {
         .frame(width: 4, height: 4)
     }
     .shadow(color: .black.opacity(0.8), radius: 3)
-    .accessibilityLabel(store.markerlessAimZone == nil ? "No target lock" : "Target locked")
+    .accessibilityLabel(combat.markerlessAimZone == nil ? "No target lock" : "Target locked")
   }
 
   private var targetReadout: some View {
     HStack(spacing: 8) {
       VKZStatusPill(label: store.targetingStatus, color: reticleColor)
-      if let zone = store.markerlessAimZone {
+      if let zone = combat.markerlessAimZone {
         VKZStatusPill(label: zone.rawValue.uppercased(), color: reticleColor)
       }
       if store.targetingSnapshot.isLocked,
@@ -287,11 +288,11 @@ struct ActiveDuelView: View {
 
         if duel.localRole == .host {
           Button("DEBUG TORSO FALLBACK") {
-            store.debugFire()
+            combat.debugFire()
           }
           .font(.caption2.bold().monospaced())
           .foregroundStyle(VKZPalette.textMuted)
-          .disabled(!store.canDebugFire)
+          .disabled(!combat.canDebugFire)
         }
       }
     case .finished:
@@ -331,14 +332,14 @@ struct ActiveDuelView: View {
   }
 
   private func fireShot() {
-    let canFireMarkerless = store.canFireMarkerless
-    let canFireDebug = store.canDebugFire
+    let canFireMarkerless = combat.canFireMarkerless
+    let canFireDebug = combat.canDebugFire
     guard canFireMarkerless || canFireDebug else { return }
     fx.fireLaser(hit: canFireMarkerless)
     if canFireMarkerless {
-      store.fireMarkerless()
+      combat.fireMarkerless()
     } else {
-      store.debugFire()
+      combat.debugFire()
     }
     withAnimation(.easeOut(duration: 0.12)) {
       muzzleFlash = true
@@ -396,8 +397,8 @@ struct ActiveDuelView: View {
     if duel.opponent?.lifeState == .respawning || duel.opponent?.health == 0 {
       return "OPPONENT RESPAWNING"
     }
-    switch store.markerlessShotState {
-    case .idle: return store.markerlessAimZone == nil ? "ACQUIRE TARGET" : "FIRE"
+    switch combat.markerlessShotState {
+    case .idle: return combat.markerlessAimZone == nil ? "ACQUIRE TARGET" : "FIRE"
     case .pending(let zone): return "\(zone.rawValue.uppercased()) SHOT…"
     case .confirmed(.kill, _, _): return "ELIMINATION CONFIRMED"
     case .confirmed(_, let zone, let damage):
@@ -421,7 +422,7 @@ struct ActiveDuelView: View {
   }
 
   private var reticleColor: Color {
-    switch store.markerlessAimZone {
+    switch combat.markerlessAimZone {
     case .head: VKZPalette.danger
     case .torso, .limbs: VKZPalette.ready
     case nil: .white

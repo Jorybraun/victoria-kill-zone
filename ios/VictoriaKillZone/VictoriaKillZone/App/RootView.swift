@@ -21,7 +21,7 @@ struct RootView: View {
         case .waiting(let room):
           WaitingRoomView(room: room, store: store)
         case .active(let duel):
-          ActiveDuelView(duel: duel, store: store)
+          ActiveDuelView(duel: duel, combat: store.duel, store: store)
         }
       }
       .foregroundStyle(VKZPalette.text)
