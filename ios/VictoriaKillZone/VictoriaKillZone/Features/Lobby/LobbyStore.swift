@@ -36,6 +36,7 @@ final class LobbyStore: ObservableObject {
 
   let environment: AppEnvironment
   let duel: DuelSession
+  private let now: @Sendable () -> Date
 
   private var stateMachine: LobbyStateMachine
   private var session: PlayerSession?
@@ -57,6 +58,7 @@ final class LobbyStore: ObservableObject {
     makePeerLink: @escaping @MainActor () -> (any DuelPeerLink)? = DuelSession.defaultPeerLink
   ) {
     self.environment = environment
+    self.now = now
     duel = DuelSession(
       gameSessionClient: environment.gameSessionClient,
       now: now,
