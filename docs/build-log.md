@@ -140,3 +140,14 @@ This is the integration-owned, evidence-based status record. Append observed res
 - **Blocker and owner:** two body-tracking-capable iPhones + operator time for the S0 spike (Hardware/Operator).
 - **Next integration step:** dispatch S0 (iOS targeting) per ADR 0006 §9; record §7 rows 1–3 here with model + iOS version only.
 - **Cut/deferred or risk change:** roadmap ADR index renumbered — personal-time semantics → 0007, street-scale spatial provider → 0008. Collaborative ARKit sessions are no longer the duel's primary frame; retirement list in ADR 0006 §8 executes only in its named slices, never before S0 evidence.
+
+### 2026-09-04 11:30 UTC — ADR 0004 §3 backend slice: shots:recordVerdict durable ledger (Tier 0)
+
+- **Git SHA / PR:** branch `devin/1788521140-record-verdict`; PR #49.
+- **Owner and write set:** Backend (`convex/**`); Integration handoff items in the same PR: `docs/interface-contracts.md` (verdict-ledger.v1 section), this log.
+- **Commands/checks:** `pnpm verify` PASS (backend lint/typecheck/tests incl. new `record-verdict.test.ts`; spectator untouched and green).
+- **What landed:** `shots:recordVerdict` host-only mutation, idempotent per (matchId, clientShotId); `resolveFire`/`resolveDebugFire` and the verdict path share one `applyVerdict`; additive `shots`/`events` schema fields and `by_match_and_client_shot_id` index; `targetConfirmed` surfaced on snapshot events. `shots:fire` and `shots:debugFire` behaviour unchanged (existing fire tests untouched and passing).
+- **Observed on physical devices:** none. No client calls the new mutation yet.
+- **Mocked or unproven:** host-to-Convex round trip (ADR 0004 p95 ≤ 500 ms), receiver confirmation flow, live schema push against the deployment (runtime validator not exercisable offline; compatibility asserted at type level).
+- **Result:** PASS for Tier 0; BLOCKED for ADR 0004 acceptance until the iOS host authority posts verdicts and the two-phone TestFlight run records fire→confirmation latency.
+- **Next integration step:** iOS slice wires `AuthorityHost` verdicts to `shots:recordVerdict`; then measure on two phones.
