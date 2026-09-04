@@ -6,7 +6,7 @@ public final class AuthorityPeerAdapter: @unchecked Sendable {
   public let slot: UInt8
   public let roster: AuthorityRoster
   public let link: any PeerLink
-  public let epoch: UInt16
+  public private(set) var epoch: UInt16
   public private(set) var host: AuthorityHost?
   public private(set) var client: AuthorityClient
   public private(set) var latency = VerdictLatencyTracker()
@@ -67,7 +67,7 @@ public final class AuthorityPeerAdapter: @unchecked Sendable {
       host = authority
       processHostEffects(effects, atMs: sample.timestampMs)
     } else {
-      try processClientEffects([effect], atMs: sample.timestampMs)
+      try processClientEffects([effect])
     }
   }
 
@@ -87,7 +87,7 @@ public final class AuthorityPeerAdapter: @unchecked Sendable {
       }
       host = authority
     } else {
-      try processClientEffects(effects, atMs: atMs)
+      try processClientEffects(effects)
     }
   }
 
@@ -107,8 +107,36 @@ public final class AuthorityPeerAdapter: @unchecked Sendable {
       }
       host = authority
     } else {
-      try processClientEffects(effects, atMs: atMs)
+      try processClientEffects(effects)
     }
+  }
+
+  public func applyTransportEffects(
+    _ effects: [TransportEffect],
+    atMs: Int64
+  ) {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+    guard slot == 0, var authority = host else { return }
+    var hostEffects: [AuthorityHostEffect] = []
+    for effect in effects {
+      switch effect {
+      case let .peerDisconnected(memberSlot):
+        hostEffects += authority.memberDropped(memberSlot, atMs: atMs)
+      case let .peerRecovered(memberSlot):
+        hostEffects += authority.memberRecovered(memberSlot, atMs: atMs)
+      default:
+        break
+      }
+    }
+    host = authority
+    processHostEffects(hostEffects, atMs: atMs)
+  }
+
+  public func resetEpoch(_ epoch: UInt16) {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+    self.epoch = epoch
   }
 
   public func advance(nowMs: Int64) throws {
@@ -120,7 +148,7 @@ public final class AuthorityPeerAdapter: @unchecked Sendable {
       processHostEffects(effects, atMs: nowMs)
     }
     let effects = client.advance(nowMs: nowMs)
-    try processClientEffects(effects, atMs: nowMs)
+    try processClientEffects(effects)
   }
 
   public func drainClientEffects() -> [AuthorityClientEffect] {
@@ -167,7 +195,7 @@ public final class AuthorityPeerAdapter: @unchecked Sendable {
           while let next = pendingHostFrames.removeValue(forKey: nextHostFrameSequence) {
             nextHostFrameSequence &+= 1
             let effects = client.receive(try codec.message(from: next), atMs: atMs)
-            try processClientEffects(effects, atMs: atMs)
+            try processClientEffects(effects)
           }
         }
       case .slotClaim, .pairingOffer, .pairingClaim:
@@ -205,10 +233,7 @@ public final class AuthorityPeerAdapter: @unchecked Sendable {
     }
   }
 
-  private func processClientEffects(
-    _ effects: [AuthorityClientEffect],
-    atMs: Int64
-  ) throws {
+  private func processClientEffects(_ effects: [AuthorityClientEffect]) throws {
     for effect in effects {
       appendClientEffect(effect)
       if case let .send(message) = effect {
@@ -234,7 +259,6 @@ public final class AuthorityPeerAdapter: @unchecked Sendable {
         }
       }
     }
-    _ = atMs
   }
 
   private func nextReliableFrame(

@@ -156,7 +156,10 @@ public struct AuthorityHost: Equatable, Sendable {
     guard roster.playerID(for: slot) != nil else { return [] }
     lastHeardAtMs[slot] = atMs
     guard fireLockedSlots.remove(slot) != nil else { return [] }
-    return [.memberFireUnlocked(slot: slot)]
+    return [
+      .memberFireUnlocked(slot: slot),
+      .broadcast(.snapshot(snapshot())),
+    ]
   }
 
   public func snapshot() -> StateSnapshot {
