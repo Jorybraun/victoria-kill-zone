@@ -141,7 +141,7 @@ struct SharedArenaSnapshot: Equatable, Sendable {
     private var awaitingRelocalization = false
     private var isRunning = false
 
-    init(role: ArenaRole, method: ArenaFrameMethod, link: any ArenaPeerLinking = CombatTransportArenaLink(matchId: "shared-arena-harness", playerId: UUID().uuidString, joinSecret: "shared-arena-harness")) {
+    init(role: ArenaRole, method: ArenaFrameMethod, link: any ArenaPeerLinking = ArenaPeerLinkFactory.make(matchId: "shared-arena-harness", playerId: UUID().uuidString, joinSecret: "shared-arena-harness")) {
       self.role = role
       self.method = method
       self.link = link

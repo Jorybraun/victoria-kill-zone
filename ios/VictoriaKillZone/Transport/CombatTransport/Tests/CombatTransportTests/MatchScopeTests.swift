@@ -78,6 +78,20 @@ final class MatchScopeTests: XCTestCase {
       return XCTFail("wrong match should be rejected")
     }
 
+    try host.acceptConnection(.init(2))
+    let wrongSecretClaim = PeerLinkStateMachine.makeSlotClaim(
+      preSharedKey: hostScope.preSharedKey(joinSecret: "5678"),
+      nonce: 2,
+      claimedSlot: 1
+    )
+    guard case .rejected(_, .authenticationFailed) = try host.receive(
+      .slotClaim(wrongSecretClaim),
+      on: .init(2)
+    ).first
+    else {
+      return XCTFail("wrong join secret should be rejected")
+    }
+
     var matchingHost = try PeerLinkStateMachine(
       role: .host,
       localSlot: 0,

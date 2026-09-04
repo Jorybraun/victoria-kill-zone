@@ -42,6 +42,7 @@
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_vkz-combat._udp</string>
+		<string>_pewpew-arena._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Pew Pew uses the rear camera to detect the opposing player and render the live duel view.</string>

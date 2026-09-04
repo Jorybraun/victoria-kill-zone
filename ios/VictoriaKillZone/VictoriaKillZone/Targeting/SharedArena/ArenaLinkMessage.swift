@@ -163,3 +163,66 @@ enum ArenaLinkBodyCodec {
     let method: ArenaFrameMethod
   }
 }
+
+enum ArenaLinkCodecError: Error, Equatable, Sendable {
+  case truncated
+  case unknownKind
+  case payloadTooLarge
+  case malformedPayload
+}
+
+enum ArenaLinkCodec {
+  static let maxPayloadLength = 64 * 1024 * 1024
+  static let lengthPrefixBytes = 4
+
+  static func encode(_ message: ArenaLinkMessage) throws -> Data {
+    let encoded = try ArenaLinkBodyCodec.encode(message)
+    let payloadLength = encoded.body.count + 1
+    guard payloadLength <= maxPayloadLength else {
+      throw ArenaLinkCodecError.payloadTooLarge
+    }
+
+    var data = Data(capacity: lengthPrefixBytes + payloadLength)
+    withUnsafeBytes(of: UInt32(payloadLength).littleEndian) {
+      data.append(contentsOf: $0)
+    }
+    data.append(encoded.kind)
+    data.append(encoded.body)
+    return data
+  }
+
+  static func drainFrames(from buffer: inout Data) throws -> [ArenaLinkMessage] {
+    var messages: [ArenaLinkMessage] = []
+    while buffer.count >= lengthPrefixBytes {
+      let length = Int(buffer.prefix(lengthPrefixBytes).withUnsafeBytes {
+        $0.loadUnaligned(as: UInt32.self)
+      }.littleEndian)
+      guard length >= 1, length <= maxPayloadLength else {
+        throw ArenaLinkCodecError.payloadTooLarge
+      }
+      guard buffer.count >= lengthPrefixBytes + length else { break }
+      let body = buffer.subdata(in: lengthPrefixBytes..<lengthPrefixBytes + length)
+      buffer.removeSubrange(0..<lengthPrefixBytes + length)
+      messages.append(try decodeBody(body))
+    }
+    return messages
+  }
+
+  private static func decodeBody(_ body: Data) throws -> ArenaLinkMessage {
+    guard let kind = body.first else {
+      throw ArenaLinkCodecError.truncated
+    }
+    do {
+      return try ArenaLinkBodyCodec.decode(kind: kind, body: Data(body.dropFirst()))
+    } catch let error as ArenaLinkBodyCodecError {
+      switch error {
+      case .unknownKind:
+        throw ArenaLinkCodecError.unknownKind
+      case .malformedPayload, .invalidShot:
+        throw ArenaLinkCodecError.malformedPayload
+      }
+    } catch {
+      throw ArenaLinkCodecError.malformedPayload
+    }
+  }
+}

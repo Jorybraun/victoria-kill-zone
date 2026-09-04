@@ -337,6 +337,95 @@ final class SharedArenaFrameTests: XCTestCase {
     )
   }
 
+  func testTCPLinkCodecRoundTripsEveryKindThroughAFragmentedStream() throws {
+    let sample = ArenaPeerSample(
+      playerId: "host-1",
+      sequence: 9,
+      timestampMs: 5_000,
+      tracking: .normal,
+      arenaFromPhone: try yawTransform(degrees: 90, translation: ArenaVector3(x: 0, y: 1.2, z: -3))
+    )
+    let anchors = [
+      ArenaNamedAnchor(name: "arena-anchor-0", transform: .identity),
+      ArenaNamedAnchor(name: "arena-anchor-1", transform: try .translation(x: 2, y: 0, z: 0)),
+    ]
+    let shot = ArenaShotTracer(
+      shotId: "host-1#7",
+      shooterPlayerId: "host-1",
+      ray: try ArenaShotRay(
+        origin: ArenaVector3(x: 0.2, y: 1.4, z: 0.1),
+        direction: ArenaVector3(x: 0.6, y: 0, z: -0.8),
+        firedAtMs: 42
+      )
+    )
+    let messages: [ArenaLinkMessage] = [
+      .hello(playerId: "host-1", role: .host, method: .collaborative),
+      .poseSample(sample),
+      .collaboration(Data(repeating: 0xAB, count: 3_000)),
+      .worldMap(Data(repeating: 0xCD, count: 70_000)),
+      .anchorSet(anchors),
+      .shotTracer(shot),
+      .shotRetracted(shotId: shot.shotId),
+    ]
+    let stream = try messages.map(ArenaLinkCodec.encode).reduce(Data(), +)
+
+    var buffer = Data()
+    var decoded: [ArenaLinkMessage] = []
+    var cursor = stream.startIndex
+    while cursor < stream.endIndex {
+      let next = min(stream.endIndex, cursor + 1_234)
+      buffer.append(stream[cursor..<next])
+      decoded += try ArenaLinkCodec.drainFrames(from: &buffer)
+      cursor = next
+    }
+    XCTAssertEqual(decoded.count, messages.count)
+    for (actual, expected) in zip(decoded, messages) {
+      if case let (.shotTracer(actualShot), .shotTracer(expectedShot)) = (actual, expected) {
+        XCTAssertEqual(actualShot.shotId, expectedShot.shotId)
+        XCTAssertEqual(actualShot.shooterPlayerId, expectedShot.shooterPlayerId)
+        XCTAssertEqual(actualShot.firedAtMs, expectedShot.firedAtMs)
+        XCTAssertEqual(actualShot.ray.origin.x, expectedShot.ray.origin.x, accuracy: 1e-6)
+        XCTAssertEqual(actualShot.ray.origin.y, expectedShot.ray.origin.y, accuracy: 1e-6)
+        XCTAssertEqual(actualShot.ray.origin.z, expectedShot.ray.origin.z, accuracy: 1e-6)
+        XCTAssertEqual(actualShot.ray.direction.x, expectedShot.ray.direction.x, accuracy: 1e-6)
+        XCTAssertEqual(actualShot.ray.direction.y, expectedShot.ray.direction.y, accuracy: 1e-6)
+        XCTAssertEqual(actualShot.ray.direction.z, expectedShot.ray.direction.z, accuracy: 1e-6)
+      } else {
+        XCTAssertEqual(actual, expected)
+      }
+    }
+    XCTAssertTrue(buffer.isEmpty)
+  }
+
+  func testTCPLinkCodecRejectsUnknownTruncatedAndOversizedFrames() throws {
+    var unknown = Data()
+    withUnsafeBytes(of: UInt32(1).littleEndian) { unknown.append(contentsOf: $0) }
+    unknown.append(99)
+    XCTAssertThrowsError(try ArenaLinkCodec.drainFrames(from: &unknown)) { error in
+      XCTAssertEqual(error as? ArenaLinkCodecError, .unknownKind)
+    }
+
+    var oversized = Data()
+    withUnsafeBytes(of: UInt32(ArenaLinkCodec.maxPayloadLength + 1).littleEndian) {
+      oversized.append(contentsOf: $0)
+    }
+    XCTAssertThrowsError(try ArenaLinkCodec.drainFrames(from: &oversized)) { error in
+      XCTAssertEqual(error as? ArenaLinkCodecError, .payloadTooLarge)
+    }
+
+    var malformed = Data()
+    withUnsafeBytes(of: UInt32(2).littleEndian) { malformed.append(contentsOf: $0) }
+    malformed.append(contentsOf: [2, 0])
+    XCTAssertThrowsError(try ArenaLinkCodec.drainFrames(from: &malformed)) { error in
+      XCTAssertEqual(error as? ArenaLinkCodecError, .malformedPayload)
+    }
+
+    var partial = try ArenaLinkCodec.encode(.worldMap(Data(repeating: 0xAA, count: 100)))
+    partial.removeLast()
+    XCTAssertEqual(try ArenaLinkCodec.drainFrames(from: &partial), [])
+    XCTAssertEqual(partial.count, 4 + 1 + 99)
+  }
+
   // MARK: - Helpers
 
   private func yawTransform(degrees: Double, translation: ArenaVector3) throws -> ArenaRigidTransform {
