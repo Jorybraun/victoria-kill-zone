@@ -47,9 +47,13 @@ final class CombatTransportArenaLinkTests: XCTestCase {
 
     pair.guest.send(.shotTracer(guestShot))
     pair.host.send(.shotTracer(hostShot))
-    waitUntil {
-      pair.guest.stats.bytesOut > 0 && pair.host.stats.bytesOut > 0
+    let sendDeadline = Date(timeIntervalSinceNow: 2)
+    while (pair.guest.stats.bytesOut == 0 || pair.host.stats.bytesOut == 0) &&
+      Date() < sendDeadline {
+      RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.005))
     }
+    XCTAssertGreaterThan(pair.guest.stats.bytesOut, 0)
+    XCTAssertGreaterThan(pair.host.stats.bytesOut, 0)
     pump(pair.fabric, until: {
       pair.hostRecorder.containsShot(guestShot) &&
         pair.guestRecorder.containsShot(hostShot)
@@ -69,7 +73,11 @@ final class CombatTransportArenaLinkTests: XCTestCase {
     }
 
     pair.host.send(.shotRetracted(shotId: "host#1"))
-    waitUntil { pair.host.stats.bytesOut > 0 }
+    let sendDeadline = Date(timeIntervalSinceNow: 2)
+    while pair.host.stats.bytesOut == 0 && Date() < sendDeadline {
+      RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.005))
+    }
+    XCTAssertGreaterThan(pair.host.stats.bytesOut, 0)
     pump(pair.fabric, until: {
       pair.guestRecorder.contains(message: .shotRetracted(shotId: "host#1"))
     })
@@ -88,7 +96,11 @@ final class CombatTransportArenaLinkTests: XCTestCase {
     }
 
     pair.host.send(.worldMap(worldMap))
-    waitUntil { pair.host.stats.bytesOut > 0 }
+    let sendDeadline = Date(timeIntervalSinceNow: 2)
+    while pair.host.stats.bytesOut == 0 && Date() < sendDeadline {
+      RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.005))
+    }
+    XCTAssertGreaterThan(pair.host.stats.bytesOut, 0)
     pump(pair.fabric, until: {
       pair.guestRecorder.contains(message: .worldMap(worldMap))
     })
@@ -137,7 +149,11 @@ final class CombatTransportArenaLinkTests: XCTestCase {
       if case .shotTracer = message { received.fulfill() }
     }
     pair.guest.send(.shotTracer(try tracer(shotId: "guest#1", shooter: "guest")))
-    waitUntil { pair.guest.stats.bytesOut > 0 }
+    let sendDeadline = Date(timeIntervalSinceNow: 2)
+    while pair.guest.stats.bytesOut == 0 && Date() < sendDeadline {
+      RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.005))
+    }
+    XCTAssertGreaterThan(pair.guest.stats.bytesOut, 0)
     pump(pair.fabric, until: { pair.hostRecorder.messageCount > 0 })
     wait(for: [received], timeout: 1)
 
@@ -194,17 +210,6 @@ final class CombatTransportArenaLinkTests: XCTestCase {
       fabric.advance(to: fabric.nowMs + 1)
       RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.001))
     }
-  }
-
-  private func waitUntil(
-    timeout: TimeInterval = 2,
-    _ predicate: @escaping () -> Bool
-  ) {
-    let deadline = Date(timeIntervalSinceNow: timeout)
-    while !predicate() && Date() < deadline {
-      RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.005))
-    }
-    XCTAssertTrue(predicate())
   }
 
   private func tracer(shotId: String, shooter: String) throws -> ArenaShotTracer {
