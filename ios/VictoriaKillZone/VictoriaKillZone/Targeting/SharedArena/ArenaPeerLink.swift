@@ -23,13 +23,26 @@ import Foundation
     private var role: ArenaRole?
     private var handshake: Handshake = .none
     private var handshakeTimeout: DispatchWorkItem?
+    private let preSharedKey: Data?
+
+    private enum Handshake {
+      case none
+      case awaitingNonce(ArenaLinkAuthenticator)
+      case awaitingProof(ArenaLinkAuthenticator, peerNonce: Data)
+      case verified
+
+      var isPending: Bool {
+        switch self {
+        case .awaitingNonce, .awaitingProof: true
+        case .none, .verified: false
+        }
+      }
+    }
 
     init(serviceName: String? = nil, preSharedKey: Data? = nil) {
       self.serviceName = serviceName
       self.preSharedKey = preSharedKey
     }
-
-    private let preSharedKey: Data?
 
     var stats: ArenaPeerLinkStats {
       lock.withLock { _stats }
@@ -165,7 +178,7 @@ import Foundation
           self.lock.withLock { self._stats.bytesIn += content.count }
           self.receiveBuffer.append(content)
           guard self.processHandshake() else {
-            if self.handshake != .none {
+            if self.handshake.isPending {
               self.receiveNext()
             }
             return
@@ -232,7 +245,7 @@ import Foundation
 
     private func armHandshakeTimeout() {
       let timeout = DispatchWorkItem { [weak self] in
-        guard let self, self.handshake != .verified else { return }
+        guard let self, self.handshake.isPending else { return }
         self.fail("auth timeout")
       }
       handshakeTimeout = timeout
