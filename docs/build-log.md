@@ -125,3 +125,17 @@ This is the integration-owned, evidence-based status record. Append observed res
 ### 2026-09-04 — ADR 0005 proposed
 
 - ADR 0005 proposed; fire-path trace found every markerless `shots:fire` rejected `LOCATION_STALE` on the current client (no location sent); PR implements ADR 0005; physical-device evidence pending.
+
+### 2026-09-04 — ADR 0006 duel shared frame proposed (docs only)
+
+- **Git SHA / PR:** this PR (docs-only; no product code, no tests changed).
+- **Owner and write set:** Integration — `docs/decisions/0006-duel-shared-frame.md` (new), `docs/decisions/0005-…` (one-line correction), `docs/roadmap.md`, this log.
+- **Environment/artifact:** Apple ARKit/Vision documentation and WWDC19/23 transcripts cited inline in the ADR; prior research `docs/research/shared-arena-frame-options.md`.
+- **Commands/checks:** `pnpm verify`; `ios-gate` CI (no Swift touched).
+- **Observed on browser/simulator:** none.
+- **Observed on physical devices:** none — nothing in this slice is device evidence.
+- **Mocked or unproven:** every ADR 0006 §7 row: body-tracking relocalization into a peer's `ARWorldMap` outdoors, residual at 3/8/15 m, drift over a 3-minute duel, map transfer time over `CombatTransport`, receiver-confirmation false-hit reduction, thermal. Drift numbers in the ADR are published planning values, not measurements of this app.
+- **Result:** PASS (documentation slice). ADR 0006 status stays Proposed.
+- **Blocker and owner:** two body-tracking-capable iPhones + operator time for the S0 spike (Hardware/Operator).
+- **Next integration step:** dispatch S0 (iOS targeting) per ADR 0006 §9; record §7 rows 1–3 here with model + iOS version only.
+- **Cut/deferred or risk change:** roadmap ADR index renumbered — personal-time semantics → 0007, street-scale spatial provider → 0008. Collaborative ARKit sessions are no longer the duel's primary frame; retirement list in ADR 0006 §8 executes only in its named slices, never before S0 evidence.
