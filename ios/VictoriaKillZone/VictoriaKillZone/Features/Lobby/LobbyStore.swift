@@ -12,6 +12,29 @@ enum LobbySyncStatus: Equatable, Sendable {
   case restored
 }
 
+enum TargetingBlocker: Equatable, Sendable {
+  case cameraDenied
+  case unsupportedDevice
+
+  var title: String {
+    switch self {
+    case .cameraDenied: "CAMERA ACCESS REQUIRED"
+    case .unsupportedDevice: "TARGETING UNAVAILABLE ON THIS DEVICE"
+    }
+  }
+
+  var message: String {
+    switch self {
+    case .cameraDenied:
+      "Pew Pew needs the rear camera to aim at the other player. Allow camera access in Settings to fire markerless shots."
+    case .unsupportedDevice:
+      "This device cannot run the augmented-reality targeting used for aiming. You can still watch the duel, but markerless shots are disabled."
+    }
+  }
+
+  var offersSettings: Bool { self == .cameraDenied }
+}
+
 enum LobbyNetworkOperation: Equatable, Sendable {
   case creating
   case joining
@@ -75,6 +98,7 @@ final class LobbyStore: ObservableObject {
   @Published private(set) var markerlessShotState = MarkerlessShotState.idle
   @Published private(set) var lastAcceptedShotAt: Date?
   @Published private(set) var targetingSnapshot: TargetingSnapshot
+  @Published private(set) var targetingBlocker: TargetingBlocker?
   @Published private(set) var killBanner: KillBanner?
   @Published private(set) var incomingShot: IncomingShot?
 
@@ -303,8 +327,10 @@ final class LobbyStore: ObservableObject {
   }
 
   func startTargeting() async {
+    targetingBlocker = nil
     guard environment.targetingSession.availability == .available else {
       targetingSnapshot = .unavailable()
+      targetingBlocker = .unsupportedDevice
       return
     }
     guard targetingTask == nil else { return }
@@ -320,13 +346,14 @@ final class LobbyStore: ObservableObject {
     do {
       try await targetingSession.start()
     } catch TargetingSessionError.cameraPermissionDenied {
-      errorMessage = "CAMERA ACCESS IS REQUIRED"
+      targetingBlocker = .cameraDenied
     } catch {
-      errorMessage = "TARGETING UNAVAILABLE"
+      targetingBlocker = .unsupportedDevice
     }
   }
 
   func stopTargeting() async {
+    targetingBlocker = nil
     targetingTask?.cancel()
     targetingTask = nil
     await environment.targetingSession.stop()
@@ -334,6 +361,7 @@ final class LobbyStore: ObservableObject {
   }
 
   func leave() {
+    targetingBlocker = nil
     actionTask?.cancel()
     snapshotTask?.cancel()
     snapshotRetryTask?.cancel()
@@ -598,7 +626,9 @@ final class LobbyStore: ObservableObject {
     setMarkerlessShotState(.pending(zone: zone))
     errorMessage = nil
     #if canImport(Network)
-      sendPeerTracer(for: request)
+      if snapshot.players.first(where: { $0.id == session.playerId })?.ammo ?? 0 > 0 {
+        sendPeerTracer(for: request)
+      }
     #endif
 
     do {
@@ -794,6 +824,9 @@ final class LobbyStore: ObservableObject {
         !seenIncomingShotEventIDs.contains(event.id)
       else { return false }
       seenIncomingShotEventIDs.insert(event.id)
+      if seenIncomingShotEventIDs.count > 512 {
+        seenIncomingShotEventIDs.removeAll(keepingCapacity: true)
+      }
       return true
     }
     guard let startedAt = snapshotSubscriptionStartedAt,
@@ -835,7 +868,7 @@ final class LobbyStore: ObservableObject {
         let ray = try? ArenaShotRay(
           origin: ArenaVector3(x: origin[0], y: origin[1], z: origin[2]),
           direction: ArenaVector3(x: direction[0], y: direction[1], z: direction[2]),
-          firedAtMs: Int64(request.firedAtClient.rounded())
+          firedAtMs: ArenaClock.nowMs()
         )
       else { return }
       link.send(.shotTracer(ArenaShotTracer(
@@ -847,12 +880,14 @@ final class LobbyStore: ObservableObject {
 
     private func updateDuelPeerLink(for snapshot: MatchSnapshot, previous: MatchSnapshot?) {
       if snapshot.match.phase == .running, duelPeerLink == nil,
-        let role = snapshot.players.first(where: { $0.id == snapshot.localPlayerId })?.role
+        let role = snapshot.players.first(where: { $0.id == snapshot.localPlayerId })?.role,
+        let opponentID = snapshot.players.first(where: { $0.id != snapshot.localPlayerId })?.id
       {
-        let link = ArenaPeerLink()
+        let serviceName = "vkz-" + String(snapshot.match.id.prefix(48))
+        let link = ArenaPeerLink(serviceName: serviceName)
         link.onMessage = { [weak self] message, _ in
           guard case .shotTracer(let tracer) = message,
-            tracer.shooterPlayerId != snapshot.localPlayerId
+            tracer.shooterPlayerId == opponentID
           else { return }
           Task { @MainActor [weak self] in
             guard let self else { return }

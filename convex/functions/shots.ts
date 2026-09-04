@@ -4,8 +4,12 @@ import {
   fireClaimFingerprint,
   resolveDebugFire,
   resolveFire,
+  resolveVerdictRecord,
+  verdictFingerprint,
+  verdictGate,
   type FirePlan,
   type FireRequest,
+  type ShotVerdictRecord,
 } from "../domain/fire.js";
 import { fireLocationGate, locationStateFrom, type FireLocationGate } from "../domain/geofence.js";
 import { mutation, type Doc, type Id, type MutationCtx } from "./lib/server.js";
@@ -34,6 +38,18 @@ const playerLifeState = v.union(
   v.literal("respawning"),
   v.literal("disconnected"),
 );
+const fireReturn = v.object({
+  accepted: v.boolean(),
+  outcome: shotOutcome,
+  clientShotId: v.string(),
+  replayed: v.boolean(),
+  damage: v.number(),
+  shooterAmmo: v.number(),
+  targetHealth: v.optional(v.number()),
+  targetLifeState: v.optional(playerLifeState),
+  eventId: v.optional(v.id("events")),
+  rejectReason: v.optional(v.string()),
+});
 
 const respawnReference = makeFunctionReference<
   "mutation",
@@ -126,7 +142,11 @@ export const debugFire = mutation({
       locationGate,
     );
 
-    const eventId = await persistPlan(ctx, match, shooter, opponent, request, plan, "debug", "debug", true);
+    const eventId = await persistPlan(ctx, match, shooter, opponent, request, plan, {
+      mode: "debug",
+      claimFingerprint: "debug",
+      forceG2HitEvent: true,
+    });
     return debugResult(plan, args.clientShotId, opponent?.health ?? 100, eventId);
   },
 });
@@ -146,18 +166,7 @@ export const fire = mutation({
     impact: v.optional(v.array(v.number())),
     firedAtClient: v.number(),
   },
-  returns: v.object({
-    accepted: v.boolean(),
-    outcome: shotOutcome,
-    clientShotId: v.string(),
-    replayed: v.boolean(),
-    damage: v.number(),
-    shooterAmmo: v.number(),
-    targetHealth: v.optional(v.number()),
-    targetLifeState: v.optional(playerLifeState),
-    eventId: v.optional(v.id("events")),
-    rejectReason: v.optional(v.string()),
-  }),
+  returns: fireReturn,
   handler: async (ctx, args): Promise<FireWireResult> => {
     const shooter = await authenticatePlayer(ctx, args.matchId, args.shooterId, args.sessionSecret);
     const match = await ctx.db.get(args.matchId);
@@ -207,8 +216,112 @@ export const fire = mutation({
       now,
       arenaGeometryOf(match) === null ? null : shooterLocationGate(shooter, now),
     );
-    const eventId = await persistPlan(ctx, match, shooter, opponent, request, plan, "fire", fingerprint, false);
+    const eventId = await persistPlan(ctx, match, shooter, opponent, request, plan, {
+      mode: "fire",
+      claimFingerprint: fingerprint,
+      forceG2HitEvent: false,
+    });
     return fireResult(plan, args.clientShotId, eventId);
+  },
+});
+
+/** Host-posted spatial verdict persisted alongside the authoritative result. */
+export const recordVerdict = mutation({
+  args: {
+    matchId: v.id("matches"),
+    playerId: v.id("players"),
+    sessionSecret: v.string(),
+    record: v.object({
+      clientShotId: v.string(),
+      shooterPlayerId: v.id("players"),
+      targetPlayerId: v.union(v.id("players"), v.null()),
+      zone: v.union(hitZone, v.null()),
+      damage: v.number(),
+      rewindMs: v.number(),
+      verdict: v.union(v.literal("hit"), v.literal("miss"), v.literal("rejected")),
+      rejectionReason: v.union(v.string(), v.null()),
+      origin: v.union(v.array(v.number()), v.null()),
+      direction: v.union(v.array(v.number()), v.null()),
+      impact: v.union(v.array(v.number()), v.null()),
+      firedAtClient: v.number(),
+      adjudicatedBy: v.id("players"),
+      targetConfirmed: v.optional(v.union(v.boolean(), v.null())),
+    }),
+  },
+  returns: fireReturn,
+  handler: async (ctx, args): Promise<FireWireResult> => {
+    const caller = await authenticatePlayer(ctx, args.matchId, args.playerId, args.sessionSecret);
+    const match = await ctx.db.get(args.matchId);
+    if (match === null) {
+      fail("MATCH_NOT_FOUND");
+    }
+    const now = Date.now();
+    const gate = verdictGate(toMatchState(match), caller._id, now);
+    if (gate !== null) {
+      fail(gate);
+    }
+
+    if (
+      args.record.clientShotId.trim().length === 0 ||
+      !validVector(args.record.origin) ||
+      !validVector(args.record.direction) ||
+      !validVector(args.record.impact)
+    ) {
+      return conflictResult(args.record.clientShotId, caller.ammo);
+    }
+
+    const record: ShotVerdictRecord = {
+      ...args.record,
+      targetConfirmed: args.record.targetConfirmed ?? null,
+    };
+    const fingerprint = verdictFingerprint(record);
+    const existing = await loadShotForMatch(ctx, match._id, record.clientShotId);
+    if (existing !== null) {
+      if (existing.mode === "verdict" && existing.claimFingerprint === fingerprint) {
+        return fireResultFromStored(existing);
+      }
+      return conflictResult(record.clientShotId, caller.ammo);
+    }
+
+    const players = await listPlayers(ctx, match._id);
+    const shooter = players.find((player) => player._id === record.shooterPlayerId);
+    if (shooter === undefined) {
+      fail("INVALID_TARGET");
+    }
+    const target =
+      record.targetPlayerId === null
+        ? null
+        : (players.find((player) => player._id === record.targetPlayerId) ?? null);
+    const plan = resolveVerdictRecord(
+      toPlayerState(shooter),
+      target === null ? null : toPlayerState(target),
+      record,
+      now,
+    );
+    const request: FireRequest = {
+      shooterId: shooter._id,
+      clientShotId: record.clientShotId,
+      firedAtClient: record.firedAtClient,
+      ...(record.targetPlayerId === null ? {} : { targetId: record.targetPlayerId }),
+      ...(record.zone === null ? {} : { zone: record.zone }),
+      ...(record.origin === null ? {} : { origin: record.origin }),
+      ...(record.direction === null ? {} : { direction: record.direction }),
+      ...(record.impact === null ? {} : { impact: record.impact }),
+    };
+    const eventId = await persistPlan(ctx, match, shooter, target, request, plan, {
+      mode: "verdict",
+      claimFingerprint: fingerprint,
+      forceG2HitEvent: false,
+      targetConfirmed: args.record.targetConfirmed ?? null,
+      ledgerExtras: {
+        rewindMs: record.rewindMs,
+        hostDamage: record.damage,
+        verdict: record.verdict,
+        hostRejectionReason: record.rejectionReason,
+        adjudicatedBy: args.record.adjudicatedBy,
+      },
+    });
+    return fireResult(plan, record.clientShotId, eventId);
   },
 });
 
@@ -216,18 +329,16 @@ async function persistPlan(
   ctx: MutationCtx,
   match: Doc<"matches">,
   shooter: Doc<"players">,
-  opponent: Doc<"players"> | null,
+  target: Doc<"players"> | null,
   request: FireRequest,
   plan: FirePlan,
-  mode: "debug" | "fire",
-  claimFingerprint: string,
-  forceG2HitEvent: boolean,
+  extra: PersistExtra,
 ): Promise<Id<"events"> | null> {
   if (plan.shooterPatch !== null) {
     await ctx.db.patch(shooter._id, plan.shooterPatch);
   }
-  if (plan.targetPatch !== null && opponent !== null) {
-    await ctx.db.patch(opponent._id, plan.targetPatch);
+  if (plan.targetPatch !== null && target !== null) {
+    await ctx.db.patch(target._id, plan.targetPatch);
   }
 
   let eventId: Id<"events"> | null = null;
@@ -235,29 +346,30 @@ async function persistPlan(
   if (event !== undefined) {
     eventId = await appendEvent(ctx, {
       matchId: match._id,
-      type: forceG2HitEvent ? "hit" : event.type,
+      type: extra.forceG2HitEvent ? "hit" : event.type,
       actorPlayerId: shooter._id,
-      targetPlayerId: event.targetPlayerId === null ? null : (opponent?._id ?? null),
+      targetPlayerId: event.targetPlayerId === null ? null : (target?._id ?? null),
       zone: event.zone,
       damage: event.damage,
       message:
-        forceG2HitEvent && opponent !== null
-          ? `${shooter.displayName} HIT ${opponent.displayName} • TORSO −${event.damage ?? 0}`
+        extra.forceG2HitEvent && target !== null
+          ? `${shooter.displayName} HIT ${target.displayName} • TORSO −${event.damage ?? 0}`
           : event.message,
       createdAt: Date.now(),
+      ...(extra.targetConfirmed === undefined ? {} : { targetConfirmed: extra.targetConfirmed }),
     });
   }
 
   const rejectReason =
     plan.result.rejectReason === undefined
       ? null
-      : mode === "debug"
+      : extra.mode === "debug"
         ? debugErrorCode(plan.result.rejectReason)
         : errorCodeForRejectReason(plan.result.rejectReason);
   await ctx.db.insert("shots", {
     matchId: match._id,
     shooterId: shooter._id,
-    targetId: plan.shot.targetId === null ? null : (opponent?._id ?? null),
+    targetId: plan.shot.targetId === null ? null : (target?._id ?? null),
     clientShotId: request.clientShotId,
     zone: plan.shot.zone,
     damage: plan.shot.damage,
@@ -268,23 +380,37 @@ async function persistPlan(
     ...(request.direction === undefined ? {} : { direction: [...request.direction] }),
     ...(request.impact === undefined ? {} : { impact: [...request.impact] }),
     firedAtClient: plan.shot.firedAtClient,
-    mode,
-    claimFingerprint,
+    mode: extra.mode,
+    claimFingerprint: extra.claimFingerprint,
     shooterAmmo: plan.result.shooterAmmo,
     targetHealth: plan.result.targetHealth ?? null,
     targetLifeState: plan.result.targetLifeState ?? null,
     eventId,
     createdAt: Date.now(),
+    ...extra.ledgerExtras,
   });
 
-  if (plan.respawnAt !== null && opponent !== null) {
+  if (plan.respawnAt !== null && target !== null) {
     await ctx.scheduler.runAt(plan.respawnAt, respawnReference, {
-      playerId: opponent._id,
+      playerId: target._id,
       expectedRespawnAt: plan.respawnAt,
     });
   }
   return eventId;
 }
+
+type PersistExtra = {
+  mode: "debug" | "fire" | "verdict";
+  claimFingerprint: string;
+  forceG2HitEvent: boolean;
+  targetConfirmed?: boolean | null;
+  ledgerExtras?: Partial<
+    Pick<
+      Doc<"shots">,
+      "rewindMs" | "hostDamage" | "verdict" | "hostRejectionReason" | "adjudicatedBy"
+    >
+  >;
+};
 
 async function loadShot(
   ctx: MutationCtx,
@@ -295,6 +421,19 @@ async function loadShot(
     .query("shots")
     .withIndex("by_shooter_and_client_shot_id", (q) =>
       q.eq("shooterId", shooterId).eq("clientShotId", clientShotId),
+    )
+    .unique();
+}
+
+async function loadShotForMatch(
+  ctx: MutationCtx,
+  matchId: Id<"matches">,
+  clientShotId: string,
+): Promise<Doc<"shots"> | null> {
+  return await ctx.db
+    .query("shots")
+    .withIndex("by_match_and_client_shot_id", (q) =>
+      q.eq("matchId", matchId).eq("clientShotId", clientShotId),
     )
     .unique();
 }
@@ -410,6 +549,6 @@ function debugErrorCode(reason: NonNullable<FirePlan["result"]["rejectReason"]>)
   }
 }
 
-function validVector(vector: number[] | undefined): boolean {
-  return vector === undefined || (vector.length === 3 && vector.every(Number.isFinite));
+function validVector(vector: number[] | null | undefined): boolean {
+  return vector === undefined || vector === null || (vector.length === 3 && vector.every(Number.isFinite));
 }

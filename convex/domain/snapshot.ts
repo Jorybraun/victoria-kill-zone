@@ -75,6 +75,7 @@ export interface EventSnapshot {
   targetPlayerId?: string;
   zone?: HitZone;
   damage?: number;
+  targetConfirmed?: boolean | null;
 }
 
 export interface MatchSnapshot {
@@ -110,6 +111,7 @@ export interface SnapshotEvent {
   targetPlayerId: string | null;
   zone: HitZone | null;
   damage: number | null;
+  targetConfirmed?: boolean | null;
   message: string;
   createdAt: number;
 }
@@ -255,6 +257,9 @@ function projectEvent(event: SnapshotEvent): EventSnapshot {
     ...(event.targetPlayerId === null ? {} : { targetPlayerId: event.targetPlayerId }),
     ...(event.zone === null ? {} : { zone: event.zone }),
     ...(event.damage === null ? {} : { damage: event.damage }),
+    ...(event.targetConfirmed === undefined || event.targetConfirmed === null
+      ? {}
+      : { targetConfirmed: event.targetConfirmed }),
   };
 }
 

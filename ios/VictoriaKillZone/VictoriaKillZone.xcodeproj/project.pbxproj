@@ -31,6 +31,8 @@
 		B00100000000000000000014 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00100000000000000000016 /* AVFoundation.framework */; };
 		B00100000000000000000015 /* Speech.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F00100000000000000000017 /* Speech.framework */; };
 		B00100000000000000000016 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000018 /* Assets.xcassets */; };
+		B0010000000000000000001A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F0010000000000000000001A /* PrivacyInfo.xcprivacy */; };
+		B00100000000000000000018 /* BodyTargetingGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000019 /* BodyTargetingGeometry.swift */; };
 		B00200000000000000000001 /* SharedArenaModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000001 /* SharedArenaModels.swift */; };
 		B00200000000000000000002 /* SharedArenaLockPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000002 /* SharedArenaLockPolicy.swift */; };
 		B00200000000000000000003 /* ArenaFrameMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000003 /* ArenaFrameMetrics.swift */; };
@@ -42,6 +44,7 @@
 		B00300000000000000000001 /* DuelInvite.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000001 /* DuelInvite.swift */; };
 		B00300000000000000000002 /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000002 /* QRScannerView.swift */; };
 		B00300000000000000000003 /* DuelInviteLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000003 /* DuelInviteLinkTests.swift */; };
+		B00300000000000000000004 /* TargetingBlockerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000004 /* TargetingBlockerTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -79,6 +82,8 @@
 		F00100000000000000000016 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		F00100000000000000000017 /* Speech.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Speech.framework; path = System/Library/Frameworks/Speech.framework; sourceTree = SDKROOT; };
 		F00100000000000000000018 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F0010000000000000000001A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		F00100000000000000000019 /* BodyTargetingGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BodyTargetingGeometry.swift; sourceTree = "<group>"; };
 		F00200000000000000000001 /* SharedArenaModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedArenaModels.swift; sourceTree = "<group>"; };
 		F00200000000000000000002 /* SharedArenaLockPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedArenaLockPolicy.swift; sourceTree = "<group>"; };
 		F00200000000000000000003 /* ArenaFrameMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArenaFrameMetrics.swift; sourceTree = "<group>"; };
@@ -90,6 +95,7 @@
 		F00300000000000000000001 /* DuelInvite.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuelInvite.swift; sourceTree = "<group>"; };
 		F00300000000000000000002 /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
 		F00300000000000000000003 /* DuelInviteLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuelInviteLinkTests.swift; sourceTree = "<group>"; };
+		F00300000000000000000004 /* TargetingBlockerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetingBlockerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -145,6 +151,7 @@
 				G0010000000000000000000B /* DesignSystem */,
 				F00100000000000000000018 /* Assets.xcassets */,
 				F0010000000000000000000D /* Info.plist */,
+				F0010000000000000000001A /* PrivacyInfo.xcprivacy */,
 			);
 			path = VictoriaKillZone;
 			sourceTree = "<group>";
@@ -183,6 +190,7 @@
 			isa = PBXGroup;
 			children = (
 				F00100000000000000000006 /* TargetingSession.swift */,
+				F00100000000000000000019 /* BodyTargetingGeometry.swift */,
 				G00200000000000000000001 /* SharedArena */,
 			);
 			path = Targeting;
@@ -240,6 +248,7 @@
 			children = (
 				F0010000000000000000000E /* LobbyStateMachineTests.swift */,
 				F00300000000000000000003 /* DuelInviteLinkTests.swift */,
+				F00300000000000000000004 /* TargetingBlockerTests.swift */,
 			);
 			path = VictoriaKillZoneTests;
 			sourceTree = "<group>";
@@ -360,6 +369,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B00100000000000000000016 /* Assets.xcassets in Resources */,
+				B0010000000000000000001A /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -386,6 +396,7 @@
 				B00100000000000000000005 /* GameSessionClient.swift in Sources */,
 				B0010000000000000000000F /* ConvexGameSessionClient.swift in Sources */,
 				B00100000000000000000006 /* TargetingSession.swift in Sources */,
+				B00100000000000000000018 /* BodyTargetingGeometry.swift in Sources */,
 				B00200000000000000000001 /* SharedArenaModels.swift in Sources */,
 				B00200000000000000000002 /* SharedArenaLockPolicy.swift in Sources */,
 				B00200000000000000000003 /* ArenaFrameMetrics.swift in Sources */,
@@ -413,6 +424,7 @@
 			files = (
 				B0010000000000000000000D /* LobbyStateMachineTests.swift in Sources */,
 				B00300000000000000000003 /* DuelInviteLinkTests.swift in Sources */,
+				B00300000000000000000004 /* TargetingBlockerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -558,6 +570,7 @@
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VKZ_DEBUG_FIRE";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -586,6 +599,7 @@
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VKZ_DEBUG_FIRE";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;

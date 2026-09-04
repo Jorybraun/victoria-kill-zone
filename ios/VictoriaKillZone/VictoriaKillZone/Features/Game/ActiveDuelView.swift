@@ -8,6 +8,7 @@ struct ActiveDuelView: View {
   let duel: ActiveDuel
   @ObservedObject var store: LobbyStore
   @Environment(\.scenePhase) private var scenePhase
+  @Environment(\.openURL) private var openURL
   @StateObject private var fx = LaserFXEngine()
   @StateObject private var voiceFire = VoiceFireController()
   @State private var muzzleFlash = false
@@ -69,6 +70,9 @@ struct ActiveDuelView: View {
           topTelemetry(at: context.date)
           opponentStrip
           connectionBanner
+          if let blocker = store.targetingBlocker {
+            targetingBlockerPanel(blocker)
+          }
           Spacer(minLength: 12)
           reticleArea
           Spacer(minLength: 12)
@@ -79,6 +83,7 @@ struct ActiveDuelView: View {
           }
         }
         .padding(18)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .opacity(store.isMatchInputLocked ? 0.58 : 1)
 
         if isLocalRespawning {
@@ -388,19 +393,21 @@ struct ActiveDuelView: View {
         .buttonStyle(VKZPrimaryButtonStyle())
         .disabled(store.fireCooldownRemaining(at: Date()) > 0)
         .accessibilityLabel("Fire markerless shot")
-        if duel.localRole == .host {
-          Button {
-            store.debugFire()
-          } label: {
-            Image(systemName: "wrench.and.screwdriver")
-              .font(.title3)
-              .foregroundStyle(VKZPalette.textMuted)
-              .frame(width: 56, height: 56)
-              .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 12))
+        #if VKZ_DEBUG_FIRE
+          if duel.localRole == .host {
+            Button {
+              store.debugFire()
+            } label: {
+              Image(systemName: "wrench.and.screwdriver")
+                .font(.title3)
+                .foregroundStyle(VKZPalette.textMuted)
+                .frame(width: 56, height: 56)
+                .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 12))
+            }
+            .disabled(!store.canDebugFire)
+            .accessibilityLabel("Debug torso fallback fire")
           }
-          .disabled(!store.canDebugFire)
-          .accessibilityLabel("Debug torso fallback")
-        }
+        #endif
       }
       Text(voiceStatusCaption)
         .font(.caption2.monospaced())
@@ -410,6 +417,7 @@ struct ActiveDuelView: View {
         store.leave()
       }
       .font(.caption.bold().monospaced())
+      .accessibilityLabel("Leave duel")
     }
   }
 
@@ -457,6 +465,33 @@ struct ActiveDuelView: View {
       store.leave()
     }
     .font(.caption.bold().monospaced())
+    .accessibilityLabel("Leave duel")
+  }
+
+  private func targetingBlockerPanel(_ blocker: TargetingBlocker) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text(blocker.title)
+        .font(.caption.weight(.bold).monospaced())
+        .foregroundStyle(VKZPalette.danger)
+      Text(blocker.message)
+        .font(.footnote)
+        .foregroundStyle(VKZPalette.text)
+        .fixedSize(horizontal: false, vertical: true)
+      if blocker.offersSettings {
+        Button("OPEN SETTINGS") {
+          #if os(iOS)
+            if let url = URL(string: UIApplication.openSettingsURLString) {
+              openURL(url)
+            }
+          #endif
+        }
+        .buttonStyle(VKZSecondaryButtonStyle())
+        .accessibilityLabel("Open Settings to allow camera access")
+      }
+    }
+    .padding(14)
+    .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 14))
+    .accessibilityElement(children: .contain)
   }
 
   private func fireShot() {
