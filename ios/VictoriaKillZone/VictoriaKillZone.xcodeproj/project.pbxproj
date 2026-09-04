@@ -25,6 +25,7 @@
 		B00100000000000000000010 /* ConvexMobile in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000001 /* ConvexMobile */; };
 		B00100000000000000000016 /* PewPewSimulation in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000002 /* PewPewSimulation */; };
 		B00100000000000000000017 /* CombatTransport in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000003 /* CombatTransport */; };
+		B00100000000000000000018 /* CombatTransport in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000003 /* CombatTransport */; };
 		B00100000000000000000011 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000013 /* RootView.swift */; };
 		B00100000000000000000012 /* LaserFX.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000014 /* LaserFX.swift */; };
 		B00100000000000000000013 /* VoiceFireController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000015 /* VoiceFireController.swift */; };
@@ -113,7 +114,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B00100000000000000000017 /* CombatTransport in Frameworks */,
+				B00100000000000000000018 /* CombatTransport in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

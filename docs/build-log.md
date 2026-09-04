@@ -125,3 +125,12 @@ This is the integration-owned, evidence-based status record. Append observed res
 ### 2026-09-04 — ADR 0005 proposed
 
 - ADR 0005 proposed; fire-path trace found every markerless `shots:fire` rejected `LOCATION_STALE` on the current client (no location sent); PR implements ADR 0005; physical-device evidence pending.
+
+### 2026-09-04 — CombatTransport becomes the peer plane (loopback + compile gate only; two-phone run pending)
+
+- **Change:** `CombatTransportArenaLink` (QUIC/Bonjour host-relay via the KIL-35 package) replaces the KIL-20 TCP `ArenaPeerLink` for the duel fast path and the Shared Arena harness; `ArenaPeerLink.swift`, `ArenaLinkCodec` and `ArenaShotTracerCodec` deleted; `NSBonjourServices` now `_vkz-combat._udp`. Match scoping (`MatchScope`: hashed scope id in Bonjour name + TXT record, PSK from match id + join code, `MatchHello` first frame), `CombatFireMessage` (`shot` with monotonic `firedAtMs`, `retracted(shotId)`), and `NetworkPeerLinkEvent` added to the package. See ADR 0004 "Transport integration".
+- **Commands/checks:** `pnpm verify` PASS locally; macOS `ios-gate` (`swift test` on both packages + xcodebuild) is the Swift gate. Loopback tests cover host/guest shot, retraction, 200 KiB world-map bulk transfer, and wrong-match rejection (TXT filter, PSK slot claim, hello scope).
+- **Observed on physical devices:** none. Not claimed.
+- **Mocked or unproven:** QUIC TLS identity — the app passes no `TransportIdentityProvider`, so the on-device handshake cannot complete until an ephemeral per-match identity is added (ADR 0004 deviation 3). Poses still ride the reliable channel, not datagrams.
+- **Handoff:** LobbyStore owner — send `.shotRetracted(shotId:)` on the duel link when `shots:fire` rejects a shot; the `updateDuelPeerLink` construction line is the only LobbyStore change in this PR. PR #46 also touches `ArenaPeerLink.swift`/that line and will conflict; resolve by keeping `CombatTransportArenaLink`.
+- **Next integration step (two-phone TestFlight run):** ephemeral identity + public-key pinning, then measure fire → peer tracer p95 ≤ 50 ms, fire → Convex confirmation p95 ≤ 500 ms, pose p99 age ≤ 100 ms once poses move to datagrams, and wrong-match rejection with a third phone.
