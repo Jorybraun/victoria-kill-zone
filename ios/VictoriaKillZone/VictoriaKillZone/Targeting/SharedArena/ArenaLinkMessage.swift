@@ -1,16 +1,5 @@
+import CombatTransport
 import Foundation
-
-// MARK: - Harness peer-channel message framing (KIL-20)
-//
-// The KIL-35 `CombatTransport` package is not yet linked into the app and its
-// reliable channel caps payloads at 512 bytes, which cannot carry an
-// `ARWorldMap` (hundreds of KB) or `ARCollaborationData`. The two-phone proof
-// therefore uses its own bulk channel with this framing. Folding it into the
-// combat transport (chunked bulk stream) is a KIL-35 follow-up, not a change
-// this slice may make.
-//
-// Wire format, little-endian: `UInt32 length` (of everything after it),
-// `UInt8 kind`, payload.
 
 enum ArenaLinkMessage: Equatable, Sendable {
   /// First message on a connection; identifies the sender and the method it
@@ -26,6 +15,7 @@ enum ArenaLinkMessage: Equatable, Sendable {
   case anchorSet([ArenaNamedAnchor])
   /// One shot, broadcast once by the shooter; receivers dedup by `shotId`.
   case shotTracer(ArenaShotTracer)
+  case shotRetracted(shotId: String)
 
   var kind: UInt8 {
     switch self {
@@ -35,6 +25,7 @@ enum ArenaLinkMessage: Equatable, Sendable {
     case .worldMap: 4
     case .anchorSet: 5
     case .shotTracer: 6
+    case .shotRetracted: 7
     }
   }
 }
@@ -53,20 +44,14 @@ struct ArenaNamedAnchor: Equatable, Codable, Sendable {
   }
 }
 
-enum ArenaLinkCodecError: Error, Equatable, Sendable {
-  case truncated
+enum ArenaLinkBodyCodecError: Error, Equatable, Sendable {
   case unknownKind
-  case payloadTooLarge
   case malformedPayload
+  case invalidShot
 }
 
-enum ArenaLinkCodec {
-  /// Generous ceiling for a serialized world map; anything larger is a bug or
-  /// an attack, not a valid arena.
-  static let maxPayloadLength = 64 * 1024 * 1024
-  static let lengthPrefixBytes = 4
-
-  static func encode(_ message: ArenaLinkMessage) throws -> Data {
+enum ArenaLinkBodyCodec {
+  static func encode(_ message: ArenaLinkMessage) throws -> (kind: UInt8, body: Data) {
     let payload: Data
     switch message {
     case .hello(let playerId, let role, let method):
@@ -75,7 +60,7 @@ enum ArenaLinkCodec {
       do {
         payload = try ArenaPeerSampleCodec.encode(sample)
       } catch {
-        throw ArenaLinkCodecError.malformedPayload
+        throw ArenaLinkBodyCodecError.malformedPayload
       }
     case .collaboration(let data), .worldMap(let data):
       payload = data
@@ -83,67 +68,79 @@ enum ArenaLinkCodec {
       payload = try JSONEncoder().encode(anchors)
     case .shotTracer(let tracer):
       do {
-        payload = try ArenaShotTracerCodec.encode(tracer)
+        payload = try CombatFireMessageCodec.encode(.shot(try CombatShotEvent(
+          shotId: tracer.shotId,
+          shooterPlayerId: tracer.shooterPlayerId,
+          origin: SIMD3<Float>(
+            Float(tracer.ray.origin.x), Float(tracer.ray.origin.y), Float(tracer.ray.origin.z)
+          ),
+          direction: SIMD3<Float>(
+            Float(tracer.ray.direction.x), Float(tracer.ray.direction.y), Float(tracer.ray.direction.z)
+          ),
+          firedAtMs: tracer.firedAtMs
+        )))
       } catch {
-        throw ArenaLinkCodecError.malformedPayload
+        throw ArenaLinkBodyCodecError.invalidShot
+      }
+    case .shotRetracted(let shotId):
+      do {
+        payload = try CombatFireMessageCodec.encode(.retracted(CombatShotRetraction(shotId: shotId)))
+      } catch {
+        throw ArenaLinkBodyCodecError.invalidShot
       }
     }
-    guard payload.count + 1 <= maxPayloadLength else { throw ArenaLinkCodecError.payloadTooLarge }
-
-    var data = Data(capacity: lengthPrefixBytes + 1 + payload.count)
-    withUnsafeBytes(of: UInt32(payload.count + 1).littleEndian) { data.append(contentsOf: $0) }
-    data.append(message.kind)
-    data.append(payload)
-    return data
+    return (message.kind, payload)
   }
 
-  /// Parses as many complete frames as `buffer` holds, removing them from the
-  /// buffer. Leaves a trailing partial frame in place for the next read.
-  static func drainFrames(from buffer: inout Data) throws -> [ArenaLinkMessage] {
-    var messages: [ArenaLinkMessage] = []
-    while buffer.count >= lengthPrefixBytes {
-      let length = Int(buffer.prefix(lengthPrefixBytes).withUnsafeBytes {
-        $0.loadUnaligned(as: UInt32.self)
-      }.littleEndian)
-      guard length >= 1, length <= maxPayloadLength else { throw ArenaLinkCodecError.payloadTooLarge }
-      guard buffer.count >= lengthPrefixBytes + length else { break }
-      let body = buffer.subdata(in: lengthPrefixBytes..<lengthPrefixBytes + length)
-      buffer.removeSubrange(0..<lengthPrefixBytes + length)
-      messages.append(try decodeBody(body))
-    }
-    return messages
-  }
-
-  private static func decodeBody(_ body: Data) throws -> ArenaLinkMessage {
-    guard let kind = body.first else { throw ArenaLinkCodecError.truncated }
-    let payload = body.dropFirst()
+  static func decode(kind: UInt8, body: Data) throws -> ArenaLinkMessage {
     switch kind {
     case 1:
-      guard let hello = try? JSONDecoder().decode(Hello.self, from: payload) else {
-        throw ArenaLinkCodecError.malformedPayload
+      guard let hello = try? JSONDecoder().decode(Hello.self, from: body) else {
+        throw ArenaLinkBodyCodecError.malformedPayload
       }
       return .hello(playerId: hello.playerId, role: hello.role, method: hello.method)
     case 2:
-      guard let sample = try? ArenaPeerSampleCodec.decode(Data(payload)) else {
-        throw ArenaLinkCodecError.malformedPayload
+      guard let sample = try? ArenaPeerSampleCodec.decode(body) else {
+        throw ArenaLinkBodyCodecError.malformedPayload
       }
       return .poseSample(sample)
     case 3:
-      return .collaboration(Data(payload))
+      return .collaboration(body)
     case 4:
-      return .worldMap(Data(payload))
+      return .worldMap(body)
     case 5:
-      guard let anchors = try? JSONDecoder().decode([ArenaNamedAnchor].self, from: payload) else {
-        throw ArenaLinkCodecError.malformedPayload
+      guard let anchors = try? JSONDecoder().decode([ArenaNamedAnchor].self, from: body) else {
+        throw ArenaLinkBodyCodecError.malformedPayload
       }
       return .anchorSet(anchors)
     case 6:
-      guard let tracer = try? ArenaShotTracerCodec.decode(Data(payload)) else {
-        throw ArenaLinkCodecError.malformedPayload
+      guard case let .shot(event) = try? CombatFireMessageCodec.decode(body) else {
+        throw ArenaLinkBodyCodecError.malformedPayload
       }
-      return .shotTracer(tracer)
+      do {
+        return .shotTracer(ArenaShotTracer(
+          shotId: event.shotId,
+          shooterPlayerId: event.shooterPlayerId,
+          ray: try ArenaShotRay(
+            origin: ArenaVector3(
+              x: Double(event.origin.x), y: Double(event.origin.y), z: Double(event.origin.z)
+            ),
+            direction: ArenaVector3(
+              x: Double(event.direction.x), y: Double(event.direction.y), z: Double(event.direction.z)
+            ),
+            firedAtMs: event.firedAtMs
+          )
+        ))
+      } catch {
+        throw ArenaLinkBodyCodecError.malformedPayload
+      }
+    case 7:
+      guard case let .retracted(retraction) = try? CombatFireMessageCodec.decode(body) else {
+        throw ArenaLinkBodyCodecError.malformedPayload
+      }
+      return .shotRetracted(shotId: retraction.shotId)
     default:
-      throw ArenaLinkCodecError.unknownKind
+      throw ArenaLinkBodyCodecError.unknownKind
     }
   }
 

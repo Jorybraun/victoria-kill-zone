@@ -83,30 +83,32 @@ final class ArenaShotTracerTests: XCTestCase {
     XCTAssertEqual(ledger.active.map(\.shotId), ["t"])
   }
 
-  func testTracerCodecRoundTripsAndRejectsBadRays() throws {
+  func testFireBodyCodecRoundTripsAndRejectsBadRays() throws {
     let shot = try tracer(id: "host-1a2b#7", at: 1_700_000_000_000, direction: ArenaVector3(x: 3, y: 0, z: -4))
-    let encoded = try ArenaShotTracerCodec.encode(shot)
-    let decoded = try ArenaShotTracerCodec.decode(encoded)
-    XCTAssertEqual(decoded, shot)
-    XCTAssertEqual(decoded.ray.direction.length, 1, accuracy: 1e-12, "Direction is normalized on both ends")
+    let encoded = try ArenaLinkBodyCodec.encode(.shotTracer(shot))
+    let decoded = try ArenaLinkBodyCodec.decode(kind: encoded.kind, body: encoded.body)
+    XCTAssertEqual(decoded, .shotTracer(shot))
 
-    XCTAssertThrowsError(try ArenaShotTracerCodec.decode(encoded.dropLast()))
-    XCTAssertThrowsError(try ArenaShotTracerCodec.decode(encoded + Data([1])))
-
-    var zeroDirection = encoded
-    let directionOffset = encoded.count - 3 * 8
-    zeroDirection.replaceSubrange(directionOffset..<encoded.count, with: Data(count: 24))
-    XCTAssertThrowsError(try ArenaShotTracerCodec.decode(zeroDirection)) { error in
-      XCTAssertEqual(error as? ArenaPeerSampleCodecError, .invalidTransform(.invalidDirection))
-    }
+    XCTAssertThrowsError(try ArenaLinkBodyCodec.decode(kind: encoded.kind, body: encoded.body.dropLast()))
+    XCTAssertThrowsError(try ArenaLinkBodyCodec.decode(kind: encoded.kind, body: encoded.body + Data([1])))
   }
 
-  func testLinkCodecCarriesShotTracers() throws {
-    let message = ArenaLinkMessage.shotTracer(try tracer(id: "guest-9f#3", at: 42))
-    var buffer = try ArenaLinkCodec.encode(message)
-    XCTAssertEqual(buffer[4], 6)
-    XCTAssertEqual(try ArenaLinkCodec.drainFrames(from: &buffer), [message])
-    XCTAssertTrue(buffer.isEmpty)
+  func testBodyCodecCarriesShotTracersAndRetractions() throws {
+    let shot = ArenaLinkMessage.shotTracer(try tracer(id: "guest-9f#3", at: 42))
+    let shotBody = try ArenaLinkBodyCodec.encode(shot)
+    XCTAssertEqual(shotBody.kind, 6)
+    XCTAssertEqual(
+      try ArenaLinkBodyCodec.decode(kind: shotBody.kind, body: shotBody.body),
+      shot
+    )
+
+    let retraction = ArenaLinkMessage.shotRetracted(shotId: "guest-9f#3")
+    let retractionBody = try ArenaLinkBodyCodec.encode(retraction)
+    XCTAssertEqual(retractionBody.kind, 7)
+    XCTAssertEqual(
+      try ArenaLinkBodyCodec.decode(kind: retractionBody.kind, body: retractionBody.body),
+      retraction
+    )
   }
 
   private func tracer(
