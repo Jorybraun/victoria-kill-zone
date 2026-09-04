@@ -677,12 +677,11 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
         markFlowReady(.pose, for: id, slot: slot)
       case let .received(_, receivedFrame):
         deliver(receivedFrame, on: connection, id: id)
-      case let .rejected(_, error):
+      case .rejected:
         let slot = withStateLock { stateMachine.boundSlot(for: id) }
         linkEventHandler?(.rejected(slot: slot))
         connection.cancel()
-        fail("rejected:\(error)")
-        failConnection(id)
+        failConnection(id, reportFailure: false)
       case .reliableGap:
         fail("reliable gap")
       case .dropped, .write, .disconnected:
@@ -722,7 +721,10 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
     handler?(frame, nowMs, nil)
   }
 
-  private func failConnection(_ id: PeerLinkStateMachine.ConnectionID) {
+  private func failConnection(
+    _ id: PeerLinkStateMachine.ConnectionID,
+    reportFailure: Bool = true
+  ) {
     let actions = withStateLock { stateMachine.disconnect(id) }
     connections[id]?.cancel()
     datagramConnections[id]?.cancel()
@@ -736,7 +738,9 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
           linkEventHandler?(.peerDisconnected(slot: slot))
         }
       }
-      fail("connection disconnected")
+      if reportFailure {
+        fail("connection disconnected")
+      }
     }
   }
 

@@ -43,6 +43,7 @@
 		B00300000000000000000001 /* DuelInvite.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000001 /* DuelInvite.swift */; };
 		B00300000000000000000002 /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000002 /* QRScannerView.swift */; };
 		B00300000000000000000003 /* DuelInviteLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000003 /* DuelInviteLinkTests.swift */; };
+		B00300000000000000000004 /* CombatTransportArenaLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000004 /* CombatTransportArenaLinkTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -92,6 +93,7 @@
 		F00300000000000000000001 /* DuelInvite.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuelInvite.swift; sourceTree = "<group>"; };
 		F00300000000000000000002 /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
 		F00300000000000000000003 /* DuelInviteLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuelInviteLinkTests.swift; sourceTree = "<group>"; };
+		F00300000000000000000004 /* CombatTransportArenaLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CombatTransportArenaLinkTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -111,6 +113,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B00100000000000000000017 /* CombatTransport in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -242,6 +245,7 @@
 			children = (
 				F0010000000000000000000E /* LobbyStateMachineTests.swift */,
 				F00300000000000000000003 /* DuelInviteLinkTests.swift */,
+				F00300000000000000000004 /* CombatTransportArenaLinkTests.swift */,
 			);
 			path = VictoriaKillZoneTests;
 			sourceTree = "<group>";
@@ -310,6 +314,9 @@
 				TD0100000000000000000001 /* PBXTargetDependency */,
 			);
 			name = VictoriaKillZoneTests;
+			packageProductDependencies = (
+				PP0100000000000000000003 /* CombatTransport */,
+			);
 			productName = VictoriaKillZoneTests;
 			productReference = F00100000000000000000010 /* VictoriaKillZoneTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -417,6 +424,7 @@
 			files = (
 				B0010000000000000000000D /* LobbyStateMachineTests.swift in Sources */,
 				B00300000000000000000003 /* DuelInviteLinkTests.swift in Sources */,
+				B00300000000000000000004 /* CombatTransportArenaLinkTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

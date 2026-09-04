@@ -109,6 +109,8 @@ final class ArenaShotTracerTests: XCTestCase {
       try ArenaLinkBodyCodec.decode(kind: retractionBody.kind, body: retractionBody.body),
       retraction
     )
+    XCTAssertThrowsError(try ArenaLinkBodyCodec.decode(kind: 6, body: retractionBody.body))
+    XCTAssertThrowsError(try ArenaLinkBodyCodec.decode(kind: 7, body: shotBody.body))
   }
 
   private func tracer(

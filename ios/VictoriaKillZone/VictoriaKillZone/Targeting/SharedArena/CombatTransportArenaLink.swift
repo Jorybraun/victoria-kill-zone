@@ -49,6 +49,7 @@ final class CombatTransportArenaLink: ArenaPeerLinking, @unchecked Sendable {
   private let scope: MatchScope
   private let playerId: String
   private let joinSecret: String
+  private let identity: (any TransportIdentityProvider)?
   private let linkFactory: ((ArenaRole) -> any PeerLink)?
   private let queue = DispatchQueue(
     label: "com.victoriakillzone.arena.combat-link",
@@ -67,10 +68,17 @@ final class CombatTransportArenaLink: ArenaPeerLinking, @unchecked Sendable {
     lock.withLock { _stats }
   }
 
-  init(matchId: String, playerId: String, joinSecret: String) {
+  /// Without an identity the QUIC handshake cannot complete on device; the ephemeral per-match identity provider is a follow-up (see ADR 0004 'Transport integration').
+  init(
+    matchId: String,
+    playerId: String,
+    joinSecret: String,
+    identity: (any TransportIdentityProvider)? = nil
+  ) {
     scope = MatchScope(matchId: matchId)
     self.playerId = playerId
     self.joinSecret = joinSecret
+    self.identity = identity
     linkFactory = nil
   }
 
@@ -78,11 +86,13 @@ final class CombatTransportArenaLink: ArenaPeerLinking, @unchecked Sendable {
     matchId: String,
     playerId: String,
     joinSecret: String,
-    linkFactory: @escaping (ArenaRole) -> any PeerLink
+    linkFactory: @escaping (ArenaRole) -> any PeerLink,
+    identity: (any TransportIdentityProvider)? = nil
   ) {
     scope = MatchScope(matchId: matchId)
     self.playerId = playerId
     self.joinSecret = joinSecret
+    self.identity = identity
     self.linkFactory = linkFactory
   }
 
@@ -101,7 +111,8 @@ final class CombatTransportArenaLink: ArenaPeerLinking, @unchecked Sendable {
             configuration = NetworkPeerLinkConfiguration(
               serviceToken: scope.serviceToken,
               credentials: TransportCredentials(
-                preSharedKey: scope.preSharedKey(joinSecret: joinSecret)
+                preSharedKey: scope.preSharedKey(joinSecret: joinSecret),
+                identity: identity
               ),
               role: .host,
               localSlot: 0,
@@ -112,7 +123,8 @@ final class CombatTransportArenaLink: ArenaPeerLinking, @unchecked Sendable {
             configuration = NetworkPeerLinkConfiguration(
               serviceToken: scope.serviceToken,
               credentials: TransportCredentials(
-                preSharedKey: scope.preSharedKey(joinSecret: joinSecret)
+                preSharedKey: scope.preSharedKey(joinSecret: joinSecret),
+                identity: identity
               ),
               role: .client,
               localSlot: 1,
@@ -192,7 +204,7 @@ final class CombatTransportArenaLink: ArenaPeerLinking, @unchecked Sendable {
       setState(role == .host ? .advertising : .browsing)
       helloVerified = false
     case .rejected:
-      setState(.failed("transport rejected peer"))
+      recordFramingError()
     case .failed(let reason):
       setState(.failed(reason))
     }
@@ -206,17 +218,9 @@ final class CombatTransportArenaLink: ArenaPeerLinking, @unchecked Sendable {
         playerId: playerId,
         protocolVersion: MatchScope.protocolVersion
       ))
-      let senderSlot: UInt8 = role == .host ? 0 : 1
-      let frame = ReliableEventFrame(
-        epoch: 1,
-        senderSlot: senderSlot,
-        sequence: 1,
-        eventKind: .control,
-        payload: Data([0]) + hello
-      )
+      let frame = mapper.controlFrame(payload: Data([0]) + hello)
       try link.send(.reliable(frame))
       lock.withLock { _stats.bytesOut += frame.payload.count }
-      mapper.reserveSequence()
       self.mapper = mapper
     } catch {
       fail("hello send failed")

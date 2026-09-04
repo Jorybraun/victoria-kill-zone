@@ -86,21 +86,17 @@ struct ArenaLinkFrameMapper {
       }
     case .fire:
       do {
-        return try ArenaLinkBodyCodec.decode(kind: 6, body: frame.payload)
+        return try ArenaLinkBodyCodec.decodeFire(frame.payload)
       } catch {
-        do {
-          return try ArenaLinkBodyCodec.decode(kind: 7, body: frame.payload)
-        } catch {
-          return nil
-        }
+        return nil
       }
     case .bulkChunk:
       return nil
     }
   }
 
-  mutating func reserveSequence() {
-    nextSequence &+= 1
+  mutating func controlFrame(payload: Data) -> ReliableEventFrame {
+    nextFrame(kind: .control, payload: payload)
   }
 
   private mutating func nextFrame(

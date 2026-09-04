@@ -114,10 +114,26 @@ enum ArenaLinkBodyCodec {
       }
       return .anchorSet(anchors)
     case 6:
-      guard case let .shot(event) = try? CombatFireMessageCodec.decode(body) else {
+      let message = try decodeFire(body)
+      guard case .shotTracer = message else {
         throw ArenaLinkBodyCodecError.malformedPayload
       }
-      do {
+      return message
+    case 7:
+      let message = try decodeFire(body)
+      guard case .shotRetracted = message else {
+        throw ArenaLinkBodyCodecError.malformedPayload
+      }
+      return message
+    default:
+      throw ArenaLinkBodyCodecError.unknownKind
+    }
+  }
+
+  static func decodeFire(_ body: Data) throws -> ArenaLinkMessage {
+    do {
+      switch try CombatFireMessageCodec.decode(body) {
+      case let .shot(event):
         return .shotTracer(ArenaShotTracer(
           shotId: event.shotId,
           shooterPlayerId: event.shooterPlayerId,
@@ -131,16 +147,13 @@ enum ArenaLinkBodyCodec {
             firedAtMs: event.firedAtMs
           )
         ))
-      } catch {
-        throw ArenaLinkBodyCodecError.malformedPayload
+      case let .retracted(retraction):
+        return .shotRetracted(shotId: retraction.shotId)
       }
-    case 7:
-      guard case let .retracted(retraction) = try? CombatFireMessageCodec.decode(body) else {
-        throw ArenaLinkBodyCodecError.malformedPayload
-      }
-      return .shotRetracted(shotId: retraction.shotId)
-    default:
-      throw ArenaLinkBodyCodecError.unknownKind
+    } catch let error as ArenaLinkBodyCodecError {
+      throw error
+    } catch {
+      throw ArenaLinkBodyCodecError.malformedPayload
     }
   }
 
