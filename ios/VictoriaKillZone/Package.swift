@@ -40,6 +40,7 @@ let package = Package(
         "Features",
         "Services",
         "Targeting/TargetingSession.swift",
+        "Targeting/BodyTargetingGeometry.swift",
         "Targeting/SharedArena",
       ],
       linkerSettings: [
