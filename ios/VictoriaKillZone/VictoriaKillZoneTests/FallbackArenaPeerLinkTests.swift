@@ -73,14 +73,14 @@ final class FallbackArenaPeerLinkTests: XCTestCase {
     let link = FallbackArenaPeerLink(
       primary: primary,
       fallback: fallback,
-      primaryTimeout: 0.05
+      primaryTimeout: 0.5
     )
 
     link.start(role: .guest)
     waitUntil { primary.startCount == 1 }
     link.stop()
     waitUntil { primary.stopCount == 1 && fallback.stopCount == 1 }
-    Thread.sleep(forTimeInterval: 0.1)
+    Thread.sleep(forTimeInterval: 0.7)
 
     XCTAssertEqual(link.activePath, .undecided)
     XCTAssertEqual(fallback.startCount, 0)
