@@ -25,7 +25,7 @@ Product direction (Slack, 2026-09-04): use ARKit body tracking, show a skeletal 
 
 ## Consequences
 
-- The spec's "Vision" targeting is superseded for devices that support body tracking; the Vision path remains as fallback and for the harness (body tracking cannot coexist with collaborative/world-map sessions).
+- The spec's "Vision" targeting is superseded for devices that support body tracking; the Vision path remains as fallback and for the harness (body tracking cannot coexist with collaborative sessions and cannot produce a world map; it *can* be seeded with one via `initialWorldMap` — see [ADR 0006](0006-duel-shared-frame.md), which defines the duel's shared frame on that basis).
 - Body tracking tracks one person; automatic skeleton scale estimation improves the fixed hit volumes across body sizes. This remains acceptable for 1v1 and the Phase 1 co-located game until ADR 0004's phone-pose capsules land.
 - The harness peer link is reused as an interim duel fast path with a match-scoped Bonjour service name; ADR 0004 retires it in favour of `CombatTransport`.
 - Write set: `ios/**/Targeting/**` (targeting), `ios/**/Features/Game/**` and `Features/Lobby/**`, `Domain/GameSessionModels.swift`, `Services/**` (game), `convex/**` (backend), `docs/interface-contracts.md` and this record (integration).

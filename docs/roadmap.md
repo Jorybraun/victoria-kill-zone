@@ -129,7 +129,8 @@ Phases are gates, not dates. Every phase ends with physical-device evidence. B-t
 6. **Shared arena v0:** relocalization + phone proxies outdoors (KIL-20), quality gates.
 7. **Phone-proxy hitscan** end-to-end: fire → rewind verdict → Convex ledger → all phones + spectator agree. **Gate: 4-phone duel, five consecutive clean kill/respawn cycles.**
 8. Parallel B-track: game-loop autopsy + fixes on the current build (keeps the demo alive and feeds reconciliation lessons into the client runtime). First slice is **ADR 0005**: ungate centerless `shots:fire` (today every markerless shot is rejected `LOCATION_STALE`), persist shot beginning/end in the ledger, ARKit body-tracking targeting with a skeleton lock overlay, and every shot rendered on every phone (Convex events + KIL-20 peer link fast path).
-9. Parallel: voice classifier spike; TestFlight OTA loop; design slices for calibration/verdict states.
+9. **Duel shared frame (ADR 0006):** S0 two-phone spike (body tracking relocalizes into a peer's map outdoors) gates linking `CombatTransport` into the app, the `DuelFrameProvider`, shared-frame shot packets, and deleting `ArenaPeerLink` / the collaborative harness branch / `ArenaHitEvaluator`. Item 6 above narrows to "world-map handoff as the production calibration" for the duel.
+10. Parallel: voice classifier spike; TestFlight OTA loop; design slices for calibration/verdict states.
 
 ### Phase 2 — Real bullets and the fantasy
 1. Projectile worldlines in the simulation core; visible, dodgeable bullets on all devices.
@@ -152,8 +153,9 @@ Phases are gates, not dates. Every phase ends with physical-device evidence. B-t
 | 0003 (proposed now) | Multiplayer-first Phase 1; supersedes 1v1 scope constraints | This document |
 | 0004 | Realtime plane: authority + transport defaults | Backend research + KIL-19/20/21 measurements |
 | 0005 (proposed now) | Duel body tracking, skeleton lock overlay, shots visible on every phone, centerless fire ungated | Slack product direction 2026-09-04 + fire-path trace |
-| 0006 | Personal-time semantics + activation economy | Phase 2 prototypes |
-| 0007 | Spatial provider for street scale | R5 research + Phase 3 spike |
+| 0006 (proposed now) | Duel shared frame: one-time `ARWorldMap` alignment, then `ARBodyTrackingConfiguration(initialWorldMap:)` on both phones, poses over `CombatTransport`, receiver-confirmation as drift monitor; two-phone acceptance plan + retirement list | ADR 0004/0005 conflict + Apple ARKit/Vision docs ([0006](decisions/0006-duel-shared-frame.md)) |
+| 0007 | Personal-time semantics + activation economy | Phase 2 prototypes |
+| 0008 | Spatial provider for street scale | R5 research + Phase 3 spike |
 
 ## 7. Risks and honest unknowns
 
