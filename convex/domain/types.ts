@@ -59,6 +59,7 @@ export type RejectReason =
   | "cooldown_active"
   | "invalid_target"
   | "target_not_alive"
+  | "host_rejected"
   | "duplicate_shot";
 
 /** Server-owned match record fields the domain rules read. */
