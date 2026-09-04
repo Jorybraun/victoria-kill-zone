@@ -184,13 +184,13 @@ final class LobbyStoreTests: XCTestCase {
       ),
     ]
 
-    await store.performDebugFire()
-    XCTAssertEqual(store.debugShotState, .failed)
-    await store.performDebugFire()
+    await store.duel.performDebugFire()
+    XCTAssertEqual(store.duel.debugShotState, .failed)
+    await store.duel.performDebugFire()
 
     XCTAssertEqual(client.debugShotIDs, ["stable-shot-id", "stable-shot-id"])
-    XCTAssertEqual(store.debugShotState, .pending)
-    await store.performDebugFire()
+    XCTAssertEqual(store.duel.debugShotState, .pending)
+    await store.duel.performDebugFire()
     XCTAssertEqual(
       client.debugShotIDs,
       ["stable-shot-id", "stable-shot-id"],
@@ -212,8 +212,8 @@ final class LobbyStoreTests: XCTestCase {
     )
     await settle()
 
-    XCTAssertEqual(store.debugShotState, .confirmed(damage: 34))
-    XCTAssertTrue(store.canDebugFire, "A confirmed fallback shot must allow the next shot")
+    XCTAssertEqual(store.duel.debugShotState, .confirmed(damage: 34))
+    XCTAssertTrue(store.duel.canDebugFire, "A confirmed fallback shot must allow the next shot")
     guard case .active(let reconciledDuel) = store.route else {
       return XCTFail("Expected active duel")
     }
@@ -245,12 +245,12 @@ final class LobbyStoreTests: XCTestCase {
       ),
     ]
 
-    await store.performDebugFire()
+    await store.duel.performDebugFire()
     await settle()
 
-    XCTAssertEqual(store.debugShotState, .pending)
+    XCTAssertEqual(store.duel.debugShotState, .pending)
     XCTAssertNil(store.errorMessage)
-    XCTAssertFalse(store.canDebugFire)
+    XCTAssertFalse(store.duel.canDebugFire)
     XCTAssertEqual(client.debugShotIDs, ["ordinary-first-shot-id"])
 
     client.send(
@@ -263,7 +263,7 @@ final class LobbyStoreTests: XCTestCase {
     )
     await settle()
 
-    XCTAssertEqual(store.debugShotState, .confirmed(damage: 34))
+    XCTAssertEqual(store.duel.debugShotState, .confirmed(damage: 34))
     XCTAssertEqual(client.debugShotIDs, ["ordinary-first-shot-id"])
   }
 
@@ -304,7 +304,7 @@ final class LobbyStoreTests: XCTestCase {
       ),
     ]
 
-    await store.performDebugFire()
+    await store.duel.performDebugFire()
     client.send(
       snapshot(
         phase: .running,
@@ -314,12 +314,12 @@ final class LobbyStoreTests: XCTestCase {
       )
     )
     await settle()
-    XCTAssertEqual(store.debugShotState, .confirmed(damage: 34))
+    XCTAssertEqual(store.duel.debugShotState, .confirmed(damage: 34))
 
-    await store.performDebugFire()
+    await store.duel.performDebugFire()
 
     XCTAssertEqual(client.debugShotIDs, ["first-shot-id", "second-shot-id"])
-    XCTAssertEqual(store.debugShotState, .pending)
+    XCTAssertEqual(store.duel.debugShotState, .pending)
   }
 
   func testDebugFireAfterDefinitiveRejectionUsesNewClientShotID() async throws {
@@ -359,13 +359,13 @@ final class LobbyStoreTests: XCTestCase {
       ),
     ]
 
-    await store.performDebugFire()
-    XCTAssertEqual(store.debugShotState, .failed)
+    await store.duel.performDebugFire()
+    XCTAssertEqual(store.duel.debugShotState, .failed)
 
-    await store.performDebugFire()
+    await store.duel.performDebugFire()
 
     XCTAssertEqual(client.debugShotIDs, ["rejected-shot-id", "next-shot-id"])
-    XCTAssertEqual(store.debugShotState, .pending)
+    XCTAssertEqual(store.duel.debugShotState, .pending)
   }
 
   func testDebugFireAgedOutEventReplaysAndConfirmsWithSameClientShotID() async throws {
@@ -411,7 +411,7 @@ final class LobbyStoreTests: XCTestCase {
       ),
     ]
 
-    await store.performDebugFire()
+    await store.duel.performDebugFire()
     clock.now = firedAt.addingTimeInterval(3)
     client.send(
       snapshot(
@@ -423,8 +423,8 @@ final class LobbyStoreTests: XCTestCase {
     )
     await settle()
 
-    XCTAssertEqual(store.debugShotState, .confirmed(damage: 34))
-    XCTAssertTrue(store.canDebugFire)
+    XCTAssertEqual(store.duel.debugShotState, .confirmed(damage: 34))
+    XCTAssertTrue(store.duel.canDebugFire)
     XCTAssertEqual(client.debugShotIDs, ["aged-out-shot-id", "aged-out-shot-id"])
   }
 
@@ -484,7 +484,7 @@ final class LobbyStoreTests: XCTestCase {
       ),
     ]
 
-    await store.performDebugFire()
+    await store.duel.performDebugFire()
     clock.now = firedAt.addingTimeInterval(3)
     for _ in 0..<3 {
       client.send(snapshot(phase: .running, events: agedOutEvents()))
@@ -492,10 +492,10 @@ final class LobbyStoreTests: XCTestCase {
     }
     XCTAssertEqual(client.debugShotIDs, ["aged-out-shot-id", "aged-out-shot-id"])
 
-    await store.performDebugFire()
+    await store.duel.performDebugFire()
 
     XCTAssertEqual(client.debugShotIDs, ["aged-out-shot-id", "aged-out-shot-id", "next-shot-id"])
-    XCTAssertEqual(store.debugShotState, .pending)
+    XCTAssertEqual(store.duel.debugShotState, .pending)
   }
 
   func testDebugFireAgedOutReplayWaitsUntilConfirmationBudgetExpires() async throws {
@@ -541,12 +541,12 @@ final class LobbyStoreTests: XCTestCase {
       ),
     ]
 
-    await store.performDebugFire()
+    await store.duel.performDebugFire()
     clock.now = firedAt.addingTimeInterval(2)
     client.send(snapshot(phase: .running, events: agedOutEvents()))
     await settle()
 
-    XCTAssertEqual(store.debugShotState, .pending)
+    XCTAssertEqual(store.duel.debugShotState, .pending)
     XCTAssertEqual(client.debugShotIDs, ["budget-shot-id"])
   }
 
@@ -593,12 +593,12 @@ final class LobbyStoreTests: XCTestCase {
       ),
     ]
 
-    await store.performDebugFire()
+    await store.duel.performDebugFire()
     clock.now = firedAt.addingTimeInterval(3)
     client.send(snapshot(phase: .running, events: agedOutEvents()))
     await settle()
 
-    XCTAssertEqual(store.debugShotState, .failed)
+    XCTAssertEqual(store.duel.debugShotState, .failed)
     XCTAssertEqual(store.errorMessage, "SHOT LOCKED WHILE RECONNECTING")
     XCTAssertEqual(client.debugShotIDs, ["rejected-replay-shot-id", "rejected-replay-shot-id"])
   }
@@ -646,15 +646,15 @@ final class LobbyStoreTests: XCTestCase {
       ),
     ]
 
-    await store.performDebugFire()
+    await store.duel.performDebugFire()
     clock.now = firedAt.addingTimeInterval(3)
     client.send(snapshot(phase: .running, events: agedOutEvents()))
     await settle()
 
-    XCTAssertEqual(store.debugShotState, .failed)
+    XCTAssertEqual(store.duel.debugShotState, .failed)
     XCTAssertEqual(client.debugShotIDs, ["non-idempotent-shot-id", "non-idempotent-shot-id"])
 
-    await store.performDebugFire()
+    await store.duel.performDebugFire()
 
     XCTAssertEqual(
       client.debugShotIDs,
@@ -670,7 +670,7 @@ final class LobbyStoreTests: XCTestCase {
     )
     await settle()
 
-    XCTAssertEqual(store.debugShotState, .confirmed(damage: 34))
+    XCTAssertEqual(store.duel.debugShotState, .confirmed(damage: 34))
   }
 
   func testDebugFireReplayTransportFailureReusesPendingShotIDOnManualRetry() async throws {
@@ -717,18 +717,18 @@ final class LobbyStoreTests: XCTestCase {
       ),
     ]
 
-    await store.performDebugFire()
+    await store.duel.performDebugFire()
     clock.now = firedAt.addingTimeInterval(3)
     client.send(snapshot(phase: .running, events: agedOutEvents()))
     await settle()
 
-    XCTAssertEqual(store.debugShotState, .failed)
+    XCTAssertEqual(store.duel.debugShotState, .failed)
     XCTAssertEqual(
       client.debugShotIDs,
       ["transport-retry-shot-id", "transport-retry-shot-id"]
     )
 
-    await store.performDebugFire()
+    await store.duel.performDebugFire()
 
     XCTAssertEqual(
       client.debugShotIDs,
@@ -744,7 +744,7 @@ final class LobbyStoreTests: XCTestCase {
     )
     await settle()
 
-    XCTAssertEqual(store.debugShotState, .confirmed(damage: 34))
+    XCTAssertEqual(store.duel.debugShotState, .confirmed(damage: 34))
   }
 
   func testDebugFireReplayResultAfterLeaveDoesNotBleedIntoNewState() async throws {
@@ -789,7 +789,7 @@ final class LobbyStoreTests: XCTestCase {
         )
       ),
     ]
-    await store.performDebugFire()
+    await store.duel.performDebugFire()
     let gate = client.gateNextDebugFire()
     clock.now = firedAt.addingTimeInterval(3)
     client.send(snapshot(phase: .running, events: agedOutEvents()))
@@ -799,9 +799,9 @@ final class LobbyStoreTests: XCTestCase {
     gate.release()
     await settle()
 
-    XCTAssertEqual(store.debugShotState, .idle)
+    XCTAssertEqual(store.duel.debugShotState, .idle)
     XCTAssertNil(store.errorMessage)
-    XCTAssertFalse(store.canDebugFire)
+    XCTAssertFalse(store.duel.canDebugFire)
     XCTAssertEqual(client.debugShotIDs, ["stale-replay-shot-id", "stale-replay-shot-id"])
   }
 
@@ -839,19 +839,19 @@ final class LobbyStoreTests: XCTestCase {
       ),
     ]
 
-    await store.performMarkerlessFire()
-    XCTAssertEqual(store.markerlessShotState, .failed(reason: nil))
+    await store.duel.performMarkerlessFire()
+    XCTAssertEqual(store.duel.markerlessShotState, .failed(reason: nil))
     XCTAssertEqual(client.fireRequests.count, 1)
 
     clock.now = firedAt.addingTimeInterval(5)
-    await store.performMarkerlessFire()
+    await store.duel.performMarkerlessFire()
 
     XCTAssertEqual(client.fireRequests.count, 2)
     XCTAssertEqual(client.fireRequests[0], client.fireRequests[1])
     XCTAssertEqual(
       client.fireRequests.map(\.clientShotId), ["markerless-shot-id", "markerless-shot-id"])
     XCTAssertEqual(
-      store.markerlessShotState,
+      store.duel.markerlessShotState,
       .confirmed(outcome: .hit, zone: .torso, damage: 34)
     )
   }
@@ -868,7 +868,7 @@ final class LobbyStoreTests: XCTestCase {
     await settle()
     XCTAssertEqual(store.syncStatus, .stale)
     XCTAssertTrue(store.isMatchInputLocked)
-    XCTAssertFalse(store.canDebugFire)
+    XCTAssertFalse(store.duel.canDebugFire)
 
     client.sendConnection(.connected)
     await settle()
@@ -931,8 +931,8 @@ final class LobbyStoreTests: XCTestCase {
       )
     ]
 
-    await store.performDebugFire()
-    XCTAssertEqual(store.debugShotState, .pending)
+    await store.duel.performDebugFire()
+    XCTAssertEqual(store.duel.debugShotState, .pending)
 
     client.failSnapshotSubscription()
     await settle()
@@ -962,10 +962,10 @@ final class LobbyStoreTests: XCTestCase {
     await settle()
 
     XCTAssertEqual(
-      store.debugShotState, .confirmed(damage: 32),
+      store.duel.debugShotState, .confirmed(damage: 32),
       "A snapshot containing the shot's own event must confirm the shot even when the transient post-shot state was never observed"
     )
-    XCTAssertTrue(store.canDebugFire)
+    XCTAssertTrue(store.duel.canDebugFire)
   }
 
   func testLocalKillSnapshotShowsKillBanner() async throws {
@@ -984,8 +984,8 @@ final class LobbyStoreTests: XCTestCase {
     )
     await settle()
 
-    XCTAssertEqual(store.killBanner?.text, "YOU ELIMINATED Guest")
-    XCTAssertTrue(store.killBanner?.isLocalKill == true)
+    XCTAssertEqual(store.duel.killBanner?.text, "YOU ELIMINATED Guest")
+    XCTAssertTrue(store.duel.killBanner?.isLocalKill == true)
   }
 
   func testOpponentKillSnapshotShowsEliminatedByBanner() async throws {
@@ -1004,8 +1004,8 @@ final class LobbyStoreTests: XCTestCase {
     )
     await settle()
 
-    XCTAssertEqual(store.killBanner?.text, "ELIMINATED BY Guest")
-    XCTAssertFalse(store.killBanner?.isLocalKill == true)
+    XCTAssertEqual(store.duel.killBanner?.text, "ELIMINATED BY Guest")
+    XCTAssertFalse(store.duel.killBanner?.isLocalKill == true)
   }
 
   func testDuplicateKillEventDoesNotRetriggerBanner() async throws {
@@ -1019,12 +1019,12 @@ final class LobbyStoreTests: XCTestCase {
     let event = eliminatedEvent(actorPlayerID: "host-1", targetPlayerID: "guest-1")
     client.send(snapshot(phase: .running, events: [event]))
     await settle()
-    let firstBanner = try XCTUnwrap(store.killBanner)
+    let firstBanner = try XCTUnwrap(store.duel.killBanner)
 
     client.send(snapshot(phase: .running, events: [event]))
     await settle()
 
-    XCTAssertEqual(store.killBanner, firstBanner)
+    XCTAssertEqual(store.duel.killBanner, firstBanner)
   }
 
   func testOpponentShotAndHitPublishIncomingShotsButOwnEventsDoNot() async throws {
@@ -1064,7 +1064,7 @@ final class LobbyStoreTests: XCTestCase {
     )
     await settle()
     XCTAssertEqual(
-      store.incomingShot,
+      store.duel.incomingShot,
       IncomingShot(
         eventID: "opponent-shot",
         hit: false,
@@ -1092,8 +1092,8 @@ final class LobbyStoreTests: XCTestCase {
       )
     )
     await settle()
-    XCTAssertEqual(store.incomingShot?.eventID, "opponent-hit")
-    XCTAssertTrue(store.incomingShot?.hit == true)
+    XCTAssertEqual(store.duel.incomingShot?.eventID, "opponent-hit")
+    XCTAssertTrue(store.duel.incomingShot?.hit == true)
   }
 
   func testKillBannerUsesFirstSnapshotServerClock() async throws {
@@ -1122,7 +1122,7 @@ final class LobbyStoreTests: XCTestCase {
     )
     await settle()
 
-    XCTAssertEqual(store.killBanner?.text, "YOU ELIMINATED Guest")
+    XCTAssertEqual(store.duel.killBanner?.text, "YOU ELIMINATED Guest")
   }
 
   private func makeStore(
@@ -2223,10 +2223,10 @@ private final class TwoClientRig {
     advance(milliseconds: 400)  // clears the 350 ms server fire cooldown
     switch attacker {
     case .host:
-      await hostStore.performDebugFire()
+      await hostStore.duel.performDebugFire()
     case .guest:
       await aim(.guest)
-      await guestStore.performMarkerlessFire()
+      await guestStore.duel.performMarkerlessFire()
     }
     if publish {
       authority.publish()
@@ -2286,6 +2286,35 @@ private final class TwoClientRig {
 
 @MainActor
 final class KIL36TwoClientConvergenceTests: XCTestCase {
+  func testMarkerlessFireCooldownUsesInlineStateInsteadOfErrorAlert() async throws {
+    let rig = TwoClientRig()
+    await rig.startRunningDuel()
+
+    await rig.aim(.guest)
+    await rig.guestStore.duel.performMarkerlessFire()
+    await rig.settle()
+    XCTAssertEqual(
+      rig.guestStore.duel.markerlessShotState,
+      .confirmed(outcome: .hit, zone: .torso, damage: 34)
+    )
+
+    await rig.aim(.guest)
+    await rig.guestStore.duel.performMarkerlessFire()
+    await rig.settle()
+    XCTAssertNil(rig.guestStore.errorMessage)
+    XCTAssertEqual(
+      rig.guestStore.duel.markerlessShotState,
+      .failed(reason: .fireCooldown)
+    )
+    XCTAssertGreaterThan(
+      rig.guestStore.duel.fireCooldownRemaining(at: rig.clock.now),
+      0
+    )
+
+    rig.advance(milliseconds: 400)
+    XCTAssertEqual(rig.guestStore.duel.fireCooldownRemaining(at: rig.clock.now), 0)
+  }
+
   /// Five deterministic kill/respawn cycles, alternating attacker, asserting
   /// that both clients hold identical authoritative shot, damage, death, score,
   /// respawn and pending-shot state at every step.
@@ -2331,7 +2360,7 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
       switch attacker {
       case .host:
         XCTAssertEqual(
-          rig.hostStore.debugShotState, .failed,
+          rig.hostStore.duel.debugShotState, .failed,
           "cycle \(cycle): debug fire at a respawning target must fail, not stay pending"
         )
         rig.authority.record(
@@ -2340,7 +2369,7 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
         )
       case .guest:
         XCTAssertEqual(
-          rig.guestStore.markerlessShotState,
+          rig.guestStore.duel.markerlessShotState,
           .confirmed(outcome: .kill, zone: .torso, damage: 32),
           "cycle \(cycle): the markerless client guard must block the shot locally, "
             + "leaving the previous confirmed kill state untouched"
@@ -2388,14 +2417,14 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
     await rig.settle()
     XCTAssertEqual(rig.guestStore.syncStatus, .stale)
     XCTAssertTrue(rig.guestStore.isMatchInputLocked)
-    XCTAssertFalse(rig.guestStore.canFireMarkerless)
+    XCTAssertFalse(rig.guestStore.duel.canFireMarkerless)
     rig.authority.record("guest transport=connecting inputLocked=true")
 
     for _ in 0..<3 {
       await rig.fire(.host)
     }
     XCTAssertEqual(rig.authority.player(.guest).lifeState, .respawning)
-    XCTAssertEqual(rig.hostStore.debugShotState, .confirmed(damage: 32))
+    XCTAssertEqual(rig.hostStore.duel.debugShotState, .confirmed(damage: 32))
     rig.authority.record("guest offline through host kill \(rig.projection)")
 
     // Transport recovery alone must not unlock the guest.
@@ -2442,7 +2471,7 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
     assertConverged(rig, label: "reorder-newest-first")
     let convergedRoute = rig.guestStore.route
     let convergedSyncStatus = rig.guestStore.syncStatus
-    let convergedBanner = rig.guestStore.killBanner
+    let convergedBanner = rig.guestStore.duel.killBanner
 
     // The older replayed snapshot must not move the guest backwards.
     rig.authority.deliver(withheld[0], to: .guest)
@@ -2456,7 +2485,7 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
     )
     XCTAssertEqual(rig.guestStore.route, convergedRoute)
     XCTAssertEqual(rig.guestStore.syncStatus, convergedSyncStatus)
-    XCTAssertEqual(rig.guestStore.killBanner, convergedBanner)
+    XCTAssertEqual(rig.guestStore.duel.killBanner, convergedBanner)
     assertConverged(rig, label: "reorder-stale-replay-ignored")
     rig.authority.record(
       "guest ignored stale snapshot serverNow=\(withheld[0].serverNow) "
@@ -2483,19 +2512,19 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
     let preShotSnapshot = rig.authority.snapshot(for: .host)
 
     await rig.fire(.host, publish: false)
-    XCTAssertEqual(rig.hostStore.debugShotState, .pending)
+    XCTAssertEqual(rig.hostStore.duel.debugShotState, .pending)
 
     rig.authority.deliver(preShotSnapshot, to: .host)
     await rig.settle()
     XCTAssertEqual(
-      rig.hostStore.debugShotState, .pending,
+      rig.hostStore.duel.debugShotState, .pending,
       "a snapshot that predates the shot must not confirm it"
     )
 
     rig.authority.publish()
     await rig.settle()
-    XCTAssertEqual(rig.hostStore.debugShotState, .confirmed(damage: 34))
-    XCTAssertTrue(rig.hostStore.canDebugFire)
+    XCTAssertEqual(rig.hostStore.duel.debugShotState, .confirmed(damage: 34))
+    XCTAssertTrue(rig.hostStore.duel.canDebugFire)
     assertConverged(rig, label: "pending-shot-confirmed")
     printTimeline(rig, label: "pending-shot-lifecycle")
   }
@@ -2548,13 +2577,13 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
     switch attacker {
     case .host:
       XCTAssertEqual(
-        rig.hostStore.debugShotState, .confirmed(damage: damage),
+        rig.hostStore.duel.debugShotState, .confirmed(damage: damage),
         "cycle \(cycle): host pending shot must confirm from the authoritative snapshot",
         file: file,
         line: line
       )
     case .guest:
-      let state = rig.guestStore.markerlessShotState
+      let state = rig.guestStore.duel.markerlessShotState
       let victimHealth = rig.authority.player(.host).health
       XCTAssertEqual(
         state,

@@ -48,6 +48,10 @@
 		B00300000000000000000001 /* DuelInvite.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000001 /* DuelInvite.swift */; };
 		B00300000000000000000002 /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000002 /* QRScannerView.swift */; };
 		B00300000000000000000003 /* DuelInviteLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000003 /* DuelInviteLinkTests.swift */; };
+		B00400000000000000000001 /* DuelSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00400000000000000000001 /* DuelSession.swift */; };
+		B00400000000000000000002 /* DuelPeerLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00400000000000000000002 /* DuelPeerLink.swift */; };
+		B00400000000000000000003 /* GameLoopTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00400000000000000000003 /* GameLoopTrace.swift */; };
+		B00400000000000000000004 /* DuelSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00400000000000000000004 /* DuelSessionTests.swift */; };
 		B00300000000000000000004 /* TargetingBlockerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000004 /* TargetingBlockerTests.swift */; };
 		B00300000000000000000006 /* CombatTransportArenaLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000006 /* CombatTransportArenaLinkTests.swift */; };
 		B00300000000000000000007 /* FallbackArenaPeerLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000007 /* FallbackArenaPeerLinkTests.swift */; };
@@ -104,6 +108,10 @@
 		F00300000000000000000001 /* DuelInvite.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuelInvite.swift; sourceTree = "<group>"; };
 		F00300000000000000000002 /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
 		F00300000000000000000003 /* DuelInviteLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuelInviteLinkTests.swift; sourceTree = "<group>"; };
+		F00400000000000000000001 /* DuelSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuelSession.swift; sourceTree = "<group>"; };
+		F00400000000000000000002 /* DuelPeerLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuelPeerLink.swift; sourceTree = "<group>"; };
+		F00400000000000000000003 /* GameLoopTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameLoopTrace.swift; sourceTree = "<group>"; };
+		F00400000000000000000004 /* DuelSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuelSessionTests.swift; sourceTree = "<group>"; };
 		F00300000000000000000004 /* TargetingBlockerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetingBlockerTests.swift; sourceTree = "<group>"; };
 		F00300000000000000000006 /* CombatTransportArenaLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CombatTransportArenaLinkTests.swift; sourceTree = "<group>"; };
 		F00300000000000000000007 /* FallbackArenaPeerLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FallbackArenaPeerLinkTests.swift; sourceTree = "<group>"; };
@@ -243,6 +251,9 @@
 			children = (
 				F0010000000000000000000B /* ActiveDuelView.swift */,
 				F00100000000000000000014 /* LaserFX.swift */,
+				F00400000000000000000001 /* DuelSession.swift */,
+				F00400000000000000000002 /* DuelPeerLink.swift */,
+				F00400000000000000000003 /* GameLoopTrace.swift */,
 			);
 			path = Game;
 			sourceTree = "<group>";
@@ -260,6 +271,7 @@
 			children = (
 				F0010000000000000000000E /* LobbyStateMachineTests.swift */,
 				F00300000000000000000003 /* DuelInviteLinkTests.swift */,
+				F00400000000000000000004 /* DuelSessionTests.swift */,
 				F00300000000000000000004 /* TargetingBlockerTests.swift */,
 				F00300000000000000000006 /* CombatTransportArenaLinkTests.swift */,
 				F00300000000000000000007 /* FallbackArenaPeerLinkTests.swift */,
@@ -438,6 +450,9 @@
 				B0010000000000000000000C /* VKZTheme.swift in Sources */,
 				B00300000000000000000001 /* DuelInvite.swift in Sources */,
 				B00300000000000000000002 /* QRScannerView.swift in Sources */,
+				B00400000000000000000001 /* DuelSession.swift in Sources */,
+				B00400000000000000000002 /* DuelPeerLink.swift in Sources */,
+				B00400000000000000000003 /* GameLoopTrace.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -447,6 +462,7 @@
 			files = (
 				B0010000000000000000000D /* LobbyStateMachineTests.swift in Sources */,
 				B00300000000000000000003 /* DuelInviteLinkTests.swift in Sources */,
+				B00400000000000000000004 /* DuelSessionTests.swift in Sources */,
 				B00300000000000000000004 /* TargetingBlockerTests.swift in Sources */,
 				B00300000000000000000006 /* CombatTransportArenaLinkTests.swift in Sources */,
 				B00300000000000000000007 /* FallbackArenaPeerLinkTests.swift in Sources */,

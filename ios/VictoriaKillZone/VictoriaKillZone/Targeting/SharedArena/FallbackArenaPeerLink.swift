@@ -166,7 +166,7 @@ enum ArenaPeerLinkFactory {
     matchId: String,
     playerId: String,
     joinSecret: String
-  ) -> any ArenaPeerLinking {
+  ) -> any ArenaPeerLinking & DuelPeerLink {
     let scope = MatchScope(matchId: matchId)
     #if canImport(Network)
       return FallbackArenaPeerLink(
