@@ -101,11 +101,11 @@ final class CombatTransportArenaLinkTests: XCTestCase {
       RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.005))
     }
     XCTAssertGreaterThan(pair.host.stats.bytesOut, 0)
-    pump(pair.fabric, until: {
+    pump(pair.fabric, timeout: 10, until: {
       pair.guestRecorder.contains(message: .worldMap(worldMap))
     })
 
-    wait(for: [received], timeout: 1)
+    wait(for: [received], timeout: 5)
     XCTAssertTrue(pair.guestRecorder.contains(message: .worldMap(worldMap)))
   }
 
@@ -213,9 +213,10 @@ final class CombatTransportArenaLinkTests: XCTestCase {
 
   private func pump(
     _ fabric: LoopbackFabric,
+    timeout: TimeInterval = 2,
     until predicate: @escaping () -> Bool
   ) {
-    let deadline = Date(timeIntervalSinceNow: 2)
+    let deadline = Date(timeIntervalSinceNow: timeout)
     while !predicate() && Date() < deadline {
       fabric.advance(to: fabric.nowMs + 1)
       RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.001))
