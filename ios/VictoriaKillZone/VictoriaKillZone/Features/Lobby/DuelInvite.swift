@@ -1,6 +1,9 @@
 import CoreImage
 import CoreImage.CIFilterBuiltins
+
+#if canImport(UIKit)
 import UIKit
+#endif
 
 enum DuelInviteLink {
   static let scheme = "pewpew"
@@ -37,6 +40,7 @@ enum DuelInviteLink {
   }
 }
 
+#if canImport(UIKit)
 enum DuelQRCode {
   static func image(for url: URL, scale: CGFloat = 10) -> UIImage? {
     let filter = CIFilter.qrCodeGenerator()
@@ -52,3 +56,4 @@ enum DuelQRCode {
     return UIImage(cgImage: cgImage)
   }
 }
+#endif

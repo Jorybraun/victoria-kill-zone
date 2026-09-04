@@ -1,9 +1,14 @@
 import SwiftUI
+
+#if canImport(VisionKit)
 import VisionKit
+#endif
 
 struct JoinDuelView: View {
   @ObservedObject var store: LobbyStore
+  #if canImport(VisionKit)
   @State private var isShowingScanner = false
+  #endif
 
   var body: some View {
     VStack(alignment: .leading, spacing: 24) {
@@ -40,26 +45,31 @@ struct JoinDuelView: View {
       .buttonStyle(VKZPrimaryButtonStyle())
       .disabled(store.isBusy)
 
-      Button("SCAN QR CODE") {
-        isShowingScanner = true
-      }
-      .buttonStyle(VKZSecondaryButtonStyle())
-      .disabled(store.isBusy)
+      #if canImport(VisionKit)
+        Button("SCAN QR CODE") {
+          isShowingScanner = true
+        }
+        .buttonStyle(VKZSecondaryButtonStyle())
+        .disabled(store.isBusy)
+      #endif
 
       Spacer()
     }
     .padding(24)
     .frame(maxWidth: 560)
     .frame(maxWidth: .infinity)
+    #if canImport(VisionKit)
     .sheet(isPresented: $isShowingScanner) {
       QRScannerSheet { code in
         store.joinCode = code
         isShowingScanner = false
       }
     }
+    #endif
   }
 }
 
+#if canImport(VisionKit)
 private struct QRScannerSheet: View {
   let onCode: (String) -> Void
   @Environment(\.dismiss) private var dismiss
@@ -85,3 +95,4 @@ private struct QRScannerSheet: View {
     .padding(24)
   }
 }
+#endif
