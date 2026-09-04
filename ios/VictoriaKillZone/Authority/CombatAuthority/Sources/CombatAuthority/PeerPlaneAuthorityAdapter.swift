@@ -190,6 +190,11 @@ public final class AuthorityPeerAdapter: @unchecked Sendable {
           guard reliable.senderSlot == 0,
                 reliable.eventKind == .verdict || reliable.eventKind == .snapshot
           else { return }
+          if reliable.eventKind == .snapshot,
+             reliable.sequence > nextHostFrameSequence {
+            pendingHostFrames = pendingHostFrames.filter { $0.key > reliable.sequence }
+            nextHostFrameSequence = reliable.sequence
+          }
           guard reliable.sequence >= nextHostFrameSequence else { return }
           pendingHostFrames[reliable.sequence] = reliable
           while let next = pendingHostFrames.removeValue(forKey: nextHostFrameSequence) {

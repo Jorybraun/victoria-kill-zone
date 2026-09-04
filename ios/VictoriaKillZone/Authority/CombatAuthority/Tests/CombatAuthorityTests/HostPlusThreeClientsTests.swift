@@ -56,10 +56,21 @@ final class HostPlusThreeClientsTests: XCTestCase {
           ),
           atMs: nowMs
         )
-        XCTAssertTrue(
-          adapters[2].drainClientEffects().contains {
-            $0 == .fireRefusedLocally(.memberFireLocked)
-          }
+      }
+      if nowMs == 1_000 {
+        for adapter in adapters {
+          XCTAssertFalse(
+            adapter.client.appliedVerdicts.contains {
+              guard case let .verdict(record) = $0.event else { return false }
+              return record.shot.shotID == "shot-2"
+            }
+          )
+        }
+        XCTAssertFalse(
+          adapters[0].host?.verdictLog.contains {
+            guard case let .verdict(record) = $0.event else { return false }
+            return record.shot.shooterID == ids[2]
+          } ?? false
         )
       }
       if nowMs == 1_100 {
@@ -68,6 +79,7 @@ final class HostPlusThreeClientsTests: XCTestCase {
         adapters[2].resetEpoch(fabric.epoch(for: 2))
       }
       if nowMs == 1_200 {
+        XCTAssertEqual(adapters[2].client.players[2]?.fireLocked, false)
         try adapters[2].fire(
           ShotClaim(
             shotID: "shot-2",

@@ -187,11 +187,7 @@ public final class LoopbackFabric {
       if relayed {
         destinations = [origin]
       } else if origin == HostRelayTopology.hostSlot {
-        if case let .reliable(frame, _) = payload, frame.eventKind == .snapshot {
-          destinations = Array(UInt8(1)..<UInt8(playerCount))
-        } else {
-          destinations = topology.relayTargets(from: origin)
-        }
+        destinations = topology.relayTargets(from: origin)
       } else {
         let route = topology.outboundRoute(for: origin)
         precondition(route == [HostRelayTopology.hostSlot])
