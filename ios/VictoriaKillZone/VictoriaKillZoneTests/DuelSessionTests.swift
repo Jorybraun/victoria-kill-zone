@@ -267,7 +267,8 @@ final class DuelSessionTests: XCTestCase {
       gameSessionClient: FakeGameSessionClient(),
       now: { Date(timeIntervalSince1970: 1_750_000_000) },
       makeShotId: { "shot-1" },
-      makePeerLink: {
+      makePeerLink: { serviceName in
+        XCTAssertEqual(serviceName, "vkz-match-1")
         makeLinkCount += 1
         return link
       }
@@ -298,7 +299,7 @@ final class DuelSessionTests: XCTestCase {
       gameSessionClient: client,
       now: now,
       makeShotId: { "shot-1" },
-      makePeerLink: { link }
+      makePeerLink: { _ in link }
     )
     duel.attach(session: makeSession())
     return duel

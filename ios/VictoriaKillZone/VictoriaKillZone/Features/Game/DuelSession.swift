@@ -74,7 +74,7 @@ final class DuelSession: ObservableObject {
   private let now: @Sendable () -> Date
   private let makeShotId: @Sendable () -> String
   private let gameSessionClient: any GameSessionClient
-  private let makePeerLink: @MainActor () -> (any DuelPeerLink)?
+  private let makePeerLink: @MainActor (_ serviceName: String) -> (any DuelPeerLink)?
   private var fireTask: Task<Void, Never>?
 
   var seenIncomingShotEventCount: Int {
@@ -85,7 +85,8 @@ final class DuelSession: ObservableObject {
     gameSessionClient: any GameSessionClient,
     now: @escaping @Sendable () -> Date = { Date() },
     makeShotId: @escaping @Sendable () -> String = { UUID().uuidString },
-    makePeerLink: @escaping @MainActor () -> (any DuelPeerLink)? = DuelSession.defaultPeerLink
+    makePeerLink: @escaping @MainActor (_ serviceName: String) -> (any DuelPeerLink)? =
+      DuelSession.defaultPeerLink
   ) {
     self.gameSessionClient = gameSessionClient
     self.now = now
@@ -93,9 +94,9 @@ final class DuelSession: ObservableObject {
     self.makePeerLink = makePeerLink
   }
 
-  static func defaultPeerLink() -> (any DuelPeerLink)? {
+  static func defaultPeerLink(serviceName: String) -> (any DuelPeerLink)? {
     #if canImport(Network)
-      return ArenaPeerLink()
+      return ArenaPeerLink(serviceName: serviceName)
     #else
       return nil
     #endif
@@ -450,7 +451,7 @@ final class DuelSession: ObservableObject {
       let ray = try? ArenaShotRay(
         origin: ArenaVector3(x: origin[0], y: origin[1], z: origin[2]),
         direction: ArenaVector3(x: direction[0], y: direction[1], z: direction[2]),
-        firedAtMs: Int64(request.firedAtClient.rounded())
+        firedAtMs: ArenaClock.nowMs()
       )
     else { return }
     link.send(.shotTracer(ArenaShotTracer(
@@ -463,7 +464,7 @@ final class DuelSession: ObservableObject {
   private func updateDuelPeerLink(for snapshot: MatchSnapshot, previous: MatchSnapshot?) {
     if snapshot.match.phase == .running, duelPeerLink == nil,
       let role = snapshot.players.first(where: { $0.id == snapshot.localPlayerId })?.role,
-      let link = makePeerLink()
+      let link = makePeerLink(Self.peerServiceName(forMatchID: snapshot.match.id))
     {
       link.onMessage = { [weak self] message, _ in
         guard case .shotTracer(let tracer) = message else { return }
@@ -490,6 +491,10 @@ final class DuelSession: ObservableObject {
       duelPeerLink?.stop()
       duelPeerLink = nil
     }
+  }
+
+  static func peerServiceName(forMatchID matchID: String) -> String {
+    "vkz-" + String(matchID.prefix(48))
   }
 
   private func makeKillBanner(for event: EventSnapshot, in snapshot: MatchSnapshot)
