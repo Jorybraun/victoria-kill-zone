@@ -758,9 +758,10 @@ final class LobbyStore: ObservableObject {
     guard let startedAt = snapshotSubscriptionStartedAt,
       let event = newEvents
         .filter({ $0.createdAt >= startedAt })
-        .max(by: { $0.createdAt < $1.createdAt }),
-      lastPeerShotAt.map({ now().timeIntervalSince($0) < 2 }) != true
+        .max(by: { $0.createdAt < $1.createdAt })
     else { return }
+    let peerAlreadyRendered = lastPeerShotAt.map { now().timeIntervalSince($0) < 2 } == true
+    if peerAlreadyRendered && event.type == .shot { return }
     incomingShot = IncomingShot(
       eventID: event.id,
       hit: event.type != .shot,
