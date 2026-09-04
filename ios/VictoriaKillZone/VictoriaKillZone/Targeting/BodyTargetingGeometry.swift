@@ -109,6 +109,11 @@ enum BodyTargetingGeometry {
     if let neck, rayIntersectsCapsule(ray, start: root, end: neck, radius: 0.18) {
       return .torso
     }
+    let top = head ?? neck ?? root
+    let feet = TargetingVector3(x: root.x, y: root.y - 0.85, z: root.z)
+    if rayIntersectsCapsule(ray, start: feet, end: top, radius: 0.45) {
+      return .limbs
+    }
     return nil
   }
 
