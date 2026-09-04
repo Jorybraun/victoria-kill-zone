@@ -138,4 +138,4 @@ This is the integration-owned, evidence-based status record. Append observed res
 - **Result:** BLOCKED pending physical-device TestFlight checks.
 - **Blocker and owner:** Integration / iOS targeting — two-phone TestFlight validation.
 - **Next integration step:** Install the pushed build on two phones and run the listed TestFlight checks.
-- **Cut/deferred or risk change:** Release excludes debug-only harness and shell controls; debug-fire paths remain available.
+- **Cut/deferred or risk change:** Release excludes debug-only harness and shell controls; debug-fire paths remain available. The torso-fallback fire button is gated by `VKZ_DEBUG_FIRE`, set in both Debug and Release so TestFlight keeps it; remove it from Release only after two-phone markerless fire evidence lands here.

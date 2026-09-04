@@ -291,7 +291,7 @@ struct ActiveDuelView: View {
         .buttonStyle(VKZPrimaryButtonStyle())
         .accessibilityLabel("Fire markerless shot")
 
-        #if DEBUG
+        #if VKZ_DEBUG_FIRE
           if duel.localRole == .host {
             Button("DEBUG · TORSO FALLBACK FIRE") {
               store.debugFire()
