@@ -1,6 +1,6 @@
 import SwiftUI
 
-#if canImport(VisionKit)
+#if os(iOS)
 import VisionKit
 
 struct QRScannerView: UIViewControllerRepresentable {
