@@ -341,9 +341,14 @@ export function verdictGate(
   return null;
 }
 
+/**
+ * Convex is the tie-breaker of record: the host's verdict is applied through the
+ * same rules as a client claim, but the shooter-side gates (ammo, cooldown,
+ * geofence, confidence) are the host's job and are not re-checked here. Convex
+ * re-checks only what it alone owns: membership, life state, and the target.
+ * Host/phase authority is checked by `verdictGate` in the adapter.
+ */
 export function resolveVerdictRecord(
-  _match: Pick<MatchState, "status" | "phase" | "endsAt" | "hostPlayerId">,
-  _caller: PlayerState,
   shooter: PlayerState,
   target: PlayerState | null,
   record: ShotVerdictRecord,
@@ -363,10 +368,11 @@ export function resolveVerdictRecord(
   if (record.verdict === "rejected") {
     return applyVerdict(shooter, target, { kind: "rejected", reason: "host_rejected" }, identity, now);
   }
+  if (shooter.lifeState !== "alive") {
+    return applyVerdict(shooter, target, { kind: "rejected", reason: "shooter_not_alive" }, identity, now);
+  }
   if (record.verdict === "miss") {
-    return shooter.lifeState === "alive"
-      ? applyVerdict(shooter, target, { kind: "miss" }, identity, now)
-      : applyVerdict(shooter, target, { kind: "rejected", reason: "shooter_not_alive" }, identity, now);
+    return applyVerdict(shooter, target, { kind: "miss" }, identity, now);
   }
   if (
     record.zone === null ||
@@ -378,9 +384,6 @@ export function resolveVerdictRecord(
   }
   if (target.lifeState !== "alive") {
     return applyVerdict(shooter, target, { kind: "rejected", reason: "target_not_alive" }, identity, now);
-  }
-  if (shooter.lifeState !== "alive") {
-    return applyVerdict(shooter, target, { kind: "rejected", reason: "shooter_not_alive" }, identity, now);
   }
   return applyVerdict(shooter, target, { kind: "hit", zone: record.zone }, identity, now);
 }

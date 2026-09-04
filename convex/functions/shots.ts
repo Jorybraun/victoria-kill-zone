@@ -293,8 +293,6 @@ export const recordVerdict = mutation({
         ? null
         : (players.find((player) => player._id === record.targetPlayerId) ?? null);
     const plan = resolveVerdictRecord(
-      toMatchState(match),
-      toPlayerState(caller),
       toPlayerState(shooter),
       target === null ? null : toPlayerState(target),
       record,

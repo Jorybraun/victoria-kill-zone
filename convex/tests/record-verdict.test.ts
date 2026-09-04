@@ -42,8 +42,6 @@ function resolve(overrides: Partial<ShotVerdictRecord> = {}, options: {
   now?: number;
 } = {}) {
   return resolveVerdictRecord(
-    match(),
-    player("host"),
     player("guest", options.shooter),
     player("host", options.target),
     record(overrides),
@@ -146,8 +144,6 @@ describe("host verdict domain", () => {
       T0 + 1_000,
     );
     const host = resolveVerdictRecord(
-      match(),
-      shooter,
       shooter,
       target,
       record({ shooterPlayerId: shooter.id, targetPlayerId: target.id }),
