@@ -10,11 +10,11 @@ final class CombatTransportArenaLinkTests: XCTestCase {
     let hostConnected = expectation(description: "host connected")
     let guestConnected = expectation(description: "guest connected")
     pair.host.onStateChange = { state in
-      pair.hostRecorder.record(state: state)
+      pair.hostRecorder.recordState(state)
       if state == .connected { hostConnected.fulfill() }
     }
     pair.guest.onStateChange = { state in
-      pair.guestRecorder.record(state: state)
+      pair.guestRecorder.recordState(state)
       if state == .connected { guestConnected.fulfill() }
     }
 
@@ -37,11 +37,11 @@ final class CombatTransportArenaLinkTests: XCTestCase {
     let hostMessage = expectation(description: "host receives guest shot")
     let guestMessage = expectation(description: "guest receives host shot")
     pair.host.onMessage = { message, _ in
-      pair.hostRecorder.record(message: message)
+      pair.hostRecorder.recordMessage(message)
       if message == .shotTracer(guestShot) { hostMessage.fulfill() }
     }
     pair.guest.onMessage = { message, _ in
-      pair.guestRecorder.record(message: message)
+      pair.guestRecorder.recordMessage(message)
       if message == .shotTracer(hostShot) { guestMessage.fulfill() }
     }
 
@@ -61,7 +61,7 @@ final class CombatTransportArenaLinkTests: XCTestCase {
     let pair = makeConnectedPair()
     let received = expectation(description: "guest receives retraction")
     pair.guest.onMessage = { message, _ in
-      pair.guestRecorder.record(message: message)
+      pair.guestRecorder.recordMessage(message)
       if message == .shotRetracted(shotId: "host#1") { received.fulfill() }
     }
 
@@ -79,7 +79,7 @@ final class CombatTransportArenaLinkTests: XCTestCase {
     let worldMap = Data((0..<200 * 1024).map { UInt8($0 % 251) })
     let received = expectation(description: "guest receives world map")
     pair.guest.onMessage = { message, _ in
-      pair.guestRecorder.record(message: message)
+      pair.guestRecorder.recordMessage(message)
       if message == .worldMap(worldMap) { received.fulfill() }
     }
 
@@ -108,9 +108,9 @@ final class CombatTransportArenaLinkTests: XCTestCase {
       joinSecret: "secret",
       linkFactory: { _ in fabric.client(slot: 1) }
     )
-    host.onStateChange = { hostRecorder.record(state: $0) }
-    host.onMessage = { hostRecorder.record(message: $0) }
-    guest.onStateChange = { guestRecorder.record(state: $0) }
+    host.onStateChange = { hostRecorder.recordState($0) }
+    host.onMessage = { message, _ in hostRecorder.recordMessage(message) }
+    guest.onStateChange = { guestRecorder.recordState($0) }
     guest.start(role: .guest)
     host.start(role: .host)
     pump(fabric, until: {
@@ -128,7 +128,7 @@ final class CombatTransportArenaLinkTests: XCTestCase {
     let pair = makeConnectedPair()
     let received = expectation(description: "host receives shot")
     pair.host.onMessage = { message, _ in
-      pair.hostRecorder.record(message: message)
+      pair.hostRecorder.recordMessage(message)
       if case .shotTracer = message { received.fulfill() }
     }
     pair.guest.send(.shotTracer(try tracer(shotId: "guest#1", shooter: "guest")))
@@ -168,8 +168,8 @@ final class CombatTransportArenaLinkTests: XCTestCase {
       joinSecret: "secret",
       linkFactory: { _ in fabric.client(slot: 1) }
     )
-    host.onStateChange = { hostRecorder.record(state: $0) }
-    guest.onStateChange = { guestRecorder.record(state: $0) }
+    host.onStateChange = { hostRecorder.recordState($0) }
+    guest.onStateChange = { guestRecorder.recordState($0) }
     return Pair(
       fabric: fabric,
       host: host,
@@ -219,11 +219,11 @@ final class CombatTransportArenaLinkTests: XCTestCase {
       lock.withLock { messages.count }
     }
 
-    func record(state: ArenaPeerLinkState) {
+    func recordState(_ state: ArenaPeerLinkState) {
       lock.withLock { states.append(state) }
     }
 
-    func record(message: ArenaLinkMessage) {
+    func recordMessage(_ message: ArenaLinkMessage) {
       lock.withLock { messages.append(message) }
     }
 

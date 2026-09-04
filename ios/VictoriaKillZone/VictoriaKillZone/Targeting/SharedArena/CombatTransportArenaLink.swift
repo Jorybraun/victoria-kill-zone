@@ -136,7 +136,10 @@ final class CombatTransportArenaLink: ArenaPeerLinking, @unchecked Sendable {
             remoteSlot: 0,
             configuration: configuration,
             linkEventHandler: { [weak self] event in
-              self?.queue.async { self?.handle(event) }
+              guard let self else { return }
+              self.queue.async { [weak self] in
+                self?.handle(event)
+              }
             }
           )
         } catch {
@@ -153,7 +156,10 @@ final class CombatTransportArenaLink: ArenaPeerLinking, @unchecked Sendable {
         }
       )
       endpoint.setReceiveHandler { [weak self] frame, _, _ in
-        self?.queue.async { self?.receive(frame) }
+        guard let self else { return }
+        self.queue.async { [weak self] in
+          self?.receive(frame)
+        }
       }
       if linkFactory != nil {
         setState(.connecting)
@@ -211,7 +217,7 @@ final class CombatTransportArenaLink: ArenaPeerLinking, @unchecked Sendable {
   }
 
   private func sendHello() {
-    guard let link, let role, var mapper else { return }
+    guard let link, var mapper else { return }
     do {
       let hello = try MatchHelloCodec.encode(MatchHello(
         scopeId: scope.scopeId,
