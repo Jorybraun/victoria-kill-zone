@@ -34,14 +34,14 @@ final class MatchScopedLoopbackTests: XCTestCase {
     )
     let collector = Collector()
     host.setReceiveHandler { frame, _, _ in collector.append(frame) }
-    guest.send(.reliable(ReliableEventFrame(
+    try guest.send(.reliable(ReliableEventFrame(
       epoch: 1,
       senderSlot: 1,
       sequence: 1,
       eventKind: .fire,
       payload: try CombatFireMessageCodec.encode(.shot(shot))
     )))
-    guest.send(.reliable(ReliableEventFrame(
+    try guest.send(.reliable(ReliableEventFrame(
       epoch: 1,
       senderSlot: 1,
       sequence: 2,
