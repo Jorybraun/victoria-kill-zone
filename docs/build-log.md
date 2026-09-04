@@ -125,3 +125,17 @@ This is the integration-owned, evidence-based status record. Append observed res
 ### 2026-09-04 — ADR 0005 proposed
 
 - ADR 0005 proposed; fire-path trace found every markerless `shots:fire` rejected `LOCATION_STALE` on the current client (no location sent); PR implements ADR 0005; physical-device evidence pending.
+
+### 2026-09-04 — App Store readiness audit (Info.plist, privacy manifest, Release gating of debug UI)
+
+- **Git SHA / PR:** Branch `devin/1788521289-app-store-readiness`; PR pending.
+- **Owner and write set:** Integration (Xcode project, Info.plist, docs) + iOS targeting (Targeting/SharedArena gating).
+- **Environment/artifact:** Linux repository workspace; iOS source and Xcode project metadata.
+- **Commands/checks:** `pnpm verify` PASS (`Repository contract: PASS`; workspace lint, typecheck, tests, build, and `Workspace verification: PASS`).
+- **Observed on browser/simulator:** None.
+- **Observed on physical devices:** None. Needed two-phone TestFlight checks: camera-denied panel; harness link absent in the TestFlight build; Bonjour prompt still works for both `_pewpew-arena._tcp` and `_vkz-combat._udp`.
+- **Mocked or unproven:** Physical-device camera-denied flow, Release/TestFlight UI, and Bonjour prompts.
+- **Result:** BLOCKED pending physical-device TestFlight checks.
+- **Blocker and owner:** Integration / iOS targeting — two-phone TestFlight validation.
+- **Next integration step:** Install the pushed build on two phones and run the listed TestFlight checks.
+- **Cut/deferred or risk change:** Release excludes debug-only harness and shell controls; debug-fire paths remain available.

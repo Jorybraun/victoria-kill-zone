@@ -1,3 +1,4 @@
+#if DEBUG
 import SwiftUI
 
 // MARK: - KIL-20 two-phone shared-arena harness
@@ -369,4 +370,5 @@ import SwiftUI
       Text("Shared arena harness requires an iOS device with ARKit.")
     }
   }
+#endif
 #endif

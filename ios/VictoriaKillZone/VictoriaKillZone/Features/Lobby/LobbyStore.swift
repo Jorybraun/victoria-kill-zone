@@ -12,6 +12,29 @@ enum LobbySyncStatus: Equatable, Sendable {
   case restored
 }
 
+enum TargetingBlocker: Equatable, Sendable {
+  case cameraDenied
+  case unsupportedDevice
+
+  var title: String {
+    switch self {
+    case .cameraDenied: "CAMERA ACCESS REQUIRED"
+    case .unsupportedDevice: "TARGETING UNAVAILABLE ON THIS DEVICE"
+    }
+  }
+
+  var message: String {
+    switch self {
+    case .cameraDenied:
+      "Pew Pew needs the rear camera to aim at the other player. Allow camera access in Settings to fire markerless shots."
+    case .unsupportedDevice:
+      "This device cannot run the augmented-reality targeting used for aiming. You can still watch the duel, but markerless shots are disabled."
+    }
+  }
+
+  var offersSettings: Bool { self == .cameraDenied }
+}
+
 enum LobbyNetworkOperation: Equatable, Sendable {
   case creating
   case joining
@@ -72,6 +95,7 @@ final class LobbyStore: ObservableObject {
   @Published private(set) var debugShotState = DebugShotState.idle
   @Published private(set) var markerlessShotState = MarkerlessShotState.idle
   @Published private(set) var targetingSnapshot: TargetingSnapshot
+  @Published private(set) var targetingBlocker: TargetingBlocker?
   @Published private(set) var killBanner: KillBanner?
   @Published private(set) var incomingShot: IncomingShot?
 
@@ -290,8 +314,10 @@ final class LobbyStore: ObservableObject {
   }
 
   func startTargeting() async {
+    targetingBlocker = nil
     guard environment.targetingSession.availability == .available else {
       targetingSnapshot = .unavailable()
+      targetingBlocker = .unsupportedDevice
       return
     }
     guard targetingTask == nil else { return }
@@ -307,13 +333,14 @@ final class LobbyStore: ObservableObject {
     do {
       try await targetingSession.start()
     } catch TargetingSessionError.cameraPermissionDenied {
-      errorMessage = "CAMERA ACCESS IS REQUIRED"
+      targetingBlocker = .cameraDenied
     } catch {
-      errorMessage = "TARGETING UNAVAILABLE"
+      targetingBlocker = .unsupportedDevice
     }
   }
 
   func stopTargeting() async {
+    targetingBlocker = nil
     targetingTask?.cancel()
     targetingTask = nil
     await environment.targetingSession.stop()
@@ -321,6 +348,7 @@ final class LobbyStore: ObservableObject {
   }
 
   func leave() {
+    targetingBlocker = nil
     actionTask?.cancel()
     snapshotTask?.cancel()
     snapshotRetryTask?.cancel()

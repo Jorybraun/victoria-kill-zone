@@ -42,18 +42,12 @@
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_pewpew-arena._tcp</string>
+		<string>_vkz-combat._udp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>Pew Pew uses the rear camera to detect the opposing player and render the live duel view.</string>
+	<string>Pew Pew uses the rear camera to track the opposing player's body pose so your shots can be aimed and rendered in the live duel view.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Pew Pew connects directly to a nearby player's phone to share the arena frame during a match.</string>
-	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
-	<dict>
-		<key>VictoriaKillZoneArena</key>
-		<string>Precise location is used during an active duel to evaluate the arena boundary.</string>
-	</dict>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Pew Pew uses your foreground location to confirm that both players remain inside the active arena.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Pew Pew uses the microphone only when you opt in to Voice Fire and listen for the phrase “pew pew.” Audio and transcripts are not stored.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
