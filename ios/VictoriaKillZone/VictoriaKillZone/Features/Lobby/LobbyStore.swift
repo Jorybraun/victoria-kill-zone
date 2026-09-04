@@ -565,9 +565,6 @@ final class LobbyStore: ObservableObject {
   }
 #else
   @inline(__always)
-  private func gameLoopTrace(_ message: @autoclosure () -> String) {}
-
-  @inline(__always)
   private func gameLoopPlayerSummary(
     _ players: [PlayerSnapshot],
     previous: MatchSnapshot?

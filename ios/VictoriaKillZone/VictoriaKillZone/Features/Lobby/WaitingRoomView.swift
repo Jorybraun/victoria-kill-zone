@@ -156,6 +156,13 @@ struct WaitingRoomView: View {
       .frame(maxWidth: 600)
       .frame(maxWidth: .infinity)
     }
+    .onAppear {
+      #if canImport(Network)
+        if store.isLiveNetworking {
+          ArenaPeerLink.primeLocalNetworkPermission()
+        }
+      #endif
+    }
   }
 
   private func playerRow(_ player: LobbyPlayer) -> some View {

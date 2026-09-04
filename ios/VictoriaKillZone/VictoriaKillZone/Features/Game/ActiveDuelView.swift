@@ -18,12 +18,22 @@ struct ActiveDuelView: View {
   @State private var toastEventID: String?
   @State private var toastVisible = false
   @State private var toastTask: Task<Void, Never>?
+  @State private var shotNotice: String?
+  @State private var shotNoticeTask: Task<Void, Never>?
 
   var body: some View {
     TimelineView(.periodic(from: .now, by: 0.2)) { context in
       ZStack {
         cameraSurface
           .ignoresSafeArea()
+
+        if let pose = store.targetingSnapshot.pose2D,
+          store.targetingSnapshot.isPoseFresh(at: context.date)
+        {
+          SkeletonOverlay(pose: pose, color: reticleColor)
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+        }
 
         LinearGradient(
           colors: [.black.opacity(0.55), .clear, .black.opacity(0.7)],
@@ -103,7 +113,13 @@ struct ActiveDuelView: View {
       voiceFire.setViewVisible(false)
       voiceFire.setSceneActive(false)
       toastTask?.cancel()
+      shotNoticeTask?.cancel()
       Task { await store.stopTargeting() }
+    }
+    .onChange(of: store.errorMessage) { message in
+      guard let message, duel.phase == .running else { return }
+      showShotNotice(message)
+      store.dismissError()
     }
     .onChange(of: scenePhase) { phase in
       voiceFire.setSceneActive(phase == .active)
@@ -383,6 +399,7 @@ struct ActiveDuelView: View {
   private var bottomStack: some View {
     VStack(spacing: 8) {
       latestEvent
+      shotNoticeView
       DuelCooldownBar(combat: combat)
       HStack(spacing: 12) {
         voiceToggle
@@ -499,8 +516,28 @@ struct ActiveDuelView: View {
     guard combat.fireCooldownRemaining(at: Date()) == 0 else { return }
     let canFireMarkerless = combat.canFireMarkerless
     let canFireDebug = combat.canDebugFire
-    guard canFireMarkerless || canFireDebug else { return }
-    fx.fireLaser(hit: canFireMarkerless)
+    guard canFireMarkerless || canFireDebug else {
+      showShotNotice(blockedShotNotice)
+      #if os(iOS)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+      #endif
+      return
+    }
+    #if os(iOS)
+      let target: SIMD3<Float>?
+      if canFireMarkerless, store.targetingSnapshot.isPoseFresh(at: Date()),
+        let skeleton = store.targetingSnapshot.skeleton,
+        let point = skeleton.position(of: combat.markerlessAimZone == .head ? "head" : "root")
+          ?? skeleton.position(of: "root")
+      {
+        target = SIMD3<Float>(Float(point.x), Float(point.y), Float(point.z))
+      } else {
+        target = nil
+      }
+      fx.fireLaser(hit: canFireMarkerless, target: target)
+    #else
+      fx.fireLaser(hit: canFireMarkerless)
+    #endif
     if canFireMarkerless {
       combat.fireMarkerless()
     } else {
@@ -514,6 +551,48 @@ struct ActiveDuelView: View {
         muzzleFlash = false
       }
     }
+  }
+
+  private var blockedShotNotice: String {
+    if isLocalRespawning { return "RESPAWNING" }
+    if duel.opponent?.lifeState != .alive { return "OPPONENT IS RESPAWNING" }
+    if (duel.localPlayer?.ammo ?? 0) <= 0 { return "OUT OF AMMO" }
+    if store.isMatchInputLocked { return "RECONNECTING" }
+    return store.targetingSnapshot.bodyDetected
+      ? "AIM AT THE BODY"
+      : "NO TARGET — FIND YOUR OPPONENT"
+  }
+
+  private func showShotNotice(_ message: String) {
+    shotNoticeTask?.cancel()
+    withAnimation(.easeOut(duration: 0.15)) {
+      shotNotice = message
+    }
+    shotNoticeTask = Task { @MainActor in
+      try? await Task.sleep(for: .seconds(1.6))
+      guard !Task.isCancelled else { return }
+      withAnimation(.easeOut(duration: 0.2)) {
+        shotNotice = nil
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var shotNoticeView: some View {
+    ZStack {
+      if let shotNotice {
+        Text(shotNotice)
+          .font(.caption.bold().monospaced())
+          .foregroundStyle(VKZPalette.danger)
+          .padding(.horizontal, 12)
+          .padding(.vertical, 6)
+          .background(.black.opacity(0.7), in: Capsule())
+          .transition(.scale(scale: 0.9).combined(with: .opacity))
+          .accessibilityAddTraits(.updatesFrequently)
+      }
+    }
+    .frame(maxWidth: .infinity)
+    .frame(height: 30)
   }
 
   private var voiceStatusColor: Color {
@@ -641,6 +720,46 @@ struct ActiveDuelView: View {
         .foregroundStyle(color)
     }
     .accessibilityElement(children: .combine)
+  }
+}
+
+/// Draws the 2D Vision pose over the aspect-filled camera preview.
+private struct SkeletonOverlay: View {
+  let pose: TargetingPose2D
+  let color: Color
+
+  var body: some View {
+    Canvas { context, size in
+      let imageWidth = size.height * pose.imageAspect
+      let xOffset = (size.width - imageWidth) / 2
+      func map(_ point: NormalizedTargetingPoint) -> CGPoint {
+        CGPoint(x: xOffset + point.x * imageWidth, y: (1 - point.y) * size.height)
+      }
+      var bones = Path()
+      for bone in pose.bones {
+        guard let from = pose.joints[bone.from], let to = pose.joints[bone.to] else { continue }
+        bones.move(to: map(from))
+        bones.addLine(to: map(to))
+      }
+      context.stroke(bones, with: .color(color.opacity(0.35)), lineWidth: 9)
+      context.stroke(bones, with: .color(color.opacity(0.95)), lineWidth: 3)
+      for joint in pose.joints.values {
+        let center = map(joint)
+        let radius: CGFloat = 6
+        let dot = Path(ellipseIn: CGRect(
+          x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2
+        ))
+        context.fill(dot, with: .color(color))
+      }
+      if let nose = pose.joints["nose"], let neck = pose.joints["neck"] {
+        let head = map(nose)
+        let radius = max(14, abs(map(neck).y - head.y) * 0.9)
+        let ring = Path(ellipseIn: CGRect(
+          x: head.x - radius, y: head.y - radius, width: radius * 2, height: radius * 2
+        ))
+        context.stroke(ring, with: .color(color.opacity(0.9)), lineWidth: 3)
+      }
+    }
   }
 }
 
