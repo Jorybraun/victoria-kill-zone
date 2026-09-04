@@ -125,6 +125,7 @@ This is the integration-owned, evidence-based status record. Append observed res
 ### 2026-09-04 — ADR 0005 proposed
 
 - ADR 0005 proposed; fire-path trace found every markerless `shots:fire` rejected `LOCATION_STALE` on the current client (no location sent); PR implements ADR 0005; physical-device evidence pending.
+- Follow-up hardening PR (match-scoped peer link, skeleton scale estimation, pure hit-geometry tests)
 
 ### 2026-09-04 — App Store readiness audit (Info.plist, privacy manifest, Release gating of debug UI)
 
