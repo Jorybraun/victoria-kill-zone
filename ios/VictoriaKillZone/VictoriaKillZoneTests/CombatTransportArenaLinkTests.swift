@@ -196,6 +196,17 @@ final class CombatTransportArenaLinkTests: XCTestCase {
     }
   }
 
+  private func waitUntil(
+    timeout: TimeInterval = 2,
+    _ predicate: @escaping () -> Bool
+  ) {
+    let deadline = Date(timeIntervalSinceNow: timeout)
+    while !predicate() && Date() < deadline {
+      RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.005))
+    }
+    XCTAssertTrue(predicate())
+  }
+
   private func tracer(shotId: String, shooter: String) throws -> ArenaShotTracer {
     ArenaShotTracer(
       shotId: shotId,
