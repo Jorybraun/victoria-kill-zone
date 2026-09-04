@@ -1237,7 +1237,8 @@ enum TargetingSessionFactory {
             y: min(1, max(0, Double(result.y))),
             confidence: 1
           )
-        }
+        },
+        capturedAt: capturedAt
       )
     }
   }
