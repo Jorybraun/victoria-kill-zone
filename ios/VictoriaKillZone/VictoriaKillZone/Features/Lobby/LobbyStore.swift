@@ -89,7 +89,6 @@ final class LobbyStore: ObservableObject {
     connectionTask?.cancel()
     recoveryTask?.cancel()
     targetingTask?.cancel()
-    duelCancellable?.cancel()
   }
 
   var networkingStatus: String {
