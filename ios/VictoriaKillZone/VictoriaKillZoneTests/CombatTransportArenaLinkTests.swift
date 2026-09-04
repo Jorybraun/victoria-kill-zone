@@ -130,6 +130,13 @@ final class CombatTransportArenaLinkTests: XCTestCase {
     guest.onStateChange = { guestRecorder.recordState($0) }
     guest.start(role: .guest)
     host.start(role: .host)
+    let helloDeadline = Date(timeIntervalSinceNow: 2)
+    while (guest.stats.bytesOut == 0 || host.stats.bytesOut == 0) &&
+      Date() < helloDeadline {
+      RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.005))
+    }
+    XCTAssertGreaterThan(guest.stats.bytesOut, 0)
+    XCTAssertGreaterThan(host.stats.bytesOut, 0)
     pump(fabric, until: {
       hostRecorder.contains(state: .failed("peer belongs to another match"))
     })
