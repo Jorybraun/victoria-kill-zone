@@ -91,6 +91,24 @@ describe("contract snapshots", () => {
     });
   });
 
+  it("projects verdict target confirmation and omits absent or null values", () => {
+    const confirmed = buildSpectatorSnapshot(
+      snapshotMatch(),
+      [player("host"), player("guest")],
+      events.map((event) => ({ ...event, targetConfirmed: true })),
+      T0 + 1_000,
+    );
+    expect(confirmed.events[0]).toHaveProperty("targetConfirmed", true);
+
+    const absent = buildSpectatorSnapshot(
+      snapshotMatch(),
+      [player("host"), player("guest")],
+      events.map((event) => ({ ...event, targetConfirmed: null })),
+      T0 + 1_000,
+    );
+    expect(absent.events[0]).not.toHaveProperty("targetConfirmed");
+  });
+
   it("sanitizes phone and spectator projections field by field", () => {
     const contaminated = [
       {
