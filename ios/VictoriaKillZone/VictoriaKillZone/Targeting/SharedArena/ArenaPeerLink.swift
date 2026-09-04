@@ -20,10 +20,16 @@ import Foundation
     private var connection: NWConnection?
     private var receiveBuffer = Data()
     private var state: ArenaPeerLinkState = .idle
+    private var role: ArenaRole?
+    private var handshake: Handshake = .none
+    private var handshakeTimeout: DispatchWorkItem?
 
-    init(serviceName: String? = nil) {
+    init(serviceName: String? = nil, preSharedKey: Data? = nil) {
       self.serviceName = serviceName
+      self.preSharedKey = preSharedKey
     }
+
+    private let preSharedKey: Data?
 
     var stats: ArenaPeerLinkStats {
       lock.withLock { _stats }
@@ -32,6 +38,7 @@ import Foundation
     func start(role: ArenaRole) {
       queue.async { [self] in
         tearDownLocked()
+        self.role = role
         switch role {
         case .host: startListenerLocked()
         case .guest: startBrowserLocked()
@@ -128,7 +135,14 @@ import Foundation
         guard let self else { return }
         switch connectionState {
         case .ready:
-          self.setState(.connected)
+          if let preSharedKey, let role = self.role {
+            let authenticator = ArenaLinkAuthenticator(preSharedKey: preSharedKey, role: role)
+            self.handshake = .awaitingNonce(authenticator)
+            self.sendHandshakeData(authenticator.localNonce)
+            self.armHandshakeTimeout()
+          } else {
+            self.setState(.connected)
+          }
           self.receiveNext()
         case .failed(let error):
           self.fail("connection:\(error.localizedDescription)")
@@ -150,6 +164,12 @@ import Foundation
           let arrivalMs = ArenaClock.nowMs()
           self.lock.withLock { self._stats.bytesIn += content.count }
           self.receiveBuffer.append(content)
+          guard self.processHandshake() else {
+            if self.handshake != .none {
+              self.receiveNext()
+            }
+            return
+          }
           do {
             for message in try ArenaLinkCodec.drainFrames(from: &self.receiveBuffer) {
               self.onMessage?(message, arrivalMs)
@@ -170,6 +190,55 @@ import Foundation
       }
     }
 
+    private func processHandshake() -> Bool {
+      guard preSharedKey != nil else { return true }
+      while true {
+        switch handshake {
+        case .none, .verified:
+          return true
+        case let .awaitingNonce(authenticator):
+          guard receiveBuffer.count >= ArenaLinkAuthenticator.nonceLength else {
+            return false
+          }
+          let peerNonce = Data(receiveBuffer.prefix(ArenaLinkAuthenticator.nonceLength))
+          receiveBuffer.removeSubrange(0..<ArenaLinkAuthenticator.nonceLength)
+          sendHandshakeData(authenticator.proof(peerNonce: peerNonce))
+          handshake = .awaitingProof(authenticator, peerNonce: peerNonce)
+        case let .awaitingProof(authenticator, peerNonce):
+          guard receiveBuffer.count >= ArenaLinkAuthenticator.proofLength else {
+            return false
+          }
+          let peerProof = Data(receiveBuffer.prefix(ArenaLinkAuthenticator.proofLength))
+          receiveBuffer.removeSubrange(0..<ArenaLinkAuthenticator.proofLength)
+          guard authenticator.verify(peerProof: peerProof, peerNonce: peerNonce) else {
+            fail("peer authentication failed")
+            return false
+          }
+          handshakeTimeout?.cancel()
+          handshakeTimeout = nil
+          handshake = .verified
+          setState(.connected)
+        }
+      }
+    }
+
+    private func sendHandshakeData(_ data: Data) {
+      guard let connection else { return }
+      lock.withLock { self._stats.bytesOut += data.count }
+      connection.send(content: data, completion: .contentProcessed { [weak self] error in
+        if let error { self?.fail("send:\(error.localizedDescription)") }
+      })
+    }
+
+    private func armHandshakeTimeout() {
+      let timeout = DispatchWorkItem { [weak self] in
+        guard let self, self.handshake != .verified else { return }
+        self.fail("auth timeout")
+      }
+      handshakeTimeout = timeout
+      queue.asyncAfter(deadline: .now() + 3, execute: timeout)
+    }
+
     private func fail(_ reason: String) {
       tearDownLocked()
       setState(.failed(reason))
@@ -183,6 +252,9 @@ import Foundation
       connection?.cancel()
       connection = nil
       receiveBuffer.removeAll(keepingCapacity: false)
+      handshakeTimeout?.cancel()
+      handshakeTimeout = nil
+      handshake = .none
     }
 
     private func setState(_ newState: ArenaPeerLinkState) {

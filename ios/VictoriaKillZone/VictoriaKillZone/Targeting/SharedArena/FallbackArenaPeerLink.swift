@@ -175,7 +175,10 @@ enum ArenaPeerLinkFactory {
           playerId: playerId,
           joinSecret: joinSecret
         ),
-        fallback: ArenaPeerLink(serviceName: scope.serviceToken)
+        fallback: ArenaPeerLink(
+          serviceName: scope.serviceToken,
+          preSharedKey: scope.preSharedKey(joinSecret: joinSecret)
+        )
       )
     #else
       return CombatTransportArenaLink(
