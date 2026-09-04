@@ -125,3 +125,11 @@ This is the integration-owned, evidence-based status record. Append observed res
 ### 2026-09-04 — ADR 0005 proposed
 
 - ADR 0005 proposed; fire-path trace found every markerless `shots:fire` rejected `LOCATION_STALE` on the current client (no location sent); PR implements ADR 0005; physical-device evidence pending.
+
+### 2026-09-04 — DuelSession combat split
+
+- **Owner and write set:** Integration+iOS (`ios/VictoriaKillZone/VictoriaKillZone/Features/Game/**`, `Features/Lobby/LobbyStore.swift`, `ActiveDuelView.swift`, `RootView.swift`, iOS tests, Xcode project registration, this log).
+- **What moved:** Duel combat state, fire actions, pending-shot reconciliation, kill/incoming event presentation, peer tracer handling, and shared game-loop tracing moved from `LobbyStore` into `@MainActor DuelSession`; combat views now observe the dedicated session.
+- **What hardened:** Peer tracers are accepted only from the current opponent, and Convex incoming-event deduplication is bounded to 256 IDs with ordered eviction.
+- **Observed on physical devices:** none.
+- **Two-phone TestFlight confirmation required:** peer tracer renders on the other phone; Convex miss suppression works while hit/eliminated events still render; peer link starts and stops across phase changes; debug fire remains unchanged.
