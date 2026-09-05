@@ -285,7 +285,7 @@ final class SharedArenaFrameTests: XCTestCase {
 
   // MARK: - Link framing
 
-  func testLinkCodecRoundTripsEveryKindThroughAFragmentedStream() throws {
+  func testFrameMapperRoundTripsEveryKindAndChunksBulk() throws {
     let sample = ArenaPeerSample(
       playerId: "host-1",
       sequence: 9,
@@ -301,8 +301,71 @@ final class SharedArenaFrameTests: XCTestCase {
       .hello(playerId: "host-1", role: .host, method: .collaborative),
       .poseSample(sample),
       .collaboration(Data(repeating: 0xAB, count: 3_000)),
+      .worldMap(Data(repeating: 0xCD, count: 300_000)),
+      .anchorSet(anchors),
+      .shotRetracted(shotId: "host-1#3"),
+    ]
+    var outbound = ArenaLinkFrameMapper(senderSlot: 0, epoch: 1)
+    var inbound = ArenaLinkFrameMapper(senderSlot: 1, epoch: 1)
+    for message in messages {
+      let frames = try outbound.outbound(message)
+      var decoded: [ArenaLinkMessage] = []
+      for frame in frames {
+        if let message = inbound.inbound(frame) {
+          decoded.append(message)
+        }
+      }
+      XCTAssertEqual(decoded, [message])
+    }
+    XCTAssertEqual(try anchors[1].transform().translation, ArenaVector3(x: 2, y: 0, z: 0))
+  }
+
+  func testBodyAndFrameMapperRejectBadPayloads() throws {
+    XCTAssertThrowsError(try ArenaLinkBodyCodec.decode(kind: 99, body: Data()))
+    XCTAssertThrowsError(try ArenaLinkBodyCodec.decode(kind: 2, body: Data([1, 2, 3])))
+
+    var mapper = ArenaLinkFrameMapper(senderSlot: 0, epoch: 1)
+    let oversized = try ArenaLinkBodyCodec.encode(.anchorSet(
+      [ArenaNamedAnchor(name: String(repeating: "a", count: 2_000), transform: .identity)]
+    ))
+    XCTAssertGreaterThan(oversized.body.count, ArenaLinkFrameMapper.controlBodyLimit)
+    XCTAssertGreaterThan(
+      try mapper.outbound(.anchorSet(
+        [ArenaNamedAnchor(name: String(repeating: "a", count: 2_000), transform: .identity)]
+      )).count,
+      1
+    )
+  }
+
+  func testTCPLinkCodecRoundTripsEveryKindThroughAFragmentedStream() throws {
+    let sample = ArenaPeerSample(
+      playerId: "host-1",
+      sequence: 9,
+      timestampMs: 5_000,
+      tracking: .normal,
+      arenaFromPhone: try yawTransform(degrees: 90, translation: ArenaVector3(x: 0, y: 1.2, z: -3))
+    )
+    let anchors = [
+      ArenaNamedAnchor(name: "arena-anchor-0", transform: .identity),
+      ArenaNamedAnchor(name: "arena-anchor-1", transform: try .translation(x: 2, y: 0, z: 0)),
+    ]
+    let shot = ArenaShotTracer(
+      shotId: "host-1#7",
+      shooterPlayerId: "host-1",
+      ray: try ArenaShotRay(
+        origin: ArenaVector3(x: 0.2, y: 1.4, z: 0.1),
+        direction: ArenaVector3(x: 0.6, y: 0, z: -0.8),
+        firedAtMs: 42
+      )
+    )
+    let messages: [ArenaLinkMessage] = [
+      .hello(playerId: "host-1", role: .host, method: .collaborative),
+      .poseSample(sample),
+      .collaboration(Data(repeating: 0xAB, count: 3_000)),
       .worldMap(Data(repeating: 0xCD, count: 70_000)),
       .anchorSet(anchors),
+      .shotTracer(shot),
+      .shotRetracted(shotId: shot.shotId),
     ]
     let stream = try messages.map(ArenaLinkCodec.encode).reduce(Data(), +)
 
@@ -315,12 +378,26 @@ final class SharedArenaFrameTests: XCTestCase {
       decoded += try ArenaLinkCodec.drainFrames(from: &buffer)
       cursor = next
     }
-    XCTAssertEqual(decoded, messages)
+    XCTAssertEqual(decoded.count, messages.count)
+    for (actual, expected) in zip(decoded, messages) {
+      if case let (.shotTracer(actualShot), .shotTracer(expectedShot)) = (actual, expected) {
+        XCTAssertEqual(actualShot.shotId, expectedShot.shotId)
+        XCTAssertEqual(actualShot.shooterPlayerId, expectedShot.shooterPlayerId)
+        XCTAssertEqual(actualShot.firedAtMs, expectedShot.firedAtMs)
+        XCTAssertEqual(actualShot.ray.origin.x, expectedShot.ray.origin.x, accuracy: 1e-6)
+        XCTAssertEqual(actualShot.ray.origin.y, expectedShot.ray.origin.y, accuracy: 1e-6)
+        XCTAssertEqual(actualShot.ray.origin.z, expectedShot.ray.origin.z, accuracy: 1e-6)
+        XCTAssertEqual(actualShot.ray.direction.x, expectedShot.ray.direction.x, accuracy: 1e-6)
+        XCTAssertEqual(actualShot.ray.direction.y, expectedShot.ray.direction.y, accuracy: 1e-6)
+        XCTAssertEqual(actualShot.ray.direction.z, expectedShot.ray.direction.z, accuracy: 1e-6)
+      } else {
+        XCTAssertEqual(actual, expected)
+      }
+    }
     XCTAssertTrue(buffer.isEmpty)
-    XCTAssertEqual(try anchors[1].transform().translation, ArenaVector3(x: 2, y: 0, z: 0))
   }
 
-  func testLinkCodecRejectsUnknownKindOversizeAndMalformedPayload() throws {
+  func testTCPLinkCodecRejectsUnknownTruncatedAndOversizedFrames() throws {
     var unknown = Data()
     withUnsafeBytes(of: UInt32(1).littleEndian) { unknown.append(contentsOf: $0) }
     unknown.append(99)
@@ -328,25 +405,25 @@ final class SharedArenaFrameTests: XCTestCase {
       XCTAssertEqual(error as? ArenaLinkCodecError, .unknownKind)
     }
 
-    var oversize = Data()
+    var oversized = Data()
     withUnsafeBytes(of: UInt32(ArenaLinkCodec.maxPayloadLength + 1).littleEndian) {
-      oversize.append(contentsOf: $0)
+      oversized.append(contentsOf: $0)
     }
-    XCTAssertThrowsError(try ArenaLinkCodec.drainFrames(from: &oversize)) { error in
+    XCTAssertThrowsError(try ArenaLinkCodec.drainFrames(from: &oversized)) { error in
       XCTAssertEqual(error as? ArenaLinkCodecError, .payloadTooLarge)
     }
 
-    var malformedPose = Data()
-    withUnsafeBytes(of: UInt32(4).littleEndian) { malformedPose.append(contentsOf: $0) }
-    malformedPose.append(contentsOf: [2, 0, 0, 0])
-    XCTAssertThrowsError(try ArenaLinkCodec.drainFrames(from: &malformedPose)) { error in
+    var malformed = Data()
+    withUnsafeBytes(of: UInt32(2).littleEndian) { malformed.append(contentsOf: $0) }
+    malformed.append(contentsOf: [2, 0])
+    XCTAssertThrowsError(try ArenaLinkCodec.drainFrames(from: &malformed)) { error in
       XCTAssertEqual(error as? ArenaLinkCodecError, .malformedPayload)
     }
 
-    var partial = try ArenaLinkCodec.encode(.worldMap(Data(count: 100)))
+    var partial = try ArenaLinkCodec.encode(.worldMap(Data(repeating: 0xAA, count: 100)))
     partial.removeLast()
     XCTAssertEqual(try ArenaLinkCodec.drainFrames(from: &partial), [])
-    XCTAssertEqual(partial.count, 4 + 1 + 99, "Partial frame stays buffered")
+    XCTAssertEqual(partial.count, 4 + 1 + 99)
   }
 
   // MARK: - Helpers
