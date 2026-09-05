@@ -1,6 +1,6 @@
 import { LIMITS, type CombatCommand, type CombatPlayerState, type CombatSnapshot, type ServerEvent, type ServerMessage } from "@vkz/combat-protocol";
 
-type Pending = {at: number; kind: CombatCommand["kind"]; shotId: string | null; measured: boolean; ack: boolean; result: boolean};
+type Pending = {at: number; kind: CombatCommand["kind"]; shotId: string | null; capturedAtMs: number | null; measured: boolean; ack: boolean; result: boolean};
 const count = (map: Record<string, number>, key: string): void => {map[key] = (map[key] ?? 0) + 1;};
 
 /** Synthetic local driver. Samples measure client-observed delivery, never server CPU time. */
@@ -17,6 +17,12 @@ export class LoadClient {
   readonly resultMs: number[] = [];
   readonly tickDeliveries: {ticks: number; wallMs: number}[] = [];
   readonly poseSendIntervalsMs: number[] = [];
+  readonly poseCaptureIntervalsMs: number[] = [];
+  readonly poseAgeAtResultMs: number[] = [];
+  readonly clockSamples: {atMatchMs: number; roundTripMs: number; adjustmentMs: number; authorityTick: number}[] = [];
+  readonly poseAnomalies: {tick: number; capturedAtMs: number; ageMs: number; reason: string | null}[] = [];
+  readonly phaseChanges: {tick: number; matchTimeMs: number; phase: string; reason: string; sincePoseSendMs: number | null; estimatedMatchMs: number}[] = [];
+  readonly diagnosticDrops = {clockSamples: 0, poseAnomalies: 0, phaseChanges: 0};
   readonly bulletEvents = new Map<number, string>();
   readonly terminalReasons: Record<string, number> = {};
   readonly projectiles = new Set<string>();
@@ -42,6 +48,7 @@ export class LoadClient {
   private lastTickAt = 0;
   private phaseAt = 0;
   private lastPoseAt: number | null = null;
+  private lastPoseCaptureAt: number | null = null;
   private clockTime = 0;
   private clockAt = 0;
   private readonly pongs = new Map<string, (message: Extract<ServerMessage, {type: "pong"}>) => void>();
@@ -89,21 +96,28 @@ export class LoadClient {
 
   async synchronizeClock(): Promise<void> {
     const nonce = crypto.randomUUID();
+    const sentAt = performance.now();
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {this.pongs.delete(nonce); reject(new Error("Clock sync timed out"));}, 3000);
       this.pongs.set(nonce, message => {
         clearTimeout(timeout);
+        if (this.measuring) {
+          if (this.clockSamples.length < 512) this.clockSamples.push({atMatchMs: message.serverSentAtMs,
+            roundTripMs: performance.now() - sentAt, adjustmentMs: message.serverSentAtMs - this.matchTimeMs,
+            authorityTick: this.latestAuthorityTick});
+          else this.diagnosticDrops.clockSamples++;
+        }
         // Receive-side anchor deliberately underestimates by delivery time. This
         // local fixture does not claim the physical client's clock uncertainty.
         this.clockTime = message.serverSentAtMs; this.clockAt = performance.now(); resolve();
       });
-      this.wire({type: "ping", nonce, clientSentAtMs: performance.now()});
+      this.wire({type: "ping", nonce, clientSentAtMs: sentAt});
     });
   }
 
   beginMeasurement(): void {
     this.measuring = true; this.phaseAt = performance.now(); this.lastTickAt = this.phaseAt;
-    this.lastTick = -1; this.lastPoseAt = null;
+    this.lastTick = -1; this.lastPoseAt = null; this.lastPoseCaptureAt = null;
   }
   endMeasurement(): void {this.recordPhase(); this.measuring = false;}
 
@@ -121,10 +135,13 @@ export class LoadClient {
       count(this.offered, command.kind);
       if (command.kind === "pose") {
         if (this.lastPoseAt !== null) this.poseSendIntervalsMs.push(now - this.lastPoseAt);
+        if (this.lastPoseCaptureAt !== null) this.poseCaptureIntervalsMs.push(command.pose.capturedAtMs - this.lastPoseCaptureAt);
         this.lastPoseAt = now;
+        this.lastPoseCaptureAt = command.pose.capturedAtMs;
       }
     }
     this.pending.set(commandId, {at: now, kind: command.kind, shotId: command.kind === "fire" ? command.shotId : null,
+      capturedAtMs: command.kind === "pose" ? command.pose.capturedAtMs : null,
       measured: this.measuring, ack: false, result: false});
     this.wire(data);
     return commandId;
@@ -160,7 +177,15 @@ export class LoadClient {
     this.tick(wrapped.tick);
     const event = wrapped.event;
     if (event.kind === "playerChanged") this.players.set(event.player.playerId, event.player);
-    if (event.kind === "phaseChanged") this.setPhase(event.phase);
+    if (event.kind === "phaseChanged") {
+      if (this.measuring) {
+        if (this.phaseChanges.length < 128) this.phaseChanges.push({tick: wrapped.tick, matchTimeMs: wrapped.matchTimeMs,
+          phase: event.phase, reason: event.reason, sincePoseSendMs: this.lastPoseAt === null ? null : performance.now() - this.lastPoseAt,
+          estimatedMatchMs: this.matchTimeMs});
+        else this.diagnosticDrops.phaseChanges++;
+      }
+      this.setPhase(event.phase);
+    }
     if (event.kind === "projectileSpawn" || event.kind === "projectileSegment" || event.kind === "projectileTerminal") {
       this.bulletEvents.set(wrapped.eventSequence, JSON.stringify(wrapped));
     }
@@ -174,6 +199,14 @@ export class LoadClient {
       if (!pending || pending.result) {this.errors.push("unexpectedCommandResult"); return;}
       pending.result = true; this.totalResults++;
       if (pending.measured) {
+        if (pending.capturedAtMs !== null) {
+          const ageMs = wrapped.matchTimeMs - pending.capturedAtMs;
+          this.poseAgeAtResultMs.push(ageMs);
+          if (!event.accepted || ageMs > LIMITS.poseAgeMs || ageMs < 0) {
+            if (this.poseAnomalies.length < 64) this.poseAnomalies.push({tick: wrapped.tick, capturedAtMs: pending.capturedAtMs, ageMs, reason: event.reason});
+            else this.diagnosticDrops.poseAnomalies++;
+          }
+        }
         if (event.accepted && pending.shotId !== null) this.acceptedShotIds.add(pending.shotId);
         this.resultMs.push(performance.now() - pending.at);
         count(event.accepted ? this.accepted : this.refusals, event.accepted ? pending.kind : `${pending.kind}:${event.reason ?? "unknown"}`);

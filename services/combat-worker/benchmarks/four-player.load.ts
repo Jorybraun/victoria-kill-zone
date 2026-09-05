@@ -4,8 +4,10 @@ import { afterEach, expect, it } from "vitest";
 import { DEFAULT_RULES, LIMITS, type BodyObservation, type CombatSnapshot, type Quaternion, type ServerEvent, type Vec3 } from "@vkz/combat-protocol";
 import { claims, requestUpgrade } from "../tests/helpers.js";
 import { LoadClient, percentiles, sleep, until } from "./load-client.js";
+import { installRuntimeProfile } from "./runtime-profile.js";
 
 declare const __VKZ_LOAD_MS__: number;
+declare const __VKZ_PROFILE__: boolean;
 const LOAD_MS = __VKZ_LOAD_MS__;
 const round = (value: number): number => Math.round(value * 1000) / 1000;
 const scenarios = ["miss-lanes", "opposing-combat"] as const;
@@ -22,6 +24,7 @@ for (const scenario of scenarios) it(`four-player ${scenario}: measured input, g
   const pumpLateness: number[] = [];
   let pumping = true, shoot = false, missedPumpSlots = 0;
   let pump: Promise<void> | undefined;
+  let profile: Awaited<ReturnType<typeof installRuntimeProfile>> | null = null;
   let clockSync = Promise.resolve(), clockSyncPending = false;
   let clockFailure: string | null = null;
   let nextClockSync = performance.now() + 1000;
@@ -42,6 +45,7 @@ for (const scenario of scenarios) it(`four-player ${scenario}: measured input, g
       await client.synchronizeClock();
       client.send({kind: "frameReady", ready: true, residualMeters: 0.01, residualDegrees: 0.1, clockUncertaintyMs: 1});
     }
+    if (__VKZ_PROFILE__) profile = await installRuntimeProfile(ticket.matchId);
     pump = (async () => {
       let due = performance.now();
       while (pumping) {
@@ -82,6 +86,7 @@ for (const scenario of scenarios) it(`four-player ${scenario}: measured input, g
     clients[0]!.send({kind: "start"});
     await until(() => clients.every(client => client.phase === "running"));
     await sleep(500); // Warmup is excluded from the measurement window.
+    await profile?.begin();
     const beganAt = performance.now(), beganMatchMs = clients[0]!.matchTimeMs;
     const beganAuthorityTick = clients[0]!.latestAuthorityTick;
     for (const client of clients) client.beginMeasurement();
@@ -92,6 +97,8 @@ for (const scenario of scenarios) it(`four-player ${scenario}: measured input, g
     const observedAuthorityElapsedMs = (clients[0]!.latestAuthorityTick - beganAuthorityTick) * LIMITS.tickMs;
     shoot = false;
     for (const client of clients) client.endMeasurement();
+    const runtimeProfile = await profile?.read() ?? null;
+    await profile?.stop();
     // Continue fresh tracking while every in-flight projectile reaches a terminal.
     await sleep(ticket.rules.weapon.lifetimeMs + 500);
     pumping = false; await pump; await clockSync;
@@ -118,7 +125,7 @@ for (const scenario of scenarios) it(`four-player ${scenario}: measured input, g
     const shotIdentityMatches = {acceptedFireCount, uniqueAcceptedShots: expectedShots.length,
       spawnsMatchAccepted: JSON.stringify(expectedShots) === JSON.stringify(spawnedShots),
       terminalsMatchAccepted: JSON.stringify(expectedShots) === JSON.stringify(terminalShots)};
-    const result = {scenario, activeLoadMs: LOAD_MS, activeElapsedMs, estimatedClockElapsedMs, observedAuthorityElapsedMs,
+    const result = {scenario, activeLoadMs: LOAD_MS, activeElapsedMs, estimatedClockElapsedMs, observedAuthorityElapsedMs, runtimeProfile,
       limitations: ["local synthetic workerd; no device or cloud latency", "maximum synthetic collider payload, not camera coverage evidence", "delivery intervals are not server tick execution or CPU", "projection endpoint disabled; outbox persistence only"],
       offeredPoseIntervalMs: LIMITS.tickMs, expectedPosesPerPlayer: LOAD_MS / LIMITS.tickMs, missedPumpSlots,
       pumpLatenessMs: percentiles(pumpLateness),
@@ -127,7 +134,10 @@ for (const scenario of scenarios) it(`four-player ${scenario}: measured input, g
       activeOutputBytes: clients.reduce((sum, client) => sum + client.measuredOutputBytes, 0),
       players: clients.map(client => ({playerId: client.playerId, offered: client.offered, accepted: client.accepted, refusals: client.refusals,
         acknowledgmentMs: percentiles(client.acknowledgmentMs), commandResultMs: percentiles(client.resultMs),
-        poseSendIntervalMs: percentiles(client.poseSendIntervalsMs), observedTickDeliveryMs: percentiles(client.tickDeliveries.map(item => item.wallMs)),
+        poseSendIntervalMs: percentiles(client.poseSendIntervalsMs), poseCaptureIntervalMs: percentiles(client.poseCaptureIntervalsMs),
+        poseAgeAtResultMs: percentiles(client.poseAgeAtResultMs), clockSamples: client.clockSamples,
+        poseAnomalies: client.poseAnomalies, phaseChanges: client.phaseChanges, diagnosticDrops: client.diagnosticDrops,
+        observedTickDeliveryMs: percentiles(client.tickDeliveries.map(item => item.wallMs)),
         tickGaps: client.tickDeliveries.filter(item => item.ticks > 1).length, phaseWallMs: client.phaseWallMs,
         maximumProjectiles: client.maximumProjectiles, terminalReasons: client.terminalReasons,
         missingEvents: client.missingEvents, duplicateEvents: client.duplicateEvents, snapshotHealedEvents: client.snapshotHealedEvents,
@@ -170,6 +180,7 @@ for (const scenario of scenarios) it(`four-player ${scenario}: measured input, g
     pumping = false;
     if (pump) await pump.catch(() => undefined);
     await clockSync;
+    await profile?.stop();
     for (const client of clients) client.close();
   }
 });

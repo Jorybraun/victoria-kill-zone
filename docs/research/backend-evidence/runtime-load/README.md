@@ -68,6 +68,49 @@ The original baseline's `activeSimulatedMs` field was an estimate extrapolated f
 
 Before the three-minute runs, independent review strengthened the driver: clock refresh runs independently of pose scheduling, and each accepted `(playerId, shotId)` must have exactly one durable spawn and one terminal. Equal client/server ledgers alone could conceal a shot omitted from both; the final harness rejects that case and separately reconciles durable bullet count to accepted fire count. The 30-second reports happen to reconcile those counts (352 and 136), but were captured before the explicit identity assertion. Do not treat the different-duration/driver runs as a controlled latency comparison.
 
+### Diagnosing tracking pauses
+
+`VKZ_PROFILE=1 pnpm --dir services/combat-worker test:load` additionally observes the actual room, storage and simulation methods through the local test harness. Installation runs a bounded clock-resolution probe before warmup. Fixed histograms retain every method duration without an unbounded sample buffer; up to 64 coverage-pause records retain tick/cadence, pending pose ages, and the latest admitted/accepted pose timestamps. No body geometry, ticket or credential payload is retained. Wrappers preserve original return values and promises, and are removed before terminal drain. Nested method durations overlap; they cannot be summed as independent CPU stages. The probe identifies whether this local runtime's clock advances during synchronous work. These elapsed timings are not deployed CPU billing or network measurements; Cloudflare documents the [local/deployed timer distinction](https://developers.cloudflare.com/workers/runtime-apis/performance/).
+
+The driver also records bounded clock RTT/adjustment and phase histories, capture intervals, and authority-side pose age/refusal diagnostics. This first profiling pass deliberately preserves its existing receive-side clock anchor. That anchor differs from the native four-timestamp, uncertainty-gated estimator: a delayed pong can move the synthetic estimate backward. Pose rejection or loss of coverage can therefore reflect driver error as well as worker delay. A later driver correction must be identified separately from a runtime optimization, with the failed original evidence retained.
+
+### Collision profiling and bounded geometry reuse
+
+The next paired 30-second run reproduced cancellation with profiling enabled. Both clock probes advanced during synchronous work, at a measured 1 ms resolution. Driver clock adjustments stayed within ±1 ms in these runs; large clock resets were not the observed cause. The miss-lane pauses occurred after empty ticks with the latest accepted poses aged 114/119 ms. Simulation advance dominated measured tick work; synchronous command lookup, checkpoint and SQL commit times were materially smaller.
+
+The collision resolver now reuses a target's interpolated body geometry for the exact same interval while collecting one batch of collision candidates. It retains at most 128 target/interval entries and computes excess intervals without retaining them. Shield poses remain lazy. Selection, freshness, sweep tolerances and global impact ordering are unchanged, and the cache is discarded before the next resolution. Independent regressions compare 128 simultaneous misses with separate resolutions, distinguish historical/current target geometry, reject reuse across later observations, and prove that an overflowing repeated interval is recomputed while preserving its hits.
+
+| Profiled 30-second observation | Before, miss lanes | Cached, miss lanes | Before, opposing | Cached, opposing |
+|---|---:|---:|---:|---:|
+| Test outcome | **Failed** | Passed | **Failed** | Passed |
+| Simulation advance mean / max, ms | 22.94 / 89 | 6.54 / 35 | 7.24 / 64 | 3.77 / 35 |
+| Whole tick mean, ms | 24.71 | 8.96 | 9.30 | 5.75 |
+| Cancelled bullets | 75 | 0 | 22 | 0 |
+| Coverage pauses | 2 | 0 | 3 | 0 |
+| Accepted shots / durable bullets | 352 / 352 | 352 / 352 | 140 / 140 | 137 / 137 |
+| Acknowledgment p95 across players, ms | 64–74 | 50 | 37–39 | 23 |
+| Exact client/ledger agreement | 4 / 4 | 4 / 4 | 4 / 4 | 4 / 4 |
+
+Raw reports: [profile-before-30s.json](profile-before-30s.json) and [profile-cached-30s.json](profile-cached-30s.json). Their allowlisted source manifests differ only in `packages/combat-simulation/src/flight.ts`; driver, instrumentation and workload are identical. Mean advance time fell about 71% in the busiest fixture. This is one controlled local observation with inclusive, coarse wall timings, not a statistical or cloud performance guarantee. `commitCandidate` includes snapshot/checkpoint/event work and awaited synchronization; it is not a direct measurement of storage sync. If a future clock probe does not advance during synchronous work, synchronous stage attribution is unavailable rather than zero-cost.
+
+### Sustained run after geometry reuse: one acceptance failure remains
+
+[cached-180s.json](cached-180s.json) records a subsequent three-minute run with runtime profiling disabled and the same gameplay/freshness assertions. Opposing combat passes; miss lanes still fail the zero-cancellation gate. The original failed reports remain above.
+
+| Three-minute observation after geometry reuse | Miss lanes | Opposing combat |
+|---|---:|---:|
+| Test outcome | **Failed** | Passed |
+| Accepted shots / durable bullets | 2,096 / 2,096 | 584 / 584 |
+| Cancelled bullets | **120** | 0 |
+| First-client paused time, ms | 242 | 0 |
+| Accepted poses per player | 3,600 / 3,600 / 3,598 / 3,597 | 3,600 each |
+| Pose send interval p99, ms | 52 each | 52 each |
+| Acknowledgment p95 across players, ms | 29–30 | 31 |
+| Exact client/ledger agreement | 4 / 4 | 4 / 4 |
+| Database allocation, bytes | 4,861,952 | 2,691,072 |
+
+Every accepted shot still matches exactly one spawn and terminal; unresolved bullets, missing/duplicate/healed events and authority recoveries remain zero. The first two miss-lane clients had no pose refusals; the others had two/three stale-pose refusals. All offered pose intervals stayed below 85 ms, and the driver had no missed pump slots. Thus improving normal simulation time and input cadence has not eliminated occasional admission/coverage failures. The next measurement should use an independent client process and the native clock estimator, while measuring command arrival/queue residence and authority catch-up around each pause. Clock-quality loss must remain a failure, and no freshness or cancellation gate should be relaxed to hide it. This local result does not establish full-round production readiness.
+
 ## Rollout and remaining evidence
 
 This candidate has not been deployed. New code reads both legacy and compact fingerprints; an older revision only reads legacy fingerprints. After compact rows are written, rollback must use a revision with digest-read compatibility or allow the affected match to finish. Do not silently roll an active room back to a legacy-only reader or rewrite its command history.
