@@ -122,11 +122,11 @@ final class DuelFrameReferenceTests: XCTestCase {
 @MainActor
 final class DuelFrameReferenceProviderTests: XCTestCase {
   func testHostMustCaptureReferenceBeforeArchivingAndBundleContainsActualDriverResult() async throws {
-    let driver = ReferenceFrameDriver()
-    let active = DuelFrameProvider(targeting: driver)
+    let driver = ReferenceFrameDriver(), clock = ReferenceTestClock()
+    let active = DuelFrameProvider(targeting: driver, now: { clock.now })
+    addTeardownBlock { await active.stop() }
     try await active.beginCalibration(epoch: 1)
-    driver.emit(phase: .mapping, tracking: .normal, mapped: true)
-    await settle()
+    await driver.emit(phase: .mapping, tracking: .normal, mapped: true, at: clock.advance())
     do { _ = try await active.captureMap(); XCTFail("Missing reference must never create a ready bundle") }
     catch { XCTAssertEqual(error as? DuelFrameFailure, .referenceUnavailable) }
     let summary = try await active.captureReference()
@@ -140,71 +140,153 @@ final class DuelFrameReferenceProviderTests: XCTestCase {
   }
 
   func testRealReferenceSamplesUnlockThenInvisibleReferenceImmediatelyClosesGate() async throws {
-    let driver = ReferenceFrameDriver(), provider = DuelFrameProvider(targeting: driver)
+    let driver = ReferenceFrameDriver(), clock = ReferenceTestClock()
+    let provider = DuelFrameProvider(targeting: driver, now: { clock.now })
+    addTeardownBlock { await provider.stop() }
     let reference = try makeFrameReference()
     let map = try DuelFrameMap(epoch: 1, bytes: DuelFrameCalibrationBundle.encode(worldMap: Data([1]), reference: reference))
     try await provider.beginCalibration(epoch: 1)
     try await provider.installMap(map)
+    await relocalize(driver, map: map, clock: clock)
+    XCTAssertFalse(provider.snapshot.permitsSpatialFire(at: clock.now))
+    for (index, timestamp) in [1.0, 1.03, 1.06].enumerated() {
+      let now = clock.advance(by: 0.03)
+      await driver.emit(map: map, phase: .bodyRelocalization, tracking: .normal,
+        reference: DuelFrameReferenceObservation(referenceID: reference.id, mapFromImage: reference.mapFromImage,
+          isTracked: true, frameTimestamp: timestamp, capturedAt: now), at: now)
+      XCTAssertEqual(provider.snapshot.permitsSpatialFire(at: clock.now), index == 2,
+        "Exactly three fresh independent reference samples are required")
+    }
+    let invisibleAt = clock.advance(by: 0.03)
+    await driver.emit(map: map, phase: .bodyRelocalization, tracking: .normal,
+      reference: DuelFrameReferenceObservation(referenceID: reference.id, mapFromImage: reference.mapFromImage,
+        isTracked: false, frameTimestamp: 1.09, capturedAt: invisibleAt), at: invisibleAt)
+    XCTAssertFalse(provider.snapshot.permitsSpatialFire(at: clock.now), "No watchdog tick is needed to revoke permission")
+    XCTAssertEqual(provider.snapshot.failure, .referenceUnavailable)
+  }
+
+  func testReferenceOlderThanFreshnessLimitCannotUnlockThenFreshEvidenceCanRecover() async throws {
+    let driver = ReferenceFrameDriver(), clock = ReferenceTestClock()
+    let provider = DuelFrameProvider(targeting: driver, now: { clock.now })
+    addTeardownBlock { await provider.stop() }
+    let reference = try makeFrameReference()
+    let map = try DuelFrameMap(epoch: 1, bytes: DuelFrameCalibrationBundle.encode(worldMap: Data([1]), reference: reference))
+    try await provider.beginCalibration(epoch: 1)
+    try await provider.installMap(map)
+    await relocalize(driver, map: map, clock: clock)
+    for timestamp in [1.0, 1.03, 1.06] {
+      let now = clock.advance(by: 0.03)
+      await driver.emit(map: map, phase: .bodyRelocalization, tracking: .normal,
+        reference: DuelFrameReferenceObservation(referenceID: reference.id, mapFromImage: reference.mapFromImage,
+          isTracked: true, frameTimestamp: timestamp, capturedAt: now.addingTimeInterval(-0.101)), at: now)
+      XCTAssertFalse(provider.snapshot.permitsSpatialFire(at: clock.now))
+      XCTAssertNil(provider.snapshot.residual, "A fresh camera pose cannot renew stale reference evidence")
+      XCTAssertEqual(provider.snapshot.failure, .referenceUnavailable)
+    }
+    for (index, timestamp) in [1.09, 1.12, 1.15].enumerated() {
+      let now = clock.advance(by: 0.03)
+      await driver.emit(map: map, phase: .bodyRelocalization, tracking: .normal,
+        reference: DuelFrameReferenceObservation(referenceID: reference.id, mapFromImage: reference.mapFromImage,
+          isTracked: true, frameTimestamp: timestamp, capturedAt: now), at: now)
+      XCTAssertEqual(provider.snapshot.permitsSpatialFire(at: clock.now), index == 2)
+    }
+    clock.advance(by: 0.101)
+    XCTAssertFalse(provider.snapshot.permitsSpatialFire(at: clock.now), "The firing check expires evidence without waiting for the watchdog")
+  }
+
+  func testLegacyMapCannotGetResidualFromNormalTracking() async throws {
+    let driver = ReferenceFrameDriver(), clock = ReferenceTestClock()
+    let provider = DuelFrameProvider(targeting: driver, now: { clock.now })
+    addTeardownBlock { await provider.stop() }
+    try await provider.beginCalibration(epoch: 1)
+    let legacy = try DuelFrameMap(epoch: 1, bytes: Data([1]))
+    try await provider.installMap(legacy)
+    await relocalize(driver, map: legacy, clock: clock)
+    XCTAssertEqual(provider.referenceState, .unavailable)
+    XCTAssertEqual(provider.snapshot.stage, .awaitingResidual, "Missing evidence remains an explicit setup step")
+    XCTAssertFalse(provider.snapshot.permitsSpatialFire(at: clock.now))
+    XCTAssertNil(provider.snapshot.residual)
+  }
+
+  private func relocalize(_ driver: ReferenceFrameDriver, map: DuelFrameMap, clock: ReferenceTestClock) async {
     let steps: [(DuelFrameSessionPhase, DuelFrameTracking)] = [
       (.worldRelocalization, .relocalizing), (.worldRelocalization, .normal),
       (.bodyRelocalization, .relocalizing), (.bodyRelocalization, .normal),
     ]
     for (phase, tracking) in steps {
-      driver.emit(map: map, phase: phase, tracking: tracking); await settle()
+      await driver.emit(map: map, phase: phase, tracking: tracking, at: clock.advance())
     }
-    XCTAssertFalse(provider.snapshot.permitsSpatialFire())
-    for timestamp in [1.0, 1.03, 1.06] {
-      let now = Date()
-      driver.emit(map: map, phase: .bodyRelocalization, tracking: .normal,
-        reference: DuelFrameReferenceObservation(referenceID: reference.id, mapFromImage: reference.mapFromImage,
-          isTracked: true, frameTimestamp: timestamp, capturedAt: now))
-      await settle()
-    }
-    XCTAssertTrue(provider.snapshot.permitsSpatialFire())
-    driver.emit(map: map, phase: .bodyRelocalization, tracking: .normal,
-      reference: DuelFrameReferenceObservation(referenceID: reference.id, mapFromImage: reference.mapFromImage,
-        isTracked: false, frameTimestamp: 1.09, capturedAt: Date()))
-    await settle()
-    XCTAssertFalse(provider.snapshot.permitsSpatialFire())
-    XCTAssertEqual(provider.snapshot.failure, .referenceUnavailable)
-    await provider.stop()
   }
+}
 
-  func testLegacyMapCannotGetResidualFromNormalTracking() async throws {
-    let driver = ReferenceFrameDriver(), provider = DuelFrameProvider(targeting: driver)
-    try await provider.beginCalibration(epoch: 1)
-    let legacy = try DuelFrameMap(epoch: 1, bytes: Data([1]))
-    try await provider.installMap(legacy)
-    let steps: [(DuelFrameSessionPhase, DuelFrameTracking)] = [
-      (.worldRelocalization, .relocalizing), (.worldRelocalization, .normal),
-      (.bodyRelocalization, .relocalizing), (.bodyRelocalization, .normal),
-    ]
-    for (phase, tracking) in steps { driver.emit(map: legacy, phase: phase, tracking: tracking); await settle() }
-    XCTAssertEqual(provider.referenceState, .unavailable)
-    XCTAssertEqual(provider.snapshot.stage, .awaitingResidual, "Missing evidence remains an explicit setup step")
-    XCTAssertFalse(provider.snapshot.permitsSpatialFire())
-    XCTAssertNil(provider.snapshot.residual)
-    await provider.stop()
+@MainActor
+private final class ReferenceTestClock {
+  private(set) var now = Date(timeIntervalSince1970: 1_000)
+  @discardableResult
+  func advance(by interval: TimeInterval = 0.01) -> Date {
+    now.addTimeInterval(interval)
+    return now
   }
-
-  private func settle() async { try? await Task.sleep(for: .milliseconds(12)) }
 }
 
 private final class ReferenceFrameDriver: DuelFrameSessionDriving, @unchecked Sendable {
-  let hub = DuelFrameObservationHub()
-  func duelFrameObservations() -> AsyncStream<DuelFrameObservation> { hub.stream() }
+  private let source = ReferenceObservationSource()
+  func duelFrameObservations() -> AsyncStream<DuelFrameObservation> {
+    AsyncStream(unfolding: { [source] in await source.next() })
+  }
   func beginFrameMapping(epoch: UInt16) async throws {}
   func installFrameMap(_ map: DuelFrameMap, phase: DuelFrameSessionPhase) async throws {}
-  func endFrameMapping() async {}
+  func endFrameMapping() async { await source.finish() }
   func captureFrameReference(epoch: UInt16) async throws -> DuelFrameReference { try makeFrameReference() }
   func captureFrameMap(epoch: UInt16) async throws -> Data { Data([1, 2, 3]) }
+  @MainActor
   func emit(map: DuelFrameMap? = nil, phase: DuelFrameSessionPhase, tracking: DuelFrameTracking,
-    mapped: Bool = false, reference: DuelFrameReferenceObservation? = nil) {
-    let date = Date()
-    hub.yield(DuelFrameObservation(epoch: map?.epoch ?? 1, frameID: map?.frameID, phase: phase,
+    mapped: Bool = false, reference: DuelFrameReferenceObservation? = nil, at date: Date,
+    file: StaticString = #filePath, line: UInt = #line) async {
+    let consumed = XCTestExpectation(description: "Provider consumed \(phase) / \(tracking) observation")
+    await source.enqueue(DuelFrameObservation(epoch: map?.epoch ?? 1, frameID: map?.frameID, phase: phase,
       tracking: tracking, isMapped: mapped, pose: tracking == .normal
         ? DuelFramePose(columnMajor: identity, capturedAt: date, frameTimestamp: 1) : nil,
-      observedAt: date, failure: nil, referenceObservation: reference))
+      observedAt: date, failure: nil, referenceObservation: reference), consumed: consumed)
+    let result = await XCTWaiter.fulfillment(of: [consumed], timeout: 1)
+    XCTAssertEqual(result, .completed, "Provider must finish processing before the next sensor event", file: file, line: line)
+  }
+}
+
+/// Asking for the next event proves the provider's awaited receive has returned.
+/// This fixture controls delivery; the production latest-only hub remains unchanged.
+private actor ReferenceObservationSource {
+  private var pending: CheckedContinuation<DuelFrameObservation?, Never>?
+  private var queued: (DuelFrameObservation, XCTestExpectation)?
+  private var inFlight: XCTestExpectation?
+  private var finished = false
+
+  func next() async -> DuelFrameObservation? {
+    inFlight?.fulfill()
+    inFlight = nil
+    if finished { return nil }
+    if let (observation, consumed) = queued {
+      queued = nil
+      inFlight = consumed
+      return observation
+    }
+    return await withCheckedContinuation { pending = $0 }
+  }
+
+  func enqueue(_ observation: DuelFrameObservation, consumed: XCTestExpectation) {
+    if let pending {
+      self.pending = nil
+      inFlight = consumed
+      pending.resume(returning: observation)
+    } else {
+      queued = (observation, consumed)
+    }
+  }
+
+  func finish() {
+    finished = true
+    pending?.resume(returning: nil)
+    pending = nil
   }
 }
 private let identity: [Double] = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]

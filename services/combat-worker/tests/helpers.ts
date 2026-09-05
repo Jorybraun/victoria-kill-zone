@@ -1,5 +1,8 @@
 import { env, exports as workerExports } from "cloudflare:workers";
+import { runInDurableObject } from "cloudflare:test";
 import { DEFAULT_RULES, LIMITS, type CombatTicketClaims, type CommandEnvelope, type ServerEvent, type ServerMessage, type Vec3 } from "@vkz/combat-protocol";
+import type { CombatSimulation } from "@vkz/combat-simulation";
+import type { SerialQueue } from "../src/serial-queue.js";
 
 export function claims(overrides: Partial<CombatTicketClaims> = {}): CombatTicketClaims {
   const now = Math.floor(Date.now() / 1000);
@@ -36,15 +39,19 @@ export class SocketInbox {
   readonly closed: Promise<number>;
   private readonly listeners = new Set<() => void>();
   private highestReceived = 0;
+  private closing = false;
 
   constructor(readonly socket: WebSocket, autoReceipt = true) {
-    this.closed = new Promise((resolve) => socket.addEventListener("close", (event) => resolve(event.code)));
+    this.closed = new Promise((resolve) => socket.addEventListener("close", (event) => {
+      this.closing = true;
+      resolve(event.code);
+    }));
     socket.addEventListener("message", (event) => {
       if (typeof event.data !== "string") throw new Error("Worker emitted non-text protocol data");
       // Server output under test; individual tests assert its declared wire shape.
       const message = JSON.parse(event.data) as ServerMessage;
       this.messages.push(message);
-      if (autoReceipt) {
+      if (autoReceipt && !this.closing && socket.readyState === WebSocket.OPEN) {
         const sequence = message.type === "events" ? message.events.at(-1)?.eventSequence : message.type === "snapshot" ? message.eventSequence : undefined;
         if (sequence !== undefined) {
           this.highestReceived = Math.max(sequence, this.highestReceived);
@@ -107,6 +114,7 @@ export class SocketInbox {
   }
 
   close(): void {
+    this.closing = true;
     if (this.socket.readyState === WebSocket.OPEN) this.socket.close(1000, "test-complete");
   }
 }
@@ -124,16 +132,10 @@ export function command(snapshot: Extract<ServerMessage, { type: "snapshot" }>, 
   };
 }
 
-/** A bounded stationary phone feed using a live authority clock, never admission time. */
-export async function phoneInput(socket: SocketInbox, initial: Extract<ServerMessage, { type: "snapshot" }>, position: Vec3) {
-  const nonce = crypto.randomUUID();
-  socket.socket.send(JSON.stringify({ type: "ping", nonce, clientSentAtMs: performance.now() }));
-  const pong = await socket.next("pong", (message) => message.nonce === nonce);
-  const receivedAt = performance.now();
-  const now = () => pong.serverSentAtMs + Math.max(0, performance.now() - receivedAt);
+/** Stationary phone commands stamped by the test's current authority tick. */
+export function phoneInput(socket: SocketInbox, initial: Extract<ServerMessage, { type: "snapshot" }>, position: Vec3, now: () => number) {
   let clientSequence = initial.clientSequence;
   let poseSequence = 0;
-  let timer: ReturnType<typeof setInterval> | null = null;
   const send = (payload: CommandEnvelope["command"]): CommandEnvelope => {
     const envelope = { ...command(initial, ++clientSequence, payload), sentAtMs: now() };
     socket.send(envelope);
@@ -142,20 +144,69 @@ export async function phoneInput(socket: SocketInbox, initial: Extract<ServerMes
   const sample = (): CommandEnvelope => send({ kind: "pose", observations: [], pose: {
     sequence: ++poseSequence, capturedAtMs: now(), position, orientation: [0, 0, 0, 1], tracking: "normal",
   } });
-  const stopTracking = (): void => { clearInterval(timer); timer = null; };
   return {
-    send, sample, stopTracking,
+    send, sample,
     get poseSequence() { return poseSequence; },
-    startTracking(): CommandEnvelope {
-      stopTracking();
-      let remaining = 60;
-      const first = sample();
-      // Match the authority's 20 Hz cadence; stop even if a failed assertion skips cleanup.
-      timer = setInterval(() => {
-        if (--remaining === 0 || socket.socket.readyState !== WebSocket.OPEN) { stopTracking(); return; }
-        sample();
-      }, LIMITS.tickMs);
-      return first;
+  };
+}
+
+type ScheduledRoom = {
+  queue: Pick<SerialQueue, "run">;
+  cadence: { reset(now: number): void };
+  simulation: Pick<CombatSimulation, "snapshot"> | null;
+  pending: readonly { command: CommandEnvelope }[];
+  stopTimer(): void;
+  scheduleTick(): void;
+  tick(): Promise<void>;
+};
+
+/**
+ * Confines private scheduler access to one isolated test object, before admission.
+ * Real authenticated WebSockets, SerialQueue, simulation, commit/sync and broadcasts
+ * remain in use. Cadence and real scheduling are covered by cadence/load suites;
+ * this fixture advances logical time explicitly, without changing freshness gates.
+ */
+export async function manuallyScheduledRoom(matchId: string) {
+  const stub = env.COMBAT_ROOMS.getByName(matchId);
+  await runInDurableObject(stub, async (instance) => {
+    const room = instance as unknown as ScheduledRoom;
+    await room.queue.run(() => {
+      if (room.simulation !== null) throw new Error("Install the fixture scheduler before connecting phones");
+      room.stopTimer();
+      room.scheduleTick = () => {};
+    });
+  });
+  let matchTimeMs = 0;
+  return {
+    get matchTimeMs() { return matchTimeMs; },
+    async tick(sockets: readonly SocketInbox[] = [], inputs: readonly CommandEnvelope[] = []) {
+      // A pong sent after this socket's commands crosses its real admission queue.
+      // Wait for every participating socket, then require the exact admitted batch.
+      await Promise.all(sockets.map(async (socket) => {
+        const nonce = crypto.randomUUID();
+        socket.socket.send(JSON.stringify({ type: "ping", nonce, clientSentAtMs: performance.now() }));
+        await socket.next("pong", (message) => message.nonce === nonce);
+        const refusal = socket.messages.find((message) => message.type === "error");
+        if (refusal?.type === "error") throw new Error(`Fixture admission failed: ${refusal.code}`);
+      }));
+      const snapshot = await runInDurableObject(stub, async (instance) => {
+        const room = instance as unknown as ScheduledRoom;
+        return room.queue.run(async () => {
+          const actual = room.pending.map((item) => item.command.commandId).sort();
+          const expected = inputs.map((input) => input.commandId).sort();
+          if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error("Fixture tick did not receive the exact WebSocket command batch");
+          const before = room.simulation?.snapshot();
+          if (before === undefined) throw new Error("Fixture requires admitted phones");
+          // CI wall-clock delays must not masquerade as a simulated authority stall.
+          room.cadence.reset(performance.now());
+          await room.tick();
+          const after = room.simulation?.snapshot();
+          if (after === undefined || after.matchTimeMs !== before.matchTimeMs + LIMITS.tickMs) throw new Error("Fixture did not commit exactly one authority tick");
+          return after;
+        });
+      });
+      matchTimeMs = snapshot.matchTimeMs;
+      return snapshot;
     },
   };
 }
