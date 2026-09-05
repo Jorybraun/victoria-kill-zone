@@ -54,11 +54,19 @@ describe("native authenticated WebSocket admission", () => {
 
   it("invalidates the replaced phone's spatial readiness and latest pose", async () => {
     const payload = claims();
+    const room = await manuallyScheduledRoom(payload.matchId);
     const first = await connect(payload);
     const initial = await first.next("snapshot");
-    first.send(command(initial, 1, { kind: "frameReady", ready: true, residualMeters: 0.01, residualDegrees: 0.1, clockUncertaintyMs: 1 }));
-    first.send(command(initial, 2, { kind: "pose", observations: [], pose: { sequence: 1, capturedAtMs: initial.snapshot.matchTimeMs,
-      position: [0, 0, 0], orientation: [0, 0, 0, 1], tracking: "normal" } }));
+    for (let tick = 0; tick <= LIMITS.rewindMs / LIMITS.tickMs; tick += 1) await room.tick();
+    const input = phoneInput(first, initial, [0, 0, 0], () => room.matchTimeMs);
+    const ready = input.send({ kind: "frameReady", ready: true, residualMeters: 0.01, residualDegrees: 0.1, clockUncertaintyMs: 1 });
+    const pose = input.sample();
+    const prepared = await room.tick([first], [ready, pose]);
+    for (const envelope of [ready, pose]) {
+      expect((await first.result(envelope)).event).toMatchObject({ accepted: true, reason: null });
+    }
+    expect(prepared.players.find((player) => player.playerId === "host")?.frameReady).toBe(true);
+    expect(prepared.phonePoses.some((sample) => sample.playerId === "host")).toBe(true);
     await first.next("ack", (ack) => ack.clientSequence === 2);
     const replacement = await connect(payload);
     const replaced = await replacement.next("snapshot");
@@ -73,16 +81,19 @@ describe("native authenticated WebSocket admission", () => {
 describe("durable command processing", () => {
   it("persists a refusal before acknowledgment and replays it without changing state", async () => {
     const payload = claims();
+    const room = await manuallyScheduledRoom(payload.matchId);
     const socket = await connect(payload);
     const initial = await socket.next("snapshot");
     const input = command(initial, 1, { kind: "reload" });
     socket.send(input);
+    await room.tick([socket], [input]);
+    expect((await socket.result(input)).event).toMatchObject({ accepted: false, reason: "notRunning" });
     const ack = await socket.next("ack");
     expect(ack).toMatchObject({ commandId: input.commandId, clientSequence: 1, replayed: false });
     const stub = env.COMBAT_ROOMS.getByName(payload.matchId);
     const row = await runInDurableObject(stub, (_instance, state) => state.storage.sql.exec<{ client_sequence: number; result_json: string }>("SELECT client_sequence, result_json FROM commands WHERE player_id = ?", "host").one());
     expect(row.client_sequence).toBe(1);
-    expect(JSON.parse(row.result_json)).toMatchObject({ event: { kind: "commandResult", accepted: false } });
+    expect(JSON.parse(row.result_json)).toMatchObject({ event: { kind: "commandResult", accepted: false, reason: "notRunning" } });
     socket.send(input);
     expect(await socket.next("ack")).toEqual({ ...ack, replayed: true });
     const count = await runInDurableObject(stub, (_instance, state) => state.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM commands").one().count);
@@ -92,10 +103,13 @@ describe("durable command processing", () => {
 
   it("rejects changed identities, skipped sequences, and mismatched epochs", async () => {
     const payload = claims();
+    const room = await manuallyScheduledRoom(payload.matchId);
     const socket = await connect(payload);
     const initial = await socket.next("snapshot");
     const input = command(initial, 1, { kind: "reload" });
     socket.send(input);
+    await room.tick([socket], [input]);
+    expect((await socket.result(input)).event).toMatchObject({ accepted: false, reason: "notRunning" });
     await socket.next("ack");
     socket.send({ ...input, command: { kind: "start" } });
     expect(await socket.next("error")).toMatchObject({ code: "idempotencyConflict" });
@@ -108,10 +122,13 @@ describe("durable command processing", () => {
 
   it("restores durable outcomes while requiring a new authority/frame readiness handshake", async () => {
     const payload = claims();
+    const room = await manuallyScheduledRoom(payload.matchId);
     const socket = await connect(payload);
     const initial = await socket.next("snapshot");
     const input = command(initial, 1, { kind: "reload" });
     socket.send(input);
+    await room.tick([socket], [input]);
+    expect((await socket.result(input)).event).toMatchObject({ accepted: false, reason: "notRunning" });
     const original = await socket.next("ack");
     socket.close();
     await socket.closed;
@@ -139,7 +156,11 @@ describe("durable command processing", () => {
     await runInDurableObject(stub, (_instance, state) => {
       state.storage.sql.exec("CREATE TRIGGER reject_test_command BEFORE INSERT ON commands BEGIN SELECT RAISE(ABORT, 'test storage failure'); END");
     });
-    socket.send(command(initial, 1, { kind: "reload" }));
+    // Keep the real timer/failRoom path, but do not spend input freshness on trigger setup.
+    const nonce = crypto.randomUUID();
+    socket.socket.send(JSON.stringify({ type: "ping", nonce, clientSentAtMs: performance.now() }));
+    const pong = await socket.next("pong", (message) => message.nonce === nonce);
+    socket.send({ ...command(initial, 1, { kind: "reload" }), sentAtMs: pong.serverSentAtMs });
     await socket.closed;
     expect(socket.messages.some((message) => message.type === "ack")).toBe(false);
     const recoveredStub = env.COMBAT_ROOMS.getByName(payload.matchId);
