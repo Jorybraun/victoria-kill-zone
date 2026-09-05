@@ -304,6 +304,7 @@ export interface FireShotArgs {
   poseConfidence?: number;
   origin?: [number, number, number];
   direction?: [number, number, number];
+  impact?: [number, number, number];
   firedAtClient: number;
 }
 
@@ -339,15 +340,15 @@ export interface FireShotResult {
 }
 ~~~
 
-Phase 0 iOS always sends arenaCenter on create. During the migration window the backend may continue accepting the smaller G2 create shape, but a match without a valid center cannot use shots:fire.
+Phase 0 iOS always sends arenaCenter on create. During the migration window the backend may continue accepting the smaller G2 create shape. On a centerless match, shots:fire is not location-gated (the same rule as debugFire); arena-centered matches retain the full location gate.
 
 For shots:fire only, shooterId is the technical-spec wire name for PlayerSession.playerId. It must name the player bound to the supplied sessionSecret; it is not a second identity.
 
 Location ranges, accuracy, and finite numbers are validated. Convex records receipt time as locationAt and uses capturedAtClient only for age validation; client time never becomes authoritative. Location is sent through players:heartbeat when meaningfully changed at approximately 2–5 Hz, with a presence-only heartbeat at least every 5 seconds.
 
-A player with no trusted location sample starts with arenaState uncertain and omitted location fields. shots:fire returns LOCATION_STALE until a trusted fresh sample establishes an authoritative arena state.
+A player with no trusted location sample starts with arenaState uncertain and omitted location fields. On an arena-centered match, shots:fire returns LOCATION_STALE until a trusted fresh sample establishes an authoritative arena state. Centerless matches do not apply this gate.
 
-For a claimed hit, targetId, zone, and poseConfidence are all required. Head confidence must be at least 0.60; torso and limbs confidence must be at least 0.45. A miss omits those three fields. Damage is never accepted from the client. origin and direction are optional reduced evidence for the active match only and never enter public snapshots.
+For a claimed hit, targetId, zone, and poseConfidence are all required. Head confidence must be at least 0.60; torso and limbs confidence must be at least 0.45. A miss omits those three fields. Damage is never accepted from the client. origin, direction, and impact are optional reduced evidence for the active match only and never enter public snapshots. The shot ledger persists origin, direction, and impact.
 
 ## Phase 0 snapshots
 
@@ -683,3 +684,42 @@ HOST_ONLY is never thrown by a v2 function; CAPABILITY_REQUIRED replaces it. All
 3. iOS and spectator migrate by switching function names and decoders wholesale per surface; mixed v1/v2 calls inside one running match are forbidden.
 4. The left event value and every v2-only enum value follow the standard rule: decoders merge before the backend emits.
 5. g2.v1 and phase0.v1 retire only after all three consumers run v2 on physical-device evidence and integration records it in the build log.
+
+## verdict-ledger.v1 — shots:recordVerdict (backend ready, no client yet)
+
+ADR 0004 decision 3: the host phone adjudicates and Convex keeps the durable ledger. This section freezes the mutation the host will post once the `CombatTransport` authority lands on iOS. No client calls it today; `shots:fire` and `shots:debugFire` remain the shipping paths unchanged.
+
+| Function | Kind | Arguments | Result |
+|---|---|---|---|
+| shots:recordVerdict | mutation | RecordVerdictArgs | FireShotResult |
+
+~~~ts
+export interface ShotVerdictRecord {
+  clientShotId: string;
+  shooterPlayerId: string;
+  targetPlayerId: string | null;
+  zone: HitZone | null;
+  damage: number;                 // host-applied damage, stored as hostDamage for audit
+  rewindMs: number;
+  verdict: "hit" | "miss" | "rejected";
+  rejectionReason: string | null; // spatial-hit.v1 reason, stored verbatim
+  origin: number[] | null;        // 3 finite components when present
+  direction: number[] | null;
+  impact: number[] | null;
+  firedAtClient: number;
+  adjudicatedBy: string;          // host playerId
+  targetConfirmed?: boolean | null; // receiver confirmation; stored and surfaced as-is
+}
+
+export interface RecordVerdictArgs extends AuthenticatedPlayerArgs {
+  record: ShotVerdictRecord;
+}
+~~~
+
+Rules:
+
+- Thrown errors: HOST_ONLY when the caller is not `hostPlayerId`; MATCH_NOT_RUNNING when the phase is not running or the match has expired; INVALID_TARGET when `shooterPlayerId` is not a member. Authentication errors are unchanged.
+- Idempotency key is (matchId, clientShotId). A replay with an identical record returns the stored result with `replayed: true`; reuse with different adjudication fields returns a rejected IDEMPOTENCY_CONFLICT and changes nothing. `targetConfirmed` is excluded from the fingerprint so a later confirmation retry is a replay, not a conflict.
+- Convex re-derives applied damage from `zone` through the same rules as `shots:fire` (`applyVerdict`), clamped to remaining health, and applies ammo, statistics, elimination, and respawn scheduling identically. Shooter-side gates the host already adjudicated (ammo, cooldown, geofence, pose confidence) are not re-checked; Convex re-checks only what it owns: shooter life state, target membership, and target life state. A `rejected` verdict writes a ledger row with rejectReason INVALID_TARGET (domain `host_rejected`) and no state or event change.
+- Events are the existing `shot` / `hit` / `eliminated` values, so current iOS and spectator decoders keep working. Events written by this path carry an additive optional `targetConfirmed: boolean | null`, which `queries:matchSnapshot` and `queries:spectatorSnapshot` surface as-is (omitted when null).
+- Ledger rows gain additive optional fields `mode: "verdict"`, `rewindMs`, `hostDamage`, `verdict`, `hostRejectionReason`, `adjudicatedBy`, `targetConfirmed`; existing rows stay valid.

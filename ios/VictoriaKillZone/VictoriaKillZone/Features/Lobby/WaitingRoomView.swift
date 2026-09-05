@@ -12,6 +12,14 @@ struct WaitingRoomView: View {
     room.players.first { $0.id != room.localPlayerID }
   }
 
+  private var allowsShellStart: Bool {
+    #if DEBUG
+      return !store.isLiveNetworking
+    #else
+      return false
+    #endif
+  }
+
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 20) {
@@ -39,6 +47,40 @@ struct WaitingRoomView: View {
           }
           .frame(maxWidth: .infinity)
         }
+
+        #if canImport(UIKit)
+          if room.localRole == .host,
+            let qrImage = DuelQRCode.image(for: DuelInviteLink.url(for: room.code))
+          {
+            VKZPanel {
+              VStack(spacing: 12) {
+                Image(uiImage: qrImage)
+                  .interpolation(.none)
+                  .resizable()
+                  .scaledToFit()
+                  .frame(width: 200, height: 200)
+                  .padding(8)
+                  .background(Color.white)
+                  .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                  .accessibilityLabel("QR code to join duel \(room.code)")
+
+                ShareLink(
+                  item: DuelInviteLink.url(for: room.code),
+                  subject: Text("Pew Pew duel"),
+                  message: Text("Join my Pew Pew duel — code \(room.code)")
+                ) {
+                  Label("TEXT INVITE", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(VKZSecondaryButtonStyle())
+
+                Text("SCAN OR TAP THE LINK TO JOIN")
+                  .font(.caption2.weight(.semibold).monospaced())
+                  .foregroundStyle(VKZPalette.textMuted)
+              }
+              .frame(maxWidth: .infinity)
+            }
+          }
+        #endif
 
         VStack(alignment: .leading, spacing: 10) {
           Text("PLAYERS")
@@ -84,9 +126,11 @@ struct WaitingRoomView: View {
           .disabled(store.isBusy || store.isMatchInputLocked)
         }
 
-        shellControls
+        #if DEBUG
+          shellControls
+        #endif
 
-        if room.localRole == .host || !store.isLiveNetworking {
+        if room.localRole == .host || allowsShellStart {
           let canStart = room.localRole == .host ? room.canLocalPlayerStart : room.allPlayersReady
           Button(room.localRole == .host ? "START DUEL" : "Simulate Host Start") {
             store.startDuel(as: room.localRole ?? .guest)
@@ -111,6 +155,13 @@ struct WaitingRoomView: View {
       .padding(24)
       .frame(maxWidth: 600)
       .frame(maxWidth: .infinity)
+    }
+    .onAppear {
+      #if canImport(Network)
+        if store.isLiveNetworking {
+          ArenaPeerLink.primeLocalNetworkPermission()
+        }
+      #endif
     }
   }
 
@@ -139,26 +190,28 @@ struct WaitingRoomView: View {
     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
   }
 
-  @ViewBuilder
-  private var shellControls: some View {
-    if !store.isLiveNetworking {
-      VStack(alignment: .leading, spacing: 10) {
-        Text("LOCAL SHELL CONTROLS")
-          .font(.caption2.weight(.semibold).monospaced())
-          .foregroundStyle(VKZPalette.textMuted)
+  #if DEBUG
+    @ViewBuilder
+    private var shellControls: some View {
+      if !store.isLiveNetworking {
+        VStack(alignment: .leading, spacing: 10) {
+          Text("LOCAL SHELL CONTROLS")
+            .font(.caption2.weight(.semibold).monospaced())
+            .foregroundStyle(VKZPalette.textMuted)
 
-        if !room.isFull, room.localRole == .host {
-          Button("Simulate Opponent Joining") {
-            store.simulateOpponentJoined()
+          if !room.isFull, room.localRole == .host {
+            Button("Simulate Opponent Joining") {
+              store.simulateOpponentJoined()
+            }
+            .buttonStyle(VKZSecondaryButtonStyle())
+          } else if let opponent {
+            Button(opponent.isReady ? "Simulate Opponent Not Ready" : "Simulate Opponent Ready") {
+              store.toggleReady(for: opponent.id, currentValue: opponent.isReady)
+            }
+            .buttonStyle(VKZSecondaryButtonStyle())
           }
-          .buttonStyle(VKZSecondaryButtonStyle())
-        } else if let opponent {
-          Button(opponent.isReady ? "Simulate Opponent Not Ready" : "Simulate Opponent Ready") {
-            store.toggleReady(for: opponent.id, currentValue: opponent.isReady)
-          }
-          .buttonStyle(VKZSecondaryButtonStyle())
         }
       }
     }
-  }
+  #endif
 }

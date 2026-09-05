@@ -19,6 +19,7 @@ export interface FireRequest {
   poseConfidence?: number;
   origin?: readonly number[];
   direction?: readonly number[];
+  impact?: readonly number[];
   firedAtClient: number;
 }
 
@@ -40,6 +41,9 @@ export interface ShotLedgerDraft {
   outcome: ShotOutcome;
   rejectReason: RejectReason | null;
   poseConfidence: number | null;
+  origin: readonly number[] | null;
+  direction: readonly number[] | null;
+  impact: readonly number[] | null;
   firedAtClient: number;
 }
 
@@ -52,6 +56,24 @@ export interface EventDraft {
   message: string;
 }
 
+/** Terminal adjudication of one shot, independent of who adjudicated it. */
+export type ShotResolution =
+  | { kind: "miss" }
+  | { kind: "hit"; zone: HitZone }
+  | { kind: "rejected"; reason: RejectReason };
+
+/** What the ledger row needs from a claim or host verdict record. */
+export interface ShotIdentity {
+  clientShotId: string;
+  targetId: string | null;
+  zone: HitZone | null;
+  poseConfidence: number | null;
+  origin: readonly number[] | null;
+  direction: readonly number[] | null;
+  impact: readonly number[] | null;
+  firedAtClient: number;
+}
+
 export interface FirePlan {
   result: FireResult;
   shooterPatch: StatePatch<PlayerState> | null;
@@ -59,6 +81,26 @@ export interface FirePlan {
   shot: ShotLedgerDraft;
   events: readonly EventDraft[];
   respawnAt: number | null;
+}
+
+export type VerdictKind = "hit" | "miss" | "rejected";
+
+/** Host-adjudicated terminal record posted to the durable ledger (ADR 0004 §3). */
+export interface ShotVerdictRecord {
+  clientShotId: string;
+  shooterPlayerId: string;
+  targetPlayerId: string | null;
+  zone: HitZone | null;
+  damage: number;
+  rewindMs: number;
+  verdict: VerdictKind;
+  rejectionReason: string | null;
+  origin: readonly number[] | null;
+  direction: readonly number[] | null;
+  impact: readonly number[] | null;
+  firedAtClient: number;
+  adjudicatedBy: string;
+  targetConfirmed: boolean | null;
 }
 
 /**
@@ -77,31 +119,102 @@ export function resolveFire(
   locationGate: FireLocationGate | null = null,
 ): FirePlan {
   if (match.status !== "active" || match.phase !== "running") {
-    return reject(shooter, request, "match_not_active");
+    return applyVerdict(shooter, opponent, { kind: "rejected", reason: "match_not_active" }, identityFrom(request), now);
   }
 
   if (hasExpired(match, now)) {
-    return reject(shooter, request, "match_expired");
+    return applyVerdict(shooter, opponent, { kind: "rejected", reason: "match_expired" }, identityFrom(request), now);
   }
 
   if (!shooter.connected) {
-    return reject(shooter, request, "shooter_disconnected");
+    return applyVerdict(shooter, opponent, { kind: "rejected", reason: "shooter_disconnected" }, identityFrom(request), now);
   }
 
   if (shooter.lifeState !== "alive") {
-    return reject(shooter, request, "shooter_not_alive");
+    return applyVerdict(shooter, opponent, { kind: "rejected", reason: "shooter_not_alive" }, identityFrom(request), now);
   }
 
   if (locationGate !== null) {
-    return reject(shooter, request, locationGate);
+    return applyVerdict(shooter, opponent, { kind: "rejected", reason: locationGate }, identityFrom(request), now);
   }
 
   if (shooter.ammo <= 0) {
-    return reject(shooter, request, "out_of_ammo");
+    return applyVerdict(shooter, opponent, { kind: "rejected", reason: "out_of_ammo" }, identityFrom(request), now);
   }
 
   if (shooter.lastShotAt !== null && now - shooter.lastShotAt < GAMEPLAY.fireCooldownMs) {
-    return reject(shooter, request, "cooldown_active");
+    return applyVerdict(shooter, opponent, { kind: "rejected", reason: "cooldown_active" }, identityFrom(request), now);
+  }
+
+  const hasTarget = request.targetId !== undefined;
+  const hasZone = request.zone !== undefined;
+  const hasConfidence = request.poseConfidence !== undefined;
+  const isMiss = !hasTarget && !hasZone && !hasConfidence;
+
+  if (isMiss) {
+    return applyVerdict(shooter, opponent, { kind: "miss" }, identityFrom(request), now);
+  }
+
+  if (!hasTarget || !hasZone || !hasConfidence) {
+    return applyVerdict(shooter, opponent, { kind: "rejected", reason: "invalid_target" }, identityFrom(request), now);
+  }
+
+  const claimedTargetId = request.targetId;
+  const zone = request.zone;
+  const poseConfidence = request.poseConfidence;
+  if (
+    claimedTargetId === undefined ||
+    zone === undefined ||
+    poseConfidence === undefined ||
+    !Number.isFinite(poseConfidence) ||
+    poseConfidence < (zone === "head" ? 0.6 : 0.45)
+  ) {
+    return applyVerdict(shooter, opponent, { kind: "rejected", reason: "invalid_target" }, identityFrom(request), now);
+  }
+
+  if (opponent === null || opponent.id !== claimedTargetId || opponent.id === shooter.id) {
+    return applyVerdict(shooter, opponent, { kind: "rejected", reason: "invalid_target" }, identityFrom(request), now);
+  }
+
+  if (opponent.lifeState !== "alive") {
+    return applyVerdict(shooter, opponent, { kind: "rejected", reason: "target_not_alive" }, identityFrom(request), now);
+  }
+
+  return applyVerdict(shooter, opponent, { kind: "hit", zone }, identityFrom(request), now);
+}
+
+/**
+ * Apply a terminal resolution to server-owned state.
+ * Rejections change no state and emit no event.
+ */
+export function applyVerdict(
+  shooter: PlayerState,
+  opponent: PlayerState | null,
+  resolution: ShotResolution,
+  identity: ShotIdentity,
+  now: number,
+): FirePlan {
+  if (resolution.kind === "rejected") {
+    return {
+      result: {
+        accepted: false,
+        outcome: "rejected",
+        rejectReason: resolution.reason,
+        damage: 0,
+        shooterAmmo: shooter.ammo,
+      },
+      shooterPatch: null,
+      targetPatch: null,
+      shot: ledger(identity, {
+        targetId: identity.targetId,
+        zone: identity.zone,
+        damage: 0,
+        outcome: "rejected",
+        rejectReason: resolution.reason,
+      }),
+      events: [],
+      respawnAt: null,
+    };
   }
 
   const shooterPatch: StatePatch<PlayerState> = {
@@ -112,17 +225,17 @@ export function resolveFire(
   };
   const shooterAmmo = shooterPatch.ammo ?? shooter.ammo;
 
-  const hasTarget = request.targetId !== undefined;
-  const hasZone = request.zone !== undefined;
-  const hasConfidence = request.poseConfidence !== undefined;
-  const isMiss = !hasTarget && !hasZone && !hasConfidence;
-
-  if (isMiss) {
+  if (resolution.kind === "miss") {
     return {
       result: { accepted: true, outcome: "miss", damage: 0, shooterAmmo },
       shooterPatch,
       targetPatch: null,
-      shot: ledger(request, { targetId: null, zone: null, damage: 0, outcome: "miss" }),
+      shot: ledger(identity, {
+        targetId: identity.targetId,
+        zone: identity.zone,
+        damage: 0,
+        outcome: "miss",
+      }),
       events: [
         {
           type: "shot",
@@ -137,45 +250,28 @@ export function resolveFire(
     };
   }
 
-  if (!hasTarget || !hasZone || !hasConfidence) {
-    return reject(shooter, request, "invalid_target");
+  if (opponent === null || opponent.id !== identity.targetId || opponent.id === shooter.id) {
+    return applyVerdict(
+      shooter,
+      opponent,
+      { kind: "rejected", reason: "invalid_target" },
+      identity,
+      now,
+    );
   }
 
-  const claimedTargetId = request.targetId;
-  const zone = request.zone;
-  const poseConfidence = request.poseConfidence;
-  if (
-    claimedTargetId === undefined ||
-    zone === undefined ||
-    poseConfidence === undefined ||
-    !Number.isFinite(poseConfidence) ||
-    poseConfidence < (zone === "head" ? 0.6 : 0.45)
-  ) {
-    return reject(shooter, request, "invalid_target");
-  }
-
-  if (opponent === null || opponent.id !== claimedTargetId || opponent.id === shooter.id) {
-    return reject(shooter, request, "invalid_target");
-  }
-
-  if (opponent.lifeState !== "alive") {
-    return reject(shooter, request, "target_not_alive");
-  }
-
-  const damage = Math.min(damageForZone(zone), opponent.health);
+  const damage = Math.min(damageForZone(resolution.zone), opponent.health);
   const remainingHealth = Math.max(0, opponent.health - damage);
   const eliminated = remainingHealth === 0;
   const outcome: ShotOutcome = eliminated ? "kill" : "hit";
-
   const targetPatch: StatePatch<PlayerState> = {
     health: remainingHealth,
     lifeState: eliminated ? "respawning" : "alive",
   };
-
   const fullShooterPatch: StatePatch<PlayerState> = {
     ...shooterPatch,
     shotsHit: shooter.shotsHit + 1,
-    headshots: shooter.headshots + (zone === "head" ? 1 : 0),
+    headshots: shooter.headshots + (resolution.zone === "head" ? 1 : 0),
     damageDealt: shooter.damageDealt + damage,
     kills: shooter.kills + (eliminated ? 1 : 0),
   };
@@ -192,7 +288,7 @@ export function resolveFire(
         type: "eliminated",
         actorPlayerId: shooter.id,
         targetPlayerId: opponent.id,
-        zone,
+        zone: resolution.zone,
         damage,
         message: `${shooter.displayName} ELIMINATED ${opponent.displayName}`,
       }
@@ -200,7 +296,7 @@ export function resolveFire(
         type: "hit",
         actorPlayerId: shooter.id,
         targetPlayerId: opponent.id,
-        zone,
+        zone: resolution.zone,
         damage,
         message: `${shooter.displayName} HIT ${opponent.displayName}`,
       };
@@ -216,10 +312,97 @@ export function resolveFire(
     },
     shooterPatch: fullShooterPatch,
     targetPatch,
-    shot: ledger(request, { targetId: opponent.id, zone, damage, outcome }),
+    shot: ledger(identity, {
+      targetId: opponent.id,
+      zone: resolution.zone,
+      damage,
+      outcome,
+    }),
     events: [event],
     respawnAt,
   };
+}
+
+/** Host and lifecycle gate used by the recordVerdict adapter. */
+export function verdictGate(
+  match: Pick<MatchState, "status" | "phase" | "endsAt" | "hostPlayerId">,
+  callerId: string,
+  now: number,
+): RejectReason | null {
+  if (match.hostPlayerId !== callerId) {
+    return "not_host";
+  }
+  if (match.status !== "active" || match.phase !== "running") {
+    return "match_not_active";
+  }
+  if (hasExpired(match, now)) {
+    return "match_expired";
+  }
+  return null;
+}
+
+/**
+ * Convex is the tie-breaker of record: the host's verdict is applied through the
+ * same rules as a client claim, but the shooter-side gates (ammo, cooldown,
+ * geofence, confidence) are the host's job and are not re-checked here. Convex
+ * re-checks only what it alone owns: membership, life state, and the target.
+ * Host/phase authority is checked by `verdictGate` in the adapter.
+ */
+export function resolveVerdictRecord(
+  shooter: PlayerState,
+  target: PlayerState | null,
+  record: ShotVerdictRecord,
+  now: number,
+): FirePlan {
+  const identity: ShotIdentity = {
+    clientShotId: record.clientShotId,
+    targetId: record.targetPlayerId,
+    zone: record.zone,
+    poseConfidence: null,
+    origin: record.origin,
+    direction: record.direction,
+    impact: record.impact,
+    firedAtClient: record.firedAtClient,
+  };
+
+  if (record.verdict === "rejected") {
+    return applyVerdict(shooter, target, { kind: "rejected", reason: "host_rejected" }, identity, now);
+  }
+  if (shooter.lifeState !== "alive") {
+    return applyVerdict(shooter, target, { kind: "rejected", reason: "shooter_not_alive" }, identity, now);
+  }
+  if (record.verdict === "miss") {
+    return applyVerdict(shooter, target, { kind: "miss" }, identity, now);
+  }
+  if (
+    record.zone === null ||
+    target === null ||
+    target.id !== record.targetPlayerId ||
+    target.id === shooter.id
+  ) {
+    return applyVerdict(shooter, target, { kind: "rejected", reason: "invalid_target" }, identity, now);
+  }
+  if (target.lifeState !== "alive") {
+    return applyVerdict(shooter, target, { kind: "rejected", reason: "target_not_alive" }, identity, now);
+  }
+  return applyVerdict(shooter, target, { kind: "hit", zone: record.zone }, identity, now);
+}
+
+export function verdictFingerprint(record: ShotVerdictRecord): string {
+  return JSON.stringify([
+    record.shooterPlayerId,
+    record.targetPlayerId,
+    record.zone,
+    record.damage,
+    record.rewindMs,
+    record.verdict,
+    record.rejectionReason,
+    record.origin,
+    record.direction,
+    record.impact,
+    record.firedAtClient,
+    record.adjudicatedBy,
+  ]);
 }
 
 /**
@@ -259,6 +442,7 @@ export function fireClaimFingerprint(request: FireRequest): string {
     request.poseConfidence ?? null,
     request.origin ?? null,
     request.direction ?? null,
+    request.impact ?? null,
     request.firedAtClient,
   ]);
 }
@@ -268,31 +452,8 @@ export function replayResult(result: FireResult): FireResult {
   return { ...result };
 }
 
-function reject(shooter: PlayerState, request: FireRequest, reason: RejectReason): FirePlan {
-  return {
-    result: {
-      accepted: false,
-      outcome: "rejected",
-      rejectReason: reason,
-      damage: 0,
-      shooterAmmo: shooter.ammo,
-    },
-    shooterPatch: null,
-    targetPatch: null,
-    shot: ledger(request, {
-      targetId: request.targetId ?? null,
-      zone: request.zone ?? null,
-      damage: 0,
-      outcome: "rejected",
-      rejectReason: reason,
-    }),
-    events: [],
-    respawnAt: null,
-  };
-}
-
 function ledger(
-  request: FireRequest,
+  identity: ShotIdentity,
   resolution: {
     targetId: string | null;
     zone: HitZone | null;
@@ -302,13 +463,29 @@ function ledger(
   },
 ): ShotLedgerDraft {
   return {
-    clientShotId: request.clientShotId,
+    clientShotId: identity.clientShotId,
     targetId: resolution.targetId,
     zone: resolution.zone,
     damage: resolution.damage,
     outcome: resolution.outcome,
     rejectReason: resolution.rejectReason ?? null,
+    poseConfidence: identity.poseConfidence,
+    origin: identity.origin,
+    direction: identity.direction,
+    impact: identity.impact,
+    firedAtClient: identity.firedAtClient,
+  };
+}
+
+function identityFrom(request: FireRequest): ShotIdentity {
+  return {
+    clientShotId: request.clientShotId,
+    targetId: request.targetId ?? null,
+    zone: request.zone ?? null,
     poseConfidence: request.poseConfidence ?? null,
+    origin: request.origin ?? null,
+    direction: request.direction ?? null,
+    impact: request.impact ?? null,
     firedAtClient: request.firedAtClient,
   };
 }

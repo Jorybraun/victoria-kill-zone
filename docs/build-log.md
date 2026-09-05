@@ -121,3 +121,54 @@ This is the integration-owned, evidence-based status record. Append observed res
 - **Result:** PASS — every green merge to `main` now promotes to TestFlight automatically. Tier 2 closes when an OTA install is observed on both phones and recorded here.
 - **Blocker and owner:** none for the lane. The Outpost Mac must stay logged in and awake; a queued promote job is the intended fail-closed state when it is not.
 - **Next integration step:** record the two OTA installs (model + iOS version only); optionally add `VKZ_SLACK_WEBHOOK_URL`/`VKZ_SLACK_CHANNEL_ID`.
+
+### 2026-09-04 — ADR 0005 proposed
+
+- ADR 0005 proposed; fire-path trace found every markerless `shots:fire` rejected `LOCATION_STALE` on the current client (no location sent); PR implements ADR 0005; physical-device evidence pending.
+- Follow-up hardening PR (match-scoped peer link, skeleton scale estimation, pure hit-geometry tests)
+### 2026-09-04 11:30 UTC — ADR 0004 §3 backend slice: shots:recordVerdict durable ledger (Tier 0)
+
+- **Git SHA / PR:** branch `devin/1788521140-record-verdict`; PR #49.
+- **Owner and write set:** Backend (`convex/**`); Integration handoff items in the same PR: `docs/interface-contracts.md` (verdict-ledger.v1 section), this log.
+- **Commands/checks:** `pnpm verify` PASS (backend lint/typecheck/tests incl. new `record-verdict.test.ts`; spectator untouched and green).
+- **What landed:** `shots:recordVerdict` host-only mutation, idempotent per (matchId, clientShotId); `resolveFire`/`resolveDebugFire` and the verdict path share one `applyVerdict`; additive `shots`/`events` schema fields and `by_match_and_client_shot_id` index; `targetConfirmed` surfaced on snapshot events. `shots:fire` and `shots:debugFire` behaviour unchanged (existing fire tests untouched and passing).
+- **Observed on physical devices:** none. No client calls the new mutation yet.
+- **Mocked or unproven:** host-to-Convex round trip (ADR 0004 p95 ≤ 500 ms), receiver confirmation flow, live schema push against the deployment (runtime validator not exercisable offline; compatibility asserted at type level).
+- **Result:** PASS for Tier 0; BLOCKED for ADR 0004 acceptance until the iOS host authority posts verdicts and the two-phone TestFlight run records fire→confirmation latency.
+- **Next integration step:** iOS slice wires `AuthorityHost` verdicts to `shots:recordVerdict`; then measure on two phones.
+
+### 2026-09-04 — App Store readiness audit (Info.plist, privacy manifest, Release gating of debug UI)
+
+- **Git SHA / PR:** Branch `devin/1788521289-app-store-readiness`; PR pending.
+- **Owner and write set:** Integration (Xcode project, Info.plist, docs) + iOS targeting (Targeting/SharedArena gating).
+- **Environment/artifact:** Linux repository workspace; iOS source and Xcode project metadata.
+- **Commands/checks:** `pnpm verify` PASS (`Repository contract: PASS`; workspace lint, typecheck, tests, build, and `Workspace verification: PASS`).
+- **Observed on browser/simulator:** None.
+- **Observed on physical devices:** None. Needed two-phone TestFlight checks: camera-denied panel; harness link absent in the TestFlight build; Bonjour prompt still works for both `_pewpew-arena._tcp` and `_vkz-combat._udp`.
+- **Mocked or unproven:** Physical-device camera-denied flow, Release/TestFlight UI, and Bonjour prompts.
+- **Result:** BLOCKED pending physical-device TestFlight checks.
+- **Blocker and owner:** Integration / iOS targeting — two-phone TestFlight validation.
+- **Next integration step:** Install the pushed build on two phones and run the listed TestFlight checks.
+- **Cut/deferred or risk change:** Release excludes debug-only harness and shell controls; debug-fire paths remain available. The torso-fallback fire button is gated by `VKZ_DEBUG_FIRE`, set in both Debug and Release so TestFlight keeps it; remove it from Release only after two-phone markerless fire evidence lands here.
+
+### 2026-09-04 — ADR 0006 duel shared frame proposed (docs only)
+
+- **Git SHA / PR:** this PR (docs-only; no product code, no tests changed).
+- **Owner and write set:** Integration — `docs/decisions/0006-duel-shared-frame.md` (new), `docs/decisions/0005-…` (one-line correction), `docs/roadmap.md`, this log.
+- **Environment/artifact:** Apple ARKit/Vision documentation and WWDC19/23 transcripts cited inline in the ADR; prior research `docs/research/shared-arena-frame-options.md`.
+- **Commands/checks:** `pnpm verify`; `ios-gate` CI (no Swift touched).
+- **Observed on browser/simulator:** none.
+- **Observed on physical devices:** none — nothing in this slice is device evidence.
+- **Mocked or unproven:** every ADR 0006 §7 row: body-tracking relocalization into a peer's `ARWorldMap` outdoors, residual at 3/8/15 m, drift over a 3-minute duel, map transfer time over `CombatTransport`, receiver-confirmation false-hit reduction, thermal. Drift numbers in the ADR are published planning values, not measurements of this app.
+- **Result:** PASS (documentation slice). ADR 0006 status stays Proposed.
+- **Blocker and owner:** two body-tracking-capable iPhones + operator time for the S0 spike (Hardware/Operator).
+- **Next integration step:** dispatch S0 (iOS targeting) per ADR 0006 §9; record §7 rows 1–3 here with model + iOS version only.
+- **Cut/deferred or risk change:** roadmap ADR index renumbered — personal-time semantics → 0007, street-scale spatial provider → 0008. Collaborative ARKit sessions are no longer the duel's primary frame; retirement list in ADR 0006 §8 executes only in its named slices, never before S0 evidence.
+
+### 2026-09-04 — DuelSession combat split
+
+- **Owner and write set:** Integration+iOS (`ios/VictoriaKillZone/VictoriaKillZone/Features/Game/**`, `Features/Lobby/LobbyStore.swift`, `ActiveDuelView.swift`, `RootView.swift`, iOS tests, Xcode project registration, this log).
+- **What moved:** Duel combat state, fire actions, pending-shot reconciliation, kill/incoming event presentation, peer tracer handling, and shared game-loop tracing moved from `LobbyStore` into `@MainActor DuelSession`; combat views now observe the dedicated session.
+- **What hardened:** Peer tracers are accepted only from the current opponent, and Convex incoming-event deduplication is bounded to 256 IDs with ordered eviction.
+- **Observed on physical devices:** none.
+- **Two-phone TestFlight confirmation required:** peer tracer renders on the other phone; Convex miss suppression works while hit/eliminated events still render; peer link starts and stops across phase changes; debug fire remains unchanged.

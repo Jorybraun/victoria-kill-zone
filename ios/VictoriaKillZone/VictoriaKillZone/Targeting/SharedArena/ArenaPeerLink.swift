@@ -64,6 +64,7 @@ protocol ArenaPeerLinking: AnyObject {
     var onStateChange: ((ArenaPeerLinkState) -> Void)?
 
     private let queue = DispatchQueue(label: "com.victoriakillzone.arena.link", qos: .userInitiated)
+    private let serviceName: String?
     private let lock = NSLock()
     private var _stats = ArenaPeerLinkStats()
     private var listener: NWListener?
@@ -71,6 +72,42 @@ protocol ArenaPeerLinking: AnyObject {
     private var connection: NWConnection?
     private var receiveBuffer = Data()
     private var state: ArenaPeerLinkState = .idle
+
+    init(serviceName: String? = nil) {
+      self.serviceName = serviceName
+    }
+
+    // Only touched on `primerQueue`.
+    nonisolated(unsafe) private static var permissionPrimer: NWBrowser?
+    private static let primerQueue = DispatchQueue(label: "com.victoriakillzone.arena.link.primer")
+
+    /// iOS shows the Local Network prompt the first time an app browses or
+    /// advertises Bonjour. Doing that briefly in the lobby means the prompt
+    /// lands before the duel instead of over a live AR camera.
+    static func primeLocalNetworkPermission() {
+      primerQueue.async {
+        guard permissionPrimer == nil else { return }
+        let browser = NWBrowser(
+          for: .bonjour(type: serviceType, domain: nil),
+          using: parameters()
+        )
+        permissionPrimer = browser
+        browser.stateUpdateHandler = { state in
+          switch state {
+          case .failed, .cancelled:
+            primerQueue.async {
+              if permissionPrimer === browser { permissionPrimer = nil }
+            }
+          default: break
+          }
+        }
+        browser.start(queue: primerQueue)
+        primerQueue.asyncAfter(deadline: .now() + 8) {
+          browser.cancel()
+          if permissionPrimer === browser { permissionPrimer = nil }
+        }
+      }
+    }
 
     var stats: ArenaPeerLinkStats {
       lock.withLock { _stats }
@@ -109,7 +146,9 @@ protocol ArenaPeerLinking: AnyObject {
     private func startListenerLocked() {
       do {
         let listener = try NWListener(using: Self.parameters())
-        listener.service = NWListener.Service(type: Self.serviceType)
+        listener.service = serviceName.map {
+          NWListener.Service(name: $0, type: Self.serviceType)
+        } ?? NWListener.Service(type: Self.serviceType)
         listener.stateUpdateHandler = { [weak self] listenerState in
           switch listenerState {
           case .ready: self?.setState(.advertising)
@@ -148,8 +187,14 @@ protocol ArenaPeerLinking: AnyObject {
         }
       }
       browser.browseResultsChangedHandler = { [weak self] results, _ in
-        guard let self, connection == nil, let first = results.first else { return }
-        adopt(NWConnection(to: first.endpoint, using: Self.parameters()))
+        guard let self, connection == nil else { return }
+        let result = results.first { result in
+          guard let serviceName = self.serviceName else { return true }
+          guard case let .service(name, type, _, _) = result.endpoint else { return false }
+          return name == serviceName && type == Self.serviceType
+        }
+        guard let result else { return }
+        adopt(NWConnection(to: result.endpoint, using: Self.parameters()))
         browser.cancel()
         self.browser = nil
       }

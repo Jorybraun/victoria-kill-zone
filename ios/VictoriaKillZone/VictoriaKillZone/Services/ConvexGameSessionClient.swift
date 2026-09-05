@@ -50,6 +50,34 @@ enum ConvexGameSessionArguments {
   ) -> [String: ConvexEncodable?] {
     authenticated(session).merging(["clientShotId": clientShotId]) { _, new in new }
   }
+
+  static func fire(
+    session: PlayerSession,
+    request: FireShotRequest
+  ) -> [String: ConvexEncodable?] {
+    var arguments: [String: ConvexEncodable?] = [
+      "matchId": session.matchId,
+      "shooterId": session.playerId,
+      "sessionSecret": session.sessionSecret,
+      "clientShotId": request.clientShotId,
+      "firedAtClient": request.firedAtClient,
+    ]
+    if let targetId = request.targetId { arguments["targetId"] = targetId }
+    if let zone = request.zone { arguments["zone"] = zone.rawValue }
+    if let poseConfidence = request.poseConfidence {
+      arguments["poseConfidence"] = poseConfidence
+    }
+    if let origin = request.origin {
+      arguments["origin"] = origin.map { $0 as ConvexEncodable? }
+    }
+    if let direction = request.direction {
+      arguments["direction"] = direction.map { $0 as ConvexEncodable? }
+    }
+    if let impact = request.impact {
+      arguments["impact"] = impact.map { $0 as ConvexEncodable? }
+    }
+    return arguments
+  }
 }
 
 final class ConvexGameSessionClient: GameSessionClient, @unchecked Sendable {
@@ -106,29 +134,10 @@ final class ConvexGameSessionClient: GameSessionClient, @unchecked Sendable {
   }
 
   func fire(session: PlayerSession, request: FireShotRequest) async throws -> FireShotResult {
-    var arguments: [String: ConvexEncodable?] = [
-      "matchId": session.matchId,
-      "shooterId": session.playerId,
-      "sessionSecret": session.sessionSecret,
-      "clientShotId": request.clientShotId,
-      "firedAtClient": request.firedAtClient,
-    ]
-    if let targetId = request.targetId { arguments["targetId"] = targetId }
-    if let zone = request.zone { arguments["zone"] = zone.rawValue }
-    if let poseConfidence = request.poseConfidence {
-      arguments["poseConfidence"] = poseConfidence
-    }
-    if let origin = request.origin {
-      arguments["origin"] = origin.map { $0 as ConvexEncodable? }
-    }
-    if let direction = request.direction {
-      arguments["direction"] = direction.map { $0 as ConvexEncodable? }
-    }
-
     do {
       let result: FireShotResultWire = try await client.mutation(
         ConvexGameSessionContract.fire,
-        with: arguments
+        with: ConvexGameSessionArguments.fire(session: session, request: request)
       )
       return try result.domainValue()
     } catch {

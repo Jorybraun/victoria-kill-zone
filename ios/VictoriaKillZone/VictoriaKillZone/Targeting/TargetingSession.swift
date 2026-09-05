@@ -96,6 +96,7 @@ struct NormalizedTargetingPolygon: Equatable, Sendable {
 enum TargetingHitZone: String, Equatable, Sendable {
   case head
   case torso
+  case limbs
 
   var displayText: String { rawValue.uppercased() }
 }
@@ -236,6 +237,62 @@ struct TargetingVector3: Equatable, Sendable {
   let x: Double
   let y: Double
   let z: Double
+
+  static func + (lhs: TargetingVector3, rhs: TargetingVector3) -> TargetingVector3 {
+    TargetingVector3(x: lhs.x + rhs.x, y: lhs.y + rhs.y, z: lhs.z + rhs.z)
+  }
+
+  static func - (lhs: TargetingVector3, rhs: TargetingVector3) -> TargetingVector3 {
+    TargetingVector3(x: lhs.x - rhs.x, y: lhs.y - rhs.y, z: lhs.z - rhs.z)
+  }
+
+  static func * (lhs: TargetingVector3, rhs: Double) -> TargetingVector3 {
+    TargetingVector3(x: lhs.x * rhs, y: lhs.y * rhs, z: lhs.z * rhs)
+  }
+
+  func dot(_ other: TargetingVector3) -> Double {
+    x * other.x + y * other.y + z * other.z
+  }
+}
+
+struct TargetingSkeletonJoint: Equatable, Sendable {
+  let name: String
+  let position: TargetingVector3
+}
+
+struct TargetingSkeletonBone: Equatable, Sendable {
+  let from: String
+  let to: String
+}
+
+struct TargetingSkeleton: Equatable, Sendable {
+  let joints: [TargetingSkeletonJoint]
+  let bones: [TargetingSkeletonBone]
+  let capturedAt: Date
+
+  func position(of name: String) -> TargetingVector3? {
+    joints.first(where: { $0.name == name })?.position
+  }
+}
+
+/// Screen-space pose used to draw the opponent skeleton when only 2D Vision
+/// joints are available. Coordinates are normalized to the portrait camera
+/// image with the origin at the bottom-left, matching Vision.
+struct TargetingPose2D: Equatable, Sendable {
+  let joints: [String: NormalizedTargetingPoint]
+  let bones: [TargetingSkeletonBone]
+  /// Portrait image aspect ratio (width / height) used to map onto an
+  /// aspect-filled camera preview.
+  let imageAspect: Double
+
+  static let visionBones: [TargetingSkeletonBone] = [
+    ("nose", "neck"), ("neck", "leftShoulder"), ("neck", "rightShoulder"),
+    ("leftShoulder", "leftElbow"), ("leftElbow", "leftWrist"),
+    ("rightShoulder", "rightElbow"), ("rightElbow", "rightWrist"),
+    ("neck", "root"), ("root", "leftHip"), ("root", "rightHip"),
+    ("leftHip", "leftKnee"), ("leftKnee", "leftAnkle"),
+    ("rightHip", "rightKnee"), ("rightKnee", "rightAnkle"),
+  ].map { TargetingSkeletonBone(from: $0.0, to: $0.1) }
 }
 
 struct TargetingCameraRay: Equatable, Sendable {
@@ -253,6 +310,9 @@ struct TargetingObservation: Equatable, Sendable {
   let torsoBounds: NormalizedTargetingRect?
   let headRegion: NormalizedTargetingEllipse?
   let torsoRegion: NormalizedTargetingPolygon?
+  let aimZone3D: TargetingHitZone?
+  let skeleton: TargetingSkeleton?
+  let pose2D: TargetingPose2D?
 
   init(
     capturedAt: Date,
@@ -262,7 +322,10 @@ struct TargetingObservation: Equatable, Sendable {
     bodyBounds: NormalizedTargetingRect,
     torsoBounds: NormalizedTargetingRect?,
     headRegion: NormalizedTargetingEllipse? = nil,
-    torsoRegion: NormalizedTargetingPolygon? = nil
+    torsoRegion: NormalizedTargetingPolygon? = nil,
+    aimZone3D: TargetingHitZone? = nil,
+    skeleton: TargetingSkeleton? = nil,
+    pose2D: TargetingPose2D? = nil
   ) {
     self.capturedAt = capturedAt
     self.bodyConfidence = bodyConfidence
@@ -272,6 +335,9 @@ struct TargetingObservation: Equatable, Sendable {
     self.torsoBounds = torsoBounds
     self.headRegion = headRegion
     self.torsoRegion = torsoRegion
+    self.aimZone3D = aimZone3D
+    self.skeleton = skeleton
+    self.pose2D = pose2D
   }
 }
 
@@ -339,10 +405,15 @@ struct TargetingSnapshot: Equatable, Sendable {
   let aimClaim: TargetingAimClaim?
   let cameraRay: TargetingCameraRay?
   let poseStaleAfter: TimeInterval
+  let skeleton: TargetingSkeleton?
+  let pose2D: TargetingPose2D?
 
   /// Compatibility/readability conveniences for HUD and fire-path callers.
   var hitZone: TargetingHitZone? { aimClaim?.zone }
   var hitConfidence: Double { aimClaim?.confidence ?? 0 }
+  var isLocked: Bool {
+    [.bodyLock, .torsoLock, .targetReacquired].contains(state)
+  }
 
   init(
     state: TargetingTrackingState,
@@ -357,7 +428,9 @@ struct TargetingSnapshot: Equatable, Sendable {
     torsoRegion: NormalizedTargetingPolygon?,
     aimClaim: TargetingAimClaim?,
     cameraRay: TargetingCameraRay?,
-    poseStaleAfter: TimeInterval
+    poseStaleAfter: TimeInterval,
+    skeleton: TargetingSkeleton? = nil,
+    pose2D: TargetingPose2D? = nil
   ) {
     self.state = state
     self.bodyDetected = bodyDetected
@@ -372,6 +445,8 @@ struct TargetingSnapshot: Equatable, Sendable {
     self.aimClaim = aimClaim
     self.cameraRay = cameraRay
     self.poseStaleAfter = poseStaleAfter
+    self.skeleton = skeleton
+    self.pose2D = pose2D
   }
 
   // Keeps the Phase 0 shell initializer source-compatible while callers move to
@@ -390,7 +465,8 @@ struct TargetingSnapshot: Equatable, Sendable {
       torsoRegion: nil,
       aimClaim: nil,
       cameraRay: nil,
-      poseStaleAfter: TargetingThresholds.phaseZero.poseStaleAfter
+      poseStaleAfter: TargetingThresholds.phaseZero.poseStaleAfter,
+      skeleton: nil
     )
   }
 
@@ -476,18 +552,29 @@ struct TargetingStateMachine: Sendable {
     }
 
     let aimCandidate: (zone: TargetingHitZone, confidence: Double)?
-    if let headConfidence = observation.headConfidence,
-      headConfidence >= thresholds.headConfidence,
-      observation.headRegion?.contains(x: 0.5, y: 0.5) == true
-    {
-      aimCandidate = (.head, min(observation.bodyConfidence, headConfidence))
-    } else if let torsoConfidence = observation.torsoConfidence,
-      torsoConfidence >= thresholds.torsoConfidence,
-      observation.torsoRegion?.contains(x: 0.5, y: 0.5) == true
-    {
-      aimCandidate = (.torso, min(observation.bodyConfidence, torsoConfidence))
+    if let zone3D = observation.aimZone3D {
+      let headIsConfident =
+        observation.headConfidence.map { $0 >= thresholds.headConfidence } ?? true
+      aimCandidate =
+        zone3D == .head && !headIsConfident
+        ? nil
+        : (zone3D, observation.bodyConfidence)
     } else {
-      aimCandidate = nil
+      if let headConfidence = observation.headConfidence,
+        headConfidence >= thresholds.headConfidence,
+        observation.headRegion?.contains(x: 0.5, y: 0.5) == true
+      {
+        aimCandidate = (.head, min(observation.bodyConfidence, headConfidence))
+      } else if let torsoConfidence = observation.torsoConfidence,
+        torsoConfidence >= thresholds.torsoConfidence,
+        observation.torsoRegion?.contains(x: 0.5, y: 0.5) == true
+      {
+        aimCandidate = (.torso, min(observation.bodyConfidence, torsoConfidence))
+      } else if observation.bodyBounds.contains(x: 0.5, y: 0.5) {
+        aimCandidate = (.limbs, observation.bodyConfidence)
+      } else {
+        aimCandidate = nil
+      }
     }
     updateAimTracking(with: aimCandidate, capturedAt: observation.capturedAt)
     let lockState: TargetingTrackingState = aimCandidate?.zone == .torso ? .torsoLock : .bodyLock
@@ -617,7 +704,9 @@ struct TargetingStateMachine: Sendable {
   private mutating func rebuildSnapshot(state: TargetingTrackingState, at date: Date) {
     let reportsBody = state == .bodyLock || state == .torsoLock || state == .targetReacquired
     let observation = lastValidObservation
-    let reportsTorso = reportsBody && observation?.torsoRegion != nil
+    let reportsTorso =
+      reportsBody
+      && (observation?.torsoRegion != nil || observation?.aimZone3D == .torso)
     let poseAge = observation.map { max(0, date.timeIntervalSince($0.capturedAt)) }
     let reportsFreshAim =
       reportsBody
@@ -636,7 +725,9 @@ struct TargetingStateMachine: Sendable {
       torsoRegion: observation?.torsoRegion,
       aimClaim: reportsFreshAim ? confirmedAimClaim : nil,
       cameraRay: cameraRay,
-      poseStaleAfter: thresholds.poseStaleAfter
+      poseStaleAfter: thresholds.poseStaleAfter,
+      skeleton: reportsFreshAim ? observation?.skeleton : nil,
+      pose2D: reportsFreshAim ? observation?.pose2D : nil
     )
   }
 }
@@ -704,6 +795,7 @@ enum TargetingSessionFactory {
     var currentSnapshot: TargetingSnapshot { snapshotHub.currentSnapshot() }
 
     private let thresholds: TargetingThresholds
+    private let usesBodyTracking = ARBodyTrackingConfiguration.isSupported
     private let snapshotHub: TargetingSnapshotHub
     private let sessionQueue = DispatchQueue(
       label: "com.victoriakillzone.targeting.session",
@@ -727,7 +819,7 @@ enum TargetingSessionFactory {
     override init() {
       let now = Date()
       let initialSnapshot = TargetingSnapshot.unavailable(at: now)
-      let supported = ARWorldTrackingConfiguration.isSupported
+      let supported = ARWorldTrackingConfiguration.isSupported || ARBodyTrackingConfiguration.isSupported
 
       availability = supported ? .available : .notConfigured
       thresholds = .phaseZero
@@ -899,8 +991,17 @@ enum TargetingSessionFactory {
       machine.sessionStarted(at: Date())
       publish(machine.snapshot)
 
-      let configuration = ARWorldTrackingConfiguration()
-      configuration.worldAlignment = .gravity
+      let configuration: ARConfiguration
+      if usesBodyTracking {
+        let bodyConfiguration = ARBodyTrackingConfiguration()
+        bodyConfiguration.worldAlignment = .gravity
+        bodyConfiguration.automaticSkeletonScaleEstimationEnabled = true
+        configuration = bodyConfiguration
+      } else {
+        let worldConfiguration = ARWorldTrackingConfiguration()
+        worldConfiguration.worldAlignment = .gravity
+        configuration = worldConfiguration
+      }
       let options: ARSession.RunOptions =
         resetTracking
         ? [.resetTracking, .removeExistingAnchors]
@@ -924,6 +1025,19 @@ enum TargetingSessionFactory {
       machine.tick(at: now)
       publish(machine.snapshot)
 
+      // ARKit body tracking needs most of the body in frame and takes a while
+      // to acquire; Vision pose detection keeps targeting alive whenever no
+      // tracked body anchor exists.
+      if usesBodyTracking,
+        let observation = frame.anchors.compactMap({ $0 as? ARBodyAnchor })
+          .first(where: \.isTracked)
+          .flatMap({ Self.bodyObservation(from: $0, frame: frame, capturedAt: now) })
+      {
+        machine.ingest(observation, evaluatedAt: now)
+        publish(machine.snapshot)
+        return
+      }
+
       guard !visionInFlight else { return }
       guard frame.timestamp - lastVisionFrameTimestamp >= thresholds.visionInterval else { return }
 
@@ -931,11 +1045,18 @@ enum TargetingSessionFactory {
       lastVisionFrameTimestamp = frame.timestamp
       let capturedAt = now
       let pixelBuffer = frame.capturedImage
+      let resolution = frame.camera.imageResolution
+      let portraitAspect =
+        resolution.width > 0 && resolution.height > 0
+        ? Double(min(resolution.width, resolution.height) / max(resolution.width, resolution.height))
+        : 0.75
       let requestGeneration = generation
 
       visionQueue.async { [weak self] in
         guard let self else { return }
-        let observation = detectPose(in: pixelBuffer, capturedAt: capturedAt)
+        let observation = detectPose(
+          in: pixelBuffer, capturedAt: capturedAt, imageAspect: portraitAspect
+        )
         sessionQueue.async { [weak self] in
           guard let self else { return }
           visionInFlight = false
@@ -954,7 +1075,8 @@ enum TargetingSessionFactory {
 
     private func detectPose(
       in pixelBuffer: CVPixelBuffer,
-      capturedAt: Date
+      capturedAt: Date,
+      imageAspect: Double
     ) -> TargetingObservation? {
       let handler = VNImageRequestHandler(
         cvPixelBuffer: pixelBuffer,
@@ -968,14 +1090,17 @@ enum TargetingSessionFactory {
       }
 
       return (poseRequest.results ?? [])
-        .compactMap { Self.targetingCandidate(from: $0, capturedAt: capturedAt) }
+        .compactMap {
+          Self.targetingCandidate(from: $0, capturedAt: capturedAt, imageAspect: imageAspect)
+        }
         .max(by: { $0.score < $1.score })?
         .observation
     }
 
     private static func targetingCandidate(
       from pose: VNHumanBodyPoseObservation,
-      capturedAt: Date
+      capturedAt: Date,
+      imageAspect: Double
     ) -> (observation: TargetingObservation, score: Double)? {
       guard let points = try? pose.recognizedPoints(.all) else { return nil }
       let usablePoints = points.values.filter { $0.confidence >= 0.2 }
@@ -1026,6 +1151,28 @@ enum TargetingSessionFactory {
         region.points.map(\.confidence).reduce(0, +) / Double(region.points.count)
       }
 
+      let namedJoints: [(String, VNHumanBodyPoseObservation.JointName)] = [
+        ("nose", .nose), ("neck", .neck), ("root", .root),
+        ("leftShoulder", .leftShoulder), ("rightShoulder", .rightShoulder),
+        ("leftElbow", .leftElbow), ("rightElbow", .rightElbow),
+        ("leftWrist", .leftWrist), ("rightWrist", .rightWrist),
+        ("leftHip", .leftHip), ("rightHip", .rightHip),
+        ("leftKnee", .leftKnee), ("rightKnee", .rightKnee),
+        ("leftAnkle", .leftAnkle), ("rightAnkle", .rightAnkle),
+      ]
+      var poseJoints: [String: NormalizedTargetingPoint] = [:]
+      for (name, joint) in namedJoints {
+        guard let point = points[joint], point.confidence >= 0.2 else { continue }
+        poseJoints[name] = NormalizedTargetingPoint(
+          x: point.location.x, y: point.location.y, confidence: Double(point.confidence)
+        )
+      }
+      let pose2D = TargetingPose2D(
+        joints: poseJoints,
+        bones: TargetingPose2D.visionBones,
+        imageAspect: imageAspect
+      )
+
       let distanceFromCrosshair = hypot(bodyBounds.centerX - 0.5, bodyBounds.centerY - 0.5)
       let crosshairProximity = max(0, 1 - distanceFromCrosshair / 0.71)
       let score =
@@ -1042,7 +1189,8 @@ enum TargetingSessionFactory {
           bodyBounds: bodyBounds,
           torsoBounds: torsoRegion?.bounds,
           headRegion: headRegion,
-          torsoRegion: torsoRegion
+          torsoRegion: torsoRegion,
+          pose2D: pose2D
         ),
         score
       )
@@ -1100,6 +1248,60 @@ enum TargetingSessionFactory {
           y: rawY / magnitude,
           z: rawZ / magnitude
         ),
+        capturedAt: capturedAt
+      )
+    }
+
+    static func bodyObservation(
+      from anchor: ARBodyAnchor,
+      frame: ARFrame,
+      capturedAt: Date
+    ) -> TargetingObservation? {
+      let requestedJoints: [(String, ARSkeleton.JointName)] = [
+        ("head", .head), ("root", .root), ("leftShoulder", .leftShoulder),
+        ("rightShoulder", .rightShoulder), ("leftHand", .leftHand),
+        ("rightHand", .rightHand), ("leftFoot", .leftFoot), ("rightFoot", .rightFoot),
+        ("neck_1_joint", ARSkeleton.JointName(rawValue: "neck_1_joint")),
+        ("spine_7_joint", ARSkeleton.JointName(rawValue: "spine_7_joint")),
+        ("left_forearm_joint", ARSkeleton.JointName(rawValue: "left_forearm_joint")),
+        ("right_forearm_joint", ARSkeleton.JointName(rawValue: "right_forearm_joint")),
+        ("left_leg_joint", ARSkeleton.JointName(rawValue: "left_leg_joint")),
+        ("right_leg_joint", ARSkeleton.JointName(rawValue: "right_leg_joint")),
+        ("left_upLeg_joint", ARSkeleton.JointName(rawValue: "left_upLeg_joint")),
+        ("right_upLeg_joint", ARSkeleton.JointName(rawValue: "right_upLeg_joint")),
+        ("left_arm_joint", ARSkeleton.JointName(rawValue: "left_arm_joint")),
+        ("right_arm_joint", ARSkeleton.JointName(rawValue: "right_arm_joint")),
+      ]
+      var positions: [String: TargetingVector3] = [:]
+      for (name, joint) in requestedJoints {
+        let index = anchor.skeleton.definition.index(for: joint)
+        guard anchor.skeleton.isJointTracked(index),
+          let model = anchor.skeleton.modelTransform(for: joint)
+        else { continue }
+        let world = anchor.transform * model
+        positions[name] = TargetingVector3(
+          x: Double(world.columns.3.x),
+          y: Double(world.columns.3.y),
+          z: Double(world.columns.3.z)
+        )
+      }
+      let ray = cameraRay(from: frame, capturedAt: capturedAt)
+      return BodyTargetingGeometry.observation(
+        joints: positions,
+        isTracked: anchor.isTracked,
+        ray: ray,
+        project: { point in
+          let result = frame.camera.projectPoint(
+            SIMD3<Float>(Float(point.x), Float(point.y), Float(point.z)),
+            orientation: .portrait,
+            viewportSize: CGSize(width: 1, height: 1)
+          )
+          return NormalizedTargetingPoint(
+            x: min(1, max(0, Double(result.x))),
+            y: min(1, max(0, Double(result.y))),
+            confidence: 1
+          )
+        },
         capturedAt: capturedAt
       )
     }

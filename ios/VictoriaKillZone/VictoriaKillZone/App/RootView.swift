@@ -21,7 +21,7 @@ struct RootView: View {
         case .waiting(let room):
           WaitingRoomView(room: room, store: store)
         case .active(let duel):
-          ActiveDuelView(duel: duel, store: store)
+          ActiveDuelView(duel: duel, combat: store.duel, store: store)
         }
       }
       .foregroundStyle(VKZPalette.text)
@@ -29,7 +29,7 @@ struct RootView: View {
       .alert(
         "Unable to Continue",
         isPresented: Binding(
-          get: { store.errorMessage != nil },
+          get: { store.errorMessage != nil && !isCombatRunning },
           set: { isPresented in
             if !isPresented { store.dismissError() }
           }
@@ -42,5 +42,15 @@ struct RootView: View {
         Text(store.errorMessage ?? "SOMETHING WENT WRONG")
       }
     }
+    .onOpenURL { url in
+      store.openInviteLink(url)
+    }
+  }
+
+  /// Combat feedback is shown inline by `ActiveDuelView`; a modal would
+  /// interrupt aiming.
+  private var isCombatRunning: Bool {
+    if case .active(let duel) = store.route { return duel.phase == .running }
+    return false
   }
 }
