@@ -1,5 +1,5 @@
 import { env, exports as workerExports } from "cloudflare:workers";
-import { DEFAULT_RULES, type CombatTicketClaims, type CommandEnvelope, type ServerMessage } from "@vkz/combat-protocol";
+import { DEFAULT_RULES, LIMITS, type CombatTicketClaims, type CommandEnvelope, type ServerEvent, type ServerMessage, type Vec3 } from "@vkz/combat-protocol";
 
 export function claims(overrides: Partial<CombatTicketClaims> = {}): CombatTicketClaims {
   const now = Math.floor(Date.now() / 1000);
@@ -77,6 +77,35 @@ export class SocketInbox {
     this.socket.send(JSON.stringify({ type: "command", envelope }));
   }
 
+  /** Inspect the result without consuming the batch that may also contain a spawn. */
+  result(envelope: CommandEnvelope): Promise<ServerEvent & { event: Extract<ServerEvent["event"], { kind: "commandResult" }> }> {
+    return new Promise((resolve, reject) => {
+      const label = `${envelope.command.kind} sequence ${envelope.clientSequence}`;
+      const timeout = setTimeout(() => {
+        this.listeners.delete(check);
+        reject(new Error(`Timed out waiting for commandResult: ${label}`));
+      }, 3000);
+      const check = () => {
+        for (const message of this.messages) {
+          if (message.type === "error" && (message.commandId === undefined || message.commandId === envelope.commandId)) {
+            clearTimeout(timeout); this.listeners.delete(check);
+            reject(new Error(`${label} transport refusal: ${message.code}`));
+            return;
+          }
+          if (message.type !== "events") continue;
+          const result = message.events.find((item) => item.event.kind === "commandResult"
+            && item.event.commandId === envelope.commandId && item.event.clientSequence === envelope.clientSequence);
+          if (result?.event.kind !== "commandResult") continue;
+          clearTimeout(timeout); this.listeners.delete(check);
+          resolve({ ...result, event: result.event });
+          return;
+        }
+      };
+      this.listeners.add(check);
+      check();
+    });
+  }
+
   close(): void {
     if (this.socket.readyState === WebSocket.OPEN) this.socket.close(1000, "test-complete");
   }
@@ -92,5 +121,41 @@ export function command(snapshot: Extract<ServerMessage, { type: "snapshot" }>, 
   return {
     v: 1, commandId, clientSequence, authorityEpoch: snapshot.snapshot.authorityEpoch,
     frameEpoch: snapshot.snapshot.frameEpoch, sentAtMs: snapshot.snapshot.matchTimeMs, command: payload,
+  };
+}
+
+/** A bounded stationary phone feed using a live authority clock, never admission time. */
+export async function phoneInput(socket: SocketInbox, initial: Extract<ServerMessage, { type: "snapshot" }>, position: Vec3) {
+  const nonce = crypto.randomUUID();
+  socket.socket.send(JSON.stringify({ type: "ping", nonce, clientSentAtMs: performance.now() }));
+  const pong = await socket.next("pong", (message) => message.nonce === nonce);
+  const receivedAt = performance.now();
+  const now = () => pong.serverSentAtMs + Math.max(0, performance.now() - receivedAt);
+  let clientSequence = initial.clientSequence;
+  let poseSequence = 0;
+  let timer: ReturnType<typeof setInterval> | null = null;
+  const send = (payload: CommandEnvelope["command"]): CommandEnvelope => {
+    const envelope = { ...command(initial, ++clientSequence, payload), sentAtMs: now() };
+    socket.send(envelope);
+    return envelope;
+  };
+  const sample = (): CommandEnvelope => send({ kind: "pose", observations: [], pose: {
+    sequence: ++poseSequence, capturedAtMs: now(), position, orientation: [0, 0, 0, 1], tracking: "normal",
+  } });
+  const stopTracking = (): void => { clearInterval(timer); timer = null; };
+  return {
+    send, sample, stopTracking,
+    get poseSequence() { return poseSequence; },
+    startTracking(): CommandEnvelope {
+      stopTracking();
+      let remaining = 60;
+      const first = sample();
+      // Match the authority's 20 Hz cadence; stop even if a failed assertion skips cleanup.
+      timer = setInterval(() => {
+        if (--remaining === 0 || socket.socket.readyState !== WebSocket.OPEN) { stopTracking(); return; }
+        sample();
+      }, LIMITS.tickMs);
+      return first;
+    },
   };
 }

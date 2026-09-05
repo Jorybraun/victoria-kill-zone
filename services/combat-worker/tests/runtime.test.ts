@@ -1,8 +1,8 @@
 import { env, exports as workerExports } from "cloudflare:workers";
 import { abortAllDurableObjects, evictDurableObject, runInDurableObject, runDurableObjectAlarm } from "cloudflare:test";
 import { afterEach, describe, expect, it } from "vitest";
-import { LIMITS } from "@vkz/combat-protocol";
-import { claims, command, connect, requestUpgrade, token } from "./helpers.js";
+import { LIMITS, type CommandEnvelope } from "@vkz/combat-protocol";
+import { claims, command, connect, phoneInput, requestUpgrade, token, type SocketInbox } from "./helpers.js";
 
 afterEach(async () => { await abortAllDurableObjects(); });
 
@@ -153,29 +153,47 @@ describe("durable command processing", () => {
     const hostState = await host.next("snapshot");
     const guest = await connect({ ...payload, playerId: "guest" });
     const guestState = await guest.next("snapshot");
-    const ready = { kind: "frameReady" as const, ready: true, residualMeters: 0.01, residualDegrees: 0.1, clockUncertaintyMs: 1 };
-    guest.send(command(guestState, 1, ready));
-    guest.send(command(guestState, 2, { kind: "pose", observations: [], pose: {
-      sequence: 1, capturedAtMs: guestState.snapshot.matchTimeMs, position: [0, 0, -6], orientation: [0, 0, 0, 1], tracking: "normal",
-    } }));
-    host.send(command(hostState, 1, ready));
-    host.send(command(hostState, 2, { kind: "pose", observations: [], pose: {
-      sequence: 1, capturedAtMs: hostState.snapshot.matchTimeMs, position: [0, 0, 0], orientation: [0, 0, 0, 1], tracking: "normal",
-    } }));
-    host.send(command(hostState, 3, { kind: "start" }));
-    host.send(command(hostState, 4, { kind: "fire", shotId: "projectile-first", poseSequence: 1, origin: [0, 0, 0], direction: [0, 0, -1] }));
-    const acknowledged = await host.next("ack", (ack) => ack.clientSequence === 4);
-    expect(acknowledged.replayed).toBe(false);
-    const onHost = await host.next("events", (batch) => batch.events.some((event) => event.event.kind === "projectileSpawn"));
-    const onGuest = await guest.next("events", (batch) => batch.events.some((event) => event.event.kind === "projectileSpawn"));
-    const spawned = onHost.events.find((event) => event.event.kind === "projectileSpawn");
-    expect(onGuest.events).toContainEqual(spawned);
-    const persisted = await runInDurableObject(env.COMBAT_ROOMS.getByName(payload.matchId), (_instance, state) => state.storage.sql.exec<{ checkpoint: string }>("SELECT checkpoint FROM room").one().checkpoint);
-    const checkpoint: unknown = JSON.parse(persisted);
-    const expectedHost: unknown = expect.objectContaining({ playerId: "host", ammo: 7 });
-    const expectedPlayers: unknown = expect.arrayContaining([expectedHost]);
-    expect(checkpoint).toMatchObject({ snapshot: { phase: "running", players: expectedPlayers } });
-    host.close(); guest.close();
+    // A player can wait in the lobby longer than either input freshness budget.
+    // Advancing authority time explicitly makes reuse of admission timestamps fail deterministically.
+    await host.next("snapshot", (state) => state.snapshot.matchTimeMs > hostState.snapshot.matchTimeMs + LIMITS.rewindMs);
+    const [hostInput, guestInput] = await Promise.all([phoneInput(host, hostState, [0, 0, 0]), phoneInput(guest, guestState, [0, 0, -6])]);
+    const accepted = async (socket: SocketInbox, input: CommandEnvelope) => {
+      const result = await socket.result(input);
+      expect(result.event, `${input.command.kind} sequence ${input.clientSequence}`).toMatchObject({ accepted: true, reason: null });
+      return result;
+    };
+    try {
+      const ready = { kind: "frameReady" as const, ready: true, residualMeters: 0.01, residualDegrees: 0.1, clockUncertaintyMs: 1 };
+      await Promise.all([accepted(host, hostInput.send(ready)), accepted(guest, guestInput.send(ready))]);
+      // Cross-socket send order is not a barrier. Both poses must be durably accepted,
+      // and keep refreshing while later commands and persistence assertions run.
+      await Promise.all([accepted(host, hostInput.startTracking()), accepted(guest, guestInput.startTracking())]);
+      const started = await accepted(host, hostInput.send({ kind: "start" }));
+      const firingPose = hostInput.sample();
+      const fire = hostInput.send({ kind: "fire", shotId: "projectile-first", poseSequence: hostInput.poseSequence, origin: [0, 0, 0], direction: [0, 0, -1] });
+      const [, fired, acknowledged] = await Promise.all([
+        accepted(host, firingPose), accepted(host, fire), host.next("ack", (ack) => ack.commandId === fire.commandId),
+      ]);
+      expect(acknowledged).toMatchObject({ clientSequence: fire.clientSequence, replayed: false });
+      const onHost = await host.next("events", (batch) => batch.events.some((event) => event.event.kind === "projectileSpawn"));
+      const onGuest = await guest.next("events", (batch) => batch.events.some((event) => event.event.kind === "projectileSpawn"));
+      const spawned = onHost.events.find((event) => event.event.kind === "projectileSpawn");
+      expect(onGuest.events).toContainEqual(spawned);
+      expect(spawned).toMatchObject({ matchTimeMs: fired.matchTimeMs, event: { kind: "projectileSpawn", projectile: { shotId: "projectile-first", shooterId: "host" } } });
+      const persisted = await runInDurableObject(env.COMBAT_ROOMS.getByName(payload.matchId), (_instance, state) => ({
+        checkpoint: state.storage.sql.exec<{ checkpoint: string }>("SELECT checkpoint FROM room").one().checkpoint,
+        spawns: state.storage.sql.exec<{ payload: string }>("SELECT payload FROM bullet_events WHERE kind = 'projectileSpawn'").toArray(),
+      }));
+      const checkpoint: unknown = JSON.parse(persisted.checkpoint);
+      const expectedHost: unknown = expect.objectContaining({ playerId: "host", ammo: 7 });
+      const expectedPlayers: unknown = expect.arrayContaining([expectedHost]);
+      // Phase may legitimately pause if tracking later expires; round start and ammo are durable.
+      expect(checkpoint).toMatchObject({ snapshot: { roundStartedAtMs: started.matchTimeMs, players: expectedPlayers } });
+      expect(persisted.spawns.map((row) => JSON.parse(row.payload) as unknown)).toEqual([spawned]);
+    } finally {
+      hostInput.stopTracking(); guestInput.stopTracking();
+      host.close(); guest.close();
+    }
   });
 });
 
