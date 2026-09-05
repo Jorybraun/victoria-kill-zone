@@ -7,6 +7,9 @@ protocol DuelPeerLink: AnyObject {
   func send(_ message: ArenaLinkMessage)
 }
 
+extension CombatTransportArenaLink: DuelPeerLink {}
+extension FallbackArenaPeerLink: DuelPeerLink {}
+
 #if canImport(Network)
   extension ArenaPeerLink: DuelPeerLink {}
 #endif

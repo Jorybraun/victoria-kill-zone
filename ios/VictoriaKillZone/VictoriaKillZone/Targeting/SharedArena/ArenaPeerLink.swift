@@ -1,56 +1,5 @@
 import Foundation
 
-// MARK: - Harness peer link (KIL-20)
-//
-// Two-phone, host/guest, Bonjour-discovered Network.framework TCP link carrying
-// `ArenaLinkMessage` frames. Reliable and ordered by construction, which is what
-// world-map and collaboration blobs need; pose samples ride the same stream at
-// 10–20 Hz for the proof (the ticket's starting rate). This is deliberately
-// scoped to the harness — see ArenaLinkMessage.swift for why it is not the
-// KIL-35 combat transport.
-
-enum ArenaClock {
-  /// Milliseconds on the same monotonic base as `ARFrame.timestamp`.
-  static func nowMs() -> Int64 {
-    Int64((ProcessInfo.processInfo.systemUptime * 1_000).rounded())
-  }
-}
-
-enum ArenaPeerLinkState: Equatable, Sendable {
-  case idle
-  case advertising
-  case browsing
-  case connecting
-  case connected
-  case failed(String)
-
-  var label: String {
-    switch self {
-    case .idle: "idle"
-    case .advertising: "advertising"
-    case .browsing: "browsing"
-    case .connecting: "connecting"
-    case .connected: "connected"
-    case .failed(let reason): "failed:\(reason)"
-    }
-  }
-}
-
-struct ArenaPeerLinkStats: Equatable, Sendable {
-  var bytesIn = 0
-  var bytesOut = 0
-  var framingErrors = 0
-}
-
-protocol ArenaPeerLinking: AnyObject {
-  var onMessage: ((ArenaLinkMessage, Int64) -> Void)? { get set }
-  var onStateChange: ((ArenaPeerLinkState) -> Void)? { get set }
-  var stats: ArenaPeerLinkStats { get }
-  func start(role: ArenaRole)
-  func stop()
-  func send(_ message: ArenaLinkMessage)
-}
-
 #if canImport(Network)
   import Network
 
@@ -59,7 +8,6 @@ protocol ArenaPeerLinking: AnyObject {
     /// Single-read ceiling; frames larger than this arrive across several reads
     /// and are reassembled by `ArenaLinkCodec.drainFrames`.
     private static let readChunk = 256 * 1024
-
     var onMessage: ((ArenaLinkMessage, Int64) -> Void)?
     var onStateChange: ((ArenaPeerLinkState) -> Void)?
 
@@ -72,9 +20,28 @@ protocol ArenaPeerLinking: AnyObject {
     private var connection: NWConnection?
     private var receiveBuffer = Data()
     private var state: ArenaPeerLinkState = .idle
+    private var role: ArenaRole?
+    private var handshake: Handshake = .none
+    private var handshakeTimeout: DispatchWorkItem?
+    private let preSharedKey: Data?
 
-    init(serviceName: String? = nil) {
+    private enum Handshake {
+      case none
+      case awaitingNonce(ArenaLinkAuthenticator)
+      case awaitingProof(ArenaLinkAuthenticator, peerNonce: Data)
+      case verified
+
+      var isPending: Bool {
+        switch self {
+        case .awaitingNonce, .awaitingProof: true
+        case .none, .verified: false
+        }
+      }
+    }
+
+    init(serviceName: String? = nil, preSharedKey: Data? = nil) {
       self.serviceName = serviceName
+      self.preSharedKey = preSharedKey
     }
 
     // Only touched on `primerQueue`.
@@ -116,6 +83,7 @@ protocol ArenaPeerLinking: AnyObject {
     func start(role: ArenaRole) {
       queue.async { [self] in
         tearDownLocked()
+        self.role = role
         switch role {
         case .host: startListenerLocked()
         case .guest: startBrowserLocked()
@@ -159,11 +127,11 @@ protocol ArenaPeerLinking: AnyObject {
         listener.newConnectionHandler = { [weak self] incoming in
           guard let self else { return }
           // The proof is two phones: the first peer wins, later ones are refused.
-          guard connection == nil else {
+          guard self.connection == nil else {
             incoming.cancel()
             return
           }
-          adopt(incoming)
+          self.adopt(incoming)
         }
         self.listener = listener
         listener.start(queue: queue)
@@ -187,14 +155,14 @@ protocol ArenaPeerLinking: AnyObject {
         }
       }
       browser.browseResultsChangedHandler = { [weak self] results, _ in
-        guard let self, connection == nil else { return }
+        guard let self, self.connection == nil else { return }
         let result = results.first { result in
           guard let serviceName = self.serviceName else { return true }
           guard case let .service(name, type, _, _) = result.endpoint else { return false }
           return name == serviceName && type == Self.serviceType
         }
         guard let result else { return }
-        adopt(NWConnection(to: result.endpoint, using: Self.parameters()))
+        self.adopt(NWConnection(to: result.endpoint, using: Self.parameters()))
         browser.cancel()
         self.browser = nil
       }
@@ -212,10 +180,17 @@ protocol ArenaPeerLinking: AnyObject {
         guard let self else { return }
         switch connectionState {
         case .ready:
-          setState(.connected)
-          receiveNext()
+          if let preSharedKey, let role = self.role {
+            let authenticator = ArenaLinkAuthenticator(preSharedKey: preSharedKey, role: role)
+            self.handshake = .awaitingNonce(authenticator)
+            self.sendHandshakeData(authenticator.localNonce)
+            self.armHandshakeTimeout()
+          } else {
+            self.setState(.connected)
+          }
+          self.receiveNext()
         case .failed(let error):
-          fail("connection:\(error.localizedDescription)")
+          self.fail("connection:\(error.localizedDescription)")
         case .cancelled:
           if self.connection === connection { self.connection = nil }
         default:
@@ -232,26 +207,81 @@ protocol ArenaPeerLinking: AnyObject {
         guard let self else { return }
         if let content, !content.isEmpty {
           let arrivalMs = ArenaClock.nowMs()
-          lock.withLock { self._stats.bytesIn += content.count }
-          receiveBuffer.append(content)
+          self.lock.withLock { self._stats.bytesIn += content.count }
+          self.receiveBuffer.append(content)
+          guard self.processHandshake() else {
+            if self.handshake.isPending {
+              self.receiveNext()
+            }
+            return
+          }
           do {
-            for message in try ArenaLinkCodec.drainFrames(from: &receiveBuffer) {
-              onMessage?(message, arrivalMs)
+            for message in try ArenaLinkCodec.drainFrames(from: &self.receiveBuffer) {
+              self.onMessage?(message, arrivalMs)
             }
           } catch {
-            lock.withLock { self._stats.framingErrors += 1 }
-            fail("framing:\(String(describing: error))")
+            self.lock.withLock { self._stats.framingErrors += 1 }
+            self.fail("framing:\(String(describing: error))")
             return
           }
         }
         if let error {
-          fail("receive:\(error.localizedDescription)")
+          self.fail("receive:\(error.localizedDescription)")
         } else if isComplete {
-          fail("peer closed")
+          self.fail("peer closed")
         } else {
-          receiveNext()
+          self.receiveNext()
         }
       }
+    }
+
+    private func processHandshake() -> Bool {
+      guard preSharedKey != nil else { return true }
+      while true {
+        switch handshake {
+        case .none, .verified:
+          return true
+        case let .awaitingNonce(authenticator):
+          guard receiveBuffer.count >= ArenaLinkAuthenticator.nonceLength else {
+            return false
+          }
+          let peerNonce = Data(receiveBuffer.prefix(ArenaLinkAuthenticator.nonceLength))
+          receiveBuffer.removeSubrange(0..<ArenaLinkAuthenticator.nonceLength)
+          sendHandshakeData(authenticator.proof(peerNonce: peerNonce))
+          handshake = .awaitingProof(authenticator, peerNonce: peerNonce)
+        case let .awaitingProof(authenticator, peerNonce):
+          guard receiveBuffer.count >= ArenaLinkAuthenticator.proofLength else {
+            return false
+          }
+          let peerProof = Data(receiveBuffer.prefix(ArenaLinkAuthenticator.proofLength))
+          receiveBuffer.removeSubrange(0..<ArenaLinkAuthenticator.proofLength)
+          guard authenticator.verify(peerProof: peerProof, peerNonce: peerNonce) else {
+            fail("peer authentication failed")
+            return false
+          }
+          handshakeTimeout?.cancel()
+          handshakeTimeout = nil
+          handshake = .verified
+          setState(.connected)
+        }
+      }
+    }
+
+    private func sendHandshakeData(_ data: Data) {
+      guard let connection else { return }
+      lock.withLock { self._stats.bytesOut += data.count }
+      connection.send(content: data, completion: .contentProcessed { [weak self] error in
+        if let error { self?.fail("send:\(error.localizedDescription)") }
+      })
+    }
+
+    private func armHandshakeTimeout() {
+      let timeout = DispatchWorkItem { [weak self] in
+        guard let self, self.handshake.isPending else { return }
+        self.fail("auth timeout")
+      }
+      handshakeTimeout = timeout
+      queue.asyncAfter(deadline: .now() + 3, execute: timeout)
     }
 
     private func fail(_ reason: String) {
@@ -267,6 +297,9 @@ protocol ArenaPeerLinking: AnyObject {
       connection?.cancel()
       connection = nil
       receiveBuffer.removeAll(keepingCapacity: false)
+      handshakeTimeout?.cancel()
+      handshakeTimeout = nil
+      handshake = .none
     }
 
     private func setState(_ newState: ArenaPeerLinkState) {
