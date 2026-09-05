@@ -245,4 +245,34 @@ describe("bounded transport and idle lifecycle", () => {
     }));
     expect(counts.room).toBe(1); expect(counts.pending).toBeGreaterThan(0);
   });
+
+  it("does not turn idle recovery into activity or an unbounded projection backlog", async () => {
+    const payload = claims();
+    const socket = await connect(payload);
+    await socket.next("snapshot"); socket.close(); await socket.closed;
+    const activityAt = Date.now() - 25 * 60 * 60 * 1000;
+    await runInDurableObject(env.COMBAT_ROOMS.getByName(payload.matchId), async (_instance, state) => {
+      state.storage.sql.exec("UPDATE room SET last_activity_ms = ?", activityAt);
+      await state.storage.setAlarm(Date.now() + 1000);
+    });
+    const wake = async () => {
+      await evictDurableObject(env.COMBAT_ROOMS.getByName(payload.matchId), { webSockets: "close" });
+      return runInDurableObject(env.COMBAT_ROOMS.getByName(payload.matchId), (_instance, state) => ({
+        room: state.storage.sql.exec<{ last_activity_ms: number; authority_epoch: number; event_sequence: number }>("SELECT last_activity_ms, authority_epoch, event_sequence FROM room").one(),
+        pending: state.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM projection_outbox").one().count,
+      }));
+    };
+    const first = await wake();
+    const second = await wake();
+    expect(first.room.last_activity_ms).toBe(activityAt);
+    expect(second.room.last_activity_ms).toBe(activityAt);
+    expect(second.room.authority_epoch).toBe(first.room.authority_epoch + 1);
+    expect(second.room.event_sequence).toBe(first.room.event_sequence);
+    expect(second.pending).toBe(first.pending);
+    await runInDurableObject(env.COMBAT_ROOMS.getByName(payload.matchId), (_instance, state) => state.storage.sql.exec("DELETE FROM projection_outbox").rowsWritten);
+    await evictDurableObject(env.COMBAT_ROOMS.getByName(payload.matchId), { webSockets: "close" });
+    expect(await runDurableObjectAlarm(env.COMBAT_ROOMS.getByName(payload.matchId))).toBe(true);
+    const tables = await runInDurableObject(env.COMBAT_ROOMS.getByName(payload.matchId), (_instance, state) => state.storage.sql.exec<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'room'").toArray());
+    expect(tables).toHaveLength(0);
+  });
 });

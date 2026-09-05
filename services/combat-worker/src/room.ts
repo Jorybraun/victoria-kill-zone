@@ -4,7 +4,7 @@ import {
   type AuthenticatedCommand, type CombatEvent,
   type CombatTicketClaims, type CommandEnvelope, type ServerEvent, type ServerMessage,
 } from "@vkz/combat-protocol";
-import { CombatSimulation } from "@vkz/combat-simulation";
+import { CombatSimulation, parseCheckpoint } from "@vkz/combat-simulation";
 import { canonicalJson } from "./canonical.js";
 import { verifyBearerTicket } from "./auth.js";
 import { Connection } from "./connection.js";
@@ -45,13 +45,21 @@ export class CombatRoom extends DurableObject<Env> {
       this.store.initialize();
       const saved = this.store.load();
       if (saved !== null) {
-        const checkpoint: unknown = JSON.parse(saved.checkpoint);
+        const raw: unknown = JSON.parse(saved.checkpoint);
+        const checkpoint = parseCheckpoint(raw);
         const candidate = CombatSimulation.restore(checkpoint, {
           authorityEpoch: saved.authority_epoch + 1, frameEpoch: saved.frame_epoch,
         });
         this.bootstrap = saved.bootstrap;
         this.eventSequence = saved.event_sequence;
-        await this.commitCandidate(candidate, candidate.takeRecoveryEvents(), []);
+        // An idle maintenance wake-up is not player activity. Avoid producing
+        // redundant projections when recovery changes only authority epoch.
+        const recovery = candidate.takeRecoveryEvents().filter((event) => {
+          if (event.kind === "phaseChanged") return event.phase !== checkpoint.snapshot.phase;
+          if (event.kind === "playerChanged") return canonicalJson(event.player) !== canonicalJson(checkpoint.snapshot.players.find((player) => player.playerId === event.player.playerId));
+          return true;
+        });
+        await this.commitCandidate(candidate, recovery, [], saved.last_activity_ms);
       }
       // Hibernated sockets belong to the old authority instance. Reconnect
       // supplies a fresh snapshot and prevents stale attachments from authorizing input.
@@ -153,7 +161,9 @@ export class CombatRoom extends DurableObject<Env> {
           connection.close(1009, "message-too-large-or-binary");
           return;
         }
-        if (!connection.admit(Date.now(), LIMITS.commandsPerSecond)) {
+        // Receipts grow with other players' bullet events, so the bounded
+        // transport envelope has a separate budget from this player's commands.
+        if (!connection.admit(Date.now(), LIMITS.commandsPerSecond * 4)) {
           connection.send({ type: "error", code: "rateLimited" });
           connection.close(4008, "input-rate-exceeded");
           return;
@@ -165,12 +175,15 @@ export class CombatRoom extends DurableObject<Env> {
           return;
         }
         switch (parsed.type) {
-          case "command": this.admitCommand(connection, parsed.envelope); break;
+          case "command":
+            if (!connection.admitCommand(Date.now())) { this.error(connection, "rateLimited"); connection.close(4008, "command-rate-exceeded"); break; }
+            this.admitCommand(connection, parsed.envelope); break;
           case "received":
             if (!connection.acknowledge(parsed.eventSequence)) connection.close(1008, "invalid-receipt");
             break;
           case "resume": this.resume(connection, parsed.afterEventSequence); break;
           case "ping": {
+            if (!connection.admitPing(Date.now())) { this.error(connection, "rateLimited"); connection.close(4008, "ping-rate-exceeded"); break; }
             const now = this.logicalNow();
             connection.send({ type: "pong", nonce: parsed.nonce, clientSentAtMs: parsed.clientSentAtMs, serverReceivedAtMs: now, serverSentAtMs: this.logicalNow() });
             break;
@@ -319,7 +332,7 @@ export class CombatRoom extends DurableObject<Env> {
     this.scheduleTick();
   }
 
-  private async commitCandidate(candidate: CombatSimulation, events: readonly CombatEvent[], pending: readonly PendingCommand[]): Promise<ServerEvent[]> {
+  private async commitCandidate(candidate: CombatSimulation, events: readonly CombatEvent[], pending: readonly PendingCommand[], activityAtMs = Date.now()): Promise<ServerEvent[]> {
     const snapshot = candidate.snapshot();
     const wrapped: ServerEvent[] = events.map((event, index) => ({
       v: 1, matchId: snapshot.matchId, authorityEpoch: snapshot.authorityEpoch, frameEpoch: snapshot.frameEpoch,
@@ -331,7 +344,7 @@ export class CombatRoom extends DurableObject<Env> {
       return { ...item, result };
     });
     const sequence = this.eventSequence + wrapped.length;
-    this.store.commit(snapshot, candidate.checkpoint({ includeTracking: false }), wrapped, processed, sequence, Date.now());
+    this.store.commit(snapshot, candidate.checkpoint({ includeTracking: false }), wrapped, processed, sequence, activityAtMs);
     await this.ctx.storage.sync();
     this.simulation = candidate;
     this.eventSequence = sequence;

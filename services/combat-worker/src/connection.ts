@@ -12,12 +12,34 @@ export class Connection {
   private refillAt: number;
   private outstandingBytes = 0;
   private readonly bytesBySequence = new Map<number, number>();
+  private commandTokens = 90;
+  private commandRefillAt: number;
+  private pingTokens = 5;
+  private pingRefillAt: number;
 
   constructor(readonly socket: WebSocket, readonly playerId: string, eventSequence: number, now: number) {
     this.receivedSequence = eventSequence;
     this.sentSequence = eventSequence;
     this.lastActivityAt = now;
     this.refillAt = now;
+    this.commandRefillAt = now;
+    this.pingRefillAt = now;
+  }
+
+  admitCommand(now: number): boolean {
+    this.commandTokens = Math.min(90, this.commandTokens + Math.max(0, now - this.commandRefillAt) * LIMITS.commandsPerSecond / 1000);
+    this.commandRefillAt = now;
+    if (this.commandTokens < 1) return false;
+    this.commandTokens -= 1;
+    return true;
+  }
+
+  admitPing(now: number): boolean {
+    this.pingTokens = Math.min(5, this.pingTokens + Math.max(0, now - this.pingRefillAt) * 2 / 1000);
+    this.pingRefillAt = now;
+    if (this.pingTokens < 1) return false;
+    this.pingTokens -= 1;
+    return true;
   }
 
   admit(now: number, perSecond: number): boolean {

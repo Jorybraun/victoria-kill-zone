@@ -17,6 +17,7 @@
     private let hitFeedback = UINotificationFeedbackGenerator()
     private let skeletonRoot = SCNNode()
     private let skeletonAnatomy = SkeletonAnatomyModel()
+    private let realtimeFX = RealtimeCombatFX()
     private var hitPresentation = HitSkeletonPresentation()
     private var confirmedHitZone: TargetingHitZone?
     private var lastSkeletonUpdate: TimeInterval = 0
@@ -37,6 +38,7 @@
       skeletonRoot.isHidden = true
       skeletonRoot.addChildNode(skeletonAnatomy.root)
       effectsRoot.addChildNode(skeletonRoot)
+      effectsRoot.addChildNode(realtimeFX.root)
       tracerPool.attach(to: effectsRoot)
       impactPool.attach(to: effectsRoot)
       configureAudio()
@@ -56,9 +58,7 @@
     /// Immediate local fire feedback. The streak is cosmetic hitscan presentation,
     /// not a projectile collider. Predicted shots must pass `hit: false`.
     func fireLaser(hit: Bool = false, ray: TargetingCameraRay? = nil) {
-      shotFeedback.impactOccurred(intensity: 0.7)
-      shotFeedback.prepare()
-      playPew()
+      predictMuzzle()
       if hit { confirmHit(skeleton: nil, zone: nil) }
       guard let sceneView else { return }
       let origin: SIMD3<Float>
@@ -104,6 +104,24 @@
         to: origin + direction * Float(CombatPresentationPolicy.maximumTracerDistance),
         incoming: false
       )
+    }
+
+    /// Immediate input feedback only. Accepted finite flight arrives separately
+    /// through updateRealtime; this never paints a predicted full-range ray.
+    func predictMuzzle() {
+      shotFeedback.impactOccurred(intensity: 0.7)
+      shotFeedback.prepare()
+      playPew()
+    }
+
+    func updateRealtime(snapshot: CombatWire.Snapshot, matchTimeMs: Double) {
+      guard sceneView != nil else { realtimeFX.clear(); return }
+      realtimeFX.update(snapshot: snapshot, matchTimeMs: matchTimeMs)
+    }
+
+    func clearRealtime() {
+      realtimeFX.clear()
+      clearSkeleton()
     }
 
     /// Only call after an accepted outgoing hit. With no fresh observed body, the
@@ -181,6 +199,7 @@
     }
 
     func clearTransientEffects() {
+      realtimeFX.clear()
       clearSkeleton()
       tracerPool.clear()
       impactPool.clear()
@@ -385,6 +404,9 @@
   final class LaserFXEngine: ObservableObject {
     func fireLaser(hit: Bool = false, ray: TargetingCameraRay? = nil) {}
     func confirmHit(skeleton: TargetingSkeleton?, zone: TargetingHitZone?) {}
+    func predictMuzzle() {}
+    func updateRealtime(snapshot: CombatWire.Snapshot, matchTimeMs: Double) {}
+    func clearRealtime() {}
     func renderIncomingLaser(from origin: SIMD3<Float>?, hit: Bool) {}
     func updateSkeleton(_ skeleton: TargetingSkeleton?, zone: TargetingHitZone?) {}
     func clearTransientEffects() {}
