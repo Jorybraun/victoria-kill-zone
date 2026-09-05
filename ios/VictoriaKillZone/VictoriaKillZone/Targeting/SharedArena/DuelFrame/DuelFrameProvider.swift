@@ -9,6 +9,7 @@ final class DuelFrameProvider: ObservableObject {
   @Published private(set) var snapshot = DuelFrameSnapshot()
   @Published private(set) var referenceState: DuelFrameReferenceState = .unavailable
   private let targeting: any DuelFrameSessionDriving
+  private let now: @MainActor () -> Date
   private var policy = DuelFramePolicy()
   private var installedMap: DuelFrameMap?
   private var capturedReference: DuelFrameReference?
@@ -17,8 +18,9 @@ final class DuelFrameProvider: ObservableObject {
   private var observationsTask: Task<Void, Never>?
   private var watchdogTask: Task<Void, Never>?
 
-  init(targeting: any DuelFrameSessionDriving) {
+  init(targeting: any DuelFrameSessionDriving, now: @escaping @MainActor () -> Date = Date.init) {
     self.targeting = targeting
+    self.now = now
     let observations = targeting.duelFrameObservations()
     observationsTask = Task { [weak self] in
       for await observation in observations {
@@ -84,7 +86,7 @@ final class DuelFrameProvider: ObservableObject {
   /// Both the capturing phone and every receiving phone install identical bytes.
   /// ARKit relocalizes in world tracking before a second, map-seeded body run.
   func installMap(_ map: DuelFrameMap) async throws {
-    try policy.beginInstall(map, at: Date())
+    try policy.beginInstall(map, at: now())
     installedMap = map
     referenceState = map.reference.map { .captured($0.summary) } ?? .unavailable
     referencePolicy = DuelFrameReferencePolicy()
@@ -107,7 +109,7 @@ final class DuelFrameProvider: ObservableObject {
   ) throws {
     defer { publish() }
     try policy.recordResidual(frameID: frameID, epoch: epoch, translationMeters: translationMeters,
-      yawDegrees: yawDegrees, observedAt: observedAt, now: Date())
+      yawDegrees: yawDegrees, observedAt: observedAt, now: now())
   }
 
   func invalidate(reason: DuelFrameFailure) {
@@ -131,15 +133,16 @@ final class DuelFrameProvider: ObservableObject {
   }
 
   private func receive(_ observation: DuelFrameObservation) async {
-    let switchToBody = policy.ingest(observation, at: Date())
+    let evaluatedAt = now()
+    let switchToBody = policy.ingest(observation, at: evaluatedAt)
     if observation.phase == .bodyRelocalization, observation.epoch == snapshot.epoch,
       observation.frameID == snapshot.frameID {
       if let expected = installedMap?.reference, let sample = observation.referenceObservation {
         do {
-          if let residual = try referencePolicy.measure(sample, expected: expected, now: Date()) {
+          if let residual = try referencePolicy.measure(sample, expected: expected, now: evaluatedAt) {
             try policy.recordResidual(frameID: observation.frameID!, epoch: observation.epoch,
               translationMeters: residual.translationMeters, yawDegrees: residual.yawDegrees,
-              observedAt: residual.observedAt, now: Date())
+              observedAt: residual.observedAt, now: evaluatedAt)
           }
         } catch DuelFrameFailure.residualExceeded {
           // recordResidual already revoked readiness; preserve its useful reason.
@@ -162,7 +165,7 @@ final class DuelFrameProvider: ObservableObject {
       while !Task.isCancelled {
         do { try await Task.sleep(for: .milliseconds(50)) } catch { return }
         guard let self else { return }
-        policy.tick(at: Date())
+        policy.tick(at: now())
         publish()
       }
     }

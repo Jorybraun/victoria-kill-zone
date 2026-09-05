@@ -1,8 +1,8 @@
 import { env, exports as workerExports } from "cloudflare:workers";
 import { abortAllDurableObjects, evictDurableObject, runInDurableObject, runDurableObjectAlarm } from "cloudflare:test";
 import { afterEach, describe, expect, it } from "vitest";
-import { LIMITS, type CommandEnvelope } from "@vkz/combat-protocol";
-import { claims, command, connect, phoneInput, requestUpgrade, token, type SocketInbox } from "./helpers.js";
+import { LIMITS, type CommandEnvelope, type ServerMessage } from "@vkz/combat-protocol";
+import { claims, command, connect, manuallyScheduledRoom, phoneInput, requestUpgrade, token, SocketInbox } from "./helpers.js";
 
 afterEach(async () => { await abortAllDurableObjects(); });
 
@@ -149,14 +149,17 @@ describe("durable command processing", () => {
 
   it("starts a ready two-phone match and persists one projectile before both phones see it", async () => {
     const payload = claims();
+    const room = await manuallyScheduledRoom(payload.matchId);
     const host = await connect(payload);
     const hostState = await host.next("snapshot");
     const guest = await connect({ ...payload, playerId: "guest" });
     const guestState = await guest.next("snapshot");
     // A player can wait in the lobby longer than either input freshness budget.
     // Advancing authority time explicitly makes reuse of admission timestamps fail deterministically.
-    await host.next("snapshot", (state) => state.snapshot.matchTimeMs > hostState.snapshot.matchTimeMs + LIMITS.rewindMs);
-    const [hostInput, guestInput] = await Promise.all([phoneInput(host, hostState, [0, 0, 0]), phoneInput(guest, guestState, [0, 0, -6])]);
+    for (let tick = 0; tick <= LIMITS.rewindMs / LIMITS.tickMs; tick += 1) await room.tick();
+    expect(room.matchTimeMs - hostState.snapshot.matchTimeMs).toBeGreaterThan(LIMITS.rewindMs);
+    const hostInput = phoneInput(host, hostState, [0, 0, 0], () => room.matchTimeMs);
+    const guestInput = phoneInput(guest, guestState, [0, 0, -6], () => room.matchTimeMs);
     const accepted = async (socket: SocketInbox, input: CommandEnvelope) => {
       const result = await socket.result(input);
       expect(result.event, `${input.command.kind} sequence ${input.clientSequence}`).toMatchObject({ accepted: true, reason: null });
@@ -164,15 +167,20 @@ describe("durable command processing", () => {
     };
     try {
       const ready = { kind: "frameReady" as const, ready: true, residualMeters: 0.01, residualDegrees: 0.1, clockUncertaintyMs: 1 };
-      await Promise.all([accepted(host, hostInput.send(ready)), accepted(guest, guestInput.send(ready))]);
-      // Cross-socket send order is not a barrier. Both poses must be durably accepted,
-      // and keep refreshing while later commands and persistence assertions run.
-      await Promise.all([accepted(host, hostInput.startTracking()), accepted(guest, guestInput.startTracking())]);
-      const started = await accepted(host, hostInput.send({ kind: "start" }));
+      const hostReady = hostInput.send(ready), guestReady = guestInput.send(ready);
+      const hostPose = hostInput.sample(), guestPose = guestInput.sample();
+      await room.tick([host, guest], [hostReady, guestReady, hostPose, guestPose]);
+      await Promise.all([accepted(host, hostReady), accepted(guest, guestReady), accepted(host, hostPose), accepted(guest, guestPose)]);
+      const startingHostPose = hostInput.sample(), startingGuestPose = guestInput.sample();
+      const start = hostInput.send({ kind: "start" });
+      await room.tick([host, guest], [startingHostPose, startingGuestPose, start]);
+      const [, , started] = await Promise.all([accepted(host, startingHostPose), accepted(guest, startingGuestPose), accepted(host, start)]);
       const firingPose = hostInput.sample();
+      const targetPose = guestInput.sample();
       const fire = hostInput.send({ kind: "fire", shotId: "projectile-first", poseSequence: hostInput.poseSequence, origin: [0, 0, 0], direction: [0, 0, -1] });
-      const [, fired, acknowledged] = await Promise.all([
-        accepted(host, firingPose), accepted(host, fire), host.next("ack", (ack) => ack.commandId === fire.commandId),
+      await room.tick([host, guest], [firingPose, targetPose, fire]);
+      const [, , fired, acknowledged] = await Promise.all([
+        accepted(host, firingPose), accepted(guest, targetPose), accepted(host, fire), host.next("ack", (ack) => ack.commandId === fire.commandId),
       ]);
       expect(acknowledged).toMatchObject({ clientSequence: fire.clientSequence, replayed: false });
       const onHost = await host.next("events", (batch) => batch.events.some((event) => event.event.kind === "projectileSpawn"));
@@ -183,21 +191,66 @@ describe("durable command processing", () => {
       const persisted = await runInDurableObject(env.COMBAT_ROOMS.getByName(payload.matchId), (_instance, state) => ({
         checkpoint: state.storage.sql.exec<{ checkpoint: string }>("SELECT checkpoint FROM room").one().checkpoint,
         spawns: state.storage.sql.exec<{ payload: string }>("SELECT payload FROM bullet_events WHERE kind = 'projectileSpawn'").toArray(),
+        fireResult: state.storage.sql.exec<{ result_json: string }>("SELECT result_json FROM commands WHERE player_id = ? AND command_id = ?", "host", fire.commandId).one().result_json,
       }));
       const checkpoint: unknown = JSON.parse(persisted.checkpoint);
       const expectedHost: unknown = expect.objectContaining({ playerId: "host", ammo: 7 });
       const expectedPlayers: unknown = expect.arrayContaining([expectedHost]);
-      // Phase may legitimately pause if tracking later expires; round start and ammo are durable.
-      expect(checkpoint).toMatchObject({ snapshot: { roundStartedAtMs: started.matchTimeMs, players: expectedPlayers } });
+      expect(checkpoint).toMatchObject({ snapshot: { phase: "running", roundStartedAtMs: started.matchTimeMs, players: expectedPlayers } });
       expect(persisted.spawns.map((row) => JSON.parse(row.payload) as unknown)).toEqual([spawned]);
+      expect(JSON.parse(persisted.fireResult)).toEqual(fired);
     } finally {
-      hostInput.stopTracking(); guestInput.stopTracking();
       host.close(); guest.close();
     }
+  });
+
+  it("still refuses a single fire when the other phone's pose expires under controlled ticks", async () => {
+    const payload = claims();
+    const room = await manuallyScheduledRoom(payload.matchId);
+    const host = await connect(payload), guest = await connect({ ...payload, playerId: "guest" });
+    const hostInput = phoneInput(host, await host.next("snapshot"), [0, 0, 0], () => room.matchTimeMs);
+    const guestInput = phoneInput(guest, await guest.next("snapshot"), [0, 0, -6], () => room.matchTimeMs);
+    try {
+      const ready = { kind: "frameReady" as const, ready: true, residualMeters: 0.01, residualDegrees: 0.1, clockUncertaintyMs: 1 };
+      const hostReady = hostInput.send(ready), guestReady = guestInput.send(ready);
+      const hostPose = hostInput.sample(), guestPose = guestInput.sample();
+      const start = hostInput.send({ kind: "start" });
+      await room.tick([host, guest], [hostReady, guestReady, hostPose, guestPose, start]);
+      for (const [socket, input] of [[host, hostReady], [guest, guestReady], [host, hostPose], [guest, guestPose], [host, start]] as const) {
+        expect((await socket.result(input)).event).toMatchObject({ accepted: true, reason: null });
+      }
+      for (let tick = 0; tick < LIMITS.poseAgeMs / LIMITS.tickMs; tick += 1) await room.tick();
+      expect(room.matchTimeMs).toBeGreaterThan(LIMITS.poseAgeMs);
+      const freshHost = hostInput.sample();
+      const fire = hostInput.send({ kind: "fire", shotId: "stale-target", poseSequence: hostInput.poseSequence, origin: [0, 0, 0], direction: [0, 0, -1] });
+      await room.tick([host], [freshHost, fire]);
+      expect((await host.result(freshHost)).event).toMatchObject({ accepted: true, reason: null });
+      expect((await host.result(fire)).event).toMatchObject({ accepted: false, reason: "notRunning" });
+      const spawns = await runInDurableObject(env.COMBAT_ROOMS.getByName(payload.matchId), (_instance, state) => state.storage.sql.exec("SELECT payload FROM bullet_events WHERE kind = 'projectileSpawn'").toArray());
+      expect(spawns).toHaveLength(0);
+    } finally { host.close(); guest.close(); }
   });
 });
 
 describe("bounded transport and idle lifecycle", () => {
+  it("keeps a queued server message after local close without sending a receipt", async () => {
+    const pair = new WebSocketPair();
+    pair[1].accept();
+    const inbox = new SocketInbox(pair[0]);
+    const receipts: unknown[] = [];
+    pair[1].addEventListener("message", (event) => receipts.push(event.data));
+    const message: ServerMessage = { type: "events", events: [{
+      v: 1, matchId: crypto.randomUUID(), authorityEpoch: 1, frameEpoch: 1, eventSequence: 1, tick: 0, matchTimeMs: 0,
+      event: { kind: "phaseChanged", phase: "calibrating", reason: "test-initial-state" },
+    }] };
+    pair[1].send(JSON.stringify(message));
+    inbox.close();
+    expect(await inbox.next("events")).toEqual(message);
+    pair[1].close();
+    await inbox.closed;
+    expect(receipts).toEqual([]);
+  });
+
   it("closes oversized, malformed, and binary frames", async () => {
     for (const message of ["x".repeat(LIMITS.messageBytes + 1), "not-json", new ArrayBuffer(4)]) {
       const socket = await connect(claims());
