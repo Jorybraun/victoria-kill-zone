@@ -37,6 +37,7 @@ enum LobbyNetworkOperation: Equatable, Sendable {
   case joining
   case settingReady
   case starting
+  case leaving
 }
 
 @MainActor
@@ -57,6 +58,7 @@ final class LobbyStore: ObservableObject {
     didSet { duel.updateTargeting(targetingSnapshot) }
   }
   @Published private(set) var targetingBlocker: TargetingBlocker?
+  @Published private(set) var realtimeArena: RealtimeArenaController?
 
   let environment: AppEnvironment
   let duel: DuelSession
@@ -185,6 +187,10 @@ final class LobbyStore: ObservableObject {
     schedule { store in await store.performCreateDuel() }
   }
 
+  func createRealtimeArena() {
+    schedule { store in await store.performCreateDuel(combatMode: .durableObject) }
+  }
+
   func joinDuel() {
     schedule { store in await store.performJoinDuel() }
   }
@@ -247,6 +253,26 @@ final class LobbyStore: ObservableObject {
   }
 
   func leave() {
+    guard operation != .leaving else { return }
+    if let realtimeArena {
+      actionTask?.cancel()
+      snapshotTask?.cancel()
+      snapshotRetryTask?.cancel()
+      recoveryTask?.cancel()
+      operation = .leaving
+      // The shared ARSession must finish stopping before a new lobby can use it.
+      actionTask = Task { [weak self] in
+        await realtimeArena.stop()
+        guard let self else { return }
+        self.realtimeArena = nil
+        self.resetLobby()
+      }
+      return
+    }
+    resetLobby()
+  }
+
+  private func resetLobby() {
     targetingBlocker = nil
     actionTask?.cancel()
     snapshotTask?.cancel()
@@ -277,7 +303,7 @@ final class LobbyStore: ObservableObject {
     errorMessage = nil
   }
 
-  func performCreateDuel() async {
+  func performCreateDuel(combatMode: CombatMode? = nil) async {
     guard operation == nil else { return }
     let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !name.isEmpty else {
@@ -294,7 +320,8 @@ final class LobbyStore: ObservableObject {
     errorMessage = nil
     do {
       let newSession = try await environment.gameSessionClient.createDuel(
-        CreateDuelRequest(displayName: name, arenaRadiusMeters: 30)
+        CreateDuelRequest(displayName: name, arenaRadiusMeters: 30,
+          combatMode: combatMode, maxPlayers: combatMode == .durableObject ? 4 : nil)
       )
       guard !Task.isCancelled else { return }
       beginSession(newSession)
@@ -363,12 +390,14 @@ final class LobbyStore: ObservableObject {
       errorMessage = "RECONNECTING — INPUT LOCKED"
       return
     }
-    guard snapshot.players.count == 2, snapshot.players.allSatisfy({ $0.ready }) else {
-      errorMessage = "BOTH PLAYERS MUST BE READY"
+    let isRealtime = snapshot.match.combatMode == .durableObject
+    let capacity = isRealtime ? (snapshot.match.maxPlayers ?? 4) : 2
+    guard (2...capacity).contains(snapshot.players.count), snapshot.players.allSatisfy({ $0.ready }) else {
+      errorMessage = isRealtime ? "AT LEAST TWO PLAYERS, ALL READY" : "BOTH PLAYERS MUST BE READY"
       return
     }
     guard snapshot.players.allSatisfy({ $0.connected }) else {
-      errorMessage = "BOTH PLAYERS MUST BE CONNECTED"
+      errorMessage = isRealtime ? "ALL PLAYERS MUST BE CONNECTED" : "BOTH PLAYERS MUST BE CONNECTED"
       return
     }
     guard snapshot.players.first(where: { $0.id == session.playerId })?.role == .host else {
@@ -379,7 +408,11 @@ final class LobbyStore: ObservableObject {
     operation = .starting
     errorMessage = nil
     do {
-      try await environment.gameSessionClient.startDuel(session: session)
+      if isRealtime {
+        try await environment.gameSessionClient.prepareRealtimeCombat(session: session)
+      } else {
+        try await environment.gameSessionClient.startDuel(session: session)
+      }
       guard !Task.isCancelled else { return }
       operation = nil
     } catch {
@@ -424,7 +457,8 @@ final class LobbyStore: ObservableObject {
       snapshot.match.code == expectedSession.code,
       snapshot.localPlayerId == expectedSession.playerId,
       snapshot.players.contains(where: { $0.id == expectedSession.playerId }),
-      snapshot.players.count <= 2,
+      snapshot.players.count <= (snapshot.match.combatMode == .durableObject ? 4 : 2),
+      snapshot.match.maxPlayers.map({ (2...4).contains($0) && snapshot.players.count <= $0 }) ?? true,
       Set(snapshot.players.map(\.id)).count == snapshot.players.count,
       snapshot.players.filter({ $0.role == .host }).count == 1
     else {
@@ -455,7 +489,15 @@ final class LobbyStore: ObservableObject {
     latestAppliedServerNow = snapshot.serverNow
     lastSyncAt = receivedAt
     route = Self.route(for: snapshot, receivedAt: receivedAt)
-    duel.receive(snapshot)
+    if snapshot.match.combatMode == .durableObject {
+      if snapshot.match.phase != .lobby, realtimeArena == nil {
+        duel.reset()
+        realtimeArena = RealtimeArenaController(session: expectedSession,
+          client: environment.gameSessionClient, targeting: environment.targetingSession)
+      }
+    } else {
+      duel.receive(snapshot)
+    }
     let nextSyncStatus: LobbySyncStatus = wasStale ? .restored : .connected
     gameLoopTrace(
       "receive phase=\(snapshot.match.phase.rawValue) players=\(snapshot.players.count) "
@@ -616,7 +658,9 @@ final class LobbyStore: ObservableObject {
           arenaRadiusMeters: 0,
           localPlayerID: snapshot.localPlayerId,
           hostPlayerID: hostPlayerID,
-          players: players
+          players: players,
+          combatMode: snapshot.match.combatMode,
+          maxPlayers: snapshot.match.maxPlayers ?? (snapshot.match.combatMode == .durableObject ? 4 : 2)
         )
       )
     case .countdown, .running, .finished, .cancelled:

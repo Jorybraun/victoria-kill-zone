@@ -117,11 +117,11 @@ final class RealtimeArenaController: ObservableObject {
     if !combat.clockReady || !sceneActive {return .paused}
     if localPlayer?.health == 0 {return .respawning}
     if snapshot?.phase == .running {return .running}
-    return .awaitingMembers
+    return snapshot?.phase == .paused ? .paused : .awaitingMembers
   }
 
   func start() async {
-    guard !started else {return}; started = true; generation += 1; let token = generation
+    guard !started else {return}; started = true; message = nil; generation += 1; let token = generation
     combat.start(session: session)
     let stream = targeting.snapshots()
     cameraTask = Task { [weak self] in

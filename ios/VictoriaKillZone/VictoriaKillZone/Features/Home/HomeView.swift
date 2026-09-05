@@ -26,14 +26,14 @@ struct HomeView: View {
           .tracking(-5)
           .lineSpacing(-12)
           .foregroundStyle(VKZPalette.text)
-        Text("A real-world duel. Just you, your phone, and a worthy opponent.")
+        Text("Your phone. Your arena. Real-time battles with up to four players.")
           .font(.body)
           .fixedSize(horizontal: false, vertical: true)
           .foregroundStyle(VKZPalette.textMuted)
       }
 
       HStack(spacing: 0) {
-        modeFact("02", caption: "PLAYERS")
+        modeFact("02–04", caption: "PLAYERS")
         Divider().overlay(VKZPalette.border)
         modeFact("03:00", caption: "PER ROUND")
         Divider().overlay(VKZPalette.border)
@@ -57,20 +57,26 @@ struct HomeView: View {
       }
 
       VStack(spacing: 12) {
-        Button(store.createButtonLabel) {
-          store.createDuel()
+        Button(store.isBusy ? "CREATING ARENA…" : "CREATE ARENA") {
+          store.createRealtimeArena()
         }
         .buttonStyle(VKZPrimaryButtonStyle())
         .disabled(store.isBusy)
-        .accessibilityLabel("Create duel")
+        .accessibilityLabel("Create arena for two to four players")
 
-        Button("JOIN DUEL") {
+        Button("JOIN ARENA") {
           store.showJoin()
         }
         .buttonStyle(VKZSecondaryButtonStyle())
         .disabled(store.isBusy)
         .accessibilityLabel("Join duel")
       }
+
+      #if VKZ_DEBUG_FIRE || DEBUG
+      Button("CLASSIC DUEL · 2 PLAYERS") { store.createDuel() }
+        .font(.caption.monospaced())
+        .disabled(store.isBusy)
+      #endif
 
       #if DEBUG
       HStack(spacing: 8) {

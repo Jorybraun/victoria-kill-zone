@@ -83,7 +83,7 @@ struct WaitingRoomView: View {
         #endif
 
         VStack(alignment: .leading, spacing: 10) {
-          Text("PLAYERS")
+          Text("PLAYERS · \(room.players.count)/\(room.maxPlayers)")
             .font(.caption.weight(.semibold).monospaced())
             .foregroundStyle(VKZPalette.textMuted)
 
@@ -132,7 +132,7 @@ struct WaitingRoomView: View {
 
         if room.localRole == .host || allowsShellStart {
           let canStart = room.localRole == .host ? room.canLocalPlayerStart : room.allPlayersReady
-          Button(room.localRole == .host ? "START DUEL" : "Simulate Host Start") {
+          Button(room.localRole == .host ? (room.combatMode == .durableObject ? "ALIGN ARENA" : "START DUEL") : "Simulate Host Start") {
             store.startDuel(as: room.localRole ?? .guest)
           }
           .buttonStyle(VKZPrimaryButtonStyle())
@@ -140,7 +140,7 @@ struct WaitingRoomView: View {
           .opacity(canStart ? 1 : 0.45)
 
           if !room.canLocalPlayerStart, room.localRole == .host {
-            Text("BOTH PLAYERS MUST BE READY")
+            Text(room.combatMode == .durableObject ? "AT LEAST TWO PLAYERS, ALL READY" : "BOTH PLAYERS MUST BE READY")
               .font(.caption.monospaced())
               .foregroundStyle(VKZPalette.textMuted)
           }

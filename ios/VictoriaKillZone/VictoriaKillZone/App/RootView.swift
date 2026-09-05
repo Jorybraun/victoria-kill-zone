@@ -21,7 +21,12 @@ struct RootView: View {
         case .waiting(let room):
           WaitingRoomView(room: room, store: store)
         case .active(let duel):
-          ActiveDuelView(duel: duel, combat: store.duel, store: store)
+          if let arena = store.realtimeArena {
+            RealtimeArenaView(controller: arena, onLeave: store.leave)
+              .id(arena.session.matchId)
+          } else {
+            ActiveDuelView(duel: duel, combat: store.duel, store: store)
+          }
         }
       }
       .foregroundStyle(VKZPalette.text)
