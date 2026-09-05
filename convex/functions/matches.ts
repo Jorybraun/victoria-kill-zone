@@ -58,6 +58,8 @@ export const create = mutation({
   args: {
     displayName: v.string(),
     arenaRadiusMeters: v.number(),
+    combatMode: v.optional(v.literal("durableObject")),
+    maxPlayers: v.optional(v.number()),
     // phase0.v1 arenaCenter. Optional during the migration window: the smaller
     // G2 create shape stays accepted, but a match created without a valid
     // center can never use shots:fire (its players stay LOCATION_STALE).
@@ -66,6 +68,8 @@ export const create = mutation({
   returns: playerSession,
   handler: async (ctx, args) => {
     const displayName = displayNameOrFail(args.displayName);
+    if (args.maxPlayers !== undefined && (args.combatMode !== "durableObject" ||
+      !Number.isInteger(args.maxPlayers) || args.maxPlayers < 2 || args.maxPlayers > 4)) fail("INVALID_ARENA");
     const now = Date.now();
     const center = validatedArenaCenter(args.arenaCenter, now);
     const code = await allocateMatchCode(ctx);
@@ -86,6 +90,7 @@ export const create = mutation({
 
     const matchId = await ctx.db.insert("matches", {
       ...plan.match,
+      ...(args.combatMode === "durableObject" ? {combatMode: args.combatMode, maxPlayers: args.maxPlayers ?? 4} : {}),
       startedAt: null,
       hostPlayerId: null,
     });
@@ -138,7 +143,7 @@ export const join = mutation({
       displayName,
       hasArenaCenter: match.arenaCenterAt !== undefined && match.arenaCenterAt !== null,
       now,
-    });
+    }, match.combatMode === "durableObject" ? match.maxPlayers : undefined);
     if (!plan.ok) {
       fail(plan.reason);
     }
@@ -225,6 +230,7 @@ export const start = mutation({
     if (match === null) {
       fail("MATCH_NOT_FOUND");
     }
+    if (match.combatMode !== undefined) fail("COMBAT_AUTHORITY_REQUIRED");
 
     const players = await listPlayers(ctx, match._id);
     const now = Date.now();
@@ -256,7 +262,7 @@ export const activate = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const match = await ctx.db.get(args.matchId);
-    if (match === null) {
+    if (match === null || match.combatMode !== undefined) {
       return null;
     }
 
@@ -301,7 +307,7 @@ export const finish = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const match = await ctx.db.get(args.matchId);
-    if (match === null) {
+    if (match === null || match.combatMode !== undefined) {
       return null;
     }
 

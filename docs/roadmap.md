@@ -154,8 +154,9 @@ Phases are gates, not dates. Every phase ends with physical-device evidence. B-t
 | 0004 | Realtime plane: authority + transport defaults | Backend research + KIL-19/20/21 measurements |
 | 0005 (proposed now) | Duel body tracking, skeleton lock overlay, shots visible on every phone, centerless fire ungated | Slack product direction 2026-09-04 + fire-path trace |
 | 0006 (proposed now) | Duel shared frame: one-time `ARWorldMap` alignment, then `ARBodyTrackingConfiguration(initialWorldMap:)` on both phones, poses over `CombatTransport`, receiver-confirmation as drift monitor; two-phone acceptance plan + retirement list | ADR 0004/0005 conflict + Apple ARKit/Vision docs ([0006](decisions/0006-duel-shared-frame.md)) |
-| 0007 | Personal-time semantics + activation economy | Phase 2 prototypes |
-| 0008 | Spatial provider for street scale | R5 research + Phase 3 spike |
+| 0007 (accepted) | Combat feedback/cadence and hit-only presentation | [Combat feedback decision](decisions/0007-combat-feedback-and-cadence.md) |
+| 0008 (accepted implementation scope) | Complete M0–M6 review, cloud authority candidate and single-writer migration | [Realtime implementation decision](decisions/0008-realtime-combat-implementation.md) |
+| Future ADR | Spatial provider for street scale | R5 research + Phase 3 spike; remains outside the current commitment |
 
 ## 7. Risks and honest unknowns
 
@@ -168,3 +169,21 @@ Phases are gates, not dates. Every phase ends with physical-device evidence. B-t
 ## 2026-09-04 combat-quality review
 
 [ADR 0007](decisions/0007-combat-feedback-and-cadence.md) and [slice 004](../design/slices/004-combat-feedback-and-cadence.md) deliver the playable-duel feedback/cadence/reload hardening before authority migration. [Production combat review](research/production-combat-review.md) records remaining security, spatial, authority, identity and performance gaps, plus proposed contracts for actual projectiles, slowdown fields and phone shields. Next dependency is measured shared-map calibration (ADR 0006), followed by one connected combat authority; a Durable Object per match remains a benchmark candidate, not an adopted production backend.
+
+## 2026-09-05 — Full architecture-report implementation
+
+Owner instruction: implement **everything** in the production-combat review, including the UI, backend and anatomically recognizable 3D human skeleton hit effect. [ADR 0008](decisions/0008-realtime-combat-implementation.md) authorizes the full implementation and disjoint parallel lanes. The active goal retains the entire scope; a package or a draft PR does not finish a milestone.
+
+Current execution step: **in progress — integrate M1–M4 into one playable realtime match**. Root owns the protocol, Convex capability/projection bridge, native client/composition, design contracts and Xcode wiring. Independent owners implement deterministic collision, the durable room runtime and same-session calibration/anatomy rendering. Branch `codex/realtime-combat-foundation` depends on the existing app changes in draft [PR #55](https://github.com/Jorybraun/victoria-kill-zone/pull/55), which follows release-fix #53.
+
+| Report requirement | Implemented evidence so far | Work still required for acceptance |
+|---|---|---|
+| M0 — feedback, cadence and UI | 150 ms cadence, reserved-ammo hold fire/reload, hit-only anatomical mesh; clear action results, ability/protection timers, rebuilt small-screen lobby and 2–4 member routing; native render evidence in slices 006/007 | Final skull/rig art refinements; physical 280 ms reveal, haptics and rendering-performance evidence |
+| M1 — shared frame | Same-session map/body provider; authenticated 8 MiB calibration bundle; natural-reference capture, image tracking and fresh residuals; epoch/backlog/capture-cancellation tests; setup thumbnail/retry flow | Two-phone S0 and exact endpoints; continuous reference visibility plus body coverage must be physically viable. Unrestricted movement and target-space accuracy remain unproven (ADR 0009) |
+| M2 — one combat authority | Bounded protocol; four-slot lobby/capabilities; legacy writer exclusion; native socket/clock/replica/retry; arena route and conservative hand/phone association; durable signed Convex projections | Physical identity crossing/occlusion trials, two/four-phone convergence, complete spectator ledger presentation |
+| M3 — finite projectiles | Deterministic swept moving-body engine and continuous accepted-worldline rendering; fixture/recovery tests pass | Filmed dodge/control trials, tracking coverage, false-verdict and latency evidence |
+| M4 — shield and slow fields | Front-face shield ordering, energy/cooldowns, field boundary/overlap engine tests; native controls and pooled rendering implemented | Physical block/slowdown trials and final UI playtesting |
+| M5 — host versus DO | SQLite room authority, full terminal ledger, map storage, epoch-sealed projection outbox and 38 actual runtime tests; dry run passes | Identical fixtures on both candidates; sustained four-player runtime load and actual Wi-Fi/LTE measurements, durability/reconnect/cost evidence; authority-selection ADR |
+| M6 — release evidence | Canonical workspace verification: 237 tests; final native SwiftPM: 258 tests; unsigned Debug/test and Release builds; registered mesh/credits, bounded retries, background suspension and lifecycle regressions | Physical frame-time/thermal/battery/memory, input/VoiceOver/permission trials; signed installation/TestFlight and reviewed canonical-SHA promotion |
+
+No physical-device, production deployment, signing or comparative latency result is inferred from automated tests. These remain required evidence. No archive code or existing user files are part of this work.

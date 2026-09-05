@@ -63,6 +63,9 @@ final class CombatTransportArenaLink: ArenaPeerLinking, @unchecked Sendable {
   private var role: ArenaRole?
   private var state: ArenaPeerLinkState = .idle
   private var helloVerified = false
+  /// Queue-owned lifetime token; removing a handler cannot cancel callbacks
+  /// already captured or enqueued by a stopped endpoint.
+  private var generation: UInt64 = 0
 
   var stats: ArenaPeerLinkStats {
     lock.withLock { _stats }
@@ -100,6 +103,7 @@ final class CombatTransportArenaLink: ArenaPeerLinking, @unchecked Sendable {
     queue.async { [self] in
       stopLocked(publish: false)
       self.role = role
+      let generation = self.generation
       let endpoint: any PeerLink
       if let linkFactory {
         endpoint = linkFactory(role)
@@ -138,7 +142,8 @@ final class CombatTransportArenaLink: ArenaPeerLinking, @unchecked Sendable {
             linkEventHandler: { [weak self] event in
               guard let self else { return }
               self.queue.async { [weak self] in
-                self?.handle(event)
+                guard let self, self.generation == generation, self.link != nil else { return }
+                self.handle(event)
               }
             }
           )
@@ -155,10 +160,14 @@ final class CombatTransportArenaLink: ArenaPeerLinking, @unchecked Sendable {
           self?.recordFramingError()
         }
       )
+      let endpointID = ObjectIdentifier(endpoint)
       endpoint.setReceiveHandler { [weak self] frame, _, _ in
         guard let self else { return }
         self.queue.async { [weak self] in
-          self?.receive(frame)
+          guard let self, self.generation == generation,
+                let current = self.link, ObjectIdentifier(current) == endpointID
+          else { return }
+          self.receive(frame)
         }
       }
       if linkFactory != nil {
@@ -212,7 +221,7 @@ final class CombatTransportArenaLink: ArenaPeerLinking, @unchecked Sendable {
     case .rejected:
       recordFramingError()
     case .failed(let reason):
-      setState(.failed(reason))
+      fail(reason)
     }
   }
 
@@ -287,18 +296,18 @@ final class CombatTransportArenaLink: ArenaPeerLinking, @unchecked Sendable {
   }
 
   private func stopLocked(publish: Bool) {
+    generation &+= 1
     link?.setReceiveHandler(nil)
     link?.stop()
     link = nil
     mapper = nil
+    orderer = ReliableEventOrderer()
     helloVerified = false
     if publish { setState(.idle) }
   }
 
   private func fail(_ reason: String) {
-    link?.stop()
-    link = nil
-    helloVerified = false
+    stopLocked(publish: false)
     setState(.failed(reason))
   }
 

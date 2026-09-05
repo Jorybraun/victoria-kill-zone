@@ -41,6 +41,7 @@ export function mutationContext() {
 
   const ctx = {
     db: {
+      normalizeId: (table: TableName,id: string) => rows.get(id)?.table === table ? id : null,
       get: (id: string) => {
         reads.push(id);
         const doc = rows.get(id)?.doc;

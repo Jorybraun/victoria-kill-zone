@@ -152,12 +152,16 @@ export function planJoinMatch(
   match: Pick<MatchState, "status">,
   playerCount: number,
   input: JoinMatchInput,
+  multiplayerLimit?: number,
 ): DomainResult<JoinPlan> {
   if (match.status === "active" || match.status === "ended") {
     return rejected("match_already_started");
   }
 
-  if (!isJoinable(match, playerCount, GAMEPLAY.maxPlayers)) {
+  const multiplayerJoinable = multiplayerLimit !== undefined && Number.isInteger(multiplayerLimit) &&
+    multiplayerLimit >= 2 && multiplayerLimit <= 4 && playerCount < multiplayerLimit &&
+    (match.status === "setup" || match.status === "waiting");
+  if (!(multiplayerLimit === undefined ? isJoinable(match, playerCount, GAMEPLAY.maxPlayers) : multiplayerJoinable)) {
     return rejected("match_full");
   }
 

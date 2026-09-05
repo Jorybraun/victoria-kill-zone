@@ -163,6 +163,83 @@ final class CombatTransportArenaLinkTests: XCTestCase {
     XCTAssertEqual(pair.host.stats.framingErrors, 0)
   }
 
+  func testRestartAcceptsFreshSequenceOneAfterPriorSessionDeliveredMessages() throws {
+    let endpoint = ControlledEndpoint()
+    let link = CombatTransportArenaLink(
+      matchId: "match", playerId: "host", joinSecret: "secret",
+      linkFactory: { _ in endpoint }
+    )
+    defer { link.stop() }
+    let firstMessage = expectation(description: "first session message")
+    let secondMessage = expectation(description: "restarted session message")
+    link.onMessage = { message, _ in
+      if message == .shotRetracted(shotId: "first") { firstMessage.fulfill() }
+      if message == .shotRetracted(shotId: "second") { secondMessage.fulfill() }
+    }
+
+    link.start(role: .host)
+    XCTAssertEqual(endpoint.started.wait(timeout: .now() + 2), .success)
+    let firstReceiver = try XCTUnwrap(endpoint.receiver)
+    for frame in try peerSessionFrames(shotId: "first") { firstReceiver(frame, 0, nil) }
+    wait(for: [firstMessage], timeout: 1)
+
+    link.start(role: .host)
+    XCTAssertEqual(endpoint.started.wait(timeout: .now() + 2), .success)
+    let secondReceiver = try XCTUnwrap(endpoint.receiver)
+    // The new connection starts at the same epoch and sequence one. Keeping the
+    // old orderer would discard both of these frames as duplicates.
+    for frame in try peerSessionFrames(shotId: "second") { secondReceiver(frame, 0, nil) }
+    wait(for: [secondMessage], timeout: 1)
+    XCTAssertEqual(link.stats.framingErrors, 0)
+  }
+
+  func testRestartDropsCapturedCallbacksEvenWhenEndpointObjectIsReused() throws {
+    let endpoint = ControlledEndpoint()
+    let recorder = Recorder()
+    let link = CombatTransportArenaLink(
+      matchId: "match", playerId: "host", joinSecret: "secret",
+      linkFactory: { _ in endpoint }
+    )
+    defer { link.stop() }
+    let currentMessage = expectation(description: "current session message")
+    link.onStateChange = { recorder.recordState($0) }
+    link.onMessage = { message, _ in
+      recorder.recordMessage(message)
+      if message == .shotRetracted(shotId: "current") { currentMessage.fulfill() }
+    }
+
+    link.start(role: .host)
+    XCTAssertEqual(endpoint.started.wait(timeout: .now() + 2), .success)
+    let retiredReceiver = try XCTUnwrap(endpoint.receiver)
+    link.stop()
+    link.start(role: .host)
+    XCTAssertEqual(endpoint.started.wait(timeout: .now() + 2), .success)
+    let currentReceiver = try XCTUnwrap(endpoint.receiver)
+
+    // These closures model callbacks captured by the endpoint before stop but
+    // delivered after restart. Object identity alone cannot distinguish them.
+    for frame in try peerSessionFrames(shotId: "retired") { retiredReceiver(frame, 0, nil) }
+    for frame in try peerSessionFrames(shotId: "current") { currentReceiver(frame, 0, nil) }
+    wait(for: [currentMessage], timeout: 1)
+
+    XCTAssertEqual(recorder.messageCount, 1)
+    XCTAssertFalse(recorder.contains(message: .shotRetracted(shotId: "retired")))
+    XCTAssertEqual(recorder.stateSnapshot.filter { $0 == .connected }.count, 1)
+    XCTAssertEqual(link.stats.framingErrors, 0)
+  }
+
+  private func peerSessionFrames(shotId: String) throws -> [TransportFrame] {
+    var mapper = ArenaLinkFrameMapper(senderSlot: 1, epoch: 1)
+    let hello = try MatchHelloCodec.encode(MatchHello(
+      scopeId: MatchScope(matchId: "match").scopeId,
+      playerId: "guest",
+      protocolVersion: MatchScope.protocolVersion
+    ))
+    let greeting = mapper.controlFrame(payload: Data([0]) + hello)
+    let messages = try mapper.outbound(.shotRetracted(shotId: shotId))
+    return ([greeting] + messages).map { .reliable($0) }
+  }
+
   private func makeConnectedPair() -> Pair {
     let pair = makePair()
     pair.host.start(role: .host)
@@ -250,6 +327,23 @@ final class CombatTransportArenaLinkTests: XCTestCase {
     let guest: CombatTransportArenaLink
     let hostRecorder: Recorder
     let guestRecorder: Recorder
+  }
+
+  private final class ControlledEndpoint: PeerLink, @unchecked Sendable {
+    let remoteSlot: UInt8 = 0
+    let evidenceTier: TransportEvidenceTier = .loopbackSimulated
+    let deliversOrderedReliableFrames = false
+    let started = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var handler: PeerLinkReceiveHandler?
+
+    var receiver: PeerLinkReceiveHandler? { lock.withLock { handler } }
+    func start() { started.signal() }
+    func stop() {}
+    func send(_ frame: TransportFrame) throws {}
+    func setReceiveHandler(_ handler: PeerLinkReceiveHandler?) {
+      lock.withLock { self.handler = handler }
+    }
   }
 
   /// The simulator is synchronous, while the adapters use independent queues.

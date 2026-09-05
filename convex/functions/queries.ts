@@ -77,6 +77,8 @@ function snapshotMatch(match: Doc<"matches">): SnapshotMatch {
     centerLatitude: match.centerLatitude,
     centerLongitude: match.centerLongitude,
     arenaCenterAt: match.arenaCenterAt ?? null,
+    ...(match.combatMode === undefined ? {} : {combatMode:match.combatMode,maxPlayers:match.maxPlayers}),
+    ...(match.combatPhase === undefined ? {} : {combatPhase:match.combatPhase}),
   };
 }
 
