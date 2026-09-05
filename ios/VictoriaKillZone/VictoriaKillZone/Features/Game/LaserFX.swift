@@ -16,12 +16,10 @@
     private let damageFeedback = UIImpactFeedbackGenerator(style: .rigid)
     private let hitFeedback = UINotificationFeedbackGenerator()
     private let skeletonRoot = SCNNode()
-    private var skeletonJointNodes: [SCNNode] = []
-    private var skeletonBoneNodes: [SCNNode] = []
+    private let skeletonAnatomy = SkeletonAnatomyModel()
     private var hitPresentation = HitSkeletonPresentation()
     private var confirmedHitZone: TargetingHitZone?
     private var lastSkeletonUpdate: TimeInterval = 0
-    private let skeletonMaterial = LaserFXEngine.material(color: .white)
     private let outgoingGeometry = LaserFXEngine.tracerGeometry(color: UIColor(red: 1, green: 0.82, blue: 0.32, alpha: 1))
     private let incomingGeometry = LaserFXEngine.tracerGeometry(color: .systemOrange)
     private let tracerPool = SceneEffectPool(capacity: CombatPresentationPolicy.tracerCapacity)
@@ -37,6 +35,7 @@
       effectsRoot.name = "combat-effects"
       skeletonRoot.name = "confirmed-hit-skeleton"
       skeletonRoot.isHidden = true
+      skeletonRoot.addChildNode(skeletonAnatomy.root)
       effectsRoot.addChildNode(skeletonRoot)
       tracerPool.attach(to: effectsRoot)
       impactPool.attach(to: effectsRoot)
@@ -234,48 +233,7 @@
     }
 
     private func renderSkeleton(_ skeleton: TargetingSkeleton, zone: TargetingHitZone?) {
-      let color: UIColor = zone == .head ? .systemRed : .white
-      skeletonMaterial.diffuse.contents = color
-      skeletonMaterial.emission.contents = color
-      var positions: [String: SIMD3<Float>] = [:]
-      for joint in skeleton.joints.prefix(CombatPresentationPolicy.maximumSkeletonJoints) {
-        if positions[joint.name] == nil, let position = vector(joint.position) {
-          positions[joint.name] = position
-        }
-      }
-      for node in skeletonJointNodes { node.isHidden = true }
-      for (index, joint) in positions.sorted(by: { $0.key < $1.key }).enumerated() {
-        if index == skeletonJointNodes.count {
-          let sphere = SCNSphere(radius: 0.016)
-          sphere.segmentCount = 8
-          sphere.firstMaterial = skeletonMaterial
-          let node = SCNNode(geometry: sphere)
-          skeletonJointNodes.append(node)
-          skeletonRoot.addChildNode(node)
-        }
-        let node = skeletonJointNodes[index]
-        node.simdPosition = joint.value
-        node.isHidden = false
-      }
-      for node in skeletonBoneNodes { node.isHidden = true }
-      for (index, bone) in skeleton.bones.prefix(CombatPresentationPolicy.maximumSkeletonBones).enumerated() {
-        guard let start = positions[bone.from], let end = positions[bone.to],
-          let direction = normalized(end - start)
-        else { continue }
-        while skeletonBoneNodes.count <= index {
-          let cylinder = SCNCylinder(radius: 0.006, height: 1)
-          cylinder.radialSegmentCount = 6
-          cylinder.firstMaterial = skeletonMaterial
-          let node = SCNNode(geometry: cylinder)
-          skeletonBoneNodes.append(node)
-          skeletonRoot.addChildNode(node)
-        }
-        let node = skeletonBoneNodes[index]
-        node.simdScale = SIMD3<Float>(1, simd_length(end - start), 1)
-        node.simdPosition = (start + end) / 2
-        node.simdOrientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: direction)
-        node.isHidden = false
-      }
+      skeletonAnatomy.update(skeleton, zone: zone)
     }
 
     private static func material(color: UIColor) -> SCNMaterial {

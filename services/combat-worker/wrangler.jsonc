@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "vkz-combat",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-05",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [{ "name": "COMBAT_ROOMS", "class_name": "CombatRoom" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CombatRoom"] }],
+  "vars": { "CONVEX_URL": "" },
+  "secrets": { "required": ["COMBAT_TICKET_SECRET", "COMBAT_PROJECTION_SECRET"] },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1,
+    "logs": { "invocation_logs": false }
+  }
+}

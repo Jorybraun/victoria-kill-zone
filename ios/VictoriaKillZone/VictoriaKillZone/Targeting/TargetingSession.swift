@@ -785,6 +785,7 @@ enum TargetingSessionFactory {
     private var lastVisionFrameTimestamp = -Double.infinity
     private var generation = 0
     private var lifecycleGeneration = 0
+    private let duelFrameState = DuelFrameARState()
 
     override init() {
       let now = Date()
@@ -808,6 +809,7 @@ enum TargetingSessionFactory {
       notificationTokens.forEach(NotificationCenter.default.removeObserver)
       arSession.pause()
       snapshotHub.finish()
+      duelFrameState.hub.finish()
     }
 
     func snapshots() -> AsyncStream<TargetingSnapshot> {
@@ -865,6 +867,7 @@ enum TargetingSessionFactory {
     func stop() async {
       await withCheckedContinuation { continuation in
         sessionQueue.async { [self] in
+          invalidateDuelFrameSession(reason: .sessionStopped)
           lifecycleGeneration += 1
           runRequested = false
           generation += 1
@@ -934,6 +937,7 @@ enum TargetingSessionFactory {
     private func suspendForBackground() {
       sessionQueue.async { [weak self] in
         guard let self else { return }
+        invalidateDuelFrameSession(reason: .backgrounded)
         isBackgrounded = true
         generation += 1
         visionInFlight = false
@@ -955,6 +959,9 @@ enum TargetingSessionFactory {
 
     private func startWorldTracking(resetTracking: Bool) {
       guard runRequested, !isBackgrounded, !isSessionRunning else { return }
+      // A paused map session must be explicitly recalibrated. Resuming the
+      // default local configuration would silently replace its coordinate frame.
+      guard duelFrameState.configuration == nil else { return }
       generation += 1
       visionInFlight = false
       lastVisionFrameTimestamp = -Double.infinity
@@ -989,6 +996,11 @@ enum TargetingSessionFactory {
 
     private func process(frame: ARFrame) {
       guard runRequested, isSessionRunning, !isBackgrounded else { return }
+      if let configuration = duelFrameState.configuration {
+        guard frame.timestamp > duelFrameState.minimumFrameTimestamp else { return }
+        publishDuelFrameObservation(frame: frame, configuration: configuration)
+        if configuration.phase != .bodyRelocalization { return }
+      }
       let now = Date()
       machine.cameraBecameReady(at: now)
       machine.updateCameraRay(Self.cameraRay(from: frame, capturedAt: now), at: now)
@@ -1249,6 +1261,7 @@ enum TargetingSessionFactory {
     }
 
     func session(_ session: ARSession, didFailWithError error: Error) {
+      invalidateDuelFrameSession(reason: .cameraUnavailable)
       generation += 1
       visionInFlight = false
       isSessionRunning = false
@@ -1257,6 +1270,7 @@ enum TargetingSessionFactory {
     }
 
     func sessionWasInterrupted(_ session: ARSession) {
+      invalidateDuelFrameSession(reason: .sessionInterrupted)
       generation += 1
       visionInFlight = false
       isSessionRunning = false
@@ -1267,6 +1281,208 @@ enum TargetingSessionFactory {
     func sessionInterruptionEnded(_ session: ARSession) {
       guard runRequested, !isBackgrounded, !isSessionRunning else { return }
       startWorldTracking(resetTracking: false)
+    }
+
+    func sessionShouldAttemptRelocalization(_ session: ARSession) -> Bool { true }
+  }
+
+  extension ARVisionTargetingSession: DuelFrameSessionDriving {
+    func duelFrameObservations() -> AsyncStream<DuelFrameObservation> {
+      duelFrameState.hub.stream()
+    }
+
+    func beginFrameMapping(epoch: UInt16) async throws {
+      guard epoch > 0 else { throw DuelFrameFailure.invalidEpoch }
+      guard ARWorldTrackingConfiguration.isSupported, ARBodyTrackingConfiguration.isSupported else {
+        throw DuelFrameFailure.unsupported
+      }
+      try await start()
+      try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+        sessionQueue.async { [self] in
+          guard runRequested, !isBackgrounded else {
+            continuation.resume(throwing: DuelFrameFailure.cameraUnavailable)
+            return
+          }
+          guard duelFrameState.configuration.map({ epoch > $0.epoch }) ?? true else {
+            continuation.resume(throwing: DuelFrameFailure.staleEpoch)
+            return
+          }
+          let configuration = ARWorldTrackingConfiguration()
+          configuration.worldAlignment = .gravity
+          runDuelFrameConfiguration(configuration,
+            metadata: DuelFrameSessionConfiguration(epoch: epoch, frameID: nil, phase: .mapping))
+          continuation.resume()
+        }
+      }
+    }
+
+    func captureFrameMap(epoch: UInt16) async throws -> Data {
+      try await withCheckedThrowingContinuation { continuation in
+        sessionQueue.async { [self] in
+          guard runRequested, isSessionRunning, !isBackgrounded,
+            duelFrameState.configuration?.epoch == epoch,
+            duelFrameState.configuration?.phase == .mapping,
+            arSession.configuration is ARWorldTrackingConfiguration,
+            let currentFrame = arSession.currentFrame,
+            currentFrame.worldMappingStatus == .mapped,
+            case .normal = currentFrame.camera.trackingState,
+            duelFrameState.pendingCapture == nil
+          else {
+            continuation.resume(throwing: DuelFrameFailure.mapNotReady)
+            return
+          }
+          // Each capture has a unique generation, including retries within one
+          // mapping run, so an earlier timeout cannot cancel a later capture.
+          duelFrameState.generation += 1
+          let requestGeneration = duelFrameState.generation
+          duelFrameState.pendingCapture = (requestGeneration, continuation)
+          sessionQueue.asyncAfter(deadline: .now() + DuelFramePolicy.relocalizationTimeout) { [weak self] in
+            guard let self, let pending = duelFrameState.pendingCapture,
+              pending.generation == requestGeneration
+            else { return }
+            duelFrameState.pendingCapture = nil
+            pending.continuation.resume(throwing: DuelFrameFailure.mapCaptureTimedOut)
+          }
+          arSession.getCurrentWorldMap { [weak self] map, _ in
+            guard let self else { return }
+            guard let map else {
+              finishDuelMapCapture(.failure(.mapCaptureFailed), generation: requestGeneration)
+              return
+            }
+            let box = DuelFrameWorldMapBox(map)
+            duelFrameState.archiveQueue.async { [weak self] in
+              guard let self else { return }
+              let result: Result<Data, DuelFrameFailure>
+              if let bytes = try? NSKeyedArchiver.archivedData(withRootObject: box.map, requiringSecureCoding: true) {
+                result = bytes.count <= DuelFrameMap.maximumBytes ? .success(bytes) : .failure(.mapTooLarge)
+              } else {
+                result = .failure(.mapCaptureFailed)
+              }
+              sessionQueue.async { [weak self] in
+                self?.finishDuelMapCapture(result, generation: requestGeneration)
+              }
+            }
+          }
+        }
+      }
+    }
+
+    func installFrameMap(_ map: DuelFrameMap, phase: DuelFrameSessionPhase) async throws {
+      guard phase != .mapping else { throw DuelFrameFailure.invalidMap }
+      let requestGeneration: Int = try await withCheckedThrowingContinuation { continuation in
+        sessionQueue.async { [self] in
+          guard runRequested, !isBackgrounded, duelFrameState.configuration?.epoch == map.epoch else {
+            continuation.resume(throwing: DuelFrameFailure.operationSuperseded)
+            return
+          }
+          duelFrameState.generation += 1
+          duelFrameState.cancelPendingCapture()
+          continuation.resume(returning: duelFrameState.generation)
+        }
+      }
+      let decoded = try await duelFrameState.decode(map.bytes)
+      try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+        sessionQueue.async { [self] in
+          guard runRequested, !isBackgrounded, duelFrameState.generation == requestGeneration,
+            duelFrameState.configuration?.epoch == map.epoch
+          else {
+            continuation.resume(throwing: DuelFrameFailure.operationSuperseded)
+            return
+          }
+          let configuration: ARConfiguration
+          if phase == .bodyRelocalization {
+            let body = ARBodyTrackingConfiguration()
+            body.worldAlignment = .gravity
+            body.automaticSkeletonScaleEstimationEnabled = true
+            body.initialWorldMap = decoded.map
+            configuration = body
+          } else {
+            let world = ARWorldTrackingConfiguration()
+            world.worldAlignment = .gravity
+            world.initialWorldMap = decoded.map
+            configuration = world
+          }
+          runDuelFrameConfiguration(configuration,
+            metadata: DuelFrameSessionConfiguration(epoch: map.epoch, frameID: map.frameID, phase: phase))
+          continuation.resume()
+        }
+      }
+    }
+
+    func endFrameMapping() async {
+      await withCheckedContinuation { continuation in
+        sessionQueue.async { [self] in
+          invalidateDuelFrameSession(reason: .sessionStopped)
+          duelFrameState.configuration = nil
+          arSession.pause()
+          isSessionRunning = false
+          if runRequested, !isBackgrounded { startWorldTracking(resetTracking: true) }
+          continuation.resume()
+        }
+      }
+    }
+
+    private func runDuelFrameConfiguration(_ configuration: ARConfiguration, metadata: DuelFrameSessionConfiguration) {
+      duelFrameState.generation += 1
+      duelFrameState.cancelPendingCapture()
+      duelFrameState.minimumFrameTimestamp = arSession.currentFrame?.timestamp ?? duelFrameState.lastPublishedTimestamp
+      duelFrameState.lastPublishedTimestamp = -Double.infinity
+      duelFrameState.lastTracking = nil
+      duelFrameState.configuration = metadata
+      generation += 1
+      visionInFlight = false
+      lastVisionFrameTimestamp = -Double.infinity
+      machine.sessionStarted(at: Date())
+      publish(machine.snapshot)
+      arSession.run(configuration, options: [.resetTracking, .removeExistingAnchors])
+      isSessionRunning = true
+    }
+
+    private func finishDuelMapCapture(_ result: Result<Data, DuelFrameFailure>, generation requestGeneration: Int) {
+      guard let pending = duelFrameState.pendingCapture, pending.generation == requestGeneration else { return }
+      duelFrameState.pendingCapture = nil
+      guard duelFrameState.generation == requestGeneration, runRequested, !isBackgrounded else {
+        pending.continuation.resume(throwing: DuelFrameFailure.operationSuperseded)
+        return
+      }
+      switch result {
+      case .success(let bytes): pending.continuation.resume(returning: bytes)
+      case .failure(let failure): pending.continuation.resume(throwing: failure)
+      }
+    }
+
+    private func invalidateDuelFrameSession(reason: DuelFrameFailure) {
+      duelFrameState.generation += 1
+      duelFrameState.cancelPendingCapture()
+      guard let configuration = duelFrameState.configuration else { return }
+      duelFrameState.hub.yield(DuelFrameObservation(epoch: configuration.epoch, frameID: configuration.frameID,
+        phase: configuration.phase, tracking: .unavailable, isMapped: false, pose: nil, observedAt: Date(), failure: reason))
+    }
+
+    private func publishDuelFrameObservation(frame: ARFrame, configuration: DuelFrameSessionConfiguration) {
+      let tracking: DuelFrameTracking
+      switch frame.camera.trackingState {
+      case .normal: tracking = .normal
+      case .notAvailable: tracking = .unavailable
+      case .limited(.relocalizing): tracking = .relocalizing
+      case .limited: tracking = .limited
+      }
+      guard frame.timestamp - duelFrameState.lastPublishedTimestamp >= 0.05 || tracking != duelFrameState.lastTracking else { return }
+      duelFrameState.lastPublishedTimestamp = frame.timestamp
+      duelFrameState.lastTracking = tracking
+      let now = Date()
+      let queuedFrameAge = max(0, (arSession.currentFrame?.timestamp ?? frame.timestamp) - frame.timestamp)
+      let capturedAt = now.addingTimeInterval(-queuedFrameAge)
+      let columns = frame.camera.transform
+      let raw = [columns.columns.0, columns.columns.1, columns.columns.2, columns.columns.3]
+        .flatMap { [Double($0.x), Double($0.y), Double($0.z), Double($0.w)] }
+      let pose = tracking == .normal
+        ? (try? ArenaRigidTransform.rigidApproximation(columnMajor: raw)).map {
+          DuelFramePose(columnMajor: $0.columnMajor, capturedAt: capturedAt, frameTimestamp: frame.timestamp)
+        } : nil
+      duelFrameState.hub.yield(DuelFrameObservation(epoch: configuration.epoch, frameID: configuration.frameID,
+        phase: configuration.phase, tracking: tracking, isMapped: frame.worldMappingStatus == .mapped,
+        pose: pose, observedAt: now, failure: nil))
     }
   }
 

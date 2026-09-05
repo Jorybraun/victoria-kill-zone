@@ -13,6 +13,7 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@vkz/combat-protocol": "workspace:*",
     "@noble/hashes": "2.3.0",
     "convex": "1.44.0"
   },

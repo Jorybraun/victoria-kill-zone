@@ -16,6 +16,9 @@ import type {
 } from "./types.js";
 
 export interface MatchSummarySnapshot {
+  combatMode?: "durableObject";
+  combatPhase?: "calibrating" | "running" | "paused" | "finished";
+  maxPlayers?: number;
   id: string;
   code: string;
   phase: MatchPhase;
@@ -98,6 +101,9 @@ export interface SpectatorSnapshot {
 }
 
 export interface SnapshotMatch extends MatchState {
+  combatMode?: "durableObject";
+  combatPhase?: "calibrating" | "running" | "paused" | "finished";
+  maxPlayers?: number;
   id: string;
   code: string;
   centerLatitude: number;
@@ -164,6 +170,9 @@ function projectMatch(match: SnapshotMatch, now: number): MatchSummarySnapshot {
     code: match.code,
     phase,
     durationMs: match.durationMs,
+    ...(match.combatMode === undefined ? {} : {combatMode:match.combatMode}),
+    ...(match.combatPhase === undefined ? {} : {combatPhase:match.combatPhase}),
+    ...(match.maxPlayers === undefined ? {} : {maxPlayers:match.maxPlayers}),
     ...(match.startsAt === null ? {} : { startsAt: match.startsAt }),
     ...(match.endsAt === null ? {} : { endsAt: match.endsAt }),
     ...(match.winnerPlayerId === null ? {} : { winnerPlayerId: match.winnerPlayerId }),

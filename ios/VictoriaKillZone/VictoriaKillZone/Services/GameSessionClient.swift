@@ -8,6 +8,8 @@ enum GameSessionAvailability: Equatable, Sendable {
 struct CreateDuelRequest: Equatable, Sendable {
   let displayName: String
   let arenaRadiusMeters: Double
+  var combatMode: CombatMode? = nil
+  var maxPlayers: Int? = nil
 }
 
 struct JoinDuelRequest: Equatable, Sendable {
@@ -22,6 +24,8 @@ protocol GameSessionClient: Sendable {
   func joinDuel(_ request: JoinDuelRequest) async throws -> PlayerSession
   func setReady(session: PlayerSession, isReady: Bool) async throws
   func startDuel(session: PlayerSession) async throws
+  func prepareRealtimeCombat(session: PlayerSession) async throws
+  func combatTicket(session: PlayerSession) async throws -> CombatAccessTicket
   func heartbeat(session: PlayerSession) async throws
   func startReload(session: PlayerSession) async throws -> ReloadResult
   func fire(session: PlayerSession, request: FireShotRequest) async throws -> FireShotResult
@@ -31,6 +35,8 @@ protocol GameSessionClient: Sendable {
 }
 
 extension GameSessionClient {
+  func prepareRealtimeCombat(session: PlayerSession) async throws {throw GameSessionClientError.notConfigured}
+  func combatTicket(session: PlayerSession) async throws -> CombatAccessTicket {throw GameSessionClientError.notConfigured}
   func heartbeat(session: PlayerSession) async throws {}
 
   func startReload(session: PlayerSession) async throws -> ReloadResult {
@@ -67,6 +73,10 @@ extension GameSessionClientError: LocalizedError {
       "BOTH PLAYERS MUST BE READY"
     case .backend(.playersNotConnected):
       "BOTH PLAYERS MUST BE CONNECTED"
+    case .backend(.combatUnavailable):
+      "LIVE COMBAT IS NOT CONFIGURED"
+    case .backend(.combatAuthorityRequired):
+      "RECONNECT TO LIVE COMBAT"
     case .backend(.matchNotRunning):
       "SHOT LOCKED UNTIL DUEL STARTS"
     case .backend(.connectionStale):

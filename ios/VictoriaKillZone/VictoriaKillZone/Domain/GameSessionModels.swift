@@ -1,5 +1,7 @@
 import Foundation
 
+enum CombatMode: String, Codable, Equatable, Sendable {case durableObject}
+
 enum MatchPhase: String, Codable, Equatable, Sendable {
   case lobby
   case countdown
@@ -39,6 +41,9 @@ enum MatchEventType: String, Codable, Equatable, Sendable {
 }
 
 struct MatchSummary: Codable, Equatable, Sendable {
+  var combatMode: CombatMode? = nil
+  var combatPhase: CombatWire.Phase? = nil
+  var maxPlayers: Int? = nil
   let id: String
   let code: String
   let phase: MatchPhase
@@ -54,7 +59,10 @@ struct MatchSummary: Codable, Equatable, Sendable {
     durationMs: Int,
     startsAt: Double?,
     endsAt: Double?,
-    winnerPlayerId: String? = nil
+    winnerPlayerId: String? = nil,
+    combatMode: CombatMode? = nil,
+    combatPhase: CombatWire.Phase? = nil,
+    maxPlayers: Int? = nil
   ) {
     self.id = id
     self.code = code
@@ -63,6 +71,9 @@ struct MatchSummary: Codable, Equatable, Sendable {
     self.startsAt = startsAt
     self.endsAt = endsAt
     self.winnerPlayerId = winnerPlayerId
+    self.combatMode = combatMode
+    self.combatPhase = combatPhase
+    self.maxPlayers = maxPlayers
   }
 }
 
@@ -216,6 +227,8 @@ struct ReloadResult: Equatable, Sendable {
 }
 
 enum BackendErrorCode: String, Codable, Equatable, Sendable {
+  case combatUnavailable = "COMBAT_UNAVAILABLE"
+  case combatAuthorityRequired = "COMBAT_AUTHORITY_REQUIRED"
   case invalidDisplayName = "INVALID_DISPLAY_NAME"
   case invalidCode = "INVALID_CODE"
   case matchNotFound = "MATCH_NOT_FOUND"

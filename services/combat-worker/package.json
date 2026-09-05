@@ -1,0 +1,29 @@
+{
+  "name": "@vkz/combat-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "types": "wrangler types worker-configuration.d.ts --strict-vars false"
+  },
+  "dependencies": {
+    "@vkz/combat-protocol": "workspace:*",
+    "@vkz/combat-simulation": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.1.4",
+    "@eslint/js": "10.0.1",
+    "@vitest/runner": "4.1.10",
+    "@vitest/snapshot": "4.1.10",
+    "eslint": "10.8.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.67.0",
+    "vitest": "4.1.10",
+    "wrangler": "4.129.0"
+  }
+}

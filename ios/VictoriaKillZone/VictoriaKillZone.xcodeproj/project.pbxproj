@@ -51,6 +51,17 @@
 		B00300000000000000000004 /* TargetingBlockerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000004 /* TargetingBlockerTests.swift */; };
 		B00500000000000000000001 /* CombatPresentationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00500000000000000000001 /* CombatPresentationPolicy.swift */; };
 		B00500000000000000000002 /* CombatPresentationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00500000000000000000002 /* CombatPresentationPolicyTests.swift */; };
+		F06FB76C4159F1A031E4B7CF /* CombatClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C31A53D023AB0DDBB4BF960 /* CombatClock.swift */; };
+		FB3BBFCB0C303774BF50677B /* CombatReplica.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E97FF0D4A2949668B6C3C07 /* CombatReplica.swift */; };
+		591D8D0B3EE10D432436EA97 /* CombatSocketTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5497BE5B56859453EF74D513 /* CombatSocketTransport.swift */; };
+		6ACDFCA9E90D80ACC7722A0A /* CombatWire.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABBE8F2EF972E1EFEE3909D9 /* CombatWire.swift */; };
+		1318C0E230D8B591CD2F744C /* RealtimeCombatSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15A2891F8815C903348F31A3 /* RealtimeCombatSession.swift */; };
+		68D2AF92F9F6239DDE5D3F86 /* DuelFrameARSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DAE45AD9CE3B5B2D0BB044D /* DuelFrameARSupport.swift */; };
+		AE0DB34F0A784EB332C639F7 /* DuelFrameModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D85B1581DC7043312A2F5F3 /* DuelFrameModels.swift */; };
+		DF7754BF4D9CB81AB5319E43 /* DuelFramePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 552EF9E0A6ACAE0FE038BB24 /* DuelFramePolicy.swift */; };
+		98430F39C0573B1CFC1CC94A /* DuelFrameProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A12B84FA719C41A0D1C0802 /* DuelFrameProvider.swift */; };
+		1C837AA0C6E438ABDB66E399 /* DuelFramePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CC0422002E75C2F96FB947A /* DuelFramePolicyTests.swift */; };
+		4B9266AAA0392F139CDD2824 /* RealtimeCombatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC6BA0DA13B39C9E2D61222C /* RealtimeCombatTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -108,6 +119,17 @@
 		F00300000000000000000004 /* TargetingBlockerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetingBlockerTests.swift; sourceTree = "<group>"; };
 		F00500000000000000000001 /* CombatPresentationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CombatPresentationPolicy.swift; sourceTree = "<group>"; };
 		F00500000000000000000002 /* CombatPresentationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CombatPresentationPolicyTests.swift; sourceTree = "<group>"; };
+		3C31A53D023AB0DDBB4BF960 /* CombatClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Realtime/CombatClock.swift"; sourceTree = "<group>"; };
+		2E97FF0D4A2949668B6C3C07 /* CombatReplica.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Realtime/CombatReplica.swift"; sourceTree = "<group>"; };
+		5497BE5B56859453EF74D513 /* CombatSocketTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Realtime/CombatSocketTransport.swift"; sourceTree = "<group>"; };
+		ABBE8F2EF972E1EFEE3909D9 /* CombatWire.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Realtime/CombatWire.swift"; sourceTree = "<group>"; };
+		15A2891F8815C903348F31A3 /* RealtimeCombatSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Realtime/RealtimeCombatSession.swift"; sourceTree = "<group>"; };
+		0DAE45AD9CE3B5B2D0BB044D /* DuelFrameARSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DuelFrame/DuelFrameARSupport.swift"; sourceTree = "<group>"; };
+		9D85B1581DC7043312A2F5F3 /* DuelFrameModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DuelFrame/DuelFrameModels.swift"; sourceTree = "<group>"; };
+		552EF9E0A6ACAE0FE038BB24 /* DuelFramePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DuelFrame/DuelFramePolicy.swift"; sourceTree = "<group>"; };
+		4A12B84FA719C41A0D1C0802 /* DuelFrameProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DuelFrame/DuelFrameProvider.swift"; sourceTree = "<group>"; };
+		8CC0422002E75C2F96FB947A /* DuelFramePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DuelFramePolicyTests.swift"; sourceTree = "<group>"; };
+		FC6BA0DA13B39C9E2D61222C /* RealtimeCombatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RealtimeCombatTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -155,6 +177,8 @@
 		G00100000000000000000002 /* VictoriaKillZone */ = {
 			isa = PBXGroup;
 			children = (
+				FC6BA0DA13B39C9E2D61222C /* RealtimeCombatTests.swift */,
+				8CC0422002E75C2F96FB947A /* DuelFramePolicyTests.swift */,
 				G00100000000000000000003 /* App */,
 				G00100000000000000000004 /* Domain */,
 				G00100000000000000000005 /* Services */,
@@ -171,6 +195,11 @@
 		G00100000000000000000003 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				15A2891F8815C903348F31A3 /* RealtimeCombatSession.swift */,
+				ABBE8F2EF972E1EFEE3909D9 /* CombatWire.swift */,
+				5497BE5B56859453EF74D513 /* CombatSocketTransport.swift */,
+				2E97FF0D4A2949668B6C3C07 /* CombatReplica.swift */,
+				3C31A53D023AB0DDBB4BF960 /* CombatClock.swift */,
 				F00100000000000000000001 /* VictoriaKillZoneApp.swift */,
 				F00100000000000000000002 /* AppEnvironment.swift */,
 				F00100000000000000000013 /* RootView.swift */,
@@ -211,6 +240,10 @@
 		G00100000000000000000007 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				4A12B84FA719C41A0D1C0802 /* DuelFrameProvider.swift */,
+				552EF9E0A6ACAE0FE038BB24 /* DuelFramePolicy.swift */,
+				9D85B1581DC7043312A2F5F3 /* DuelFrameModels.swift */,
+				0DAE45AD9CE3B5B2D0BB044D /* DuelFrameARSupport.swift */,
 				G00100000000000000000008 /* Home */,
 				G00100000000000000000009 /* Lobby */,
 				G0010000000000000000000A /* Game */,
@@ -405,6 +438,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				98430F39C0573B1CFC1CC94A /* DuelFrameProvider.swift in Sources */,
+				DF7754BF4D9CB81AB5319E43 /* DuelFramePolicy.swift in Sources */,
+				AE0DB34F0A784EB332C639F7 /* DuelFrameModels.swift in Sources */,
+				68D2AF92F9F6239DDE5D3F86 /* DuelFrameARSupport.swift in Sources */,
+				1318C0E230D8B591CD2F744C /* RealtimeCombatSession.swift in Sources */,
+				6ACDFCA9E90D80ACC7722A0A /* CombatWire.swift in Sources */,
+				591D8D0B3EE10D432436EA97 /* CombatSocketTransport.swift in Sources */,
+				FB3BBFCB0C303774BF50677B /* CombatReplica.swift in Sources */,
+				F06FB76C4159F1A031E4B7CF /* CombatClock.swift in Sources */,
 				B00100000000000000000001 /* VictoriaKillZoneApp.swift in Sources */,
 				B00100000000000000000002 /* AppEnvironment.swift in Sources */,
 				B00100000000000000000011 /* RootView.swift in Sources */,
@@ -444,6 +486,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4B9266AAA0392F139CDD2824 /* RealtimeCombatTests.swift in Sources */,
+				1C837AA0C6E438ABDB66E399 /* DuelFramePolicyTests.swift in Sources */,
 				B0010000000000000000000D /* LobbyStateMachineTests.swift in Sources */,
 				B00300000000000000000003 /* DuelInviteLinkTests.swift in Sources */,
 				B00400000000000000000004 /* DuelSessionTests.swift in Sources */,
