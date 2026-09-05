@@ -116,7 +116,8 @@ export function useSpectatorSnapshot(
               : null;
             const wasInterrupted =
               previousResource?.kind === "degraded" ||
-              previousResource?.kind === "error";
+              previousResource?.kind === "error" ||
+              previousResource?.kind === "recovery";
             const normalizedSnapshot =
               snapshot === null ? null : snapshotWithDedupedEvents(snapshot);
 
@@ -166,29 +167,20 @@ export function useSpectatorSnapshot(
     };
   }, [adapter, code, retryToken]);
 
+  const isRecovering = code !== null && belongsToSubscription(result, adapter, code)
+    && result.retryToken === retryToken && result.resource.kind === "recovery";
   useEffect(() => {
-    if (result?.resource.kind !== "recovery") {
-      return;
-    }
-
-    const recoveryResult = result;
-    const recoveredSnapshot = result.resource.snapshot;
+    if (!isRecovering || code === null) return;
     const timeout = window.setTimeout(() => {
-      setResult((current) =>
-        current === recoveryResult
-          ? {
-              ...current,
-              resource: {
-                kind: "ready",
-                snapshot: recoveredSnapshot,
-              },
-            }
+      setResult(current =>
+        belongsToSubscription(current, adapter, code) && current.retryToken === retryToken
+          && current.resource.kind === "recovery"
+          ? {...current, resource: {kind: "ready", snapshot: current.resource.snapshot}}
           : current,
       );
     }, RECOVERY_ANNOUNCEMENT_MS);
-
     return () => window.clearTimeout(timeout);
-  }, [result]);
+  }, [isRecovering, adapter, code, retryToken]);
 
   if (code === null) {
     return { kind: "idle" };

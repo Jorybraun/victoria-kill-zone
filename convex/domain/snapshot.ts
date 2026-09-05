@@ -164,7 +164,9 @@ export function buildSpectatorSnapshot(
 }
 
 function projectMatch(match: SnapshotMatch, now: number): MatchSummarySnapshot {
-  const phase = hasExpired(match, now) ? "finished" : match.phase;
+  // Realtime deadlines are wall-clock estimates from the last combat projection.
+  // Only that authority can finish its round; a stale estimate is not a verdict.
+  const phase = match.combatMode !== "durableObject" && hasExpired(match, now) ? "finished" : match.phase;
   return {
     id: match.id,
     code: match.code,
