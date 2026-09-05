@@ -7,64 +7,56 @@ enum SkeletonAnatomyPart: String, CaseIterable, Sendable {
   case leftHand, rightHand, leftFoot, rightFoot
 }
 
+/// A target anatomical bind frame. `size` contains reference lengths, never a
+/// desired mesh bounding box: transverse humeral-root width and longitudinal
+/// observed joint span. The imported source bind has the identical semantics.
 struct SkeletonAnatomyPlacement: Equatable, Sendable {
   let part: SkeletonAnatomyPart
   let position: SIMD3<Double>
-  let right: SIMD3<Double>
-  let up: SIMD3<Double>
-  let back: SIMD3<Double>
+  let right: SIMD3<Double> // Subject left, the review world's +X.
+  let up: SIMD3<Double> // Distal to proximal for limbs; superior for torso.
+  let back: SIMD3<Double> // Anatomical anterior, the review world's +Z.
   let size: SIMD3<Double>
 }
 
-/// Presentation retargeting only. Every rigid part requires observed landmarks;
-/// no inferred joint, collider, or hit volume is created. Hands and feet use a
-/// neutral anatomical template oriented from the observed proximal segment;
-/// their finger/toe articulation is cosmetic, not tracking evidence.
+/// Rigid presentation retargeting only. Finer hand/foot articulation and limb
+/// roll are cosmetic templates. Missing landmarks hide dependent anatomy; no
+/// joint, collider, independent head yaw or sensed body width is invented.
 enum SkeletonAnatomyLayout {
-  static func placements(for skeleton: TargetingSkeleton) -> [SkeletonAnatomyPlacement] {
+  static func placements(for skeleton: TargetingSkeleton,
+    previous: [SkeletonAnatomyPart: SkeletonAnatomyPlacement] = [:]
+  ) -> [SkeletonAnatomyPlacement] {
     var points: [String: SIMD3<Double>] = [:]
     for joint in skeleton.joints.prefix(32) where points[joint.name] == nil {
       let point = SIMD3<Double>(joint.position.x, joint.position.y, joint.position.z)
       if finite(point) { points[joint.name] = point }
     }
+    // ARKit medial shoulder pivots are not the humeral roots. Using their small
+    // separation makes the ribcage collapse even when the observed arms are wide.
+    guard let root = points["root"], let neck = points["neck_1_joint"],
+      let leftArm = points["left_arm_joint"], let rightArm = points["right_arm_joint"],
+      let torso = axes(up: neck - root, across: leftArm - rightArm)
+    else { return [] }
+    let height = length(neck - root), width = length(leftArm - rightArm)
+    guard (0.20...1.2).contains(height), (0.20...0.85).contains(width) else { return [] }
     var result: [SkeletonAnatomyPlacement] = []
-    var torsoRight: SIMD3<Double>?
-    if let root = points["root"], let neck = points["neck_1_joint"],
-      let left = points["leftShoulder"], let right = points["rightShoulder"],
-      let basis = axes(up: neck - root, across: right - left)
-    {
-      let height = length(neck - root)
-      let width = length(right - left)
-      if (0.20...1.2).contains(height), (0.12...0.85).contains(width) {
-        torsoRight = basis.right
-        result.append(placement(.ribcage, at: root + basis.up * height * 0.65, axes: basis,
-          size: SIMD3<Double>(width * 0.88, height * 0.66, width * 0.78)))
-        result.append(placement(.spine, at: (root + neck) / 2 + basis.back * width * 0.12, axes: basis,
-          size: SIMD3<Double>(width * 0.15, height, width * 0.16)))
-        if let head = points["head"], let headAxes = axes(up: head - neck, across: right - left),
-          (0.06...0.40).contains(length(head - neck))
-        {
-          let skullWidth = min(0.24, max(0.13, width * 0.45))
-          result.append(placement(.skull, at: head, axes: headAxes,
-            size: SIMD3<Double>(skullWidth, skullWidth * 1.20, skullWidth)))
-          result.append(placement(.cervicalSpine, at: (head + neck) / 2, axes: headAxes,
-            size: SIMD3<Double>(skullWidth * 0.34, length(head - neck), skullWidth * 0.34)))
-        }
-      }
+    let torsoSize = SIMD3<Double>(width, height, width)
+    for part: SkeletonAnatomyPart in [.ribcage, .spine, .leftClavicle, .rightClavicle] {
+      result.append(placement(part, at: root, axes: torso, size: torsoSize))
     }
-    if let root = points["root"], let neck = points["neck_1_joint"],
-      let leftHip = points["left_upLeg_joint"], let rightHip = points["right_upLeg_joint"],
-      let basis = axes(up: neck - root, across: rightHip - leftHip)
-    {
-      let width = length(rightHip - leftHip)
-      if (0.10...0.55).contains(width) {
-        result.append(placement(.pelvis, at: root, axes: basis,
-          size: SIMD3<Double>(width * 1.55, width, width * 0.90)))
+    if let leftHip = points["left_upLeg_joint"], let rightHip = points["right_upLeg_joint"],
+      (0.10...0.55).contains(length(leftHip - rightHip)) {
+      // Preserve the pelvis and sacrum's source relationship with the torso.
+      result.append(placement(.pelvis, at: root, axes: torso, size: torsoSize))
+    }
+    if let head = points["head"], (0.06...0.40).contains(length(head - neck)),
+      let headAxes = segmentAxes(up: head - neck, torso: torso, previous: previous[.skull]) {
+      for part: SkeletonAnatomyPart in [.skull, .cervicalSpine] {
+        result.append(placement(part, at: neck, axes: headAxes,
+          size: SIMD3<Double>(width, length(head - neck), width)))
       }
     }
     let segments: [(SkeletonAnatomyPart, String, String)] = [
-      (.leftClavicle, "neck_1_joint", "left_arm_joint"),
-      (.rightClavicle, "neck_1_joint", "right_arm_joint"),
       (.leftUpperArm, "left_arm_joint", "left_forearm_joint"),
       (.rightUpperArm, "right_arm_joint", "right_forearm_joint"),
       (.leftForearm, "left_forearm_joint", "leftHand"),
@@ -75,38 +67,25 @@ enum SkeletonAnatomyLayout {
       (.rightShin, "right_leg_joint", "rightFoot"),
     ]
     for (part, from, to) in segments {
-      guard let start = points[from], let end = points[to] else { continue }
-      let span = end - start
-      let distance = length(span)
-      guard (0.025...1.2).contains(distance), let up = unit(span) else { continue }
-      let reference = torsoRight ?? (abs(up.x) < 0.85 ? SIMD3<Double>(1, 0, 0) : SIMD3<Double>(0, 0, 1))
-      let fallback = abs(up.z) < 0.85 ? SIMD3<Double>(0, 0, 1) : SIMD3<Double>(1, 0, 0)
-      guard let basis = axes(up: span, across: reference) ?? axes(up: span, across: fallback) else { continue }
-      let width = min(0.080, max(0.018, distance * 0.16))
-      result.append(placement(part, at: (start + end) / 2, axes: basis,
-        size: SIMD3<Double>(width, distance, width)))
+      guard let proximal = points[from], let distal = points[to],
+        (0.025...1.2).contains(length(proximal - distal)),
+        let frame = segmentAxes(up: proximal - distal, torso: torso, previous: previous[part])
+      else { continue }
+      result.append(placement(part, at: proximal, axes: frame,
+        size: SIMD3<Double>(width, length(proximal - distal), width)))
     }
-    for (part, proximal, endpoint) in [
-      (SkeletonAnatomyPart.leftHand, "left_forearm_joint", "leftHand"),
-      (.rightHand, "right_forearm_joint", "rightHand"),
+    for (part, proximalName, endpointName, allowedSpan) in [
+      (SkeletonAnatomyPart.leftHand, "left_forearm_joint", "leftHand", 0.10...0.65),
+      (.rightHand, "right_forearm_joint", "rightHand", 0.10...0.65),
+      (.leftFoot, "left_leg_joint", "leftFoot", 0.15...0.80),
+      (.rightFoot, "right_leg_joint", "rightFoot", 0.15...0.80),
     ] {
-      guard let elbow = points[proximal], let wrist = points[endpoint], let across = torsoRight,
-        let basis = axes(up: wrist - elbow, across: across),
-        (0.10...0.65).contains(length(wrist - elbow)) else { continue }
-      let handLength = min(0.215, max(0.145, length(wrist - elbow) * 0.62))
-      result.append(placement(part, at: wrist + basis.up * handLength * 0.5, axes: basis,
-        size: SIMD3<Double>(handLength * 0.49, handLength, handLength * 0.25)))
-    }
-    for (part, proximal, endpoint) in [
-      (SkeletonAnatomyPart.leftFoot, "left_leg_joint", "leftFoot"),
-      (.rightFoot, "right_leg_joint", "rightFoot"),
-    ] {
-      guard let knee = points[proximal], let ankle = points[endpoint], let across = torsoRight,
-        let basis = axes(up: knee - ankle, across: across),
-        (0.15...0.80).contains(length(knee - ankle)) else { continue }
-      let footLength = min(0.29, max(0.18, length(knee - ankle) * 0.54))
-      result.append(placement(part, at: ankle - basis.up * 0.025 - basis.back * footLength * 0.23, axes: basis,
-        size: SIMD3<Double>(footLength * 0.40, footLength * 0.28, footLength)))
+      guard let proximal = points[proximalName], let endpoint = points[endpointName],
+        allowedSpan.contains(length(proximal - endpoint)),
+        let frame = segmentAxes(up: proximal - endpoint, torso: torso, previous: previous[part])
+      else { continue }
+      result.append(placement(part, at: endpoint, axes: frame,
+        size: SIMD3<Double>(width, length(proximal - endpoint), width)))
     }
     return result
   }
@@ -118,16 +97,38 @@ enum SkeletonAnatomyLayout {
     return (x, y, z)
   }
 
-  private static func placement(_ part: SkeletonAnatomyPart, at position: SIMD3<Double>,
-    axes: Axes, size: SIMD3<Double>) -> SkeletonAnatomyPlacement {
-    SkeletonAnatomyPlacement(part: part, position: position, right: axes.right, up: axes.up, back: axes.back, size: size)
+  /// Transport the torso frame by the shortest rotation taking superior to the
+  /// segment's distal→proximal axis. Unlike cross(across, limb), this does not
+  /// flip the anterior axis when an arm passes through lateral extension.
+  /// At the antipodal singularity, retain the previous cosmetic roll (or the
+  /// torso lateral axis on first observation). This never adds sensed rotation.
+  private static func segmentAxes(up: SIMD3<Double>, torso: Axes,
+    previous: SkeletonAnatomyPlacement?) -> Axes? {
+    guard let y = unit(up) else { return nil }
+    let cosine = min(1, max(-1, dot(torso.up, y)))
+    let x: SIMD3<Double>
+    if cosine < -0.98 {
+      let reference = previous?.right ?? torso.right
+      guard let projected = unit(reference - y * dot(reference, y))
+        ?? unit(torso.back - y * dot(torso.back, y)) else { return nil }
+      x = projected
+    } else {
+      let v = cross(torso.up, y)
+      x = torso.right + cross(v, torso.right) + cross(v, cross(v, torso.right)) / (1 + cosine)
+    }
+    return axes(up: y, across: x)
   }
 
+  private static func placement(_ part: SkeletonAnatomyPart, at position: SIMD3<Double>,
+    axes: Axes, size: SIMD3<Double>) -> SkeletonAnatomyPlacement {
+    SkeletonAnatomyPlacement(part: part, position: position, right: axes.right,
+      up: axes.up, back: axes.back, size: size)
+  }
   private static func finite(_ value: SIMD3<Double>) -> Bool {
-    // SceneKit consumes Float transforms; a finite Double may still overflow.
     Float(value.x).isFinite && Float(value.y).isFinite && Float(value.z).isFinite
   }
-  private static func length(_ value: SIMD3<Double>) -> Double { (value * value).sum().squareRoot() }
+  private static func dot(_ a: SIMD3<Double>, _ b: SIMD3<Double>) -> Double { (a * b).sum() }
+  private static func length(_ value: SIMD3<Double>) -> Double { dot(value, value).squareRoot() }
   private static func unit(_ value: SIMD3<Double>) -> SIMD3<Double>? {
     let magnitude = length(value)
     guard magnitude.isFinite, magnitude > 0.0001 else { return nil }

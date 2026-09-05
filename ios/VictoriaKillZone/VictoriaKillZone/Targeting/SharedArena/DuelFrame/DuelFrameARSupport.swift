@@ -25,11 +25,24 @@
     var lastPublishedTimestamp = -Double.infinity
     var lastTracking: DuelFrameTracking?
     var pendingCapture: (generation: Int, continuation: CheckedContinuation<Data, any Error>)?
+    var pendingReference: (generation: Int, continuation: CheckedContinuation<DuelFrameReference, any Error>)?
+    var referenceCaptureTask: Task<Void, Never>?
+    var reference: DuelFrameReference?
+    var latestReferenceObservation: DuelFrameReferenceObservation?
+    var pendingReferenceEvent: DuelFrameReferenceSensorEvent?
+    var lastFrameTimestamp = -Double.infinity
+    var lastFrameCapturedAt: Date?
 
     func cancelPendingCapture() {
       if let pendingCapture {
         self.pendingCapture = nil
         pendingCapture.continuation.resume(throwing: DuelFrameFailure.operationSuperseded)
+      }
+      if let pendingReference {
+        self.pendingReference = nil
+        referenceCaptureTask?.cancel()
+        referenceCaptureTask = nil
+        pendingReference.continuation.resume(throwing: DuelFrameFailure.operationSuperseded)
       }
     }
 

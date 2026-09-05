@@ -7,6 +7,8 @@ cd "$repo_root"
 
 xcode_developer_dir="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 
+python3 "$script_dir/check-xcode-sources.py"
+
 sanitize_xcode_output() {
   sed -E \
     -e 's/(id:)[^,}\]]+/\1<redacted>/g' \

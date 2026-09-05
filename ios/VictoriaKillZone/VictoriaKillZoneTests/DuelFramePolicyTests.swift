@@ -179,6 +179,7 @@ final class DuelFrameProviderTests: XCTestCase {
       try await Task.sleep(for: .milliseconds(1))
     }
     XCTAssertEqual(provider.snapshot.stage, .mapReady)
+    try await provider.captureReference()
     let capture = Task { try await provider.captureMap() }
     await driver.waitForCapture()
     await provider.stop()
@@ -205,6 +206,11 @@ private actor DelayedDuelFrameDriver: DuelFrameSessionDriving {
   func beginFrameMapping(epoch: UInt16) async throws {}
   func installFrameMap(_ map: DuelFrameMap, phase: DuelFrameSessionPhase) async throws {}
   func endFrameMapping() async {}
+  func captureFrameReference(epoch: UInt16) async throws -> DuelFrameReference {
+    try DuelFrameReference(imageData: Data([1, 2, 3]), widthMeters: 1, heightMeters: 0.6,
+      mapFromImage: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      sampleCount: 3, maximumCornerDeviationMeters: 0)
+  }
 
   func captureFrameMap(epoch: UInt16) async throws -> Data {
     try await withCheckedThrowingContinuation { continuation in

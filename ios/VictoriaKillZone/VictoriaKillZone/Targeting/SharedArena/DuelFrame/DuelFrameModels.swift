@@ -11,6 +11,7 @@ enum DuelFrameFailure: String, Error, Equatable, Sendable {
   case mapCaptureFailed, mapCaptureTimedOut, mapTooLarge, invalidMap, hashMismatch
   case operationSuperseded, relocalizationTimedOut, trackingLost, sessionInterrupted
   case backgrounded, sessionStopped, stalePose, staleResidual, residualExceeded, invalidResidual
+  case referenceUnavailable, referenceNotFound, referenceUnsuitable, referenceCaptureTimedOut
 }
 
 /// Targeting-local value, not a transport envelope. The app authenticates the
@@ -20,6 +21,8 @@ struct DuelFrameMap: Equatable, Sendable {
   let epoch: UInt16
   let frameID: String
   let bytes: Data
+  let worldMapBytes: Data
+  let reference: DuelFrameReference?
 
   init(epoch: UInt16, bytes: Data, expectedFrameID: String? = nil) throws {
     guard epoch > 0 else { throw DuelFrameFailure.invalidEpoch }
@@ -30,6 +33,9 @@ struct DuelFrameMap: Equatable, Sendable {
     self.epoch = epoch
     frameID = digest
     self.bytes = bytes
+    let bundle = try DuelFrameCalibrationBundle.decode(bytes)
+    worldMapBytes = bundle.worldMap
+    reference = bundle.reference
   }
 }
 
@@ -63,6 +69,7 @@ struct DuelFrameObservation: Equatable, Sendable {
   let pose: DuelFramePose?
   let observedAt: Date
   let failure: DuelFrameFailure?
+  var referenceObservation: DuelFrameReferenceObservation? = nil
 }
 
 struct DuelFrameResidual: Equatable, Sendable {
@@ -92,8 +99,15 @@ protocol DuelFrameSessionDriving: Sendable {
   func duelFrameObservations() -> AsyncStream<DuelFrameObservation>
   func beginFrameMapping(epoch: UInt16) async throws
   func captureFrameMap(epoch: UInt16) async throws -> Data
+  func captureFrameReference(epoch: UInt16) async throws -> DuelFrameReference
   func installFrameMap(_ map: DuelFrameMap, phase: DuelFrameSessionPhase) async throws
   func endFrameMapping() async
+}
+
+extension DuelFrameSessionDriving {
+  func captureFrameReference(epoch: UInt16) async throws -> DuelFrameReference {
+    throw DuelFrameFailure.unsupported
+  }
 }
 
 struct DuelFrameOperationToken: Equatable, Sendable {

@@ -147,6 +147,13 @@ struct DuelFramePolicy: Sendable {
     resetEvidence()
   }
 
+  mutating func referenceUnavailable() {
+    guard [.awaitingResidual, .aligned, .degraded].contains(snapshot.stage) else { return }
+    let stillCalibrating = snapshot.stage == .awaitingResidual
+    degrade(reason: .referenceUnavailable)
+    if stillCalibrating { snapshot.stage = .awaitingResidual }
+  }
+
   mutating func stop() {
     generation &+= 1
     latestEpoch = 0

@@ -7,9 +7,13 @@ import Foundation
 @MainActor
 final class DuelFrameProvider: ObservableObject {
   @Published private(set) var snapshot = DuelFrameSnapshot()
+  @Published private(set) var referenceState: DuelFrameReferenceState = .unavailable
   private let targeting: any DuelFrameSessionDriving
   private var policy = DuelFramePolicy()
   private var installedMap: DuelFrameMap?
+  private var capturedReference: DuelFrameReference?
+  private var referencePolicy = DuelFrameReferencePolicy()
+  var referenceImageData: Data? { installedMap?.reference?.imageData ?? capturedReference?.imageData }
   private var observationsTask: Task<Void, Never>?
   private var watchdogTask: Task<Void, Never>?
 
@@ -32,6 +36,9 @@ final class DuelFrameProvider: ObservableObject {
   func beginCalibration(epoch: UInt16) async throws {
     try policy.beginCalibration(epoch: epoch)
     installedMap = nil
+    capturedReference = nil
+    referenceState = .unavailable
+    referencePolicy = DuelFrameReferencePolicy()
     publish()
     startWatchdog()
     let token = policy.operationToken!
@@ -46,9 +53,32 @@ final class DuelFrameProvider: ObservableObject {
 
   func captureMap() async throws -> DuelFrameMap {
     guard snapshot.stage == .mapReady, let token = policy.operationToken else { throw DuelFrameFailure.mapNotReady }
+    guard let reference = capturedReference, referenceState == .captured(reference.summary) else {
+      throw DuelFrameFailure.referenceUnavailable
+    }
     let bytes = try await targeting.captureFrameMap(epoch: token.epoch)
     guard policy.accepts(token), snapshot.stage == .mapReady else { throw DuelFrameFailure.operationSuperseded }
-    return try DuelFrameMap(epoch: token.epoch, bytes: bytes)
+    return try DuelFrameMap(epoch: token.epoch,
+      bytes: DuelFrameCalibrationBundle.encode(worldMap: bytes, reference: reference))
+  }
+
+  @discardableResult
+  func captureReference() async throws -> DuelFrameReferenceSummary {
+    guard snapshot.stage == .mapReady, let token = policy.operationToken,
+      referenceState != .capturing else { throw DuelFrameFailure.mapNotReady }
+    capturedReference = nil
+    referenceState = .capturing
+    do {
+      let reference = try await targeting.captureFrameReference(epoch: token.epoch)
+      guard policy.accepts(token), snapshot.stage == .mapReady else { throw DuelFrameFailure.operationSuperseded }
+      guard reference.isValid else { throw DuelFrameFailure.referenceUnsuitable }
+      capturedReference = reference
+      referenceState = .captured(reference.summary)
+      return reference.summary
+    } catch {
+      if policy.accepts(token) { referenceState = .failed(error as? DuelFrameFailure ?? .referenceUnsuitable) }
+      throw error
+    }
   }
 
   /// Both the capturing phone and every receiving phone install identical bytes.
@@ -56,6 +86,8 @@ final class DuelFrameProvider: ObservableObject {
   func installMap(_ map: DuelFrameMap) async throws {
     try policy.beginInstall(map, at: Date())
     installedMap = map
+    referenceState = map.reference.map { .captured($0.summary) } ?? .unavailable
+    referencePolicy = DuelFrameReferencePolicy()
     publish()
     let token = policy.operationToken!
     do {
@@ -81,12 +113,17 @@ final class DuelFrameProvider: ObservableObject {
   func invalidate(reason: DuelFrameFailure) {
     policy.invalidate(reason: reason)
     installedMap = nil
+    capturedReference = nil
+    referenceState = .unavailable
     publish()
   }
 
   func stop() async {
     policy.stop()
     installedMap = nil
+    capturedReference = nil
+    referenceState = .unavailable
+    referencePolicy = DuelFrameReferencePolicy()
     watchdogTask?.cancel()
     watchdogTask = nil
     publish()
@@ -95,6 +132,20 @@ final class DuelFrameProvider: ObservableObject {
 
   private func receive(_ observation: DuelFrameObservation) async {
     let switchToBody = policy.ingest(observation, at: Date())
+    if observation.phase == .bodyRelocalization, observation.epoch == snapshot.epoch,
+      observation.frameID == snapshot.frameID {
+      if let expected = installedMap?.reference, let sample = observation.referenceObservation {
+        do {
+          if let residual = try referencePolicy.measure(sample, expected: expected, now: Date()) {
+            try policy.recordResidual(frameID: observation.frameID!, epoch: observation.epoch,
+              translationMeters: residual.translationMeters, yawDegrees: residual.yawDegrees,
+              observedAt: residual.observedAt, now: Date())
+          }
+        } catch DuelFrameFailure.residualExceeded {
+          // recordResidual already revoked readiness; preserve its useful reason.
+        } catch { policy.referenceUnavailable() }
+      } else { policy.referenceUnavailable() }
+    }
     publish()
     guard switchToBody, let map = installedMap, let token = policy.operationToken else { return }
     do {
@@ -119,8 +170,11 @@ final class DuelFrameProvider: ObservableObject {
 
   private func fail(_ error: any Error, ifCurrent token: DuelFrameOperationToken) {
     guard policy.accepts(token) else { return }
-    policy.invalidate(reason: error as? DuelFrameFailure ?? .cameraUnavailable)
+    let failure = error as? DuelFrameFailure ?? .cameraUnavailable
+    policy.invalidate(reason: failure)
     installedMap = nil
+    capturedReference = nil
+    referenceState = .failed(failure)
     publish()
   }
 

@@ -133,6 +133,8 @@ final class LobbyStore: ObservableObject {
     targetingSnapshot.state.displayText
   }
 
+  var lobbyRoundDurationMs: Int? {latestSnapshot?.match.durationMs}
+
   var isLiveNetworking: Bool {
     environment.gameSessionClient.availability == .available
   }
@@ -265,14 +267,14 @@ final class LobbyStore: ObservableObject {
         await realtimeArena.stop()
         guard let self else { return }
         self.realtimeArena = nil
-        self.resetLobby()
+        self.resetLobby(stopTargeting: false)
       }
       return
     }
     resetLobby()
   }
 
-  private func resetLobby() {
+  private func resetLobby(stopTargeting: Bool = true) {
     targetingBlocker = nil
     actionTask?.cancel()
     snapshotTask?.cancel()
@@ -280,8 +282,13 @@ final class LobbyStore: ObservableObject {
     recoveryTask?.cancel()
     targetingTask?.cancel()
     targetingTask = nil
-    let targetingSession = environment.targetingSession
-    Task { await targetingSession.stop() }
+    // Realtime leave already awaited this shared camera's complete teardown.
+    // Starting another asynchronous stop here could outlive the reset and shut
+    // down the camera after the next arena starts.
+    if stopTargeting {
+      let targetingSession = environment.targetingSession
+      Task { await targetingSession.stop() }
+    }
     session = nil
     latestSnapshot = nil
     duel.reset()

@@ -26,3 +26,23 @@ The skeleton is recognizable original 3D anatomy: skull/jaw, ribs/sternum, verte
 The backend owns cooldown, magazine, damage, protection, shield energy and field expiry. Render projectile position from authoritative spawn/segment parameters and synchronized match time. Never replay unknown elapsed flight after a disconnect. Reject stale/foreign epochs, ambiguous body association and absent tracked geometry.
 
 Acceptance: automated lifecycle/geometry/protocol/recovery tests; real rendered anatomy review; complete native app compile; two/four-phone calibration and convergence; filmed hit/shield/slow-field controls; accessibility/permissions and sustained thermal/frame-time evidence. A synthetic anatomy render establishes visual form only.
+
+## Bounded gameplay feedback refinement — 2026-09-05
+
+Rejected player actions appear as brief inline feedback above the controls and are announced accessibly. They do not replace the live controls or turn a transient refusal into an unavailable arena. Begin shows a pending progress state until authority acknowledges it. Ammunition display accounts for submitted shots while authoritative state catches up; authority remains responsible for acceptance and reload totals.
+
+Use friendly weapon names, never raw configuration identifiers. The local slow-field button displays its accepted active duration before its cooldown; other players' fields do not claim the local ability is active. Spawn protection has a remaining-time label, and reload shows a bounded progress bar plus remaining seconds. These displays use synchronized authority time and never alter gameplay durations.
+
+Recovery distinguishes connection retry, timing synchronization, and alignment retry. Permanent admission/configuration failures show a safe explanation and a connection retry action. Camera Settings is offered only for a relevant permission problem. During an already-started match, tracking recovery can resume play automatically; initial match start remains a host action after alignment. The completion action says “Return home” because leaving clears the current session.
+
+Reference capture and verification UI remain owned by the calibration integration; this refinement does not invent reference data or claim an aligned state.
+
+## Multiplayer entry and lobby copy — 2026-09-05
+
+The main entry identifies two-to-four-player arena play and offers Create arena / Join arena. The classic two-player path remains available under its existing debug gate, and Credits remains reachable. The home screen does not advertise a fixed round duration independently of the selected match state.
+
+The waiting room uses “Arena” for the Durable Objects mode and “Classic duel” for the retained duel path, including invite and accessibility copy. Capacity and open-slot counts come from the room; round duration is shown only when the authoritative lobby snapshot supplies it. The current lobby model does not expose a selected weapon, so this slice does not invent a weapon/rules summary from duplicated defaults.
+
+Place the code and sharing action in a compact panel, followed by the roster. The larger QR invitation is secondary, explicitly expandable content. Ready/start controls remain reachable at the bottom on ordinary text sizes; at accessibility text sizes they become normal scroll content so a tall fixed footer cannot hide the roster. Player status moves below the identity at large accessibility sizes. Explain the actual readiness blocker: too few players, disconnected players, unready players, or waiting for the host.
+
+Create, ready, and start mutations expose their existing pending state. Codes can be copied and are read character by character by accessibility labels; sharing remains a deliberate user action. No cosmetic status dot claims a live connection before the app has one.

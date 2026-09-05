@@ -15,12 +15,8 @@
     private let shotFeedback = UIImpactFeedbackGenerator(style: .light)
     private let damageFeedback = UIImpactFeedbackGenerator(style: .rigid)
     private let hitFeedback = UINotificationFeedbackGenerator()
-    private let skeletonRoot = SCNNode()
-    private let skeletonAnatomy = SkeletonAnatomyModel()
+    private let skeletonReveal = HitSkeletonReveal()
     private let realtimeFX = RealtimeCombatFX()
-    private var hitPresentation = HitSkeletonPresentation()
-    private var confirmedHitZone: TargetingHitZone?
-    private var lastSkeletonUpdate: TimeInterval = 0
     private let outgoingGeometry = LaserFXEngine.tracerGeometry(color: UIColor(red: 1, green: 0.82, blue: 0.32, alpha: 1))
     private let incomingGeometry = LaserFXEngine.tracerGeometry(color: .systemOrange)
     private let tracerPool = SceneEffectPool(capacity: CombatPresentationPolicy.tracerCapacity)
@@ -34,10 +30,7 @@
 
     init() {
       effectsRoot.name = "combat-effects"
-      skeletonRoot.name = "confirmed-hit-skeleton"
-      skeletonRoot.isHidden = true
-      skeletonRoot.addChildNode(skeletonAnatomy.root)
-      effectsRoot.addChildNode(skeletonRoot)
+      effectsRoot.addChildNode(skeletonReveal.root)
       effectsRoot.addChildNode(realtimeFX.root)
       tracerPool.attach(to: effectsRoot)
       impactPool.attach(to: effectsRoot)
@@ -124,6 +117,21 @@
       clearSkeleton()
     }
 
+    /// Project observed landmarks through the actual rendered viewport. The
+    /// result is normalized upper-left view space, with no Vision-style Y flip.
+    func projectedTargetBounds(_ skeleton: TargetingSkeleton) -> NormalizedTargetingRect? {
+      guard let sceneView, sceneView.session.currentFrame != nil, sceneView.pointOfView != nil,
+        RealtimeAssociationPolicy.fresh(skeleton.capturedAt, at: Date()),
+        (2...32).contains(skeleton.joints.count) else {return nil}
+      let samples = skeleton.joints.compactMap {joint -> RealtimeTargetProjection.Sample? in
+        guard let position = vector(joint.position) else {return nil}
+        let projected = sceneView.projectPoint(SCNVector3(position))
+        return .init(x: Double(projected.x), y: Double(projected.y), depth: Double(projected.z))
+      }
+      return RealtimeTargetProjection.bounds(samples: samples,
+        viewportWidth: Double(sceneView.bounds.width), viewportHeight: Double(sceneView.bounds.height))
+    }
+
     /// Only call after an accepted outgoing hit. With no fresh observed body, the
     /// HUD and haptic confirm the verdict without inventing a world-space impact.
     func confirmHit(skeleton: TargetingSkeleton?, zone: TargetingHitZone?) {
@@ -135,19 +143,7 @@
         clearSkeleton()
         return
       }
-      let now = ProcessInfo.processInfo.systemUptime
-      hitPresentation.confirmHit(at: now)
-      confirmedHitZone = zone
-      lastSkeletonUpdate = now
-      skeletonRoot.removeAllActions()
-      skeletonRoot.opacity = 1
-      skeletonRoot.isHidden = false
-      renderSkeleton(skeleton, zone: confirmedHitZone)
-      skeletonRoot.runAction(.sequence([
-        .wait(duration: CombatPresentationPolicy.skeletonHoldDuration),
-        .fadeOut(duration: CombatPresentationPolicy.skeletonFadeDuration),
-        .hide(),
-      ]), forKey: "confirmed-hit")
+      skeletonReveal.confirmHit(skeleton: skeleton, zone: zone)
 
       // The joint is a body-local impact cue, not a new authoritative hit point.
       let point = zone == .head
@@ -186,16 +182,7 @@
     /// Tracking refreshes an existing flash but never reveals an unhit person.
     /// Expiry is also scheduled on the scene, including when observations stop.
     func updateSkeleton(_ skeleton: TargetingSkeleton?, zone: TargetingHitZone?) {
-      let now = ProcessInfo.processInfo.systemUptime
-      guard hitPresentation.isVisible(at: now), let skeleton,
-        CombatPresentationPolicy.isPoseFresh(capturedAt: skeleton.capturedAt, now: Date())
-      else {
-        clearSkeleton()
-        return
-      }
-      guard now - lastSkeletonUpdate >= 0.05 else { return }
-      lastSkeletonUpdate = now
-      renderSkeleton(skeleton, zone: confirmedHitZone)
+      skeletonReveal.refresh(skeleton)
     }
 
     func clearTransientEffects() {
@@ -208,12 +195,7 @@
     }
 
     private func clearSkeleton() {
-      hitPresentation.clear()
-      confirmedHitZone = nil
-      skeletonRoot.removeAllActions()
-      skeletonRoot.isHidden = true
-      skeletonRoot.opacity = 0
-      lastSkeletonUpdate = 0
+      skeletonReveal.clear()
     }
 
     private func renderTracer(from start: SIMD3<Float>, to end: SIMD3<Float>, incoming: Bool) {
@@ -249,10 +231,6 @@
         .group([.scale(to: 1.7, duration: 0.12), .fadeOut(duration: 0.16)]),
         .hide(),
       ]))
-    }
-
-    private func renderSkeleton(_ skeleton: TargetingSkeleton, zone: TargetingHitZone?) {
-      skeletonAnatomy.update(skeleton, zone: zone)
     }
 
     private static func material(color: UIColor) -> SCNMaterial {
@@ -407,6 +385,7 @@
     func predictMuzzle() {}
     func updateRealtime(snapshot: CombatWire.Snapshot, matchTimeMs: Double) {}
     func clearRealtime() {}
+    func projectedTargetBounds(_ skeleton: TargetingSkeleton) -> NormalizedTargetingRect? {nil}
     func renderIncomingLaser(from origin: SIMD3<Float>?, hit: Bool) {}
     func updateSkeleton(_ skeleton: TargetingSkeleton?, zone: TargetingHitZone?) {}
     func clearTransientEffects() {}

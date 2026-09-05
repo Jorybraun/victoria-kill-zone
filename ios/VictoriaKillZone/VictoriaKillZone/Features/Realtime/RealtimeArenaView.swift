@@ -59,6 +59,13 @@ struct RealtimeArenaView: View {
     .onChange(of: controller.localShotSequence) {_, _ in
       guard scenePhase == .active else {return}; fx.predictMuzzle()
     }
+    .onChange(of: controller.actionFeedback) {_, feedback in
+      #if os(iOS)
+      if scenePhase == .active, let feedback {
+        UIAccessibility.post(notification: .announcement, argument: feedback)
+      }
+      #endif
+    }
     .onReceive(controller.$confirmedHits) {hits in
       guard scenePhase == .active else {return}
       for hit in hits {
@@ -83,6 +90,15 @@ struct RealtimeArenaView: View {
       telemetry
       RealtimeRosterStrip(players: controller.snapshot?.players ?? [], localPlayerID: controller.session.playerId)
       if !dynamicTypeSize.isAccessibilitySize {Spacer(minLength: 12)}
+      if let feedback = controller.actionFeedback {
+        Label(feedback, systemImage: "info.circle.fill")
+          .font(.subheadline.weight(.semibold))
+          .foregroundStyle(VKZPalette.pending)
+          .fixedSize(horizontal: false, vertical: true)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(12).background(.black.opacity(0.84), in: RoundedRectangle(cornerRadius: 14))
+          .accessibilityElement(children: .combine)
+      }
       if controller.stage == .running {combatControls}
       else if controller.stage == .finished {finishedPanel}
       else {preparationPanel}
@@ -108,7 +124,7 @@ struct RealtimeArenaView: View {
       }
       Spacer(minLength: 4)
       VStack(spacing: 3) {
-        Text(controller.stage.title.uppercased()).font(.caption2.bold().monospaced()).lineLimit(2).multilineTextAlignment(.center)
+        Text(stageTitle.uppercased()).font(.caption2.bold().monospaced()).lineLimit(2).multilineTextAlignment(.center)
         Text(roundTime).font(.system(.title2, design: .monospaced, weight: .bold).monospacedDigit())
       }
       Spacer(minLength: 4)
@@ -119,17 +135,17 @@ struct RealtimeArenaView: View {
   }
 
   @ViewBuilder private var targetCue: some View {
-    if controller.worldReady, let body = controller.associatedBody, let bounds = controller.targetingSnapshot.bodyBounds {
+    if controller.worldReady, let body = controller.associatedBody, let bounds = fx.projectedTargetBounds(body.skeleton) {
       GeometryReader {geometry in
         RoundedRectangle(cornerRadius: 12)
           .stroke(VKZPalette.ready.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [12, 18]))
           .overlay(alignment: .top) {
             Text(controller.snapshot?.players.first {$0.playerId == body.association.playerID}?.displayName ?? "Target")
               .font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 4)
-              .background(.black.opacity(0.7), in: Capsule()).offset(y: -24)
+              .background(.black.opacity(0.7), in: Capsule()).padding(.top, 4)
           }
-          .frame(width: max(44, geometry.size.width * min(1, max(0, bounds.width))), height: max(44, geometry.size.height * min(1, max(0, bounds.height))))
-          .position(x: geometry.size.width * bounds.centerX, y: geometry.size.height * (1 - bounds.centerY))
+          .frame(width: geometry.size.width * bounds.width, height: geometry.size.height * bounds.height)
+          .position(x: geometry.size.width * bounds.centerX, y: geometry.size.height * bounds.centerY)
       }
       .ignoresSafeArea().allowsHitTesting(false).accessibilityHidden(true)
     }
@@ -154,20 +170,24 @@ struct RealtimeArenaView: View {
     let eligibility = controller.eligibility
     let player = controller.localPlayer
     let time = controller.matchTimeMs ?? controller.snapshot?.matchTimeMs ?? 0
+    let fieldStatus = RealtimeArenaPresentation.slowFieldStatus(fields: controller.snapshot?.slowFields ?? [],
+      localPlayerID: controller.session.playerId, readyAt: player?.slowFieldReadyAtMs ?? 0, now: time)
+    let protection = RealtimeArenaPresentation.protectionDetail(until: player?.protectedUntilMs, now: time)
     return VStack(spacing: 12) {
       HStack(alignment: .lastTextBaseline) {
         VStack(alignment: .leading, spacing: 3) {
-          Text(controller.snapshot?.rules.weapon.id.uppercased() ?? "WEAPON").font(.caption2.bold().monospaced()).foregroundStyle(VKZPalette.textMuted)
-          Text("\(player?.ammo ?? 0) / \(controller.snapshot?.rules.weapon.magazine ?? 0)")
+          Text(RealtimeArenaPresentation.weaponName(controller.snapshot?.rules.weapon.id).uppercased()).font(.caption2.bold().monospaced()).foregroundStyle(VKZPalette.textMuted)
+          Text("\(controller.displayAmmo) / \(controller.snapshot?.rules.weapon.magazine ?? 0)")
             .font(.system(.title, design: .monospaced, weight: .black).monospacedDigit())
         }
         Spacer()
-        Text(eligibility.reason).font(.caption.bold()).foregroundStyle(VKZPalette.pending).multilineTextAlignment(.trailing)
+        Text(protection ?? (controller.triggerHeld && eligibility.reason == "Recharging" ? "Automatic fire" : eligibility.reason))
+          .font(.caption.bold()).foregroundStyle(VKZPalette.pending).multilineTextAlignment(.trailing)
       }
       HStack(spacing: 10) {
         abilityButton(title: (player?.shield.activeUntilMs ?? 0) > time ? "Lower shield" : "Shield", icon: "shield.lefthalf.filled",
           detail: shieldDetail(at: time), enabled: eligibility.shield, action: controller.toggleShield)
-        abilityButton(title: "Slow field", icon: "clock.arrow.2.circlepath", detail: cooldownText(until: player?.slowFieldReadyAtMs ?? 0, at: time),
+        abilityButton(title: "Slow field", icon: "clock.arrow.2.circlepath", detail: fieldStatus.detail,
           enabled: eligibility.slowField, action: controller.activateSlowField)
       }
       HStack(spacing: 12) {
@@ -188,8 +208,18 @@ struct RealtimeArenaView: View {
         .accessibilityAction {controller.fireOnce()}
       }
       if let reloadEnd = player?.reloadEndsAtMs, reloadEnd > time {
-        ProgressView(value: max(0, 1 - (reloadEnd - time) / (controller.snapshot?.rules.weapon.reloadMs ?? 1)))
-          .tint(VKZPalette.pending).accessibilityLabel("Reload progress")
+        VStack(spacing: 5) {
+          HStack {
+            Text("Reloading").font(.caption.bold())
+            Spacer()
+            Text(String(format: "%.1fs", max(0, reloadEnd - time) / 1000)).font(.caption.monospacedDigit())
+          }
+          ProgressView(value: RealtimeArenaPresentation.reloadProgress(until: reloadEnd,
+            duration: controller.snapshot?.rules.weapon.reloadMs ?? 1, now: time))
+            .tint(VKZPalette.pending)
+        }
+        .accessibilityElement(children: .ignore).accessibilityLabel("Reloading")
+        .accessibilityValue("\(RealtimeArenaPresentation.secondsRemaining(until: reloadEnd, at: time)) seconds remaining")
       }
     }
     .padding(16).background(.black.opacity(0.84), in: RoundedRectangle(cornerRadius: 24))
@@ -213,7 +243,7 @@ struct RealtimeArenaView: View {
     VStack(alignment: .leading, spacing: 12) {
       HStack {
         Image(systemName: controller.stage == .respawning ? "heart.slash" : "viewfinder").font(.title2).foregroundStyle(VKZPalette.pending)
-        Text(controller.stage.title).font(.title3.bold())
+        Text(stageTitle).font(.title3.bold())
         Spacer(minLength: 0)
         if [.connecting, .waitingForMap, .transferringMap, .relocalizing, .reconnecting].contains(controller.stage) {ProgressView().tint(.white)}
       }
@@ -226,15 +256,33 @@ struct RealtimeArenaView: View {
         Text("\(seconds(until: controller.localPlayer?.respawnAtMs ?? 0))").font(.system(.largeTitle, design: .rounded, weight: .black)).monospacedDigit()
       }
       if controller.stage == .mapReady && controller.isHost {
-        Button("Share arena scan", action: controller.captureAndShareMap).buttonStyle(VKZPrimaryButtonStyle())
+        RealtimeReferencePanel(state: controller.referenceState, imageData: controller.referenceImageData,
+          onCapture: controller.captureReference, onShare: controller.captureAndShareMap)
+      } else if [.relocalizing, .measuringReference, .paused, .awaitingMembers].contains(controller.stage) {
+        RealtimeReferencePanel(state: controller.referenceState, imageData: controller.referenceImageData)
       }
-      if controller.eligibility.begin {
-        Button(controller.snapshot?.roundStartedAtMs == nil ? "Begin match" : "Resume match", action: controller.beginRound).buttonStyle(VKZPrimaryButtonStyle())
+      if controller.eligibility.begin || controller.startPending {
+        Button(action: controller.beginRound) {
+          HStack(spacing: 8) {
+            if controller.startPending {ProgressView().tint(VKZPalette.background)}
+            Text(controller.startPending ? "Starting match…" : "Begin match")
+          }
+        }
+        .buttonStyle(VKZPrimaryButtonStyle()).disabled(controller.startPending)
+        .accessibilityLabel(controller.startPending ? "Starting match" : "Begin match")
+      }
+      if controller.stage == .measuringReference && controller.referenceState == .unavailable {
+        Button("Return home", action: leave).buttonStyle(VKZPrimaryButtonStyle())
+      }
+      if controller.connectionIssue != nil || controller.stage == .reconnecting {
+        Button("Retry connection", action: controller.retryConnection).buttonStyle(VKZSecondaryButtonStyle())
       }
       if controller.stage == .paused || controller.stage == .unavailable {
-        Button("Retry alignment", action: controller.retryAlignment).buttonStyle(VKZSecondaryButtonStyle())
+        if controller.connectionIssue == nil {
+          Button("Retry alignment", action: controller.retryAlignment).buttonStyle(VKZSecondaryButtonStyle())
+        }
         #if os(iOS)
-        if controller.message != nil {
+        if controller.canOpenCameraSettings {
           Button("Open Settings") {if let url = URL(string: UIApplication.openSettingsURLString) {openURL(url)}}
             .font(.subheadline.bold()).frame(minHeight: 44)
         }
@@ -252,12 +300,13 @@ struct RealtimeArenaView: View {
           .accessibilityElement(children: .combine)
       }
       Text("Kills / deaths").font(.caption).foregroundStyle(VKZPalette.textMuted)
-      Button("Return to lobby", action: leave).buttonStyle(VKZPrimaryButtonStyle())
+      Button("Return home", action: leave).buttonStyle(VKZPrimaryButtonStyle())
     }
     .padding(18).background(.black.opacity(0.88), in: RoundedRectangle(cornerRadius: 24))
   }
 
   private var guidance: String {
+    if let issue = controller.connectionIssue {return issue}
     if let message = controller.message {return message}
     if case .failed(let explanation) = controller.mapState {return explanation}
     switch controller.stage {
@@ -265,14 +314,23 @@ struct RealtimeArenaView: View {
     case .waitingForMap: return "The host is scanning the play area. Stay nearby; the shared scan will load automatically."
     case .transferringMap: return "Keep this screen open while the shared arena scan transfers."
     case .relocalizing: return "Point at the same fixed objects the host scanned. Move slowly until the camera recognizes the area."
-    case .measuringReference: return "Keep the shared fixed reference in view. An independent reference measurement is required before combat can begin."
-    case .awaitingMembers: return "Keep players and their phones visible so their tracked bodies can be identified. Everyone must finish alignment."
-    case .paused: return controller.combat.clockReady ? "Keep fixed objects and players in view. Combat resumes when shared tracking and body identity are reliable." : "Synchronizing the match clock. Input resumes after timing is reliable."
+    case .measuringReference:
+      return controller.referenceState == .unavailable
+        ? "This older arena scan has no shared reference. Return home and create a new arena to capture one."
+        : "Point at the reference shown below and hold steady. Each phone must recognize it before the match can begin. Keep it in view while playing."
+    case .awaitingMembers: return "Keep players and their phones in view. The host begins when everyone has finished alignment."
+    case .paused: return RealtimeArenaPresentation.pauseGuidance(clockReady: controller.combat.clockReady,
+      roundHasStarted: controller.snapshot?.roundStartedAtMs != nil)
     case .reconnecting: return "Your score is retained. Reconnecting and checking the shared arena before input resumes."
     case .respawning: return "Health and ammunition restore automatically. You can keep looking and moving."
     case .unavailable: return "Shared body tracking is unavailable on this device or configuration."
     default: return "Joining the shared arena and synchronizing the match clock."
     }
+  }
+  private var stageTitle: String {
+    if controller.connectionIssue != nil {return "Connection needs attention"}
+    if controller.stage == .paused && !controller.combat.clockReady {return "Synchronizing match"}
+    return controller.stage.title
   }
   private var roundTime: String {
     guard let ms = RealtimeActionEligibility.remainingRoundMs(snapshot: controller.snapshot, now: controller.matchTimeMs ?? controller.snapshot?.matchTimeMs) else {return "—:—"}

@@ -57,6 +57,40 @@ final class RealtimeLobbyIntegrationTests: XCTestCase {
     XCTAssertNil(store.realtimeArena)
   }
 
+  func testRealtimeLeaveWaitsForExactlyOneCameraStopBeforeNextArena() async throws {
+    let client = ArenaLobbyClient()
+    let camera = LobbyTeardownCamera()
+    let store = LobbyStore(environment: .init(gameSessionClient: client, targetingSession: camera))
+    await store.performCreateDuel(combatMode: .durableObject)
+    client.emit(Self.snapshot(count: 2, phase: .running))
+    try await until {store.realtimeArena != nil}
+    let firstArena = try XCTUnwrap(store.realtimeArena)
+    await firstArena.start()
+
+    store.leave()
+    await camera.waitForStop()
+    XCTAssertEqual(store.operation, .leaving)
+    await store.performCreateDuel(combatMode: .durableObject)
+    XCTAssertEqual(client.requests.count, 1, "A new arena cannot start during camera teardown")
+
+    await camera.releaseStop()
+    try await until {store.route == .home}
+    let stopsAfterLeave = await camera.stops
+    XCTAssertEqual(stopsAfterLeave, 1, "Lobby reset must not schedule another camera stop")
+
+    let nextArena = RealtimeArenaController(
+      session: .init(matchId: "next-match", code: "DEF456", playerId: "p0", sessionSecret: UUID().uuidString),
+      client: client, targeting: camera)
+    await nextArena.start()
+    // Drain any old unstructured cleanup task before inspecting the new camera.
+    for _ in 0..<10 {await Task.yield()}
+    let stopsAfterRestart = await camera.stops
+    let running = await camera.running
+    XCTAssertEqual(stopsAfterRestart, 1)
+    XCTAssertTrue(running)
+    await nextArena.stop()
+  }
+
   private func makeStore(_ client: ArenaLobbyClient) -> LobbyStore {
     LobbyStore(environment: .init(gameSessionClient: client, targetingSession: UnavailableTargetingSession()))
   }
@@ -74,6 +108,33 @@ final class RealtimeLobbyIntegrationTests: XCTestCase {
           ready: true, connected: true, health: 100, ammo: 8)
       }, events: [])
   }
+}
+
+private actor LobbyTeardownCamera: TargetingSession {
+  nonisolated let availability = TargetingAvailability.available
+  nonisolated let currentSnapshot = TargetingSnapshot.unavailable()
+  private var stopContinuation: CheckedContinuation<Void, Never>?
+  private var firstStopObserver: CheckedContinuation<Void, Never>?
+  private(set) var stops = 0
+  private(set) var running = false
+
+  nonisolated func snapshots() -> AsyncStream<TargetingSnapshot> {AsyncStream {$0.finish()}}
+  func start() async throws {running = true}
+  func stop() async {
+    stops += 1
+    if stops == 1 {
+      await withCheckedContinuation {continuation in
+        stopContinuation = continuation
+        firstStopObserver?.resume(); firstStopObserver = nil
+      }
+    }
+    running = false
+  }
+  func waitForStop() async {
+    if stops > 0 {return}
+    await withCheckedContinuation {firstStopObserver = $0}
+  }
+  func releaseStop() {stopContinuation?.resume(); stopContinuation = nil}
 }
 
 private final class ArenaLobbyClient: GameSessionClient, @unchecked Sendable {

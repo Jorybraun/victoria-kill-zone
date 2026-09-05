@@ -1,0 +1,3147 @@
+{
+  "status": "mesh-built-pending-native-visual-and-device-acceptance",
+  "publisher": "The Database Center for Life Science",
+  "asset": "BodyParts3D",
+  "version": "4.0 / FMA 3.0 part_of",
+  "sourceURL": "https://dbarchive.biosciencedbc.jp/data/bodyparts3d/LATEST/partof_BP3D_4.0_obj_99.zip",
+  "sourceSHA256": "9fbc713fffeee924a5a657d9813d84d7eb957bded63adb854931dd5e3eb61c97",
+  "sourceBytes": 64888505,
+  "downloadDate": "2026-09-05",
+  "license": "CC-BY-4.0",
+  "licenseURL": "https://dbarchive.biosciencedbc.jp/en/bodyparts3d/lic.html",
+  "licensePageUpdated": "2025-02-27",
+  "licenseEvidenceSHA256": "23746997f93e2768feb48a77fd91e9ac56d8ebd41fee86601e4466ac36c12108",
+  "attribution": "BodyParts3D, \u00a9 The Database Center for Life Science licensed under CC Attribution 4.0 International.",
+  "format": "SKN1",
+  "meshSHA256": "321dffc4e1c23ad4ea3fcae501ec98c2b13b3af2d8b42ee1966718823e36a53c",
+  "meshBytes": 1695385,
+  "triangleCount": 51796,
+  "vertexCount": 26806,
+  "geometryDrawCount": 19,
+  "sourceElementCount": 215,
+  "sourceTriangles": 527202,
+  "sourcePins": {
+    "partof_BP3D_4.0_obj_99.zip": "9fbc713fffeee924a5a657d9813d84d7eb957bded63adb854931dd5e3eb61c97",
+    "partof_parts_list_e.txt": "9224080557053e6f1322f1e13ab27f0ecde0db19bb3b505f0631afad230eeebd",
+    "partof_element_parts.txt": "3f5f6df1028eb122b30de77c711597b6bb8e5541658e5985859fd228adbf88ea"
+  },
+  "generator": "scripts/skeleton-assets/build.py",
+  "sourceToReview": {
+    "units": "metres",
+    "axes": "+X subject-left, +Y superior, +Z anterior",
+    "formula": "[x, z + 68.42, -y - 80] / 1000",
+    "rotationDeterminant": 1
+  },
+  "bindContract": "nodeTransform = targetFrame * inverse(sourceBindFrame); raw vertices in shared source-world metres; columns encode semantic lengths, not AABB normalization",
+  "sourceLandmarksMeters": {
+    "root": [
+      0.0,
+      0.91842,
+      0.0
+    ],
+    "neck_1_joint": [
+      0.0,
+      1.43842,
+      -0.002
+    ],
+    "head": [
+      0.0,
+      1.5784200000000002,
+      0.012
+    ],
+    "spine_7_joint": [
+      0.0,
+      1.2984200000000001,
+      -0.01
+    ],
+    "leftShoulder": [
+      0.065,
+      1.40842,
+      0.01
+    ],
+    "rightShoulder": [
+      -0.065,
+      1.40842,
+      0.01
+    ],
+    "left_arm_joint": [
+      0.158,
+      1.3864200000000002,
+      -0.002
+    ],
+    "right_arm_joint": [
+      -0.158,
+      1.3864200000000002,
+      -0.002
+    ],
+    "left_forearm_joint": [
+      0.216,
+      1.1084200000000002,
+      -0.007
+    ],
+    "right_forearm_joint": [
+      -0.216,
+      1.1084200000000002,
+      -0.007
+    ],
+    "leftHand": [
+      0.251,
+      0.88042,
+      0.033
+    ],
+    "rightHand": [
+      -0.251,
+      0.88042,
+      0.033
+    ],
+    "left_upLeg_joint": [
+      0.055,
+      0.88042,
+      0.002
+    ],
+    "right_upLeg_joint": [
+      -0.055,
+      0.88042,
+      0.002
+    ],
+    "left_leg_joint": [
+      0.08,
+      0.44142000000000003,
+      0.002
+    ],
+    "right_leg_joint": [
+      -0.08,
+      0.44142000000000003,
+      0.002
+    ],
+    "leftFoot": [
+      0.07,
+      0.06642,
+      -0.006
+    ],
+    "rightFoot": [
+      -0.07,
+      0.06642,
+      -0.006
+    ]
+  },
+  "sourceReferenceWidthMeters": 0.316,
+  "sourceReferenceTorsoHeightMeters": 0.5200038461396224,
+  "landmarkEvidence": "Art-reviewed articulating-surface joint-centre estimates in source anatomy; not captured ARKit pivots. Physical-device alignment remains required.",
+  "originalCosmeticGeometry": {
+    "teeth": "28 seated closed crowns with varied incisor/canine/premolar/molar profiles; original geometry, no sensed facial articulation",
+    "triangleCount": 2240
+  },
+  "connectingStructures": "Explicit costal cartilage from source; no intervertebral disks, eye/lacrimal soft tissue, muscle or organ surfaces.",
+  "parts": {
+    "skull": {
+      "vertices": 9723,
+      "triangles": 18290,
+      "elements": [
+        "FJ3199",
+        "FJ3200",
+        "FJ3263",
+        "FJ3265",
+        "FJ3269",
+        "FJ3272",
+        "FJ3273",
+        "FJ3274",
+        "FJ3281",
+        "FJ3287",
+        "FJ3289",
+        "FJ3309",
+        "FJ3369",
+        "FJ3371",
+        "FJ3375",
+        "FJ3378",
+        "FJ3379",
+        "FJ3380",
+        "FJ3386",
+        "FJ3392",
+        "FJ3394",
+        "FJ3395"
+      ],
+      "concepts": [],
+      "bindTransformColumnMajor": [
+        0.316,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.14000000000000012,
+        0.014000000000000002,
+        0.0,
+        0.0,
+        -0.03144317521063564,
+        0.3144317521063566,
+        0.0,
+        0.0,
+        1.43842,
+        -0.002,
+        1.0
+      ],
+      "boundsMeters": [
+        [
+          -0.07615232619563658,
+          1.489970090780039,
+          -0.09811523078783685
+        ],
+        [
+          0.07492388066035764,
+          1.716535830641142,
+          0.11093264961846407
+        ]
+      ]
+    },
+    "cervicalSpine": {
+      "vertices": 1321,
+      "triangles": 2694,
+      "elements": [
+        "FJ3161",
+        "FJ3164",
+        "FJ3167",
+        "FJ3170",
+        "FJ3172",
+        "FJ3176",
+        "FJ3177",
+        "FJ3201"
+      ],
+      "concepts": [
+        {
+          "concept": "FMA12519",
+          "name": "atlas"
+        },
+        {
+          "concept": "FMA12520",
+          "name": "axis"
+        },
+        {
+          "concept": "FMA12521",
+          "name": "third cervical vertebra"
+        },
+        {
+          "concept": "FMA12522",
+          "name": "fourth cervical vertebra"
+        },
+        {
+          "concept": "FMA12523",
+          "name": "fifth cervical vertebra"
+        },
+        {
+          "concept": "FMA12524",
+          "name": "sixth cervical vertebra"
+        },
+        {
+          "concept": "FMA12525",
+          "name": "seventh cervical vertebra"
+        },
+        {
+          "concept": "FMA52749",
+          "name": "hyoid bone"
+        }
+      ],
+      "bindTransformColumnMajor": [
+        0.316,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.14000000000000012,
+        0.014000000000000002,
+        0.0,
+        0.0,
+        -0.03144317521063564,
+        0.3144317521063566,
+        0.0,
+        0.0,
+        1.43842,
+        -0.002,
+        1.0
+      ],
+      "boundsMeters": [
+        [
+          -0.041539930958740416,
+          1.432813828530012,
+          -0.05881890853032702
+        ],
+        [
+          0.04010292993859164,
+          1.5497409834814382,
+          0.04902554722304424
+        ]
+      ]
+    },
+    "ribcage": {
+      "vertices": 3385,
+      "triangles": 6538,
+      "elements": [
+        "FJ3153",
+        "FJ3178",
+        "FJ3225",
+        "FJ3226",
+        "FJ3227",
+        "FJ3228",
+        "FJ3229",
+        "FJ3230",
+        "FJ3231",
+        "FJ3232",
+        "FJ3233",
+        "FJ3234",
+        "FJ3235",
+        "FJ3236",
+        "FJ3239",
+        "FJ3242",
+        "FJ3245",
+        "FJ3248",
+        "FJ3251",
+        "FJ3254",
+        "FJ3255",
+        "FJ3290",
+        "FJ3330",
+        "FJ3331",
+        "FJ3332",
+        "FJ3333",
+        "FJ3334",
+        "FJ3335",
+        "FJ3336",
+        "FJ3337",
+        "FJ3338",
+        "FJ3339",
+        "FJ3340",
+        "FJ3341",
+        "FJ3342",
+        "FJ3343",
+        "FJ3344",
+        "FJ3345",
+        "FJ3346",
+        "FJ3347",
+        "FJ3348"
+      ],
+      "concepts": [
+        {
+          "concept": "FMA7485",
+          "name": "sternum"
+        },
+        {
+          "concept": "FMA7857",
+          "name": "right first rib"
+        },
+        {
+          "concept": "FMA7875",
+          "name": "right first costal cartilage"
+        },
+        {
+          "concept": "FMA7882",
+          "name": "right second rib"
+        },
+        {
+          "concept": "FMA7886",
+          "name": "right second costal cartilage"
+        },
+        {
+          "concept": "FMA7909",
+          "name": "right third rib"
+        },
+        {
+          "concept": "FMA7913",
+          "name": "right third costal cartilage"
+        },
+        {
+          "concept": "FMA7957",
+          "name": "right fourth rib"
+        },
+        {
+          "concept": "FMA7976",
+          "name": "right fourth costal cartilage"
+        },
+        {
+          "concept": "FMA7987",
+          "name": "left first rib"
+        },
+        {
+          "concept": "FMA8005",
+          "name": "left first costal cartilage"
+        },
+        {
+          "concept": "FMA8012",
+          "name": "left second rib"
+        },
+        {
+          "concept": "FMA8031",
+          "name": "left second costal cartilage"
+        },
+        {
+          "concept": "FMA8039",
+          "name": "left third rib"
+        },
+        {
+          "concept": "FMA8058",
+          "name": "left third costal cartilage"
+        },
+        {
+          "concept": "FMA8066",
+          "name": "right fifth rib"
+        },
+        {
+          "concept": "FMA8070",
+          "name": "right fifth costal cartilage"
+        },
+        {
+          "concept": "FMA8093",
+          "name": "left fifth rib"
+        },
+        {
+          "concept": "FMA8112",
+          "name": "left fifth costal cartilage"
+        },
+        {
+          "concept": "FMA8148",
+          "name": "left fourth rib"
+        },
+        {
+          "concept": "FMA8167",
+          "name": "left fourth costal cartilage"
+        },
+        {
+          "concept": "FMA8175",
+          "name": "right sixth rib"
+        },
+        {
+          "concept": "FMA8194",
+          "name": "right sixth costal cartilage"
+        },
+        {
+          "concept": "FMA8202",
+          "name": "left sixth rib"
+        },
+        {
+          "concept": "FMA8221",
+          "name": "left sixth costal cartilage"
+        },
+        {
+          "concept": "FMA8229",
+          "name": "right seventh rib"
+        },
+        {
+          "concept": "FMA8248",
+          "name": "right seventh costal cartilage"
+        },
+        {
+          "concept": "FMA8256",
+          "name": "left seventh rib"
+        },
+        {
+          "concept": "FMA8275",
+          "name": "left seventh costal cartilage"
+        },
+        {
+          "concept": "FMA8283",
+          "name": "right eighth rib"
+        },
+        {
+          "concept": "FMA8310",
+          "name": "left eighth rib"
+        },
+        {
+          "concept": "FMA8364",
+          "name": "right ninth rib"
+        },
+        {
+          "concept": "FMA8391",
+          "name": "left ninth rib"
+        },
+        {
+          "concept": "FMA8445",
+          "name": "right tenth rib"
+        },
+        {
+          "concept": "FMA8472",
+          "name": "left tenth rib"
+        },
+        {
+          "concept": "FMA8531",
+          "name": "right eleventh rib"
+        },
+        {
+          "concept": "FMA8532",
+          "name": "left eleventh rib"
+        },
+        {
+          "concept": "FMA8533",
+          "name": "right twelfth rib"
+        },
+        {
+          "concept": "FMA8534",
+          "name": "left twelfth rib"
+        }
+      ],
+      "bindTransformColumnMajor": [
+        0.316,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.52,
+        -0.002,
+        0.0,
+        0.0,
+        0.0012153756259531711,
+        0.31599766274782454,
+        0.0,
+        0.0,
+        0.91842,
+        0.0,
+        1.0
+      ],
+      "boundsMeters": [
+        [
+          -0.13696589445635168,
+          1.076191842503421,
+          -0.07622506117159997
+        ],
+        [
+          0.1364338087999312,
+          1.4392184507745949,
+          0.133205445316259
+        ]
+      ]
+    },
+    "spine": {
+      "vertices": 2390,
+      "triangles": 4780,
+      "elements": [
+        "FJ3154",
+        "FJ3155",
+        "FJ3156",
+        "FJ3157",
+        "FJ3158",
+        "FJ3159",
+        "FJ3160",
+        "FJ3162",
+        "FJ3163",
+        "FJ3165",
+        "FJ3166",
+        "FJ3168",
+        "FJ3169",
+        "FJ3171",
+        "FJ3173",
+        "FJ3174",
+        "FJ3175"
+      ],
+      "concepts": [
+        {
+          "concept": "FMA9165",
+          "name": "first thoracic vertebra"
+        },
+        {
+          "concept": "FMA9187",
+          "name": "second thoracic vertebra"
+        },
+        {
+          "concept": "FMA9209",
+          "name": "third thoracic vertebra"
+        },
+        {
+          "concept": "FMA9248",
+          "name": "fourth thoracic vertebra"
+        },
+        {
+          "concept": "FMA9922",
+          "name": "fifth thoracic vertebra"
+        },
+        {
+          "concept": "FMA9945",
+          "name": "sixth thoracic vertebra"
+        },
+        {
+          "concept": "FMA9968",
+          "name": "seventh thoracic vertebra"
+        },
+        {
+          "concept": "FMA9991",
+          "name": "eighth thoracic vertebra"
+        },
+        {
+          "concept": "FMA10014",
+          "name": "ninth thoracic vertebra"
+        },
+        {
+          "concept": "FMA10037",
+          "name": "tenth thoracic vertebra"
+        },
+        {
+          "concept": "FMA10059",
+          "name": "eleventh thoracic vertebra"
+        },
+        {
+          "concept": "FMA10081",
+          "name": "twelfth thoracic vertebra"
+        },
+        {
+          "concept": "FMA13072",
+          "name": "first lumbar vertebra"
+        },
+        {
+          "concept": "FMA13073",
+          "name": "second lumbar vertebra"
+        },
+        {
+          "concept": "FMA13074",
+          "name": "third lumbar vertebra"
+        },
+        {
+          "concept": "FMA13075",
+          "name": "fourth lumbar vertebra"
+        },
+        {
+          "concept": "FMA13076",
+          "name": "fifth lumbar vertebra"
+        }
+      ],
+      "bindTransformColumnMajor": [
+        0.316,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.52,
+        -0.002,
+        0.0,
+        0.0,
+        0.0012153756259531711,
+        0.31599766274782454,
+        0.0,
+        0.0,
+        0.91842,
+        0.0,
+        1.0
+      ],
+      "boundsMeters": [
+        [
+          -0.05074202360742526,
+          0.9731253719463167,
+          -0.08015966375823613
+        ],
+        [
+          0.04934210152118115,
+          1.445436443990874,
+          0.03561447521980033
+        ]
+      ]
+    },
+    "pelvis": {
+      "vertices": 1685,
+      "triangles": 3398,
+      "elements": [
+        "FJ3152",
+        "FJ3288",
+        "FJ3393"
+      ],
+      "concepts": [
+        {
+          "concept": "FMA16202",
+          "name": "sacrum"
+        },
+        {
+          "concept": "FMA16587",
+          "name": "left hip bone"
+        },
+        {
+          "concept": "FMA16586",
+          "name": "right hip bone"
+        }
+      ],
+      "bindTransformColumnMajor": [
+        0.316,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.52,
+        -0.002,
+        0.0,
+        0.0,
+        0.0012153756259531711,
+        0.31599766274782454,
+        0.0,
+        0.0,
+        0.91842,
+        0.0,
+        1.0
+      ],
+      "boundsMeters": [
+        [
+          -0.14537997510086978,
+          0.8204042476539251,
+          -0.08729495836199663
+        ],
+        [
+          0.14462890306294202,
+          1.0268251977359382,
+          0.0592060893142384
+        ]
+      ]
+    },
+    "leftClavicle": {
+      "vertices": 703,
+      "triangles": 1398,
+      "elements": [
+        "FJ3237",
+        "FJ3279"
+      ],
+      "concepts": [
+        {
+          "concept": "FMA13323",
+          "name": "left clavicle"
+        },
+        {
+          "concept": "FMA13396",
+          "name": "left scapula"
+        }
+      ],
+      "bindTransformColumnMajor": [
+        0.316,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.52,
+        -0.002,
+        0.0,
+        0.0,
+        0.0012153756259531711,
+        0.31599766274782454,
+        0.0,
+        0.0,
+        0.91842,
+        0.0,
+        1.0
+      ],
+      "boundsMeters": [
+        [
+          0.007512065115117233,
+          1.2522827556794256,
+          -0.08517467126196679
+        ],
+        [
+          0.16651173401970537,
+          1.4232282490609895,
+          0.06729147488801927
+        ]
+      ]
+    },
+    "rightClavicle": {
+      "vertices": 703,
+      "triangles": 1398,
+      "elements": [
+        "FJ3362",
+        "FJ3384"
+      ],
+      "concepts": [
+        {
+          "concept": "FMA13322",
+          "name": "right clavicle"
+        },
+        {
+          "concept": "FMA13395",
+          "name": "right scapula"
+        }
+      ],
+      "bindTransformColumnMajor": [
+        0.316,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.52,
+        -0.002,
+        0.0,
+        0.0,
+        0.0012153756259531711,
+        0.31599766274782454,
+        0.0,
+        0.0,
+        0.91842,
+        0.0,
+        1.0
+      ],
+      "boundsMeters": [
+        [
+          -0.16643067750393076,
+          1.25236562754614,
+          -0.08517283356702693
+        ],
+        [
+          -0.009471783720102631,
+          1.4234460082123945,
+          0.06671129546103668
+        ]
+      ]
+    },
+    "leftUpperArm": {
+      "vertices": 502,
+      "triangles": 1000,
+      "elements": [
+        "FJ3262"
+      ],
+      "concepts": [
+        {
+          "concept": "FMA23131",
+          "name": "left humerus"
+        }
+      ],
+      "bindTransformColumnMajor": [
+        0.30934058664231845,
+        0.06453061413648667,
+        0.0004486590622350946,
+        0.0,
+        -0.057999999999999996,
+        0.278,
+        0.005,
+        0.0,
+        0.0006968485778044165,
+        -0.0055371811340182405,
+        0.3159507145539454,
+        0.0,
+        0.158,
+        1.3864200000000002,
+        -0.002,
+        1.0
+      ],
+      "boundsMeters": [
+        [
+          0.1397673405271263,
+          1.0975253235887727,
+          -0.02910510504467964
+        ],
+        [
+          0.24078358520178833,
+          1.4048559795724296,
+          0.02032778428310593
+        ]
+      ]
+    },
+    "rightUpperArm": {
+      "vertices": 502,
+      "triangles": 1000,
+      "elements": [
+        "FJ3368"
+      ],
+      "concepts": [
+        {
+          "concept": "FMA23130",
+          "name": "right humerus"
+        }
+      ],
+      "bindTransformColumnMajor": [
+        0.30934058664231845,
+        -0.06453061413648667,
+        -0.0004486590622350946,
+        0.0,
+        0.057999999999999996,
+        0.278,
+        0.005,
+        0.0,
+        -0.0006968485778044165,
+        -0.0055371811340182405,
+        0.3159507145539454,
+        0.0,
+        -0.158,
+        1.3864200000000002,
+        -0.002,
+        1.0
+      ],
+      "boundsMeters": [
+        [
+          -0.24105481262049125,
+          1.097477335370383,
+          -0.029067317288424564
+        ],
+        [
+          -0.13993258283157226,
+          1.404855549261859,
+          0.020348054728906
+        ]
+      ]
+    },
+    "leftForearm": {
+      "vertices": 378,
+      "triangles": 748,
+      "elements": [
+        "FJ3277",
+        "FJ3286"
+      ],
+      "concepts": [
+        {
+          "concept": "FMA23465",
+          "name": "left radius"
+        },
+        {
+          "concept": "FMA23468",
+          "name": "left ulna"
+        }
+      ],
+      "bindTransformColumnMajor": [
+        0.3124231077020873,
+        0.04722637215342454,
+        -0.004179897964806331,
+        0.0,
+        -0.03500000000000001,
+        0.2280000000000002,
+        -0.04000000000000001,
+        0.0,
+        -0.003998228499321909,
+        0.05400472776093162,
+        0.31132539817421717,
+        0.0,
+        0.216,
+        1.1084200000000002,
+        -0.007,
+        1.0
+      ],
+      "boundsMeters": [
+        [
+          0.19696028848708616,
+          0.8735289387717728,
+          -0.0354896879639172
+        ],
+        [
+          0.27908552264974884,
+          1.1207819313078902,
+          0.047570952910156145
+        ]
+      ]
+    },
+    "rightForearm": {
+      "vertices": 378,
+      "triangles": 748,
+      "elements": [
+        "FJ3349",
+        "FJ3391"
+      ],
+      "concepts": [
+        {
+          "concept": "FMA23464",
+          "name": "right radius"
+        },
+        {
+          "concept": "FMA23467",
+          "name": "right ulna"
+        }
+      ],
+      "bindTransformColumnMajor": [
+        0.3124231077020873,
+        -0.04722637215342454,
+        0.004179897964806331,
+        0.0,
+        0.03500000000000001,
+        0.2280000000000002,
+        -0.04000000000000001,
+        0.0,
+        0.003998228499321909,
+        0.05400472776093162,
+        0.31132539817421717,
+        0.0,
+        -0.216,
+        1.1084200000000002,
+        -0.007,
+        1.0
+      ],
+      "boundsMeters": [
+        [
+          -0.2795567019231085,
+          0.8736750289093752,
+          -0.03529304768665952
+        ],
+        [
+          -0.19701231040078138,
+          1.1208195226759676,
+          0.046828
+        ]
+      ]
+    },
+    "leftThigh": {
+      "vertices": 578,
+      "triangles": 1148,
+      "elements": [
+        "FJ3259",
+        "FJ3275"
+      ],
+      "concepts": [
+        {
+          "concept": "FMA24475",
+          "name": "left femur"
+        },
+        {
+          "concept": "FMA24487",
+          "name": "left patella"
+        }
+      ],
+      "bindTransformColumnMajor": [
+        0.3154888422933903,
+        0.017966334982539314,
+        -3.457848328643259e-05,
+        0.0,
+        -0.025000000000000005,
+        0.43899999999999995,
+        9.355642049451853e-20,
+        0.0,
+        3.45225497645907e-05,
+        1.965976638074527e-06,
+        0.3159999981081147,
+        0.0,
+        0.055,
+        0.88042,
+        0.002,
+        1.0
+      ],
+      "boundsMeters": [
+        [
+          0.032135631135943483,
+          0.4300084762534156,
+          -0.03053309171290692
+        ],
+        [
+          0.15039595934815875,
+          0.90269672454736,
+          0.04285442475247712
+        ]
+      ]
+    },
+    "rightThigh": {
+      "vertices": 578,
+      "triangles": 1148,
+      "elements": [
+        "FJ3365",
+        "FJ3381"
+      ],
+      "concepts": [
+        {
+          "concept": "FMA24474",
+          "name": "right femur"
+        },
+        {
+          "concept": "FMA24486",
+          "name": "right patella"
+        }
+      ],
+      "bindTransformColumnMajor": [
+        0.3154888422933903,
+        -0.017966334982539314,
+        3.457848328643259e-05,
+        0.0,
+        0.025000000000000005,
+        0.43899999999999995,
+        9.355642049451853e-20,
+        0.0,
+        -3.45225497645907e-05,
+        1.965976638074527e-06,
+        0.3159999981081147,
+        0.0,
+        -0.055,
+        0.88042,
+        0.002,
+        1.0
+      ],
+      "boundsMeters": [
+        [
+          -0.15024746168081665,
+          0.42956525879214386,
+          -0.030268446790413118
+        ],
+        [
+          -0.0318943,
+          0.9027398272575939,
+          0.04244749270543063
+        ]
+      ]
+    },
+    "leftShin": {
+      "vertices": 428,
+      "triangles": 848,
+      "elements": [
+        "FJ3260",
+        "FJ3282"
+      ],
+      "concepts": [
+        {
+          "concept": "FMA24478",
+          "name": "left tibia"
+        },
+        {
+          "concept": "FMA24481",
+          "name": "left fibula"
+        }
+      ],
+      "bindTransformColumnMajor": [
+        0.3158877376033869,
+        -0.008422102679418389,
+        -7.360890649652372e-05,
+        0.0,
+        0.009999999999999995,
+        0.375,
+        0.008,
+        0.0,
+        -0.00010600082508279954,
+        -0.006736974046637722,
+        0.3159281594674967,
+        0.0,
+        0.08,
+        0.44142000000000003,
+        0.002,
+        1.0
+      ],
+      "boundsMeters": [
+        [
+          0.035184036398930627,
+          0.0429324269030586,
+          -0.0315495078256588
+        ],
+        [
+          0.12007124038650922,
+          0.4424774140039511,
+          0.03436101354464159
+        ]
+      ]
+    },
+    "rightShin": {
+      "vertices": 428,
+      "triangles": 848,
+      "elements": [
+        "FJ3366",
+        "FJ3387"
+      ],
+      "concepts": [
+        {
+          "concept": "FMA24477",
+          "name": "right tibia"
+        },
+        {
+          "concept": "FMA24480",
+          "name": "right fibula"
+        }
+      ],
+      "bindTransformColumnMajor": [
+        0.3158877376033869,
+        0.008422102679418389,
+        7.360890649652372e-05,
+        0.0,
+        -0.009999999999999995,
+        0.375,
+        0.008,
+        0.0,
+        0.00010600082508279954,
+        -0.006736974046637722,
+        0.3159281594674967,
+        0.0,
+        -0.08,
+        0.44142000000000003,
+        0.002,
+        1.0
+      ],
+      "boundsMeters": [
+        [
+          -0.120130242860893,
+          0.0429115417874785,
+          -0.031228630744418995
+        ],
+        [
+          -0.03543775381359112,
+          0.4427562838214427,
+          0.03470455026346295
+        ]
+      ]
+    },
+    "leftHand": {
+      "vertices": 732,
+      "triangles": 1352,
+      "elements": [
+        "FJ3183",
+        "FJ3184",
+        "FJ3186",
+        "FJ3187",
+        "FJ3188",
+        "FJ3240",
+        "FJ3243",
+        "FJ3246",
+        "FJ3249",
+        "FJ3252",
+        "FJ3257",
+        "FJ3261",
+        "FJ3268",
+        "FJ3276",
+        "FJ3278",
+        "FJ3283",
+        "FJ3284",
+        "FJ3285",
+        "FJ3291",
+        "FJ3296",
+        "FJ3297",
+        "FJ3299",
+        "FJ3313",
+        "FJ3314",
+        "FJ3316",
+        "FJ3317",
+        "FJ3318"
+      ],
+      "concepts": [
+        {
+          "concept": "FMA23938",
+          "name": "middle phalanx of left index finger"
+        },
+        {
+          "concept": "FMA23940",
+          "name": "middle phalanx of left middle finger"
+        },
+        {
+          "concept": "FMA23942",
+          "name": "middle phalanx of left ring finger"
+        },
+        {
+          "concept": "FMA23944",
+          "name": "middle phalanx of left little finger"
+        },
+        {
+          "concept": "FMA23951",
+          "name": "distal phalanx of left thumb"
+        },
+        {
+          "concept": "FMA23953",
+          "name": "distal phalanx of left index finger"
+        },
+        {
+          "concept": "FMA23955",
+          "name": "distal phalanx of left middle finger"
+        },
+        {
+          "concept": "FMA23957",
+          "name": "distal phalanx of left ring finger"
+        },
+        {
+          "concept": "FMA23959",
+          "name": "distal phalanx of left little finger"
+        },
+        {
+          "concept": "FMA24436",
+          "name": "left scaphoid"
+        },
+        {
+          "concept": "FMA24438",
+          "name": "left lunate"
+        },
+        {
+          "concept": "FMA24440",
+          "name": "left triquetral"
+        },
+        {
+          "concept": "FMA24442",
+          "name": "left pisiform"
+        },
+        {
+          "concept": "FMA24444",
+          "name": "left trapezium"
+        },
+        {
+          "concept": "FMA24445",
+          "name": "left trapezoid"
+        },
+        {
+          "concept": "FMA24447",
+          "name": "left capitate"
+        },
+        {
+          "concept": "FMA24449",
+          "name": "left hamate"
+        },
+        {
+          "concept": "FMA24465",
+          "name": "left first metacarpal bone"
+        },
+        {
+          "concept": "FMA24467",
+          "name": "left second metacarpal bone"
+        },
+        {
+          "concept": "FMA24469",
+          "name": "left third metacarpal bone"
+        },
+        {
+          "concept": "FMA24471",
+          "name": "left fourth metacarpal bone"
+        },
+        {
+          "concept": "FMA24473",
+          "name": "left fifth metacarpal bone"
+        },
+        {
+          "concept": "FMA65470",
+          "name": "proximal phalanx of left thumb"
+        },
+        {
+          "concept": "FMA66791",
+          "name": "proximal phalanx of left little finger"
+        },
+        {
+          "concept": "FMA71908",
+          "name": "proximal phalanx of left middle finger"
+        },
+        {
+          "concept": "FMA71915",
+          "name": "proximal phalanx of left index finger"
+        },
+        {
+          "concept": "FMA71916",
+          "name": "proximal phalanx of left ring finger"
+        }
+      ],
+      "bindTransformColumnMajor": [
+        0.3124231077020873,
+        0.04722637215342454,
+        -0.004179897964806331,
+        0.0,
+        -0.03500000000000001,
+        0.2280000000000002,
+        -0.04000000000000001,
+        0.0,
+        -0.003998228499321909,
+        0.05400472776093162,
+        0.31132539817421717,
+        0.0,
+        0.251,
+        0.88042,
+        0.033,
+        1.0
+      ],
+      "boundsMeters": [
+        [
+          0.21893670953131575,
+          0.7215209071848631,
+          0.030480321090073415
+        ],
+        [
+          0.32391532922694755,
+          0.8803970475086259,
+          0.11545970550754513
+        ]
+      ]
+    },
+    "rightHand": {
+      "vertices": 760,
+      "triangles": 1404,
+      "elements": [
+        "FJ3193",
+        "FJ3194",
+        "FJ3196",
+        "FJ3197",
+        "FJ3198",
+        "FJ3292",
+        "FJ3303",
+        "FJ3304",
+        "FJ3306",
+        "FJ3322",
+        "FJ3323",
+        "FJ3325",
+        "FJ3326",
+        "FJ3327",
+        "FJ3350",
+        "FJ3352",
+        "FJ3354",
+        "FJ3356",
+        "FJ3358",
+        "FJ3361",
+        "FJ3367",
+        "FJ3374",
+        "FJ3382",
+        "FJ3383",
+        "FJ3388",
+        "FJ3389",
+        "FJ3390"
+      ],
+      "concepts": [
+        {
+          "concept": "FMA23725",
+          "name": "right trapezoid"
+        },
+        {
+          "concept": "FMA24435",
+          "name": "right scaphoid"
+        },
+        {
+          "concept": "FMA24437",
+          "name": "right lunate"
+        },
+        {
+          "concept": "FMA24439",
+          "name": "right triquetral"
+        },
+        {
+          "concept": "FMA24441",
+          "name": "right pisiform"
+        },
+        {
+          "concept": "FMA24443",
+          "name": "right trapezium"
+        },
+        {
+          "concept": "FMA24446",
+          "name": "right capitate"
+        },
+        {
+          "concept": "FMA24448",
+          "name": "right hamate"
+        },
+        {
+          "concept": "FMA24450",
+          "name": "proximal phalanx of right thumb"
+        },
+        {
+          "concept": "FMA24451",
+          "name": "proximal phalanx of right index finger"
+        },
+        {
+          "concept": "FMA24452",
+          "name": "proximal phalanx of right middle finger"
+        },
+        {
+          "concept": "FMA24453",
+          "name": "proximal phalanx of right ring finger"
+        },
+        {
+          "concept": "FMA24454",
+          "name": "proximal phalanx of right little finger"
+        },
+        {
+          "concept": "FMA24455",
+          "name": "middle phalanx of right index finger"
+        },
+        {
+          "concept": "FMA24456",
+          "name": "middle phalanx of right middle finger"
+        },
+        {
+          "concept": "FMA24457",
+          "name": "middle phalanx of right ring finger"
+        },
+        {
+          "concept": "FMA24458",
+          "name": "middle phalanx of right little finger"
+        },
+        {
+          "concept": "FMA24459",
+          "name": "distal phalanx of right thumb"
+        },
+        {
+          "concept": "FMA24460",
+          "name": "distal phalanx of right index finger"
+        },
+        {
+          "concept": "FMA24461",
+          "name": "distal phalanx of right middle finger"
+        },
+        {
+          "concept": "FMA24462",
+          "name": "distal phalanx of right ring finger"
+        },
+        {
+          "concept": "FMA24463",
+          "name": "distal phalanx of right little finger"
+        },
+        {
+          "concept": "FMA24464",
+          "name": "right first metacarpal bone"
+        },
+        {
+          "concept": "FMA24466",
+          "name": "right second metacarpal bone"
+        },
+        {
+          "concept": "FMA24468",
+          "name": "right third metacarpal bone"
+        },
+        {
+          "concept": "FMA24470",
+          "name": "right fourth metacarpal bone"
+        },
+        {
+          "concept": "FMA24472",
+          "name": "right fifth metacarpal bone"
+        }
+      ],
+      "bindTransformColumnMajor": [
+        0.3124231077020873,
+        -0.04722637215342454,
+        0.004179897964806331,
+        0.0,
+        0.03500000000000001,
+        0.2280000000000002,
+        -0.04000000000000001,
+        0.0,
+        0.003998228499321909,
+        0.05400472776093162,
+        0.31132539817421717,
+        0.0,
+        -0.251,
+        0.88042,
+        0.033,
+        1.0
+      ],
+      "boundsMeters": [
+        [
+          -0.3239250506338779,
+          0.7214291846549901,
+          0.03022793889657673
+        ],
+        [
+          -0.21898326535436569,
+          0.8797940269925545,
+          0.11561120121647396
+        ]
+      ]
+    },
+    "leftFoot": {
+      "vertices": 818,
+      "triangles": 1532,
+      "elements": [
+        "FJ3179",
+        "FJ3180",
+        "FJ3181",
+        "FJ3182",
+        "FJ3185",
+        "FJ3241",
+        "FJ3244",
+        "FJ3247",
+        "FJ3250",
+        "FJ3253",
+        "FJ3256",
+        "FJ3258",
+        "FJ3264",
+        "FJ3267",
+        "FJ3271",
+        "FJ3280",
+        "FJ3293",
+        "FJ3294",
+        "FJ3295",
+        "FJ3298",
+        "FJ3307",
+        "FJ3311",
+        "FJ3312",
+        "FJ3315",
+        "FJ3328",
+        "FJ3329"
+      ],
+      "concepts": [
+        {
+          "concept": "FMA24483",
+          "name": "left talus"
+        },
+        {
+          "concept": "FMA24498",
+          "name": "left calcaneus"
+        },
+        {
+          "concept": "FMA24501",
+          "name": "navicular bone of left foot"
+        },
+        {
+          "concept": "FMA24508",
+          "name": "left first metatarsal bone"
+        },
+        {
+          "concept": "FMA24510",
+          "name": "left second metatarsal bone"
+        },
+        {
+          "concept": "FMA24512",
+          "name": "left third metatarsal bone"
+        },
+        {
+          "concept": "FMA24514",
+          "name": "left fourth metatarsal bone"
+        },
+        {
+          "concept": "FMA24516",
+          "name": "left fifth metatarsal bone"
+        },
+        {
+          "concept": "FMA24522",
+          "name": "left medial cuneiform bone"
+        },
+        {
+          "concept": "FMA24524",
+          "name": "left intermediate cuneiform bone"
+        },
+        {
+          "concept": "FMA24526",
+          "name": "left lateral cuneiform bone"
+        },
+        {
+          "concept": "FMA24529",
+          "name": "left cuboid bone"
+        },
+        {
+          "concept": "FMA32635",
+          "name": "proximal phalanx of left second toe"
+        },
+        {
+          "concept": "FMA32637",
+          "name": "proximal phalanx of left third toe"
+        },
+        {
+          "concept": "FMA32639",
+          "name": "proximal phalanx of left fourth toe"
+        },
+        {
+          "concept": "FMA32641",
+          "name": "proximal phalanx of left little toe"
+        },
+        {
+          "concept": "FMA32643",
+          "name": "middle phalanx of left second toe"
+        },
+        {
+          "concept": "FMA32645",
+          "name": "middle phalanx of left third toe"
+        },
+        {
+          "concept": "FMA32647",
+          "name": "middle phalanx of left fourth toe"
+        },
+        {
+          "concept": "FMA32651",
+          "name": "distal phalanx of left big toe"
+        },
+        {
+          "concept": "FMA32653",
+          "name": "distal phalanx of left second toe"
+        },
+        {
+          "concept": "FMA32655",
+          "name": "distal phalanx of left third toe"
+        },
+        {
+          "concept": "FMA32657",
+          "name": "distal phalanx of left fourth toe"
+        },
+        {
+          "concept": "FMA32659",
+          "name": "distal phalanx of left little toe"
+        },
+        {
+          "concept": "FMA43254",
+          "name": "proximal phalanx of left big toe"
+        },
+        {
+          "concept": "FMA230988",
+          "name": "middle phalanx of left little toe"
+        }
+      ],
+      "bindTransformColumnMajor": [
+        0.3158877376033869,
+        -0.008422102679418389,
+        -7.360890649652372e-05,
+        0.0,
+        0.009999999999999995,
+        0.375,
+        0.008,
+        0.0,
+        -0.00010600082508279954,
+        -0.006736974046637722,
+        0.3159281594674967,
+        0.0,
+        0.07,
+        0.06642,
+        -0.006,
+        1.0
+      ],
+      "boundsMeters": [
+        [
+          0.04417960668646049,
+          -0.0022329502119956047,
+          -0.05681997940846953
+        ],
+        [
+          0.16911546958940218,
+          0.07161117262618909,
+          0.15564700032608372
+        ]
+      ]
+    },
+    "rightFoot": {
+      "vertices": 814,
+      "triangles": 1524,
+      "elements": [
+        "FJ3189",
+        "FJ3190",
+        "FJ3191",
+        "FJ3192",
+        "FJ3195",
+        "FJ3300",
+        "FJ3301",
+        "FJ3302",
+        "FJ3305",
+        "FJ3308",
+        "FJ3310",
+        "FJ3319",
+        "FJ3320",
+        "FJ3321",
+        "FJ3324",
+        "FJ3351",
+        "FJ3353",
+        "FJ3355",
+        "FJ3357",
+        "FJ3359",
+        "FJ3360",
+        "FJ3364",
+        "FJ3370",
+        "FJ3373",
+        "FJ3377",
+        "FJ3385"
+      ],
+      "concepts": [
+        {
+          "concept": "FMA24482",
+          "name": "right talus"
+        },
+        {
+          "concept": "FMA24497",
+          "name": "right calcaneus"
+        },
+        {
+          "concept": "FMA24500",
+          "name": "navicular bone of right foot"
+        },
+        {
+          "concept": "FMA24507",
+          "name": "right first metatarsal bone"
+        },
+        {
+          "concept": "FMA24509",
+          "name": "right second metatarsal bone"
+        },
+        {
+          "concept": "FMA24511",
+          "name": "right third metatarsal bone"
+        },
+        {
+          "concept": "FMA24513",
+          "name": "right fourth metatarsal bone"
+        },
+        {
+          "concept": "FMA24515",
+          "name": "right fifth metatarsal bone"
+        },
+        {
+          "concept": "FMA24521",
+          "name": "right medial cuneiform bone"
+        },
+        {
+          "concept": "FMA24523",
+          "name": "right intermediate cuneiform bone"
+        },
+        {
+          "concept": "FMA24525",
+          "name": "right lateral cuneiform bone"
+        },
+        {
+          "concept": "FMA24528",
+          "name": "right cuboid bone"
+        },
+        {
+          "concept": "FMA32634",
+          "name": "proximal phalanx of right second toe"
+        },
+        {
+          "concept": "FMA32636",
+          "name": "proximal phalanx of right third toe"
+        },
+        {
+          "concept": "FMA32638",
+          "name": "proximal phalanx of right fourth toe"
+        },
+        {
+          "concept": "FMA32640",
+          "name": "proximal phalanx of right little toe"
+        },
+        {
+          "concept": "FMA32642",
+          "name": "middle phalanx of right second toe"
+        },
+        {
+          "concept": "FMA32644",
+          "name": "middle phalanx of right third toe"
+        },
+        {
+          "concept": "FMA32646",
+          "name": "middle phalanx of right fourth toe"
+        },
+        {
+          "concept": "FMA32650",
+          "name": "distal phalanx of right big toe"
+        },
+        {
+          "concept": "FMA32652",
+          "name": "distal phalanx of right second toe"
+        },
+        {
+          "concept": "FMA32654",
+          "name": "distal phalanx of right third toe"
+        },
+        {
+          "concept": "FMA32656",
+          "name": "distal phalanx of right fourth toe"
+        },
+        {
+          "concept": "FMA32658",
+          "name": "distal phalanx of right little toe"
+        },
+        {
+          "concept": "FMA43253",
+          "name": "proximal phalanx of right big toe"
+        },
+        {
+          "concept": "FMA230986",
+          "name": "middle phalanx of right little toe"
+        }
+      ],
+      "bindTransformColumnMajor": [
+        0.3158877376033869,
+        0.008422102679418389,
+        7.360890649652372e-05,
+        0.0,
+        -0.009999999999999995,
+        0.375,
+        0.008,
+        0.0,
+        0.00010600082508279954,
+        -0.006736974046637722,
+        0.3159281594674967,
+        0.0,
+        -0.07,
+        0.06642,
+        -0.006,
+        1.0
+      ],
+      "boundsMeters": [
+        [
+          -0.1691416692875371,
+          -0.0020611414967284325,
+          -0.05599989311886
+        ],
+        [
+          -0.04468755904206366,
+          0.07148370307090761,
+          0.15608761233408616
+        ]
+      ]
+    }
+  },
+  "elements": {
+    "FJ3199": {
+      "name": "Ethmoid",
+      "sourceSHA256": "6c0fceb9f44fe469d4db0e41594e8c5ed28a576950de7c43df488628d81105ea",
+      "sourceTriangles": 22276,
+      "outputTriangles": 750
+    },
+    "FJ3200": {
+      "name": "Frontal bone",
+      "sourceSHA256": "9a01d88bd564b462ecadd6ad5bb3bb2274105baa3d211e0f444210d3f499ed64",
+      "sourceTriangles": 14510,
+      "outputTriangles": 2200
+    },
+    "FJ3263": {
+      "name": "Left inferior nasal concha",
+      "sourceSHA256": "c6477a98607e712a2bdefd4c2732ce22a990b8cd8783b7b7a6453192443961cd",
+      "sourceTriangles": 738,
+      "outputTriangles": 160
+    },
+    "FJ3265": {
+      "name": "Left lacrimal bone",
+      "sourceSHA256": "8ad400f81a74d51e3193ab1dc92ec39df5dc1c104a6ced970d430bca3d0f9c9c",
+      "sourceTriangles": 640,
+      "outputTriangles": 180
+    },
+    "FJ3269": {
+      "name": "Left maxilla",
+      "sourceSHA256": "a56eeb3723f4b3cd1d96b113eaba8f253ed49ff76220ba48ac0d1d086b80ff60",
+      "sourceTriangles": 5198,
+      "outputTriangles": 1200
+    },
+    "FJ3272": {
+      "name": "Left nasal bone",
+      "sourceSHA256": "cc03a0b61102415dfa66cc55210f65c71ca9466e6e043d350449eac71b414a24",
+      "sourceTriangles": 438,
+      "outputTriangles": 150
+    },
+    "FJ3273": {
+      "name": "Left palatine bone",
+      "sourceSHA256": "dacf96918a971758cbf25e3884b15e6c2b0a112a863b773332fb916431676368",
+      "sourceTriangles": 1938,
+      "outputTriangles": 220
+    },
+    "FJ3274": {
+      "name": "Left parietal bone",
+      "sourceSHA256": "df63a28fa604ff67828d8f382c66cfa46f40306b1b4c17a8062029764047d0e3",
+      "sourceTriangles": 13210,
+      "outputTriangles": 1300
+    },
+    "FJ3281": {
+      "name": "Left temporal bone",
+      "sourceSHA256": "47cc46f1480c54fe14a2d22361c3b93fcb964538f23d5b425ac718854cff2673",
+      "sourceTriangles": 4936,
+      "outputTriangles": 800
+    },
+    "FJ3287": {
+      "name": "Left zygomatic bone",
+      "sourceSHA256": "9cfd8fd359816b5fa5ed9758f26d942c7ada0900aa7f614aff39949fdad3ddee",
+      "sourceTriangles": 1434,
+      "outputTriangles": 600
+    },
+    "FJ3289": {
+      "name": "Mandible",
+      "sourceSHA256": "6ae0d7fde4221302f1c74d9e9933e2e05c36efef273bb27a78326d108d140ce8",
+      "sourceTriangles": 5576,
+      "outputTriangles": 1800
+    },
+    "FJ3309": {
+      "name": "Occipital bone",
+      "sourceSHA256": "37172b4706d23d51ebb3ce3839cc59c6e4cb4931039901f395703bc7dff52761",
+      "sourceTriangles": 12450,
+      "outputTriangles": 1200
+    },
+    "FJ3369": {
+      "name": "Right inferior nasal concha",
+      "sourceSHA256": "681194f0df836eb03818110633c22976f9e4cb9e4e77bb194cec3f61cdf2a80b",
+      "sourceTriangles": 714,
+      "outputTriangles": 160
+    },
+    "FJ3371": {
+      "name": "Right lacrimal bone",
+      "sourceSHA256": "d8160ed34abb66d2539e6f05eadc431bd18774e5d1def1a4cb9bc40e3e4a32c5",
+      "sourceTriangles": 702,
+      "outputTriangles": 180
+    },
+    "FJ3375": {
+      "name": "Right maxilla",
+      "sourceSHA256": "a1be9480b632355859507e590be68146a591d343ad671ca85c43d7be50d8b43c",
+      "sourceTriangles": 5324,
+      "outputTriangles": 1200
+    },
+    "FJ3378": {
+      "name": "Right nasal bone",
+      "sourceSHA256": "1acb8f803fb2cd9679eccd1634768b1bbee0714ebef7cf2de041d9332da88acf",
+      "sourceTriangles": 416,
+      "outputTriangles": 150
+    },
+    "FJ3379": {
+      "name": "Right palatine bone",
+      "sourceSHA256": "629876377eca1ae98eefc496121e950367c49bf215febf17cf58a7f9687845dd",
+      "sourceTriangles": 1736,
+      "outputTriangles": 220
+    },
+    "FJ3380": {
+      "name": "Right parietal bone",
+      "sourceSHA256": "fb69a19eaa0585509f45ce1ebb5e8d91af0442629e52cfe1cfd190ca8f2f72b0",
+      "sourceTriangles": 13002,
+      "outputTriangles": 1300
+    },
+    "FJ3386": {
+      "name": "Right temporal bone",
+      "sourceSHA256": "cae2e4dc5211d50b06e70893eef3bdaf19564ab8ae7923260e800c3498f65f88",
+      "sourceTriangles": 4928,
+      "outputTriangles": 800
+    },
+    "FJ3392": {
+      "name": "Right zygomatic bone",
+      "sourceSHA256": "e2c25d922162e3a76131e40ddf0356709947fa554b46640fa1880c381bb749c7",
+      "sourceTriangles": 1556,
+      "outputTriangles": 600
+    },
+    "FJ3394": {
+      "name": "Sphenoid bone",
+      "sourceSHA256": "9255a2f02b16d0cf87c68fbfdc7afc4709d1afef94c2e2bb1e035b7f7852aca0",
+      "sourceTriangles": 8154,
+      "outputTriangles": 700
+    },
+    "FJ3395": {
+      "name": "Vomer",
+      "sourceSHA256": "fcbfac8ca1992059a3026b445fbf55c5b5fa5a54786ed468a6ee8259230101d4",
+      "sourceTriangles": 7218,
+      "outputTriangles": 180
+    },
+    "FJ3161": {
+      "name": "Third cervical vertebra",
+      "sourceSHA256": "7717781b7cb53eaa24eff097e6da5f8dfd1e58a3f23aa169ec05c58eb93de2dc",
+      "sourceTriangles": 2030,
+      "outputTriangles": 334
+    },
+    "FJ3164": {
+      "name": "Fourth cervical vertebra",
+      "sourceSHA256": "ac0dc9fe871acf68fc8fffa41666f4d7fae35626055e18c104135db80bbd8a65",
+      "sourceTriangles": 2410,
+      "outputTriangles": 396
+    },
+    "FJ3167": {
+      "name": "Fifth cervical vertebra",
+      "sourceSHA256": "15c66e24dcef4af7b1e4c7e948d3048c87b2d772a2f182f814ae7df8059af3f5",
+      "sourceTriangles": 2196,
+      "outputTriangles": 360
+    },
+    "FJ3170": {
+      "name": "Sixth cervical vertebra",
+      "sourceSHA256": "e9cda58b8a69602513d067ee47468c3984c223cdc501975468379b65149c7d19",
+      "sourceTriangles": 2374,
+      "outputTriangles": 390
+    },
+    "FJ3172": {
+      "name": "Seventh cervical vertebra",
+      "sourceSHA256": "7454480761dbf6c98c04f1a59788aeba1dcdecde7a673553ec19b2da172c2916",
+      "sourceTriangles": 1820,
+      "outputTriangles": 298
+    },
+    "FJ3176": {
+      "name": "Atlas",
+      "sourceSHA256": "594ac8b2b09280022e2b73142f873fd4d622ba7a1bca590c3fdcb0231e4fb461",
+      "sourceTriangles": 2094,
+      "outputTriangles": 344
+    },
+    "FJ3177": {
+      "name": "Axis",
+      "sourceSHA256": "d76f052f56dda3dc6f4d453c33f062ff56207ff3aea90f9678b5d295f0c916f1",
+      "sourceTriangles": 2288,
+      "outputTriangles": 376
+    },
+    "FJ3201": {
+      "name": "Hyoid bone",
+      "sourceSHA256": "27e9e3f1146ff10c489c683b89f78c60c187eed578f52ec1bfdd1694d0684b44",
+      "sourceTriangles": 1196,
+      "outputTriangles": 196
+    },
+    "FJ3153": {
+      "name": "Xiphoid process",
+      "sourceSHA256": "d17057ed1dad252a6fa6a3e8d92bc13310cebe0b584df147af0cc4a646f98f3e",
+      "sourceTriangles": 922,
+      "outputTriangles": 40
+    },
+    "FJ3178": {
+      "name": "Body of sternum",
+      "sourceSHA256": "32a06946d8eadbe1a847a373abe7499381c0182c72b7c94e3e2a0c3ba7c867e3",
+      "sourceTriangles": 4646,
+      "outputTriangles": 152
+    },
+    "FJ3225": {
+      "name": "Left tenth rib",
+      "sourceSHA256": "daa25aba7fba3ff691d61cd239f8d49debc84ff871a351051c1d57a192b91dfd",
+      "sourceTriangles": 6826,
+      "outputTriangles": 224
+    },
+    "FJ3226": {
+      "name": "Left eleventh rib",
+      "sourceSHA256": "4bb9d52fdb2c15cb459c2bd08fd58082cdb39d15903cde675313762ea2287fc8",
+      "sourceTriangles": 4866,
+      "outputTriangles": 160
+    },
+    "FJ3227": {
+      "name": "Left twelfth rib",
+      "sourceSHA256": "83e04b8b6f91e4de57e7b380a2f2c7d6f0bbf284ce76710ca89aa82fb376bd4e",
+      "sourceTriangles": 2818,
+      "outputTriangles": 92
+    },
+    "FJ3228": {
+      "name": "Left first rib",
+      "sourceSHA256": "eb534d19462226e26b91234544f99abe118878a25c125f2a8839341e6769252b",
+      "sourceTriangles": 3276,
+      "outputTriangles": 108
+    },
+    "FJ3229": {
+      "name": "Left second rib",
+      "sourceSHA256": "b752f038ceba8430f3872897ce69495d7dd74ed8e19c21d3f75d0bc0b156d84f",
+      "sourceTriangles": 5594,
+      "outputTriangles": 184
+    },
+    "FJ3230": {
+      "name": "Left third rib",
+      "sourceSHA256": "8b42d241c711fe9765b1239be33fcab6b865ab4619b5d05fa98ea245b6075d5c",
+      "sourceTriangles": 7254,
+      "outputTriangles": 238
+    },
+    "FJ3231": {
+      "name": "Left fourth rib",
+      "sourceSHA256": "28b852d4813703c5654d0405168e22bf0032632d47b9667b4b16e60ed89a425b",
+      "sourceTriangles": 8850,
+      "outputTriangles": 290
+    },
+    "FJ3232": {
+      "name": "Left fifth rib",
+      "sourceSHA256": "6fa730aea273685148d3e9d3f52fe450acec4c13d6e3b1b6865e0e9532283abb",
+      "sourceTriangles": 9710,
+      "outputTriangles": 320
+    },
+    "FJ3233": {
+      "name": "Left sixth rib",
+      "sourceSHA256": "2a0f1e32b8410b6396bea7ae342a16ae1ac1b77042e70d7e98cabeb7dcf3dfb9",
+      "sourceTriangles": 10264,
+      "outputTriangles": 338
+    },
+    "FJ3234": {
+      "name": "Left seventh rib",
+      "sourceSHA256": "638a766f20b64d02095efa845b5ea316624a376acb44c7e4a6d533d4da6ef4db",
+      "sourceTriangles": 10032,
+      "outputTriangles": 330
+    },
+    "FJ3235": {
+      "name": "Left eighth rib",
+      "sourceSHA256": "81a7215ef6ed923bbad6f07208bbc0ee26ddbaae3b1423f624cae465012d9144",
+      "sourceTriangles": 8336,
+      "outputTriangles": 274
+    },
+    "FJ3236": {
+      "name": "Left ninth rib",
+      "sourceSHA256": "3dc292292b9f2bd5e226ac100d3a8db76cba8eb1d9d09533a6e5e871f023e2a8",
+      "sourceTriangles": 7576,
+      "outputTriangles": 248
+    },
+    "FJ3239": {
+      "name": "Left first costal cartilage",
+      "sourceSHA256": "9ca5fdb0582ad2795c9316ab9bb2f89f952b5a8c8fcf92a37efa042fc5c7739c",
+      "sourceTriangles": 642,
+      "outputTriangles": 40
+    },
+    "FJ3242": {
+      "name": "Left second costal cartilage",
+      "sourceSHA256": "c83bb88d995837a455e72707e9d5ecb0035ad60d8fd2f6f28d3710b4ef4c9d8e",
+      "sourceTriangles": 588,
+      "outputTriangles": 40
+    },
+    "FJ3245": {
+      "name": "Left third costal cartilage",
+      "sourceSHA256": "ac65f51684b5dbcc3ea82381edae8723cbd9c7b8680bf6149a31dbf0acd26065",
+      "sourceTriangles": 604,
+      "outputTriangles": 40
+    },
+    "FJ3248": {
+      "name": "Left fourth costal cartilage",
+      "sourceSHA256": "3633cb39f1540513872b9477c829d562114dce8d19cba5c99073fe4e3abeb1be",
+      "sourceTriangles": 658,
+      "outputTriangles": 40
+    },
+    "FJ3251": {
+      "name": "Left fifth costal cartilage",
+      "sourceSHA256": "86be490af572a3d8c7f41fd1ed3f4bfac19a9966737bc1275f135f160d8298be",
+      "sourceTriangles": 1086,
+      "outputTriangles": 40
+    },
+    "FJ3254": {
+      "name": "Left sixth costal cartilage",
+      "sourceSHA256": "bc9ca44f2ea1fa9800d7f0a35c4596f41df1750ba9c89910d4f64041131db2bf",
+      "sourceTriangles": 1498,
+      "outputTriangles": 48
+    },
+    "FJ3255": {
+      "name": "Left seventh costal cartilage",
+      "sourceSHA256": "97e69ede580a6e81cc42bb54fb22d4752719b61c5fced8ccccfb18ce64996676",
+      "sourceTriangles": 2314,
+      "outputTriangles": 76
+    },
+    "FJ3290": {
+      "name": "Manubrium",
+      "sourceSHA256": "b847e67db475197cc4510744fef76bafd8e75c50797ca85eb8cd56dd853d61d6",
+      "sourceTriangles": 2546,
+      "outputTriangles": 82
+    },
+    "FJ3330": {
+      "name": "Right tenth rib",
+      "sourceSHA256": "0f688dd4e0d20a8328b4763c0acc7582a9beac8fe5c7ce58586db99c6e366945",
+      "sourceTriangles": 6820,
+      "outputTriangles": 224
+    },
+    "FJ3331": {
+      "name": "Right eleventh rib",
+      "sourceSHA256": "761d6d8713c31d4b9f795c4875da9fc750c913907386489568fdebea15af49c3",
+      "sourceTriangles": 4866,
+      "outputTriangles": 160
+    },
+    "FJ3332": {
+      "name": "Right twelfth rib",
+      "sourceSHA256": "ece92488a9293cde2d8a8275cee8232326b377811afba888f6147d7217e04e07",
+      "sourceTriangles": 2818,
+      "outputTriangles": 92
+    },
+    "FJ3333": {
+      "name": "Right first costal cartilage",
+      "sourceSHA256": "616b5add6471a3fd2a7297cbebfee18a13866eb165ca0be05c5942ae16bacc10",
+      "sourceTriangles": 676,
+      "outputTriangles": 40
+    },
+    "FJ3334": {
+      "name": "Right first rib",
+      "sourceSHA256": "ecef0080744a8422b72b4f52229bd68945692cdef7d6fe2a57043b2155c49d17",
+      "sourceTriangles": 3276,
+      "outputTriangles": 108
+    },
+    "FJ3335": {
+      "name": "Right second costal cartilage",
+      "sourceSHA256": "065a4969ea4210ce6d3f5838dc2da20f1153de478e02c7a86ced152eab82bf6a",
+      "sourceTriangles": 658,
+      "outputTriangles": 40
+    },
+    "FJ3336": {
+      "name": "Right second rib",
+      "sourceSHA256": "e9f527453bb2a48764ac7243d0b9b23e37fb2a85e92cee445972a1a770a5eaa4",
+      "sourceTriangles": 5594,
+      "outputTriangles": 184
+    },
+    "FJ3337": {
+      "name": "Right third costal cartilage",
+      "sourceSHA256": "469513e43364a7212843011c944a9fff22b5b50496a11e739bcdafc70005d3dd",
+      "sourceTriangles": 652,
+      "outputTriangles": 40
+    },
+    "FJ3338": {
+      "name": "Right third rib",
+      "sourceSHA256": "69dbbcfc72d592aa862621612e7ad1151ada3fa06c5ce51e24731015561ad7ac",
+      "sourceTriangles": 7254,
+      "outputTriangles": 238
+    },
+    "FJ3339": {
+      "name": "Right fourth costal cartilage",
+      "sourceSHA256": "fc442f6596ca1a7ce18fc2d65cb92dcc1de1951381ebd631223469b6e84923b1",
+      "sourceTriangles": 694,
+      "outputTriangles": 40
+    },
+    "FJ3340": {
+      "name": "Right fourth rib",
+      "sourceSHA256": "b9bc6bbb160fd579ed246c3eb145b39f82866dc2dfeebe798f0dba5a2e352597",
+      "sourceTriangles": 8832,
+      "outputTriangles": 290
+    },
+    "FJ3341": {
+      "name": "Right fifth costal cartilage",
+      "sourceSHA256": "921b821e925624302d8ab138dfa80a24bf3d9150e006b7ac27a2b5f73d15ab33",
+      "sourceTriangles": 1168,
+      "outputTriangles": 40
+    },
+    "FJ3342": {
+      "name": "Right fifth rib",
+      "sourceSHA256": "11d403618e4114a5edcd8f2fa4e90ef4e6427b04f4cd3962c59462694b55c443",
+      "sourceTriangles": 9710,
+      "outputTriangles": 320
+    },
+    "FJ3343": {
+      "name": "Right sixth costal cartilage",
+      "sourceSHA256": "3b633ffd599c51c1f00d66442855a047b013bda569fa092ea31ece5fdc289111",
+      "sourceTriangles": 1546,
+      "outputTriangles": 50
+    },
+    "FJ3344": {
+      "name": "Right sixth rib",
+      "sourceSHA256": "67f1f42fea1c289adaf4929716534bad7dfdd136ca0057f05de83d6e20c8f0a8",
+      "sourceTriangles": 10246,
+      "outputTriangles": 336
+    },
+    "FJ3345": {
+      "name": "Right seventh costal cartilage",
+      "sourceSHA256": "a4d22796f4ffc6f9ad1b7d620c917be1638244864eca62aec60bd11033ed3041",
+      "sourceTriangles": 2450,
+      "outputTriangles": 80
+    },
+    "FJ3346": {
+      "name": "Right seventh rib",
+      "sourceSHA256": "91aa56e034fbe6f413c0f15b76d725a1f8efd115aa2900beda6edf43a3ab0c43",
+      "sourceTriangles": 10032,
+      "outputTriangles": 330
+    },
+    "FJ3347": {
+      "name": "Right eighth rib",
+      "sourceSHA256": "43a1591cf1e123ca01f64297a7ce008d679a5f5f26421cc5b69e2232da89d743",
+      "sourceTriangles": 8336,
+      "outputTriangles": 274
+    },
+    "FJ3348": {
+      "name": "Right ninth rib",
+      "sourceSHA256": "7d3a969b778da18eb38b1a64d92e2b90e1730fcb0d7b2bfacd125ff4826876d0",
+      "sourceTriangles": 7576,
+      "outputTriangles": 248
+    },
+    "FJ3154": {
+      "name": "Tenth thoracic vertebra",
+      "sourceSHA256": "55fd0b1ec25bc207c5a58cb2aa3d5f2880df6593719ec803c83ac898d3bda358",
+      "sourceTriangles": 2790,
+      "outputTriangles": 296
+    },
+    "FJ3155": {
+      "name": "Eleventh thoracic vertebra",
+      "sourceSHA256": "7ce892808f37a9c96c74f298334be195cb50bfdbe64bcfa62072141ed38df0a2",
+      "sourceTriangles": 2674,
+      "outputTriangles": 284
+    },
+    "FJ3156": {
+      "name": "Twelfth thoracic vertebra",
+      "sourceSHA256": "d78f0563a0c0b5be89284a6d73434998a05dc9dbddb471b49e398c9ef96f07ae",
+      "sourceTriangles": 2772,
+      "outputTriangles": 294
+    },
+    "FJ3157": {
+      "name": "First lumbar vertebra",
+      "sourceSHA256": "2e252a2558f0f64430efa35d79a4fe8677b6cbb0ab6e93afda94b8d4239479fd",
+      "sourceTriangles": 2972,
+      "outputTriangles": 316
+    },
+    "FJ3158": {
+      "name": "First thoracic vertebra",
+      "sourceSHA256": "57a9cd9f62fc902f2d10f32c83237bba5bee4a24ae323a2b2405d9df68fd585b",
+      "sourceTriangles": 1700,
+      "outputTriangles": 180
+    },
+    "FJ3159": {
+      "name": "Second lumbar vertebra",
+      "sourceSHA256": "1e63e0abb22ccf6255f1fb910699b2bade07cace17ffc12b43bb185228dd3696",
+      "sourceTriangles": 3214,
+      "outputTriangles": 342
+    },
+    "FJ3160": {
+      "name": "Second thoracic vertebra",
+      "sourceSHA256": "f04ca280dc74fdc79afb14e5da1515a1e77762960bb38fab869be0e617348eac",
+      "sourceTriangles": 1938,
+      "outputTriangles": 206
+    },
+    "FJ3162": {
+      "name": "Third lumbar vertebra",
+      "sourceSHA256": "07fdac1c69d14c68241176f055da667eec8c2976c3a579df235d90e66fca91b0",
+      "sourceTriangles": 3272,
+      "outputTriangles": 348
+    },
+    "FJ3163": {
+      "name": "Third thoracic vertebra",
+      "sourceSHA256": "968ed4928160fd54c444aa8c4a2c318fa56368c55c715afcdeaa48445382d3f6",
+      "sourceTriangles": 2038,
+      "outputTriangles": 216
+    },
+    "FJ3165": {
+      "name": "Fourth lumbar vertebra",
+      "sourceSHA256": "e30bc2a914a50d097dc5824cacbe54be10fc68c9f43cd9ef023519bc146cab61",
+      "sourceTriangles": 3512,
+      "outputTriangles": 374
+    },
+    "FJ3166": {
+      "name": "Fourth thoracic vertebra",
+      "sourceSHA256": "cd744d75a90dc4d2b38f3b25928656ae2f9b873ea3113d01f91a102290eda5bd",
+      "sourceTriangles": 2066,
+      "outputTriangles": 220
+    },
+    "FJ3168": {
+      "name": "Fifth lumbar vertebra",
+      "sourceSHA256": "884ef6993f9578f86a6441ca7016f647f22778a9ab850189e1863d5f4112001d",
+      "sourceTriangles": 3892,
+      "outputTriangles": 414
+    },
+    "FJ3169": {
+      "name": "Fifth thoracic vertebra",
+      "sourceSHA256": "7eb98fe2886168196d8a7ee37d1c7a6e7decbc1c09cdf2d4295c13ed7ba3df0c",
+      "sourceTriangles": 2280,
+      "outputTriangles": 242
+    },
+    "FJ3171": {
+      "name": "Sixth thoracic vertebra",
+      "sourceSHA256": "7c9c326269edd09bdf02aca90333c61debe4f39c777fbef887751826a54adb9e",
+      "sourceTriangles": 2248,
+      "outputTriangles": 240
+    },
+    "FJ3173": {
+      "name": "Seventh thoracic vertebra",
+      "sourceSHA256": "1bcf85e649234f976236f81077019ae66971c69c0943992a7ec0072939d42245",
+      "sourceTriangles": 2574,
+      "outputTriangles": 274
+    },
+    "FJ3174": {
+      "name": "Eighth thoracic vertebra",
+      "sourceSHA256": "f5928470229deb2c7579804b883ffeaae611127dac1454caed3b3df93fe8dad6",
+      "sourceTriangles": 2424,
+      "outputTriangles": 258
+    },
+    "FJ3175": {
+      "name": "Ninth thoracic vertebra",
+      "sourceSHA256": "f1ce32fedb9f84ac37b800b2a182f6701f972fbd8cc01be7732ab3ca3864603e",
+      "sourceTriangles": 2586,
+      "outputTriangles": 276
+    },
+    "FJ3152": {
+      "name": "Right hip bone",
+      "sourceSHA256": "708e42cba3d1817230c98410c80742875d56bb5b3e688a566f62509c7a63e424",
+      "sourceTriangles": 2374,
+      "outputTriangles": 550
+    },
+    "FJ3288": {
+      "name": "Left hip bone",
+      "sourceSHA256": "981411a910d502c80e454cc95128a9812a1284202295d1ebc7ab5020a08d83aa",
+      "sourceTriangles": 2332,
+      "outputTriangles": 542
+    },
+    "FJ3393": {
+      "name": "Sacrum",
+      "sourceSHA256": "fd95a0b26f450e4939858c9effb7b14e589874c9210edfdb92e8f4552dd484de",
+      "sourceTriangles": 9922,
+      "outputTriangles": 2306
+    },
+    "FJ3237": {
+      "name": "Left clavicle",
+      "sourceSHA256": "ae2dc115516cd51b56047c8c0188a0b62c3fe627deed4d1b83e79e09b4b5c0d8",
+      "sourceTriangles": 1176,
+      "outputTriangles": 56
+    },
+    "FJ3279": {
+      "name": "Left scapula",
+      "sourceSHA256": "a52cf573f15b7c7c5cf096ae3ee81d8062a955edffdf82447e745afeccd0e554",
+      "sourceTriangles": 28106,
+      "outputTriangles": 1342
+    },
+    "FJ3362": {
+      "name": "Right clavicle",
+      "sourceSHA256": "1435b8f365652b215180e398b894a5bdfbf9cb13d00ccf06d07038b962e957b9",
+      "sourceTriangles": 1146,
+      "outputTriangles": 58
+    },
+    "FJ3384": {
+      "name": "Right scapula",
+      "sourceSHA256": "cb68b2e01a22989f20e602d5036a3f1fb28448fe647f599b9bbd61edfbff2320",
+      "sourceTriangles": 26172,
+      "outputTriangles": 1340
+    },
+    "FJ3262": {
+      "name": "Left humerus",
+      "sourceSHA256": "58b4f0f36723f27726009cdf4b77172dc694303f4e03f51b29c1663507480194",
+      "sourceTriangles": 3844,
+      "outputTriangles": 1000
+    },
+    "FJ3368": {
+      "name": "Right humerus",
+      "sourceSHA256": "159fbdeb854044e7b0ebd0d48cfe332afb44a691d09b89ff644a851826d08268",
+      "sourceTriangles": 3784,
+      "outputTriangles": 1000
+    },
+    "FJ3277": {
+      "name": "Left radius",
+      "sourceSHA256": "cce317e77ca297f93c0676815e22e8a2b6cc09029b74f1678193b17a9c0d5583",
+      "sourceTriangles": 632,
+      "outputTriangles": 324
+    },
+    "FJ3286": {
+      "name": "Left ulna",
+      "sourceSHA256": "32838a464599fa017717090afe9d355c03c0afb48cd8c5aa7e6f825156b594a5",
+      "sourceTriangles": 824,
+      "outputTriangles": 424
+    },
+    "FJ3349": {
+      "name": "Right radius",
+      "sourceSHA256": "be1ebc9c5285cc934c625763b3363fc3133efab9eafdf1edf0b36de3b7ee06a9",
+      "sourceTriangles": 672,
+      "outputTriangles": 334
+    },
+    "FJ3391": {
+      "name": "Right ulna",
+      "sourceSHA256": "c84d953caa7613d6640593003ead91449eb1aaedc74cb2b27ae103e2177d3871",
+      "sourceTriangles": 834,
+      "outputTriangles": 414
+    },
+    "FJ3259": {
+      "name": "Left femur",
+      "sourceSHA256": "4b919097be4820784d199838c69b1fe10afba703f0d6680a3ecab58460fb6549",
+      "sourceTriangles": 3204,
+      "outputTriangles": 1048
+    },
+    "FJ3275": {
+      "name": "Left patella",
+      "sourceSHA256": "8a0776c1efe4ed2e3fff3c14b6fdb814dab4c077f8f3cf866866e8d9312a33e3",
+      "sourceTriangles": 310,
+      "outputTriangles": 100
+    },
+    "FJ3365": {
+      "name": "Right femur",
+      "sourceSHA256": "02fffe2e1b0f8e038d8b7b48e47cbc4925a749446240e676e910bff34d5348de",
+      "sourceTriangles": 3102,
+      "outputTriangles": 1046
+    },
+    "FJ3381": {
+      "name": "Right patella",
+      "sourceSHA256": "3f53300560b903d8fbc4165af3cdafab8d4f1d0a941ca59c7ef5169d0b838b8a",
+      "sourceTriangles": 306,
+      "outputTriangles": 102
+    },
+    "FJ3260": {
+      "name": "Left fibula",
+      "sourceSHA256": "34d29e9d6b2bf032147bcbe8da1e9fb65739ca2115baf577987ff1b780fabb73",
+      "sourceTriangles": 1124,
+      "outputTriangles": 338
+    },
+    "FJ3282": {
+      "name": "Left tibia",
+      "sourceSHA256": "80add76b87c7b9e1396406de48f691e5fd3dde9e5cec49a0b15c6963d78542c6",
+      "sourceTriangles": 1692,
+      "outputTriangles": 510
+    },
+    "FJ3366": {
+      "name": "Right fibula",
+      "sourceSHA256": "05bf4de7604e2fd5099b3a5337d243d2d40f2b8f80daf1694b3aba394aa93942",
+      "sourceTriangles": 1142,
+      "outputTriangles": 344
+    },
+    "FJ3387": {
+      "name": "Right tibia",
+      "sourceSHA256": "a658d28799577c26cdf8318aef799dbe90564355a28b5098d8707eee907f9c7d",
+      "sourceTriangles": 1664,
+      "outputTriangles": 504
+    },
+    "FJ3183": {
+      "name": "Distal phalanx of left index finger",
+      "sourceSHA256": "4b21956aa21986a4e709fe73291d0a21a74b202375ce6623dfc7ef6b26ebf9b8",
+      "sourceTriangles": 328,
+      "outputTriangles": 40
+    },
+    "FJ3184": {
+      "name": "Distal phalanx of left little finger",
+      "sourceSHA256": "11479ce0bbe0c20515066d4b98dd11c35f7f23580f10e2a388ccb816a8dad20e",
+      "sourceTriangles": 198,
+      "outputTriangles": 40
+    },
+    "FJ3186": {
+      "name": "Distal phalanx of left middle finger",
+      "sourceSHA256": "c5dcbe81e721420508a2cb40228e45471925d4b507f0c738a7446a2ee835cd7c",
+      "sourceTriangles": 266,
+      "outputTriangles": 40
+    },
+    "FJ3187": {
+      "name": "Distal phalanx of left ring finger",
+      "sourceSHA256": "49dd966dbef49394d802a781a5ee80b98eec168352d190e6a57ba35ff4ca3bd6",
+      "sourceTriangles": 196,
+      "outputTriangles": 40
+    },
+    "FJ3188": {
+      "name": "Distal phalanx of left thumb",
+      "sourceSHA256": "6a0cae057769e3f67a86304be10f7f4b6cafc631092c764a82aef7e7ee9d2119",
+      "sourceTriangles": 270,
+      "outputTriangles": 40
+    },
+    "FJ3240": {
+      "name": "Left first metacarpal bone",
+      "sourceSHA256": "0c8bf4436d320036d10a7fa3747ef34f0ce4ecd01bbee373225d1588efa38c70",
+      "sourceTriangles": 578,
+      "outputTriangles": 72
+    },
+    "FJ3243": {
+      "name": "Left second metacarpal bone",
+      "sourceSHA256": "8fda448450b00ade9b520798111fce1c90a3f27832d0c5112daafb2dabf8c2e9",
+      "sourceTriangles": 774,
+      "outputTriangles": 98
+    },
+    "FJ3246": {
+      "name": "Left third metacarpal bone",
+      "sourceSHA256": "c0c426e3140f3dc2457ddeb2e83d1db6efdadb3e77ccd939a2f15cbd7e186ecd",
+      "sourceTriangles": 708,
+      "outputTriangles": 90
+    },
+    "FJ3249": {
+      "name": "Left fourth metacarpal bone",
+      "sourceSHA256": "f6b5c38ee246def1b4c59bbb878ad52b9d06b37af4e55f634c84beb757afff5d",
+      "sourceTriangles": 528,
+      "outputTriangles": 66
+    },
+    "FJ3252": {
+      "name": "Left fifth metacarpal bone",
+      "sourceSHA256": "ffe5b98ae80aabd879732ae03f8c56e3f4f84ed6442bf5a00565d274f2816b50",
+      "sourceTriangles": 500,
+      "outputTriangles": 62
+    },
+    "FJ3257": {
+      "name": "Left capitate",
+      "sourceSHA256": "43e59c2c85a9d76c49d338c1b42b6ddff82173b8ebd76fbb2d54d86930d23508",
+      "sourceTriangles": 402,
+      "outputTriangles": 50
+    },
+    "FJ3261": {
+      "name": "Left hamate",
+      "sourceSHA256": "bc8ce15358c4b60be971675493d38a4bc11046bbb2e93281fdb39d3a3049b375",
+      "sourceTriangles": 452,
+      "outputTriangles": 56
+    },
+    "FJ3268": {
+      "name": "Left lunate",
+      "sourceSHA256": "8be07938751172946412e4e5eedf72831d7ec7b42110884d423982e5b8406333",
+      "sourceTriangles": 314,
+      "outputTriangles": 40
+    },
+    "FJ3276": {
+      "name": "Left pisiform",
+      "sourceSHA256": "fde947e4adb1373a5fe74820141804efb7875a6a507ff53938c2727392d6828b",
+      "sourceTriangles": 210,
+      "outputTriangles": 40
+    },
+    "FJ3278": {
+      "name": "Left scaphoid",
+      "sourceSHA256": "4311e5b791fb93c11376a4643d6bee38b134614dba22e94004d9fb3de1fe2a3f",
+      "sourceTriangles": 312,
+      "outputTriangles": 40
+    },
+    "FJ3283": {
+      "name": "Left trapezium",
+      "sourceSHA256": "b3126c2751ac29968622e802011d4461c528057f9fd2db950f0704acaa8763cb",
+      "sourceTriangles": 356,
+      "outputTriangles": 44
+    },
+    "FJ3284": {
+      "name": "Left trapezoid",
+      "sourceSHA256": "cea6f3c52bdeb7d261f52a296e00686acf042d87ed004bf453fd39cdfb8f1379",
+      "sourceTriangles": 398,
+      "outputTriangles": 50
+    },
+    "FJ3285": {
+      "name": "Left triquetral",
+      "sourceSHA256": "fe25c63027de612508d7d92ac6ea08beafe48b0f9d0c8a2a7471b5ce85882576",
+      "sourceTriangles": 304,
+      "outputTriangles": 40
+    },
+    "FJ3291": {
+      "name": "Middle phalanx of left ring finger",
+      "sourceSHA256": "8c31a1d782b726629680cd5e0514b4988e8c0b9d388d600b5c76f0a89dcd9275",
+      "sourceTriangles": 340,
+      "outputTriangles": 42
+    },
+    "FJ3296": {
+      "name": "Middle phalanx of left index finger",
+      "sourceSHA256": "3784ab9d38876602abdda3ef45b45a11f907f5412abf458915a5ffe92cdd82ac",
+      "sourceTriangles": 306,
+      "outputTriangles": 40
+    },
+    "FJ3297": {
+      "name": "Middle phalanx of left little finger",
+      "sourceSHA256": "876fc444322b51eebcc12622aefff29266c16b8dadbe9c7b97588013b2e6a120",
+      "sourceTriangles": 254,
+      "outputTriangles": 40
+    },
+    "FJ3299": {
+      "name": "Middle phalanx of left middle finger",
+      "sourceSHA256": "7d67270dabfb72710d6adf29b6ccc901a459fa49d2315517a392ca62cf2e0878",
+      "sourceTriangles": 384,
+      "outputTriangles": 48
+    },
+    "FJ3313": {
+      "name": "Proximal phalanx of left index finger",
+      "sourceSHA256": "8ff94391d57f8758f86e7a8ac9a82f62c9175067ffbbadab5693221ba204ecbe",
+      "sourceTriangles": 392,
+      "outputTriangles": 48
+    },
+    "FJ3314": {
+      "name": "Proximal phalanx of left little finger",
+      "sourceSHA256": "a970bf6fea2d1ad51cad704a488417aaaaacca40be6f10c9ec713f358760efb8",
+      "sourceTriangles": 274,
+      "outputTriangles": 40
+    },
+    "FJ3316": {
+      "name": "Proximal phalanx of left middle finger",
+      "sourceSHA256": "411ec81747038f797c4a2a7c33ac87cdbf49047aedc43a6487d45cc373f697a8",
+      "sourceTriangles": 460,
+      "outputTriangles": 58
+    },
+    "FJ3317": {
+      "name": "Proximal phalanx of left ring finger",
+      "sourceSHA256": "851e0b459c672fef4cd2a32583991b22c30576f467eb50c5ffcb22fd13ea7de8",
+      "sourceTriangles": 376,
+      "outputTriangles": 46
+    },
+    "FJ3318": {
+      "name": "Proximal phalanx of left thumb",
+      "sourceSHA256": "0f62e4d042979264f6f3d4dd0a90044b89a3ad4b66c141cebc2aa515bd3255c8",
+      "sourceTriangles": 346,
+      "outputTriangles": 42
+    },
+    "FJ3193": {
+      "name": "Distal phalanx of right index finger",
+      "sourceSHA256": "22fb13bf483f413a93306da7e3805569ec78cf91222920a23e31d1f8f8be8ca7",
+      "sourceTriangles": 210,
+      "outputTriangles": 40
+    },
+    "FJ3194": {
+      "name": "Distal phalanx of right little finger",
+      "sourceSHA256": "1a77bb45ca5da49a3f46f0773d8f544f8171fa7650da31040fc15524d541eac0",
+      "sourceTriangles": 188,
+      "outputTriangles": 40
+    },
+    "FJ3196": {
+      "name": "Distal phalanx of right middle finger",
+      "sourceSHA256": "9aa0ed0579e703009b4f5e16c7a650d5127a9fcf6f91b6e20e5b8317b7e7651e",
+      "sourceTriangles": 174,
+      "outputTriangles": 40
+    },
+    "FJ3197": {
+      "name": "Distal phalanx of right ring finger",
+      "sourceSHA256": "a8e025b484c28f564f12d7e98b32dad1196050a957f879b639aac2cadc5a300d",
+      "sourceTriangles": 112,
+      "outputTriangles": 40
+    },
+    "FJ3198": {
+      "name": "Distal phalanx of right thumb",
+      "sourceSHA256": "b95a645681d4548ad0d6bf4d79645f5c2e3b7c044c834ed8d52315c9e3a14f4e",
+      "sourceTriangles": 240,
+      "outputTriangles": 40
+    },
+    "FJ3292": {
+      "name": "Middle phalanx of right ring finger",
+      "sourceSHA256": "48586a1489d539eecb8f37520e9683c014fc32bc6666bba42ca264b35af5c7a7",
+      "sourceTriangles": 316,
+      "outputTriangles": 42
+    },
+    "FJ3303": {
+      "name": "Middle phalanx of right index finger",
+      "sourceSHA256": "0dce3e3ab43a1c3c8030e5bd97c40035f84e1ca272ea08e57c6523fecca7337c",
+      "sourceTriangles": 264,
+      "outputTriangles": 40
+    },
+    "FJ3304": {
+      "name": "Middle phalanx of right little finger",
+      "sourceSHA256": "3289a2bb712569479a65872d56778a962cca787409326252fd05734cc5f9dd36",
+      "sourceTriangles": 208,
+      "outputTriangles": 40
+    },
+    "FJ3306": {
+      "name": "Middle phalanx of right middle finger",
+      "sourceSHA256": "8795bec6ecf458cbb1a4e361113da509a49dfafdaf8ca4610cb0a90e3bdd6233",
+      "sourceTriangles": 342,
+      "outputTriangles": 44
+    },
+    "FJ3322": {
+      "name": "Proximal phalanx of right index finger",
+      "sourceSHA256": "7f260208904ef78c88790201e64b02cb9bb3e2b3e0feafa4108630d9a2d8c7a9",
+      "sourceTriangles": 386,
+      "outputTriangles": 50
+    },
+    "FJ3323": {
+      "name": "Proximal phalanx of right little finger",
+      "sourceSHA256": "dede96cf0c9d5ccb093673a9ec2dc2ef2970578cde1438276120fdf9aff096d2",
+      "sourceTriangles": 314,
+      "outputTriangles": 40
+    },
+    "FJ3325": {
+      "name": "Proximal phalanx of right middle finger",
+      "sourceSHA256": "0ed85cade9e2a4c6d0c3353cbfcd996ab65f9c908ac6a2d41b0cffada814bd0d",
+      "sourceTriangles": 458,
+      "outputTriangles": 60
+    },
+    "FJ3326": {
+      "name": "Proximal phalanx of right ring finger",
+      "sourceSHA256": "8464ab995a48d5642198901885fafc5b101fd8982530f533f04e2be8aef26b59",
+      "sourceTriangles": 376,
+      "outputTriangles": 50
+    },
+    "FJ3327": {
+      "name": "Proximal phalanx of right thumb",
+      "sourceSHA256": "14f0aa99ab3dbcc34f8c9460fb240bb7ba0b43c2188feaa79aa58ae8a476cae8",
+      "sourceTriangles": 318,
+      "outputTriangles": 42
+    },
+    "FJ3350": {
+      "name": "Right first metacarpal bone",
+      "sourceSHA256": "73267d7a1a33294ed2856e147f3d7658c14878cd01906ec8ffb64a4b9b68318b",
+      "sourceTriangles": 566,
+      "outputTriangles": 74
+    },
+    "FJ3352": {
+      "name": "Right second metacarpal bone",
+      "sourceSHA256": "3c67c77a4312c40f3ca98e1600eb930c6210ac83773efe4f594bf6ca3ca02fce",
+      "sourceTriangles": 748,
+      "outputTriangles": 100
+    },
+    "FJ3354": {
+      "name": "Right third metacarpal bone",
+      "sourceSHA256": "ce10ec6c9f5c3428593ae8ba0a8be016df7905f39e7d3d7ca930d60da76d0d90",
+      "sourceTriangles": 702,
+      "outputTriangles": 92
+    },
+    "FJ3356": {
+      "name": "Right fourth metacarpal bone",
+      "sourceSHA256": "beb659c0409fc079dbb9bb950c5a409cb31f0177273d231fda65af930e991f72",
+      "sourceTriangles": 536,
+      "outputTriangles": 70
+    },
+    "FJ3358": {
+      "name": "Right fifth metacarpal bone",
+      "sourceSHA256": "dca9d2526d8970358c4c2802e840687561cf24d4fb382b3a16f0f423b717283f",
+      "sourceTriangles": 506,
+      "outputTriangles": 66
+    },
+    "FJ3361": {
+      "name": "Right capitate",
+      "sourceSHA256": "25066d1353fd200871374beffaaed8c6c5ef694148385f3fd33fd5b63bd017ce",
+      "sourceTriangles": 428,
+      "outputTriangles": 56
+    },
+    "FJ3367": {
+      "name": "Right hamate",
+      "sourceSHA256": "0591d076d4c7a0fc5fe653f80f03801b543075b72544f46e562b21412c743d12",
+      "sourceTriangles": 522,
+      "outputTriangles": 66
+    },
+    "FJ3374": {
+      "name": "Right lunate",
+      "sourceSHA256": "7b607f05b221c86aa6b3f93fc9d37d860281941ed293c4afc1affdb1ef379fc4",
+      "sourceTriangles": 332,
+      "outputTriangles": 44
+    },
+    "FJ3382": {
+      "name": "Right pisiform",
+      "sourceSHA256": "c02fffdeada2334cb5cc8281cf3068043c194930f42d6253292416fbb8af50a2",
+      "sourceTriangles": 190,
+      "outputTriangles": 40
+    },
+    "FJ3383": {
+      "name": "Right scaphoid",
+      "sourceSHA256": "1d657f0402994d7854cf5a2038ccf085cffb69ff349fcbe88b04b7d26c1491f1",
+      "sourceTriangles": 322,
+      "outputTriangles": 42
+    },
+    "FJ3388": {
+      "name": "Right trapezium",
+      "sourceSHA256": "def87e2a86ad17a4b537abfeb0a5b83fac8117fd658cff7ee29a1f79afa59c1a",
+      "sourceTriangles": 434,
+      "outputTriangles": 58
+    },
+    "FJ3389": {
+      "name": "Right trapezoid",
+      "sourceSHA256": "6361a214c7008b247b5ac0dd7bd80be5593bf8882a45add63c9036485d4bcee6",
+      "sourceTriangles": 360,
+      "outputTriangles": 48
+    },
+    "FJ3390": {
+      "name": "Right triquetral",
+      "sourceSHA256": "701c3417f0a8d3df769781449e7f5a5797ed30808849aebca261a6fea3dd4ce9",
+      "sourceTriangles": 170,
+      "outputTriangles": 40
+    },
+    "FJ3179": {
+      "name": "Distal phalanx of left second toe",
+      "sourceSHA256": "aa2903a8f53a7fe7383a9f27dc4920f411a4d8f181afaf7412799dd87e589aac",
+      "sourceTriangles": 240,
+      "outputTriangles": 40
+    },
+    "FJ3180": {
+      "name": "Distal phalanx of left third toe",
+      "sourceSHA256": "f0887b9a26088762fbd89b1dc34a033ce8d59c2f41a8bf239e822e99c042a8c2",
+      "sourceTriangles": 336,
+      "outputTriangles": 40
+    },
+    "FJ3181": {
+      "name": "Distal phalanx of left fourth toe",
+      "sourceSHA256": "eea79d87f0a3b799e705dc7e6cfcba699aa46f1ba4ebc78f27392b069e6849dc",
+      "sourceTriangles": 226,
+      "outputTriangles": 40
+    },
+    "FJ3182": {
+      "name": "Distal phalanx of left big toe",
+      "sourceSHA256": "dad7cb9b6e4eb0619d725a2e2697997a2e8b869ed5d67965c91746b2e6faaa88",
+      "sourceTriangles": 378,
+      "outputTriangles": 40
+    },
+    "FJ3185": {
+      "name": "Distal phalanx of left little toe",
+      "sourceSHA256": "4e4c610814cfdf5cb49d890f5ba5b6c0049bda34d031a439c9b3812d161936fa",
+      "sourceTriangles": 220,
+      "outputTriangles": 40
+    },
+    "FJ3241": {
+      "name": "Left first metatarsal bone",
+      "sourceSHA256": "81a87d611584dc38c5da832051623450d5e798e0461f5595c53b926bce8e1205",
+      "sourceTriangles": 1172,
+      "outputTriangles": 106
+    },
+    "FJ3244": {
+      "name": "Left second metatarsal bone",
+      "sourceSHA256": "dfccfdd4e15f9c5fc2d3ff5aec2c192e655b33796b7936a091f4fbbf0e846a47",
+      "sourceTriangles": 774,
+      "outputTriangles": 70
+    },
+    "FJ3247": {
+      "name": "Left third metatarsal bone",
+      "sourceSHA256": "ba30e72831383f90a10502c5d511ebaa1edb77ba2a345b3030d95e3483769535",
+      "sourceTriangles": 742,
+      "outputTriangles": 66
+    },
+    "FJ3250": {
+      "name": "Left fourth metatarsal bone",
+      "sourceSHA256": "60e27563f64f948d6de395fb136af962c07d01d83bfa6ac057a263a6f5afcec0",
+      "sourceTriangles": 772,
+      "outputTriangles": 70
+    },
+    "FJ3253": {
+      "name": "Left fifth metatarsal bone",
+      "sourceSHA256": "bb7bfc77f5c770e1ad0042802b74ab028bd131c631bbdbf3636bcabe522e680b",
+      "sourceTriangles": 864,
+      "outputTriangles": 78
+    },
+    "FJ3256": {
+      "name": "Left calcaneus",
+      "sourceSHA256": "f39b699100eea69a951440f617a7d2ab692a7dc1c80e5bbb064603d7ba2dd4a4",
+      "sourceTriangles": 1288,
+      "outputTriangles": 116
+    },
+    "FJ3258": {
+      "name": "Left cuboid bone",
+      "sourceSHA256": "f1ed3539cbb89954b3aadd8a435a174dd26d31e8de39e9480f1c9bd38b4ee3c6",
+      "sourceTriangles": 886,
+      "outputTriangles": 80
+    },
+    "FJ3264": {
+      "name": "Left intermediate cuneiform bone",
+      "sourceSHA256": "6d6675dfb04a553a305369368392e91c1a2fd49783a81f7ac35773a5407e13f1",
+      "sourceTriangles": 466,
+      "outputTriangles": 42
+    },
+    "FJ3267": {
+      "name": "Left lateral cuneiform bone",
+      "sourceSHA256": "1e59930bb6ff4556d250b38ae71fc1e46148b6a87c7355148bac05ea52da0b27",
+      "sourceTriangles": 680,
+      "outputTriangles": 60
+    },
+    "FJ3271": {
+      "name": "Left medial cuneiform bone",
+      "sourceSHA256": "6bd6c95a27d545d8984a2582f36f3881e04e1550ae2fb3f068d3bee80bf833b2",
+      "sourceTriangles": 996,
+      "outputTriangles": 90
+    },
+    "FJ3280": {
+      "name": "Left talus",
+      "sourceSHA256": "0f9b04d6f7e7f82572e9bca7fe3e08e92e4a7917d9cc60f9a8038e4c3a7c7bb7",
+      "sourceTriangles": 1356,
+      "outputTriangles": 122
+    },
+    "FJ3293": {
+      "name": "Middle phalanx of left second toe",
+      "sourceSHA256": "706e5f280c437ae9c01d08e021d82640ec3dfa50d1d2e0a2ee48eafc821ed104",
+      "sourceTriangles": 324,
+      "outputTriangles": 40
+    },
+    "FJ3294": {
+      "name": "Middle phalanx of left third toe",
+      "sourceSHA256": "c7b9a13197ef69b530146cfdcfca046bcba053bcc6bc6895c63cf2fc9fd3781f",
+      "sourceTriangles": 294,
+      "outputTriangles": 40
+    },
+    "FJ3295": {
+      "name": "Middle phalanx of left fourth toe",
+      "sourceSHA256": "d854f4059f59201871761d7a891f626c7ad8d74a77e7aea64f7b99c8c2b55f9b",
+      "sourceTriangles": 284,
+      "outputTriangles": 40
+    },
+    "FJ3298": {
+      "name": "Middle phalanx of left little toe",
+      "sourceSHA256": "68eb411cca65a47677026461b807534ee0640dcb7355031d6ab1fef901050e81",
+      "sourceTriangles": 226,
+      "outputTriangles": 40
+    },
+    "FJ3307": {
+      "name": "Navicular bone of left foot",
+      "sourceSHA256": "f3acad5a0995ac64585b22079fed851a20af96fc09e1e781fbb8853145a5df2d",
+      "sourceTriangles": 744,
+      "outputTriangles": 66
+    },
+    "FJ3311": {
+      "name": "Proximal phalanx of left third toe",
+      "sourceSHA256": "deac4abe55e492efe84c7dd5bef101690ea3c6c5f4a9df552c370b8a2a324aa6",
+      "sourceTriangles": 408,
+      "outputTriangles": 40
+    },
+    "FJ3312": {
+      "name": "Proximal phalanx of left fourth toe",
+      "sourceSHA256": "663bd9469b96679753e7f64c5f072c8cfe245dbb4b37b685079b4e7b890c4937",
+      "sourceTriangles": 438,
+      "outputTriangles": 40
+    },
+    "FJ3315": {
+      "name": "Proximal phalanx of left little toe",
+      "sourceSHA256": "0bdbbd0619f4765da9fa25918a1e79db22b156eb4de1ba8574bec67369bfdd6d",
+      "sourceTriangles": 396,
+      "outputTriangles": 40
+    },
+    "FJ3328": {
+      "name": "Proximal phalanx of left second toe",
+      "sourceSHA256": "33964822dfcd4833af09cef2c3909d210ba13a6c96fc9f3c2d457f4f2d1805f8",
+      "sourceTriangles": 380,
+      "outputTriangles": 40
+    },
+    "FJ3329": {
+      "name": "Proximal phalanx of left big toe",
+      "sourceSHA256": "7b351faa1a13618f21c5072c00e97248334306b623c78a8eb102c62b298245c5",
+      "sourceTriangles": 516,
+      "outputTriangles": 46
+    },
+    "FJ3189": {
+      "name": "Distal phalanx of right second toe",
+      "sourceSHA256": "e9375bc30ba9c2aa2c69cbe3f7e1b1f581d0d1a674c41d31f6b9c27a8f174715",
+      "sourceTriangles": 200,
+      "outputTriangles": 40
+    },
+    "FJ3190": {
+      "name": "Distal phalanx of right third toe",
+      "sourceSHA256": "153722e3a39bc9f4cf3444cefd9336e5adb6b2236c6d6b8c2d1ba4a54c8754af",
+      "sourceTriangles": 260,
+      "outputTriangles": 40
+    },
+    "FJ3191": {
+      "name": "Distal phalanx of right fourth toe",
+      "sourceSHA256": "35ca50bcad4f559dcc6a0885abb9fe3c06965925791ff5567a38301623d46beb",
+      "sourceTriangles": 244,
+      "outputTriangles": 40
+    },
+    "FJ3192": {
+      "name": "Distal phalanx of right big toe",
+      "sourceSHA256": "ecb7a162be315a96591180a3b997efffa827d06849e8c85cfea72fe0d57e9ab8",
+      "sourceTriangles": 440,
+      "outputTriangles": 40
+    },
+    "FJ3195": {
+      "name": "Distal phalanx of right little toe",
+      "sourceSHA256": "5402b29f019e8c13be850809be79cd262eab0276094322203e46a103145276ff",
+      "sourceTriangles": 210,
+      "outputTriangles": 40
+    },
+    "FJ3300": {
+      "name": "Middle phalanx of right second toe",
+      "sourceSHA256": "d23b2c500c208c3c3c3f482f8429b75a08d8d852f2d5529bb18aad4716bd17e9",
+      "sourceTriangles": 264,
+      "outputTriangles": 40
+    },
+    "FJ3301": {
+      "name": "Middle phalanx of right third toe",
+      "sourceSHA256": "41a7cc5bda4605754c7db7bbc561e78fea9e59824a311d16efee7c00d9e931ae",
+      "sourceTriangles": 292,
+      "outputTriangles": 40
+    },
+    "FJ3302": {
+      "name": "Middle phalanx of right fourth toe",
+      "sourceSHA256": "6454fbcd2ba8d7fc45c9d9d9d4b56cd9e7831143038ee4510a7bbd407984bad1",
+      "sourceTriangles": 350,
+      "outputTriangles": 40
+    },
+    "FJ3305": {
+      "name": "Middle phalanx of right little toe",
+      "sourceSHA256": "e6a389b572fb34e9a2e483dcbec2446d1b6a94a02e4ae25079513e571e452b49",
+      "sourceTriangles": 136,
+      "outputTriangles": 40
+    },
+    "FJ3308": {
+      "name": "Navicular bone of right foot",
+      "sourceSHA256": "8156683b53dbe285d9c5bd939969b0ae85bc4f989f0d2bca5d7a72a28ed22518",
+      "sourceTriangles": 716,
+      "outputTriangles": 66
+    },
+    "FJ3310": {
+      "name": "Proximal phalanx of right big toe",
+      "sourceSHA256": "c325627d966076f87101492f298d0e71ba877ce796463fd10e4fa6697b5e42fd",
+      "sourceTriangles": 486,
+      "outputTriangles": 44
+    },
+    "FJ3319": {
+      "name": "Proximal phalanx of right second toe",
+      "sourceSHA256": "1d2f11bb623181a344f0b9d68b16ffb3e31946d3f5f571e92cd35f0e66c1101c",
+      "sourceTriangles": 414,
+      "outputTriangles": 40
+    },
+    "FJ3320": {
+      "name": "Proximal phalanx of right third toe",
+      "sourceSHA256": "54e8381fbba8e81960afa51c153d5e06143c85f1808e083f2bd591115fce3c02",
+      "sourceTriangles": 422,
+      "outputTriangles": 40
+    },
+    "FJ3321": {
+      "name": "Proximal phalanx of right fourth toe",
+      "sourceSHA256": "37b1195ac0a13fc425bab0d0151ada733b4d1c107a61a70ae42eeb3ee3c33dfa",
+      "sourceTriangles": 438,
+      "outputTriangles": 40
+    },
+    "FJ3324": {
+      "name": "Proximal phalanx of right little toe",
+      "sourceSHA256": "0f783ee739f14fd2ca5c9db076d989795880ac9e436ce15062e397e7c6586225",
+      "sourceTriangles": 406,
+      "outputTriangles": 40
+    },
+    "FJ3351": {
+      "name": "Right first metatarsal bone",
+      "sourceSHA256": "36f03bdaf6be4385c83cc297b13bf6089504e5ddd12a6d6894a4e655b01cfb02",
+      "sourceTriangles": 1122,
+      "outputTriangles": 104
+    },
+    "FJ3353": {
+      "name": "Right second metatarsal bone",
+      "sourceSHA256": "3f813ff69332df5a67dbce693af5558f4b5db2d48bf12ba39fff3e48e44e99d6",
+      "sourceTriangles": 752,
+      "outputTriangles": 70
+    },
+    "FJ3355": {
+      "name": "Right third metatarsal bone",
+      "sourceSHA256": "27fc6985c6e4b902188075caae096aaf7c8c13360d41446f6a85a5bf34003750",
+      "sourceTriangles": 700,
+      "outputTriangles": 64
+    },
+    "FJ3357": {
+      "name": "Right fourth metatarsal bone",
+      "sourceSHA256": "ca70d269f39c11fed91263c4b4bce78cf682acff928ec656130e997e1b07a20b",
+      "sourceTriangles": 674,
+      "outputTriangles": 62
+    },
+    "FJ3359": {
+      "name": "Right fifth metatarsal bone",
+      "sourceSHA256": "56164dbe40a84f339817445368bebc440d1cb9cfa8246b2d91f8084a538ea745",
+      "sourceTriangles": 794,
+      "outputTriangles": 74
+    },
+    "FJ3360": {
+      "name": "Right calcaneus",
+      "sourceSHA256": "c278cca7a72dc6fc4eee55a348b0020522d99f72209eafe60f35ba4f7258682b",
+      "sourceTriangles": 1262,
+      "outputTriangles": 118
+    },
+    "FJ3364": {
+      "name": "Right cuboid bone",
+      "sourceSHA256": "92673fcdd37a297b135725f05848155705c04a4bdada1c5088cb3d5d8deef010",
+      "sourceTriangles": 932,
+      "outputTriangles": 86
+    },
+    "FJ3370": {
+      "name": "Right intermediate cuneiform bone",
+      "sourceSHA256": "0f849f1f865d7f206cdef48047ccd111cb8f434f0f97b0ed28246a9ba7707679",
+      "sourceTriangles": 450,
+      "outputTriangles": 42
+    },
+    "FJ3373": {
+      "name": "Right lateral cuneiform bone",
+      "sourceSHA256": "fd23e4ff9032ac103773b75b0dfba0b5502979db882c92dd7d724766672da23a",
+      "sourceTriangles": 626,
+      "outputTriangles": 58
+    },
+    "FJ3377": {
+      "name": "Right medial cuneiform bone",
+      "sourceSHA256": "cf2bcfee0c5f1bb6f27589044043eb5964b1f35b9fe38624fe31b17cdd8a52aa",
+      "sourceTriangles": 952,
+      "outputTriangles": 88
+    },
+    "FJ3385": {
+      "name": "Right talus",
+      "sourceSHA256": "2332712fbc270403f10f8a99259493758831a6c68c9f54e59ee8d7c3d7281811",
+      "sourceTriangles": 1380,
+      "outputTriangles": 128
+    }
+  },
+  "excludedDuplicateElements": {
+    "FJ2772": "Geometry identical to selected FJ3201 hyoid"
+  },
+  "generatorSHA256": "d8e097560bf47211fc2326944d10c4673b7903aadab232ef5b1118b4f9c1bd29",
+  "visualAcceptance": {
+    "status": "not-accepted",
+    "remaining": [
+      "Jagged orbital/maxilla/vault facets in native closeup review",
+      "Rigid shoulder and source foot yaw require further retarget review",
+      "Physical camera and sustained GPU/CPU profiling not recorded"
+    ],
+    "scopeDecision": "User asked to close current skeleton integration and prioritize game work before further art iterations."
+  },
+  "licenseEvidenceSourceSHA256": "44a953bca57804473789c96892e0a5511029d794ffe3c1ddfdb3eb755cc3244c",
+  "licenseTextSourceSHA256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+  "licenseTextSHA256": "9e5f1b3c610b9c2da5c313bf81d577a7d1acec686bdb0384edefa6df0f90cd94",
+  "licenseEvidenceNormalization": "Only line endings, trailing whitespace and empty lines at EOF normalized for the repository. Source download hashes are preserved; license wording is unchanged."
+}

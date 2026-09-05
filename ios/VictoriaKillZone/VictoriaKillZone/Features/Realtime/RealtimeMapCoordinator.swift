@@ -22,14 +22,17 @@ final class RealtimeMapCoordinator: ObservableObject {
   }
 
   func configure(epoch: UInt16, isHost: Bool) {
-    generation += 1; task?.cancel(); let token = generation
+    generation += 1; let previous = task; previous?.cancel(); let token = generation
     task = Task { [weak self] in
       guard let self else {return}
       defer {if self.generation == token {self.task = nil}}
       do {
+        await previous?.value
+        guard self.current(token) else {return}
         await self.frame.stop()
         guard self.current(token) else {return}
         try await self.frame.beginCalibration(epoch: epoch)
+        guard self.current(token) else {return}
         if let map = self.installedMap, map.epoch == epoch {
           try await self.frame.installMap(map)
           guard self.current(token) else {return}
@@ -81,7 +84,8 @@ final class RealtimeMapCoordinator: ObservableObject {
   }
 
   func stop() async {
-    generation += 1; task?.cancel(); task = nil; state = .idle
+    generation += 1; let previous = task; previous?.cancel(); task = nil; state = .idle
+    await previous?.value
     await frame.stop()
   }
 

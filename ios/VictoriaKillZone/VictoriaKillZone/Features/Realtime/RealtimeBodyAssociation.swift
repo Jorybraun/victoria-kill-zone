@@ -25,7 +25,9 @@ enum RealtimeAssociationPolicy {
       observationConfidence.isFinite, observationConfidence >= 0.8, matchTimeMs.isFinite else {return nil}
     let hands = ["leftHand", "rightHand"].compactMap {skeleton.position(of: $0)}.filter(valid)
     guard !hands.isEmpty else {return nil}
-    let eligible = Set(players.filter {$0.playerId != localPlayerID && $0.connected && $0.frameReady && $0.health > 0}.map(\.playerId))
+    let remote = players.filter {$0.playerId != localPlayerID}
+    guard !remote.isEmpty, remote.allSatisfy({$0.connected && $0.frameReady}) else {return nil}
+    let eligible = Set(remote.map(\.playerId))
     let candidates = phonePoses.compactMap {sample -> (id: String, distance: Double)? in
       let age = matchTimeMs - sample.pose.capturedAtMs
       guard eligible.contains(sample.playerId), sample.pose.tracking == "normal", age.isFinite, age >= 0, age <= 100,
@@ -34,7 +36,12 @@ enum RealtimeAssociationPolicy {
       guard let nearest = hands.map({distance($0, phone)}).min() else {return nil}
       return (sample.playerId, nearest)
     }.sorted {$0.distance == $1.distance ? $0.id < $1.id : $0.distance < $1.distance}
-    guard let first = candidates.first, first.distance <= maximumHandDistance else {return nil}
+    // A missing/stale competitor cannot be treated as infinitely far away.
+    // Include eliminated members in the comparison: their physical body remains
+    // in the arena even while their gameplay hit volumes are disabled.
+    guard candidates.count == eligible.count, Set(candidates.map(\.id)) == eligible,
+      let first = candidates.first, first.distance <= maximumHandDistance,
+      remote.first(where: {$0.playerId == first.id})?.health ?? 0 > 0 else {return nil}
     let margin = candidates.dropFirst().first.map {$0.distance - first.distance} ?? 1
     guard margin >= minimumMargin else {return nil}
     let confidence = min(observationConfidence, 1 - 0.15 * first.distance / maximumHandDistance)

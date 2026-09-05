@@ -39,7 +39,8 @@ struct RealtimeActionEligibility: Equatable {
     guard sceneActive, clockReady, canSubmit else {return Self(reason: "Synchronizing")}
     guard frameReady, poseFresh, player.connected, player.frameReady else {return Self(reason: "Align the arena")}
     if snapshot.phase == .calibrating || snapshot.phase == .paused {
-      return Self(begin: player.role == "host" && snapshot.players.allSatisfy {$0.connected && $0.frameReady}, reason: "Waiting for players")
+      return Self(begin: snapshot.roundStartedAtMs == nil && player.role == "host"
+        && snapshot.players.allSatisfy {$0.connected && $0.frameReady}, reason: "Waiting for players")
     }
     guard snapshot.phase == .running else {return Self(reason: "Match complete")}
     guard player.health > 0 else {return Self(reason: "Respawning")}

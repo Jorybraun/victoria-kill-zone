@@ -52,6 +52,40 @@ Hands and feet are neutral cosmetic templates attached to observed wrists/ankles
 
 Model broad shape first, joint transitions second, recessed details third. Use smooth normals for continuous bone surfaces, deliberate creases at anatomical ridges, and real thickness at exposed rims. No degenerate triangles, inverted normals, conspicuous primitive intersections, open tube ends facing the camera, or paper-thin plates in profile. A smoother sphere is still a sphere; subdivision must serve a shaped surface.
 
+## Bind frames and neutral pose
+
+The old synthetic preview puts the subject's left side at positive world X, the head above the feet on positive world Y, and the front camera on positive world Z. Keep that review convention explicit: **subject left = +X, superior = +Y, anterior = +Z**. It is a review-world convention, not a claim about the downloaded asset's axes. A front camera looks toward the subject from +Z; a rear camera looks from −Z. Label the views by the side of the subject being seen.
+
+Use the following synthetic landmarks for a repeatable relaxed upright art review. Values are metres in the review world; the named entries are fixture inputs, not a measured ARKit neutral skeleton. In particular, actual ARKit shoulder/head pivot semantics still require a real bind/device capture before alignment acceptance.
+
+| Landmark | Subject-left position | Subject-right position |
+|---|---|---|
+| `head` | `(0, 1.630, 0.005)` | Same central landmark |
+| `neck_1_joint` | `(0, 1.490, 0)` | Same central landmark |
+| `spine_7_joint` | `(0, 1.340, -0.025)` | Same central landmark |
+| `root` | `(0, 0.950, 0)` | Same central landmark |
+| `leftShoulder` / `rightShoulder` | `(0.070, 1.470, 0)` | `(-0.070, 1.470, 0)` |
+| `left_arm_joint` / `right_arm_joint` | `(0.200, 1.435, 0)` | `(-0.200, 1.435, 0)` |
+| `left_forearm_joint` / `right_forearm_joint` | `(0.260, 1.125, 0)` | `(-0.260, 1.125, 0)` |
+| `leftHand` / `rightHand` | `(0.290, 0.870, 0)` | `(-0.290, 0.870, 0)` |
+| `left_upLeg_joint` / `right_upLeg_joint` | `(0.100, 0.920, 0)` | `(-0.100, 0.920, 0)` |
+| `left_leg_joint` / `right_leg_joint` | `(0.100, 0.490, 0)` | `(-0.100, 0.490, 0)` |
+| `leftFoot` / `rightFoot` | `(0.100, 0.085, 0)` | `(-0.100, 0.085, 0)` |
+
+For the bent-elbow fixture, preserve each upper arm and replace each wrist with `(±0.260, 1.125, 0.257)`. This turns the forearms anteriorly, at a right angle to the upper-arm direction, while preserving their length approximately. For a global turn, apply the same +90° world-Y rotation to every landmark and to the test's expected anterior direction; do not change only the torso. For missing-part tests, remove a landmark from the input rather than moving it to zero. Build a crouch by changing observed test landmarks with documented segment lengths; do not scale an upright skeleton vertically.
+
+Every imported group needs an explicit source bind frame, proximal/distal joint pivots where applicable, anatomical anterior direction, and a positive-determinant transform. Determine source superior/lateral/anterior from the imported anatomy or documented metadata; do not assume OBJ uses the review world's axes. Cross-check superior with pelvis-to-skull, left/right with named paired bones, and anterior with thoracic spine-to-sternum. Retain these checks in the asset conversion manifest.
+
+Use `targetFrame × localScale × inverse(sourceBindFrame)` for retargeting imported vertices. The source and target frame must express the same anatomical directions. Preserve inter-bone relative positions within each group and the distinction between a joint pivot and an AABB center. Never normalize each bone independently to an unrelated unit box: that disconnects the skull/jaw, rib/sternum, radius/ulna, and pelvic groups. The observed segment length may scale the longitudinal direction; visual transverse scale should remain coherent across neighboring groups. Width is a template estimate, not a sensed body dimension.
+
+The current procedural layout illustrates a critical failure mode: its torso local +Y points upward, but its arm/leg local +Y points from proximal to distal, downward in the neutral pose. Building both bases with the same across vector reverses local Z. Therefore the old femur's patella at local −Z is posterior in the old upright fixture. The replacement must carry anatomical anterior explicitly per group instead of assuming local −Z always faces forward.
+
+During review, check the patella is anterior to the knee, sternum anterior to the thoracic spine, scapulae posterior to the ribs, and toes anterior to the ankle. With palms facing anteriorly in anatomical position, thumbs point laterally and big toes medially. A relaxed palms-inward hand template has a different thumb orientation and must be labeled accordingly. Forearm roll, finger curl, and independent head yaw are cosmetic where the current input contains only positions.
+
+Near a straight or axis-aligned limb, a cross product can lose its orientation reference. Avoid a sudden 180° roll when an arm becomes parallel to the torso's across vector. Use a documented stable bind/previous-frame orientation fallback for the cosmetic roll, and refuse nonfinite/degenerate placements. Evidence must include arms down, arms forward, an arm extended laterally, and each pose approached from both directions.
+
+The current topology distinguishes `leftShoulder → left_arm_joint → left_forearm_joint`. Do not equate shoulder-name separation with humeral-root width without checking those pivots. The old fixture's shoulder entries at ±0.18 m and upper-arm roots at ±0.26 m can hide this problem. The new art fixture deliberately distinguishes medial shoulder landmarks from upper-arm roots; chest/skull sizing must remain plausible under it without moving the inputs.
+
 ## Material and hit presentation
 
 Use one coherent material family, with stable depth cues in front, side, and rear views. The following values are starting art tokens, subject to actual render review at fixed exposure.
@@ -88,7 +122,7 @@ Retain the current typed entry points: `SkeletonAnatomyModel.update(_:zone:)`, `
 | Repeated hit | Reuse the same pooled model and restart the bounded presentation window. |
 | Leave, reconnect, scene inactive, or epoch change | Clear reveal state and release transient effects through existing lifecycle cleanup. |
 
-Initial rendering budgets are acceptance targets to measure, not claimed performance: at most 45,000 triangles and 32 geometry draw calls per visible full-detail skeleton; at most three remote skeleton instances in a four-player match if the product later requires simultaneous reveals. Reuse immutable geometry/material resources; create no meshes, lights, textures, or nodes in pose updates. The currently supported single visible associated-target model remains sufficient unless integration changes that presentation contract.
+Initial rendering budgets are acceptance targets to measure, not claimed performance: integration approved a provisional **52,000-triangle** full-detail cap on 2026-09-05 to preserve cranial, rib, and pelvic form; the earlier 45,000-triangle figure is superseded. Keep at most 32 geometry draw calls per visible full-detail skeleton and at most three remote skeleton instances in a four-player match if the product later requires simultaneous reveals. This revision has no device performance evidence behind it and must be checked against the CPU/GPU gates below. Reuse immutable geometry/material resources; create no meshes, lights, textures, or nodes in pose updates. The currently supported single visible associated-target model remains sufficient unless integration changes that presentation contract.
 
 Use screen-space detail levels only when profiling shows a need: full form above 600 px body height; medium target at most 18,000 triangles for 240–600 px; distant target at most 6,000 below 240 px. Preserve skull/jaw, ribcage shape, pelvis openings, limb pairs, hands, and feet at every level. Simplify small sutures, tiny teeth, and fine phalangeal surfaces first. Add approximately 10% threshold hysteresis and choose a level at reveal start to prevent a visible switch within 280 ms. Detail selection never affects colliders, target association, weapon timing, or hit validation.
 
@@ -106,6 +140,38 @@ Keep the rejected first evidence under slice 005 as history. New evidence should
 
 ## Provenance
 
-The current geometry is original procedural work. The linked anatomy pages are structure references; their diagrams, text, and downloadable models are not imported into the game. Current source licensing must be checked before any asset reuse. Do not label an asset CC0 merely because it is downloadable or hosted by a museum/university.
+The rejected slice 005 geometry was original procedural work. The replacement uses the versioned BodyParts3D bone geometry and original cosmetic teeth documented beside `Features/Game/SkeletonAssets/HumanSkeleton.vkskeleton`. The linked OpenStax anatomy pages remain structure references; their diagrams, text, and downloadable models are not imported into the game. Do not label an asset CC0 merely because it is downloadable or hosted by a museum/university.
 
 If a third-party anatomical mesh is selected, store its exact source URL, author/publisher, asset identifier/version, download date, license URL and saved license text, original-file SHA-256, attribution requirements, redistribution/commercial-use permission, modifications, and conversion steps next to the asset manifest. Retain required attribution in the shipped app. A license restricted to noncommercial use does not satisfy this production game. Prefer original geometry or an individually verified CC0/compatible commercial asset; an unavailable or uncertain license is a reason to choose another asset, not to postpone the authorized original-model rebuild.
+
+BodyParts3D is now the candidate source being evaluated. The [current official archive license](https://dbarchive.biosciencedbc.jp/en/bodyparts3d/lic.html), last updated 2025-02-27 and checked 2026-09-05, specifies CC BY 4.0 and the attribution “BodyParts3D, © The Database Center for Life Science licensed under CC Attribution 4.0 International”. Preserve this current license evidence alongside historical OBJ headers. The [official download page](https://dbarchive.biosciencedbc.jp/en/bodyparts3d/download.html) lists the version 4.0 PART-OF archive as a 99% polygon-reduced dataset: the source is already simplified, so further decimation requires particular scrutiny of skull cavities, thin ribs, hand bones, and pelvis openings. The provider's [version notes](https://lifesciencedb.jp/bp3d/info_en/index.html) also distinguish coordinate compatibility across major versions; keep a coherent versioned set. These checks establish a suitable source to evaluate, not automatic art acceptance or medical accuracy.
+
+The 2026-09-05 source-table audit found that broad PART-OF concept names are not sufficient for asset selection. The `skull` concept (`FMA46565`) contains eye/lacrimal soft-tissue elements; `skeleton (in vivo)` (`FMA23876`) omits some explicitly available limb bones; `skeleton of left hand proper` (`FMA79182`) contains only five metacarpals; and `vertebral column` (`FMA13478`) includes disks. Resolve specific anatomical bone concepts, deduplicate element IDs, and review the resulting mesh groups. If cartilage or disks are retained to support visual continuity, list them explicitly as cosmetic connecting structures rather than labeling every selected element bone.
+
+The verified skull-bone selection in the downloaded version 4.0 tables has 22 elements: `FJ3199`, `FJ3200`, `FJ3263`, `FJ3265`, `FJ3269`, `FJ3272`, `FJ3273`, `FJ3274`, `FJ3281`, `FJ3287`, `FJ3289`, `FJ3309`, `FJ3369`, `FJ3371`, `FJ3375`, `FJ3378`, `FJ3379`, `FJ3380`, `FJ3386`, `FJ3392`, `FJ3394`, and `FJ3395`. Their source concepts cover the cranial/facial bones and mandible described above. The hyoid is separate neck anatomy. Keep this selection version-bound; it is not a general rule to infer anatomy from numeric ID ranges.
+
+## First imported-mesh review — 2026-09-05
+
+Reviewed the actual native source-pose renders `source-front.png`, `source-three-quarter.png`, `source-profile.png`, and `source-rear.png` from the modeler's temporary BodyParts3D workspace. The modeler reports 44,129 triangles in 19 groups. These are optimized imported geometry before live retargeting, and therefore do not establish body alignment, reveal timing, or application quality.
+
+The silhouette now has credible human anatomy: the pelvis forms a bowl with shaped openings, long bones have distinct shafts and joint ends, the ribcage has volume, scapulae read correctly from the rear, and paired lower-leg bones and feet remain distinct. Preserve those proportions through retargeting. This is an acceptable source direction to continue, **not final visual acceptance**.
+
+Required refinements remain:
+
+- **P0 skull surface and teeth:** orbital rims and cheek/jaw joins contain conspicuous jagged edges; the toothless mouth makes the face read as damaged. Compare the source and simplified head at a fixed camera before changing it. Preserve facial edge topology and close unintended conversion seams while retaining natural sutures and bone openings. Add restrained seated teeth as documented original cosmetic geometry if the source has no teeth; avoid the old uniform grin.
+- **P1 reveal material:** the front is gray-beige and profile/rear are too dark for the brief gameplay window. Increase readable midtone/fill by an initial 20–30% in a fixed-exposure comparison, retain cavity depth, and add a restrained cool grazing rim. Review again against bright and dark backgrounds rather than accepting brighter studio lighting alone.
+- **P1 silhouette simplification:** several rib edges and pelvic crests have visible angular breaks. Preserve those contours and inspect unsimplified/simplified crops before spending more geometry on surfaces that are already smooth. A 45,000-triangle target does not justify a visibly broken orbital or pelvic opening; integration may revise the budget based on actual device profiling.
+- **Pending rig evidence:** check the explicit anterior sentinels and full neutral/bent/turned pose set after bind-frame retargeting. The successful source pose cannot conceal a flipped patella, mirrored hand, narrowed chest, or disconnected joint in the live rig.
+
+## Integrated-mesh review after restart — 2026-09-05
+
+The reproducible harness in `scripts/skeleton-preview/` now compiles the actual production mesh loader, layout, model, targeting DTOs, and `HitSkeletonReveal` controller. Actual native Metal/SceneKit images and a manifest with source and asset hashes are preserved in `design/evidence/006-skeleton-model/`; temporary previews are no longer the sole evidence. The independent fixture distinguishes medial shoulder landmarks from humeral roots and retains a 1.75 m review frame. It includes front/rear/both profiles/45°, bent elbows, a segment-length-preserving crouch, a global 90° turn, a lateral arm, missing wrist/ankle, close details, and 3/8/15 m projections on three backgrounds.
+
+The replacement clearly improves anatomical structure over slice 005: actual rib volume, separated limb bones, a shaped pelvis, scapulae, hands and feet, and skull openings survive the native integration. It is approved to integrate and continue the playable game under the user's revised priority; this is **not final visual-quality acceptance**. Outstanding art observations are recorded without blocking the remaining app work:
+
+- The skull still has conspicuous faceting and thin spike/sliver features at cranial seams, orbital/nasal edges, and the jaw. The fixed-camera source-versus-packaged comparison confirms that the source has natural seams but the packaged simplification introduces additional needle-like vault spikes, torn nasal/maxillary edges, and broad angular facets. This localizes a future conversion repair; increased polygon count alone does not resolve it.
+- Scaling transverse template width from observed humeral separation widens the fixture's chest and pelvis. Actual device bind evidence must determine a coherent template scale while preserving observed joint locations.
+- The source foot's outward yaw is retained because the current input does not establish an independent foot direction. The front pose shows noticeable toe-out, and a crouch does not prove ground contact or sensed ankle articulation. A later cosmetic foot orientation refinement must remain separate from sensed pose and colliders.
+- Bright ivory improves brief visibility but some facial surfaces flatten and some thin crest/rib silhouettes remain angular. Further material/topology work should use the fixed-camera evidence, without delaying the game integration requested by the user.
+
+The actual shared production SceneKit reveal action was rendered at deterministic scene times. Its measured presentation opacity was 1 at 0/20/100 ms, approximately 0.556 at 180 ms, and 0 with the node hidden at 280 ms. A new hit at 150 ms restarted the window; stale observation input cleared it. These are real renders of the controller now composed by `LaserFXEngine`, not a parallel timing approximation. They do not establish physical-device wall-clock behavior, camera registration, haptics, thermal performance, or four-player GPU cost. Those acceptance gates remain open.

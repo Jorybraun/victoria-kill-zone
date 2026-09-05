@@ -27,30 +27,37 @@ final class RealtimeArenaController: ObservableObject {
   @Published private(set) var confirmedHits: [RealtimeHitFeedback] = []
   @Published private(set) var connection: RealtimeConnectionState = .disconnected
   @Published private(set) var mapState: RealtimeMapState = .idle
+  @Published private(set) var referenceState: DuelFrameReferenceState = .unavailable
+  @Published private(set) var referenceImageData: Data?
   @Published private(set) var triggerHeld = false
   @Published private(set) var localShotSequence = 0
   @Published private(set) var message: String?
+  @Published private(set) var actionFeedback: String?
+  @Published private(set) var connectionIssue: String?
   @Published private(set) var now = Date()
   private let mapCoordinator: RealtimeMapCoordinator?
   private var subscriptions: Set<AnyCancellable> = []
   private var cameraTask: Task<Void, Never>?
   private var pumpTask: Task<Void, Never>?
   private var triggerTask: Task<Void, Never>?
+  private var referenceTask: Task<Void, Never>?
+  private var startTask: Task<Void, Never>?
+  private var stopTask: Task<Void, Never>?
   private var started = false
   private var cameraReady = false
   private var sceneActive = true
   private var generation = 0
   private var configuredEpoch: Int?
   private var authorityEpoch: Int?
-  private var announcedReady: Bool?
+  private var reconciledSnapshotRevision: Int?
+  private var readiness = RealtimeReadinessState()
+  private var commands = RealtimeCommandState()
   private var lastSubmittedPose: CombatWire.Pose?
   private var lastPoseDate: Date?
   private var poseSequence = 0
   private var lastLocalFireAtMs: Double?
   private var lastBodyDate: Date?
   private var lastBodyMatchTimeMs: Double?
-  private var pendingReload: String?
-  private var pendingShield: String?
   private var alignedSince: Date?
 
   init(session: PlayerSession, client: any GameSessionClient, targeting: any TargetingSession) {
@@ -61,14 +68,14 @@ final class RealtimeArenaController: ObservableObject {
       frameProvider = provider
       mapCoordinator = RealtimeMapCoordinator(session: session, client: client, combat: combat, frame: provider)
     } else {frameProvider = nil; mapCoordinator = nil}
+    combat.$connectionIssue.sink { [weak self] in self?.connectionIssue = $0 }.store(in: &subscriptions)
     combat.$snapshot.sink { [weak self] in self?.receiveSnapshot($0) }.store(in: &subscriptions)
     combat.$events.sink { [weak self] in self?.receiveEvents($0) }.store(in: &subscriptions)
     combat.$state.sink { [weak self] state in
       guard let self else {return}
       self.connection = state
       if state != .connected {
-        self.announcedReady = nil; self.setTriggerHeld(false); self.associatedBody = nil
-        self.pendingReload = nil; self.pendingShield = nil
+        self.readiness = RealtimeReadinessState(); self.setTriggerHeld(false); self.associatedBody = nil
       }
     }.store(in: &subscriptions)
     frameProvider?.$snapshot.sink { [weak self] value in
@@ -78,11 +85,19 @@ final class RealtimeArenaController: ObservableObject {
       if newlyAligned {self.alignedSince = Date()}
       if value.stage != .aligned {self.alignedSince = nil; self.associatedBody = nil; self.setTriggerHeld(false)}
     }.store(in: &subscriptions)
+    frameProvider?.$referenceState.sink { [weak self] value in
+      guard let self else {return}
+      self.referenceState = value
+      self.referenceImageData = self.frameProvider?.referenceImageData
+    }.store(in: &subscriptions)
     mapCoordinator?.$state.sink { [weak self] in self?.mapState = $0 }.store(in: &subscriptions)
   }
 
-  deinit {cameraTask?.cancel(); pumpTask?.cancel(); triggerTask?.cancel()}
+  deinit {cameraTask?.cancel(); pumpTask?.cancel(); triggerTask?.cancel(); referenceTask?.cancel()}
 
+  var startPending: Bool {commands.contains(.start)}
+  var displayAmmo: Int {commands.availableAmmo(localPlayer?.ammo ?? 0)}
+  var canOpenCameraSettings: Bool {message != nil && !cameraReady}
   var localPlayer: CombatWire.Player? {snapshot?.players.first {$0.playerId == session.playerId}}
   var isHost: Bool {localPlayer?.role == "host"}
   var matchTimeMs: Double? {combat.matchTimeMs}
@@ -92,12 +107,20 @@ final class RealtimeArenaController: ObservableObject {
     var result = RealtimeActionEligibility.evaluate(snapshot: snapshot, localPlayerID: session.playerId, clockReady: combat.clockReady,
       frameReady: frame.permitsSpatialFire(at: Date()), sceneActive: sceneActive, canSubmit: combat.canSubmitSpatialInput,
       poseFresh: fresh, localFireAtMs: lastLocalFireAtMs, matchTimeMs: matchTimeMs)
-    if pendingReload != nil || pendingShield != nil {result.fire = false; result.reload = false; result.shield = false; result.reason = "Confirming action"}
+    if commands.contains(.reload) || commands.contains(.shield) {
+      result.fire = false; result.reload = false; result.shield = false; result.reason = "Confirming action"
+    }
+    if commands.contains(.slowField) {result.slowField = false}
+    if startPending {result.begin = false; result.reason = "Starting match"}
+    if displayAmmo == 0 {
+      result.fire = false
+      if (localPlayer?.ammo ?? 0) > 0 {result.reason = "Confirming shots"}
+    }
     return result
   }
   var stage: RealtimeArenaStage {
     if snapshot?.phase == .finished || connection == .finished {return .finished}
-    if frameProvider == nil || message != nil {return .unavailable}
+    if frameProvider == nil || message != nil || (connectionIssue != nil && connection == .disconnected) {return .unavailable}
     if connection == .retrying {return .reconnecting}
     if connection != .connected {return .connecting}
     switch mapState {
@@ -121,8 +144,24 @@ final class RealtimeArenaController: ObservableObject {
   }
 
   func start() async {
-    guard !started else {return}; started = true; message = nil; generation += 1; let token = generation
+    if let stopTask {await stopTask.value}
+    if started {await startTask?.value; return}
+    started = true; message = nil; generation += 1; let token = generation
+    let task = Task { [weak self] in
+      guard let self else {return}
+      await self.performStart(token: token)
+    }
+    // Give each caller the same start completion, including a stop arriving while
+    // the camera permission/session operation is suspended.
+    startTask = task
+    await task.value
+    if generation == token {startTask = nil}
+  }
+
+  private func performStart(token: Int) async {
+    guard started, generation == token else {return}
     combat.start(session: session)
+    if !sceneActive {combat.suspendConnection()}
     let stream = targeting.snapshots()
     cameraTask = Task { [weak self] in
       for await value in stream {
@@ -147,20 +186,51 @@ final class RealtimeArenaController: ObservableObject {
   }
 
   func stop() async {
+    if let stopTask {await stopTask.value; return}
     guard started else {return}; started = false; cameraReady = false; generation += 1
     setTriggerHeld(false); cameraTask?.cancel(); cameraTask = nil; pumpTask?.cancel(); pumpTask = nil
-    combat.stop(); configuredEpoch = nil; authorityEpoch = nil; announcedReady = nil
+    referenceTask?.cancel(); referenceTask = nil
+    combat.stop(); configuredEpoch = nil; authorityEpoch = nil; readiness = RealtimeReadinessState()
     associatedBody = nil; confirmedHits = []; lastSubmittedPose = nil; lastPoseDate = nil
-    pendingReload = nil; pendingShield = nil; lastLocalFireAtMs = nil
-    await mapCoordinator?.stop(); await targeting.stop()
+    commands = RealtimeCommandState(); actionFeedback = nil; lastLocalFireAtMs = nil
+    let pendingStart = startTask
+    let teardown = Task { [self] in
+      // An AR start may ignore cancellation while awaiting camera permission.
+      // Wait for it, then stop; otherwise it can turn the camera on after leave.
+      await pendingStart?.value
+      await mapCoordinator?.stop(); await targeting.stop()
+      startTask = nil; stopTask = nil
+    }
+    stopTask = teardown
+    await teardown.value
   }
 
   func setSceneActive(_ active: Bool) {
     sceneActive = active
-    if !active {setTriggerHeld(false); frameProvider?.invalidate(reason: .backgrounded); associatedBody = nil; announcedReady = nil}
-    else if started, frame.stage == .lost {retryAlignment()}
+    if !active {
+      setTriggerHeld(false); frameProvider?.invalidate(reason: .backgrounded)
+      associatedBody = nil; readiness = RealtimeReadinessState()
+      combat.suspendConnection()
+    } else if started {
+      if combat.connectionSuspended {combat.retryConnection()}
+      if frame.stage == .lost {retryAlignment()}
+    }
   }
-  func captureAndShareMap() {guard isHost else {return}; mapCoordinator?.captureAndShare()}
+  func captureReference() {
+    guard isHost, frame.stage == .mapReady, referenceTask == nil, let frameProvider else {return}
+    let token = generation
+    referenceTask = Task { [weak self] in
+      do {_ = try await frameProvider.captureReference()} catch {
+        // The provider publishes a typed, recoverable capture failure beside
+        // the capture control; it does not make the whole match unavailable.
+      }
+      if self?.generation == token {self?.referenceTask = nil}
+    }
+  }
+  func captureAndShareMap() {
+    guard isHost, case .captured = referenceState else {return}
+    mapCoordinator?.captureAndShare()
+  }
   func retryAlignment() {
     guard started else {return}
     if !cameraReady {
@@ -170,29 +240,39 @@ final class RealtimeArenaController: ObservableObject {
       }
       return
     }
-    setTriggerHeld(false); message = nil; configuredEpoch = nil; announcedReady = nil; lastSubmittedPose = nil; lastPoseDate = nil
+    setTriggerHeld(false); message = nil; configuredEpoch = nil; readiness = RealtimeReadinessState(); lastSubmittedPose = nil; lastPoseDate = nil
     configureMapIfNeeded()
   }
   func recordResidual(frameID: String, epoch: UInt16, translationMeters: Double, yawDegrees: Double, observedAt: Date) throws {
     guard let frameProvider else {throw DuelFrameFailure.unsupported}
     try frameProvider.recordResidual(frameID: frameID, epoch: epoch, translationMeters: translationMeters, yawDegrees: yawDegrees, observedAt: observedAt)
   }
-  func beginRound() {guard eligibility.begin else {return}; _ = combat.submit(.start)}
+  func retryConnection() {setTriggerHeld(false); combat.retryConnection()}
+  func beginRound() {
+    guard eligibility.begin, let id = combat.submit(.start) else {return}
+    commands.queued(.start, id: id); objectWillChange.send()
+  }
   func reload() {
     guard eligibility.reload else {return}; setTriggerHeld(false)
-    pendingReload = combat.submit(.reload); objectWillChange.send()
+    if let id = combat.submit(.reload) {commands.queued(.reload, id: id); objectWillChange.send()}
   }
   func toggleShield() {
     guard eligibility.shield, let pose = lastSubmittedPose else {return}; setTriggerHeld(false)
     let active = (localPlayer?.shield.activeUntilMs ?? 0) > (matchTimeMs ?? 0)
-    pendingShield = combat.submit(.shield(active: !active, poseSequence: pose.sequence)); objectWillChange.send()
+    if let id = combat.submit(.shield(active: !active, poseSequence: pose.sequence)) {commands.queued(.shield, id: id); objectWillChange.send()}
   }
-  func activateSlowField() {guard eligibility.slowField, let pose = lastSubmittedPose else {return}; _ = combat.submit(.slowField(poseSequence: pose.sequence))}
+  func activateSlowField() {
+    guard eligibility.slowField, let pose = lastSubmittedPose,
+      let id = combat.submit(.slowField(poseSequence: pose.sequence)) else {return}
+    commands.queued(.slowField, id: id); objectWillChange.send()
+  }
   func fireOnce() {
     guard eligibility.fire, let pose = lastSubmittedPose, let time = matchTimeMs else {return}
     let q = pose.orientation, x = q[0], y = q[1], z = q[2], w = q[3]
     let direction = [-2 * (x * z + w * y), -2 * (y * z - w * x), -(1 - 2 * (x * x + y * y))]
-    guard combat.submit(.fire(shotId: UUID().uuidString, poseSequence: pose.sequence, origin: pose.position, direction: direction)) != nil else {return}
+    let shotID = UUID().uuidString
+    guard let id = combat.submit(.fire(shotId: shotID, poseSequence: pose.sequence, origin: pose.position, direction: direction)) else {return}
+    commands.queued(.fire, id: id, shotID: shotID)
     lastLocalFireAtMs = time; localShotSequence += 1
   }
   func setTriggerHeld(_ held: Bool) {
@@ -214,9 +294,13 @@ final class RealtimeArenaController: ObservableObject {
   private func receiveSnapshot(_ value: CombatWire.Snapshot?) {
     snapshot = value
     guard let value else {return}
+    if reconciledSnapshotRevision != combat.snapshotRevision {
+      commands.reconcile(pendingIDs: combat.pendingCommandIDs)
+      reconciledSnapshotRevision = combat.snapshotRevision
+    }
     if let authorityEpoch, authorityEpoch != value.authorityEpoch {
-      configuredEpoch = nil; announcedReady = nil; lastSubmittedPose = nil; lastPoseDate = nil
-      pendingReload = nil; pendingShield = nil; lastLocalFireAtMs = nil; setTriggerHeld(false)
+      configuredEpoch = nil; readiness = RealtimeReadinessState(); lastSubmittedPose = nil; lastPoseDate = nil
+      commands = RealtimeCommandState(); actionFeedback = nil; lastLocalFireAtMs = nil; setTriggerHeld(false)
       frameProvider?.invalidate(reason: .sessionInterrupted)
     }
     authorityEpoch = value.authorityEpoch
@@ -230,13 +314,16 @@ final class RealtimeArenaController: ObservableObject {
   private func tick() {
     guard started else {return}
     let date = Date(); now = date
+    commands.tick(at: date); actionFeedback = commands.notice
     refreshAssociation(at: date)
     guard sceneActive, combat.canSubmitSpatialInput, let matchTimeMs else {return}
     let ready = frame.permitsSpatialFire(at: date)
-    if announcedReady != ready {
+    if readiness.shouldSubmit(ready: ready, authoritative: localPlayer?.frameReady ?? false, at: date) {
       let residual = frame.residual
-      if combat.submit(.frameReady(ready: ready, residualMeters: residual?.translationMeters ?? 0,
-        residualDegrees: residual?.yawDegrees ?? 0, clockUncertaintyMs: combat.clockUncertaintyMs)) != nil {announcedReady = ready}
+      if let id = combat.submit(.frameReady(ready: ready, residualMeters: residual?.translationMeters ?? 0,
+        residualDegrees: residual?.yawDegrees ?? 0, clockUncertaintyMs: combat.clockUncertaintyMs)) {
+        readiness.queued(id: id, ready: ready, at: date)
+      }
     }
     guard let sample = frame.localPose, sample.capturedAt != lastPoseDate,
       let pose = RealtimePoseBuilder.pose(sample, sequence: poseSequence + 1, matchTimeMs: matchTimeMs, now: date) else {return}
@@ -271,10 +358,18 @@ final class RealtimeArenaController: ObservableObject {
     var hits: [RealtimeHitFeedback] = []
     for wrapped in values {
       switch wrapped.event {
-      case .commandResult(let commandID, _, let playerID, _, _):
+      case .projectileSpawn(let projectile):
+        if projectile.shooterId == session.playerId {
+          commands.projectileSpawned(shotID: projectile.shotId, atMs: projectile.spawnedAtMs)
+        }
+      case .playerChanged(let player):
+        if player.playerId == session.playerId {commands.playerChanged(lastFireAtMs: player.lastFireAtMs)}
+      case .commandResult(let commandID, _, let playerID, let accepted, let reason):
         guard playerID == session.playerId else {continue}
-        if pendingReload == commandID {pendingReload = nil}
-        if pendingShield == commandID {pendingShield = nil}
+        readiness.resolve(id: commandID)
+        commands.resolve(id: commandID, accepted: accepted, reason: reason, at: Date())
+        actionFeedback = commands.notice
+        objectWillChange.send()
       case .projectileTerminal(let terminal):
         guard terminal.reason == "bodyHit", terminal.damage > 0, sceneActive, connection == .connected else {continue}
         let incoming = terminal.targetPlayerId == session.playerId

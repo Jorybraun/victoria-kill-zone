@@ -5,6 +5,67 @@ import XCTest
 final class RealtimeArenaTests: XCTestCase {
   private let date = Date(timeIntervalSince1970: 2000)
 
+  @MainActor
+  func testConcurrentStopsBothAwaitActualCameraTeardown() async throws {
+    let camera = ArenaLifecycleCamera()
+    let controller = makeController(camera)
+    await controller.start()
+    var firstDone = false, secondDone = false
+    let first = Task {await controller.stop(); firstDone = true}
+    try await waitFor {await camera.stops == 1}
+    let second = Task {await controller.stop(); secondDone = true}
+    try await Task.sleep(for: .milliseconds(10))
+    XCTAssertFalse(firstDone); XCTAssertFalse(secondDone)
+    await camera.releaseStop()
+    await first.value; await second.value
+    XCTAssertTrue(firstDone); XCTAssertTrue(secondDone)
+    let stops = await camera.stops; XCTAssertEqual(stops, 1)
+  }
+
+  @MainActor
+  func testNewStartWaitsForPreviousCameraTeardown() async throws {
+    let camera = ArenaLifecycleCamera()
+    let controller = makeController(camera)
+    await controller.start()
+    let stopping = Task {await controller.stop()}
+    try await waitFor {await camera.stops == 1}
+    let restarting = Task {await controller.start()}
+    try await Task.sleep(for: .milliseconds(10))
+    let during = await camera.starts; XCTAssertEqual(during, 1)
+    await camera.releaseStop(); await stopping.value; await restarting.value
+    let after = await camera.starts; XCTAssertEqual(after, 2)
+    await camera.disableStopGate(); await controller.stop()
+  }
+
+  @MainActor
+  func testStopWaitsForSuspendedStartBeforeStoppingCamera() async throws {
+    let camera = ArenaLifecycleCamera(gateStart: true)
+    let controller = makeController(camera)
+    let starting = Task {await controller.start()}
+    try await waitFor {await camera.starts == 1}
+    var stopped = false
+    let stopping = Task {await controller.stop(); stopped = true}
+    try await Task.sleep(for: .milliseconds(10))
+    let before = await camera.stops; XCTAssertEqual(before, 0); XCTAssertFalse(stopped)
+    await camera.releaseStart()
+    try await waitFor {await camera.stops == 1}
+    XCTAssertFalse(stopped)
+    await camera.releaseStop(); await starting.value; await stopping.value
+    let running = await camera.running; XCTAssertFalse(running)
+  }
+
+  @MainActor
+  private func makeController(_ camera: ArenaLifecycleCamera) -> RealtimeArenaController {
+    .init(session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
+      client: UnavailableGameSessionClient(), targeting: camera)
+  }
+  @MainActor
+  private func waitFor(_ condition: () async -> Bool) async throws {
+    let deadline = Date().addingTimeInterval(2)
+    while !(await condition()), Date() < deadline {try await Task.sleep(for: .milliseconds(2))}
+    let fulfilled = await condition(); XCTAssertTrue(fulfilled)
+  }
+
   func testAssociationSelectsObservedHandMatchAcrossFourPlayers() throws {
     let association = try XCTUnwrap(associate(phones: [phone("p2", x: 0.1), phone("p3", x: 1), phone("p4", x: 2)]))
     XCTAssertEqual(association.playerID, "p2")
@@ -14,6 +75,14 @@ final class RealtimeArenaTests: XCTestCase {
   func testAmbiguousNearbyPhonesDoNotPickRosterOrder() {
     let phones = [phone("p2", x: 0.1), phone("p3", x: 0.2), phone("p4", x: 2)]
     XCTAssertNil(associate(phones: phones)); XCTAssertNil(associate(phones: phones.reversed()))
+  }
+  func testMissingOrStaleCompetitorDoesNotCreateFalseIdentityMargin() {
+    XCTAssertNil(associate(phones: [phone("p2", x: 0.1)], roster: players()))
+    XCTAssertNil(associate(phones: [phone("p2", x: 0.1), phone("p3", x: 0.11, at: 899), phone("p4", x: 2)], roster: players()))
+  }
+  func testEliminatedBodyCannotBeReassignedToNearbyLivingPlayer() {
+    var roster = players(); roster[1].health = 0
+    XCTAssertNil(associate(phones: [phone("p2", x: 0), phone("p3", x: 0.4), phone("p4", x: 2)], roster: roster))
   }
   func testOneRemoteMemberStillRequiresActualHandGeometry() {
     XCTAssertNil(associate(phones: [phone("p2", x: 2)]))
@@ -87,6 +156,8 @@ final class RealtimeArenaTests: XCTestCase {
     XCTAssertNil(RealtimeActionEligibility.remainingRoundMs(snapshot: snapshot, now: 12_000))
     snapshot.roundStartedAtMs = 10_000
     XCTAssertEqual(RealtimeActionEligibility.remainingRoundMs(snapshot: snapshot, now: 12_000), 178_000)
+    snapshot.players[0].role = "host"; snapshot.phase = .paused
+    XCTAssertFalse(eligibility(snapshot).begin, "A started match resumes automatically when authoritative coverage returns")
   }
 
   private func eligibility(_ snapshot: CombatWire.Snapshot, clock: Bool = true, frame: Bool = true, scene: Bool = true, pose: Bool = true, capacity: Bool = true, localFire: Double? = nil) -> RealtimeActionEligibility {
@@ -94,7 +165,8 @@ final class RealtimeArenaTests: XCTestCase {
   }
   private func associate(phones: [CombatWire.PlayerPose], skeleton body: TargetingSkeleton? = nil, ready: Bool = true, confidence: Double = 0.9, roster: [CombatWire.Player]? = nil) -> RealtimeBodyAssociation? {
     RealtimeAssociationPolicy.associate(skeleton: body ?? skeleton(), observationConfidence: confidence, phonePoses: phones,
-      players: roster ?? players(), localPlayerID: "p1", matchTimeMs: 1000, now: date, frameReady: ready)
+      players: roster ?? (phones.count == 1 ? Array(players().prefix(2)) : players()),
+      localPlayerID: "p1", matchTimeMs: 1000, now: date, frameReady: ready)
   }
   private func phone(_ id: String, x: Double, at: Double = 1000) -> CombatWire.PlayerPose {
     .init(playerId: id, pose: .init(sequence: 1, capturedAtMs: at, position: [x, 1, 0], orientation: [0, 0, 0, 1], tracking: "normal"))
@@ -110,4 +182,31 @@ final class RealtimeArenaTests: XCTestCase {
     for index in 3...4 {var player = players[1]; player.playerId = "p\(index)"; player.displayName = "Player \(index)"; players.append(player)}
     return players
   }
+}
+
+private actor ArenaLifecycleCamera: TargetingSession {
+  nonisolated let availability = TargetingAvailability.available
+  nonisolated let currentSnapshot = TargetingSnapshot.unavailable()
+  private let gateStart: Bool
+  private var gateStop = true
+  private var startContinuation: CheckedContinuation<Void, Never>?
+  private var stopContinuation: CheckedContinuation<Void, Never>?
+  private(set) var starts = 0
+  private(set) var stops = 0
+  private(set) var running = false
+  init(gateStart: Bool = false) {self.gateStart = gateStart}
+  nonisolated func snapshots() -> AsyncStream<TargetingSnapshot> {AsyncStream {$0.finish()}}
+  func start() async throws {
+    starts += 1
+    if gateStart {await withCheckedContinuation {startContinuation = $0}}
+    running = true
+  }
+  func stop() async {
+    stops += 1
+    if gateStop {await withCheckedContinuation {stopContinuation = $0}}
+    running = false
+  }
+  func releaseStart() {startContinuation?.resume(); startContinuation = nil}
+  func releaseStop() {stopContinuation?.resume(); stopContinuation = nil}
+  func disableStopGate() {gateStop = false; releaseStop()}
 }

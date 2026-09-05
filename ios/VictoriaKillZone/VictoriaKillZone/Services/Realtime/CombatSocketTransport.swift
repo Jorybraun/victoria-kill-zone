@@ -10,7 +10,7 @@ struct CombatAccessTicket: Sendable, CustomStringConvertible, CustomDebugStringC
   var debugDescription: String {description}
 }
 
-enum CombatTransportError: Error, Equatable {case invalidEndpoint, oversizedMessage, invalidMessage, disconnected, consumerTooSlow}
+enum CombatTransportError: Error, Equatable {case invalidEndpoint, admissionRejected, oversizedMessage, invalidMessage, disconnected, consumerTooSlow}
 
 @MainActor
 protocol CombatSocketConnecting: AnyObject {
@@ -74,14 +74,17 @@ final class CombatSocketTransport: CombatSocketConnecting {
           @unknown default: throw CombatTransportError.invalidMessage
           }
           guard bytes.count <= CombatWire.maximumServerBytes else {throw CombatTransportError.oversizedMessage}
-          let decoded = try JSONDecoder().decode(CombatWire.ServerMessage.self,from:bytes)
+          guard let decoded = try? JSONDecoder().decode(CombatWire.ServerMessage.self,from:bytes) else {
+            throw CombatTransportError.invalidMessage
+          }
           guard CombatWireValidation.valid(decoded) else {throw CombatTransportError.invalidMessage}
           if case .dropped = self.continuation?.yield(decoded) {throw CombatTransportError.consumerTooSlow}
         }
       } catch {
         guard let self, self.generation == current else {return}
         // Never propagate URLRequest descriptions or server bodies containing capabilities.
-        self.continuation?.finish(throwing:(error as? CombatTransportError) ?? CombatTransportError.disconnected)
+        let safeError = Self.safeFailure(error, response: task.response)
+        self.continuation?.finish(throwing:safeError)
         self.close()
       }
     }
@@ -90,9 +93,25 @@ final class CombatSocketTransport: CombatSocketConnecting {
 
   func send(_ message: CombatWire.ClientMessage) async throws {
     guard let socket else {throw CombatTransportError.disconnected}
+    let current = generation
     let bytes = try JSONEncoder().encode(message)
     guard bytes.count <= CombatWire.maximumClientBytes, let text = String(data:bytes,encoding:.utf8) else {throw CombatTransportError.oversizedMessage}
-    try await socket.send(.string(text))
+    do {try await socket.send(.string(text))} catch {
+      let safeError = Self.safeFailure(error, response: socket.response)
+      // A failed send can be the first observable HTTP admission response. End
+      // the stream with its sanitized classification before a caller closes it.
+      if generation == current {
+        continuation?.finish(throwing: safeError)
+        close()
+      }
+      throw safeError
+    }
+  }
+
+  static func safeFailure(_ error: Error, response: URLResponse?) -> CombatTransportError {
+    if let status = (response as? HTTPURLResponse)?.statusCode,
+      (400...499).contains(status), ![408, 425, 429].contains(status) {return .admissionRejected}
+    return (error as? CombatTransportError) ?? .disconnected
   }
 
   func close() {
