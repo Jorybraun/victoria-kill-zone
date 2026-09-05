@@ -1,6 +1,4 @@
 import Foundation
-import Network
-import Security
 
 public struct TransportCredentials: Sendable {
   public let preSharedKey: Data
@@ -59,6 +57,10 @@ public protocol PeerLink: AnyObject, Sendable {
   func send(_ frame: TransportFrame) throws
   func setReceiveHandler(_ handler: PeerLinkReceiveHandler?)
 }
+
+#if canImport(Network)
+import Network
+import Security
 
 /// Direct Network.framework peer link.
 ///
@@ -718,3 +720,4 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
     return try body()
   }
 }
+#endif
