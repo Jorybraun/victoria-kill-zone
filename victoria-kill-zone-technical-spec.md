@@ -154,7 +154,7 @@ If the gate fails, fix provisioning, networking, or hardware before building UI.
 - Arena radius: 30 metres by default; host-selectable from 20–60 metres.
 - Starting health: 100.
 - Magazine size: 8.
-- Fire cooldown: 350 milliseconds.
+- Fire cooldown: 150 milliseconds (ADR 0007; 400 RPM ceiling).
 - Reload duration: 1.25 seconds.
 - Respawn delay: 5 seconds.
 - Win condition: most kills when the timer ends.

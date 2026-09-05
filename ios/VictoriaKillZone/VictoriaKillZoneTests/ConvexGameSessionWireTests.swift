@@ -4,6 +4,23 @@ import XCTest
 @testable import VictoriaKillZone
 
 final class ConvexGameSessionWireTests: XCTestCase {
+  func testReloadDeadlineDecodesWhenPresentAndIsOptionalForOlderServers() throws {
+    let player: [String: Any] = [
+      "id": "player-1", "displayName": "Player", "role": "host",
+      "ready": true, "connected": true, "health": 100, "ammo": 0,
+    ]
+    let before = try JSONDecoder().decode(
+      PlayerSnapshotWire.self, from: JSONSerialization.data(withJSONObject: player)
+    ).domainValue()
+    XCTAssertNil(before.reloadEndsAt)
+    let reloading = player.merging(["reloadEndsAt": 1_750_000_001_250]) { _, new in new }
+    let during = try JSONDecoder().decode(
+      PlayerSnapshotWire.self, from: JSONSerialization.data(withJSONObject: reloading)
+    ).domainValue()
+    XCTAssertEqual(during.reloadEndsAt, 1_750_000_001_250)
+    XCTAssertEqual(during.ammo, 0)
+  }
+
   func testArgumentsMatchExactBackendValidators() {
     let session = testSession()
 

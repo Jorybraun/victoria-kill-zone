@@ -49,6 +49,8 @@
 		B00400000000000000000003 /* GameLoopTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00400000000000000000003 /* GameLoopTrace.swift */; };
 		B00400000000000000000004 /* DuelSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00400000000000000000004 /* DuelSessionTests.swift */; };
 		B00300000000000000000004 /* TargetingBlockerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000004 /* TargetingBlockerTests.swift */; };
+		B00500000000000000000001 /* CombatPresentationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00500000000000000000001 /* CombatPresentationPolicy.swift */; };
+		B00500000000000000000002 /* CombatPresentationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00500000000000000000002 /* CombatPresentationPolicyTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -104,6 +106,8 @@
 		F00400000000000000000003 /* GameLoopTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameLoopTrace.swift; sourceTree = "<group>"; };
 		F00400000000000000000004 /* DuelSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuelSessionTests.swift; sourceTree = "<group>"; };
 		F00300000000000000000004 /* TargetingBlockerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetingBlockerTests.swift; sourceTree = "<group>"; };
+		F00500000000000000000001 /* CombatPresentationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CombatPresentationPolicy.swift; sourceTree = "<group>"; };
+		F00500000000000000000002 /* CombatPresentationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CombatPresentationPolicyTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -239,6 +243,7 @@
 			children = (
 				F0010000000000000000000B /* ActiveDuelView.swift */,
 				F00100000000000000000014 /* LaserFX.swift */,
+				F00500000000000000000001 /* CombatPresentationPolicy.swift */,
 				F00400000000000000000001 /* DuelSession.swift */,
 				F00400000000000000000002 /* DuelPeerLink.swift */,
 				F00400000000000000000003 /* GameLoopTrace.swift */,
@@ -260,6 +265,7 @@
 				F0010000000000000000000E /* LobbyStateMachineTests.swift */,
 				F00300000000000000000003 /* DuelInviteLinkTests.swift */,
 				F00400000000000000000004 /* DuelSessionTests.swift */,
+				F00500000000000000000002 /* CombatPresentationPolicyTests.swift */,
 				F00300000000000000000004 /* TargetingBlockerTests.swift */,
 			);
 			path = VictoriaKillZoneTests;
@@ -423,6 +429,7 @@
 				B0010000000000000000000A /* WaitingRoomView.swift in Sources */,
 				B0010000000000000000000B /* ActiveDuelView.swift in Sources */,
 				B00100000000000000000012 /* LaserFX.swift in Sources */,
+				B00500000000000000000001 /* CombatPresentationPolicy.swift in Sources */,
 				B00100000000000000000013 /* VoiceFireController.swift in Sources */,
 				B0010000000000000000000C /* VKZTheme.swift in Sources */,
 				B00300000000000000000001 /* DuelInvite.swift in Sources */,
@@ -440,6 +447,7 @@
 				B0010000000000000000000D /* LobbyStateMachineTests.swift in Sources */,
 				B00300000000000000000003 /* DuelInviteLinkTests.swift in Sources */,
 				B00400000000000000000004 /* DuelSessionTests.swift in Sources */,
+				B00500000000000000000002 /* CombatPresentationPolicyTests.swift in Sources */,
 				B00300000000000000000004 /* TargetingBlockerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

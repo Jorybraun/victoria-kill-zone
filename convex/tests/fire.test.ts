@@ -153,6 +153,7 @@ describe("debugFire authority", () => {
       lifeState: "respawning",
       deaths: 2,
       respawnAt: now + GAMEPLAY.respawnDelayMs,
+      reloadEndsAt: null,
     });
     expect(plan.respawnAt).toBe(now + GAMEPLAY.respawnDelayMs);
     expect(plan.events.map((event) => event.type)).toEqual(["eliminated"]);

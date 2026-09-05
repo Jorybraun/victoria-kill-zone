@@ -43,6 +43,7 @@ export interface PlayerSnapshot {
   arenaState: ArenaState;
   lastSeenAt: number;
   lastShotAt?: number;
+  reloadEndsAt?: number;
   respawnAt?: number;
   latitude?: number;
   longitude?: number;
@@ -68,6 +69,7 @@ export type SpectatorPlayerSnapshot = Omit<
 
 export interface EventSnapshot {
   id: string;
+  clientShotId?: string;
   type: string;
   message: string;
   createdAt: number;
@@ -106,6 +108,7 @@ export interface SnapshotMatch extends MatchState {
 
 export interface SnapshotEvent {
   id: string;
+  clientShotId?: string;
   type: string;
   actorPlayerId: string | null;
   targetPlayerId: string | null;
@@ -198,6 +201,7 @@ function projectPlayer(player: PlayerState, match: SnapshotMatch, now: number): 
     arenaState: projectedArenaState(player, match, now),
     lastSeenAt: player.lastSeenAt,
     ...(player.lastShotAt === null ? {} : { lastShotAt: player.lastShotAt }),
+    ...(player.reloadEndsAt === null ? {} : { reloadEndsAt: player.reloadEndsAt }),
     ...(player.respawnAt === null ? {} : { respawnAt: player.respawnAt }),
     ...(player.latitude === null ? {} : { latitude: player.latitude }),
     ...(player.longitude === null ? {} : { longitude: player.longitude }),
@@ -233,6 +237,7 @@ function projectSpectatorPlayer(
     lifeState: player.lifeState,
     arenaState: projectedArenaState(player, match, now),
     ...(player.lastShotAt === null ? {} : { lastShotAt: player.lastShotAt }),
+    ...(player.reloadEndsAt === null ? {} : { reloadEndsAt: player.reloadEndsAt }),
     ...(player.respawnAt === null ? {} : { respawnAt: player.respawnAt }),
     ...(hasPosition && player.latitude !== null && player.longitude !== null
       ? {
@@ -250,6 +255,7 @@ function projectSpectatorPlayer(
 function projectEvent(event: SnapshotEvent): EventSnapshot {
   return {
     id: event.id,
+    ...(event.clientShotId === undefined ? {} : { clientShotId: event.clientShotId }),
     type: event.type,
     message: event.message,
     createdAt: event.createdAt,

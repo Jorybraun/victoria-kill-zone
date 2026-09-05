@@ -22,6 +22,8 @@ protocol GameSessionClient: Sendable {
   func joinDuel(_ request: JoinDuelRequest) async throws -> PlayerSession
   func setReady(session: PlayerSession, isReady: Bool) async throws
   func startDuel(session: PlayerSession) async throws
+  func heartbeat(session: PlayerSession) async throws
+  func startReload(session: PlayerSession) async throws -> ReloadResult
   func fire(session: PlayerSession, request: FireShotRequest) async throws -> FireShotResult
   func debugFire(session: PlayerSession, clientShotId: String) async throws -> DebugFireResult
   func snapshots(for session: PlayerSession) -> AsyncThrowingStream<MatchSnapshot, Error>
@@ -29,6 +31,12 @@ protocol GameSessionClient: Sendable {
 }
 
 extension GameSessionClient {
+  func heartbeat(session: PlayerSession) async throws {}
+
+  func startReload(session: PlayerSession) async throws -> ReloadResult {
+    throw GameSessionClientError.notConfigured
+  }
+
   func fire(session: PlayerSession, request: FireShotRequest) async throws -> FireShotResult {
     throw GameSessionClientError.notConfigured
   }
