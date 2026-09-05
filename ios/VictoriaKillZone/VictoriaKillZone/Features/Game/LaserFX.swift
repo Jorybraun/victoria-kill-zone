@@ -171,10 +171,18 @@
       guard let forward = normalized(SIMD3<Float>(
         -transform.columns.2.x, -transform.columns.2.y, -transform.columns.2.z
       )) else { return }
-      // Aim toward the receiver only for the explicitly coarse legacy cue.
-      // Exact incoming worldlines require the shared-frame transport contract.
-      let right = SIMD3<Float>(transform.columns.0.x, transform.columns.0.y, transform.columns.0.z)
-      let end = hit ? cameraPosition + forward * 0.3 : cameraPosition + right * 0.6
+      guard let right = normalized(SIMD3<Float>(
+        transform.columns.0.x, transform.columns.0.y, transform.columns.0.z
+      )), let up = normalized(SIMD3<Float>(
+        transform.columns.1.x, transform.columns.1.y, transform.columns.1.z
+      )) else { return }
+      // Preserve the travelling-laser presentation's off-centre endpoint so an
+      // incoming bolt has a visible path instead of collapsing into the lens.
+      // This remains a coarse cue from an observed origin, not an aligned shot.
+      let end = hit
+        ? cameraPosition + forward * 0.45 - up * 0.22 + right * 0.08
+        : cameraPosition + right * 0.9 - up * 0.5 - forward * 0.2
+      guard end.x.isFinite, end.y.isFinite, end.z.isFinite else { return }
       renderTracer(from: origin, to: end, incoming: true)
       if hit { renderImpact(at: end) }
     }

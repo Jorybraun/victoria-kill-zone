@@ -110,7 +110,7 @@ final class DuelSession: ObservableObject {
   private let now: @Sendable () -> Date
   private let makeShotId: @Sendable () -> String
   private let gameSessionClient: any GameSessionClient
-  private let makePeerLink: @MainActor (_ serviceName: String) -> (any DuelPeerLink)?
+  private let makePeerLink: (@MainActor (_ serviceName: String) -> (any DuelPeerLink)?)?
   private var fireTask: Task<Void, Never>?
   private var repeatFireTask: Task<Void, Never>?
   private var reloadTask: Task<Void, Never>?
@@ -129,8 +129,7 @@ final class DuelSession: ObservableObject {
     gameSessionClient: any GameSessionClient,
     now: @escaping @Sendable () -> Date = { Date() },
     makeShotId: @escaping @Sendable () -> String = { UUID().uuidString },
-    makePeerLink: @escaping @MainActor (_ serviceName: String) -> (any DuelPeerLink)? =
-      DuelSession.defaultPeerLink
+    makePeerLink: (@MainActor (_ serviceName: String) -> (any DuelPeerLink)?)? = nil
   ) {
     self.gameSessionClient = gameSessionClient
     self.now = now
@@ -138,12 +137,10 @@ final class DuelSession: ObservableObject {
     self.makePeerLink = makePeerLink
   }
 
-  static func defaultPeerLink(serviceName: String) -> (any DuelPeerLink)? {
-    #if canImport(Network)
-      return ArenaPeerLink(serviceName: serviceName)
-    #else
-      return nil
-    #endif
+  static func defaultPeerLink(
+    matchId: String, playerId: String, joinSecret: String
+  ) -> any DuelPeerLink {
+    ArenaPeerLinkFactory.make(matchId: matchId, playerId: playerId, joinSecret: joinSecret)
   }
 
   func attach(session: PlayerSession) {
@@ -253,7 +250,11 @@ final class DuelSession: ObservableObject {
       let session, let snapshot = latestSnapshot,
       snapshot.match.phase == .running,
       snapshot.localPlayerId == session.playerId,
-      snapshot.players.first(where: { $0.id == session.playerId })?.role == .host
+      let localPlayer = snapshot.players.first(where: { $0.id == session.playerId }),
+      localPlayer.role == .host,
+      // A lost reply to the final round retains its exact ID. Retrying that
+      // unresolved request does not spend another round; rejected IDs are cleared.
+      localPlayer.ammo > 0 || (debugShotState == .failed && pendingShotId != nil)
     else {
       return false
     }
@@ -475,11 +476,7 @@ final class DuelSession: ObservableObject {
         pendingShotDispatchedAt = nil
         pendingShotAutomaticReplayStarted = false
         setDebugShotState(.failed)
-        if let reason = result.rejectReason {
-          present(GameSessionClientError.backend(reason))
-        } else {
-          present(GameSessionClientError.unknown)
-        }
+        presentDebugRejection(result)
         return
       }
       pendingShotResult = result
@@ -697,7 +694,7 @@ final class DuelSession: ObservableObject {
   private func updateDuelPeerLink(for snapshot: MatchSnapshot, previous: MatchSnapshot?) {
     if snapshot.match.phase == .running, duelPeerLink == nil,
       let role = snapshot.players.first(where: { $0.id == snapshot.localPlayerId })?.role,
-      let link = makePeerLink(Self.peerServiceName(forMatchID: snapshot.match.id))
+      let link = makePeerLink(for: snapshot)
     {
       let expectedMatchID = snapshot.match.id
       link.onMessage = { [weak self] message, _ in
@@ -728,6 +725,17 @@ final class DuelSession: ObservableObject {
       duelPeerLink?.stop()
       duelPeerLink = nil
     }
+  }
+
+  private func makePeerLink(for snapshot: MatchSnapshot) -> (any DuelPeerLink)? {
+    if let makePeerLink {
+      return makePeerLink(Self.peerServiceName(forMatchID: snapshot.match.id))
+    }
+    return Self.defaultPeerLink(
+      matchId: snapshot.match.id,
+      playerId: snapshot.localPlayerId,
+      joinSecret: session?.code ?? ""
+    )
   }
 
   static func peerServiceName(forMatchID matchID: String) -> String {
@@ -888,11 +896,7 @@ final class DuelSession: ObservableObject {
         gameLoopTrace("reconcilePendingShot reason=eventAgedOut outcome=replayRejected")
         clearPendingShot()
         setDebugShotState(.failed)
-        if let reason = result.rejectReason {
-          present(GameSessionClientError.backend(reason))
-        } else {
-          present(GameSessionClientError.unknown)
-        }
+        presentDebugRejection(result)
         return
       }
       guard result.replayed else {
@@ -943,6 +947,23 @@ final class DuelSession: ObservableObject {
 
   private func gameLoopTrace(_ message: @autoclosure () -> String) {
     GameLoopTrace.trace(message())
+  }
+
+  /// The debug-fire contract collapses most rejections to `MATCH_NOT_RUNNING`;
+  /// while the duel is visibly running the only local cause is an empty
+  /// magazine, so surface that instead of a misleading phase message.
+  private func presentDebugRejection(_ result: DebugFireResult) {
+    guard let reason = result.rejectReason else {
+      present(GameSessionClientError.unknown)
+      return
+    }
+    if reason == .matchNotRunning, latestSnapshot?.match.phase == .running,
+      result.shooterAmmo <= 0
+    {
+      onErrorMessage?("OUT OF AMMO")
+      return
+    }
+    present(GameSessionClientError.backend(reason))
   }
 
   private func present(_ error: Error) {

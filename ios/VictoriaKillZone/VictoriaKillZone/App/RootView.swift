@@ -34,7 +34,7 @@ struct RootView: View {
       .alert(
         "Unable to Continue",
         isPresented: Binding(
-          get: { store.errorMessage != nil },
+          get: { store.errorMessage != nil && !showsInlineCombatErrors },
           set: { isPresented in
             if !isPresented { store.dismissError() }
           }
@@ -50,5 +50,13 @@ struct RootView: View {
     .onOpenURL { url in
       store.openInviteLink(url)
     }
+  }
+
+  /// Combat feedback is shown inline by `ActiveDuelView`; a modal would
+  /// interrupt aiming.
+  private var showsInlineCombatErrors: Bool {
+    guard store.realtimeArena == nil else { return false }
+    if case .active(let duel) = store.route { return duel.phase == .running }
+    return false
   }
 }

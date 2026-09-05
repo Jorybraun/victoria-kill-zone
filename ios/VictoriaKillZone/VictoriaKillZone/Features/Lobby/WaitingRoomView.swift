@@ -44,6 +44,14 @@ struct WaitingRoomView: View {
             .fixedSize(horizontal: false, vertical: true)
         }
 
+        #if canImport(UIKit) && canImport(Network)
+        if store.isLiveNetworking && !isArena {
+          Label("Allow Local Network access when prompted so nearby players can connect.", systemImage: "wifi")
+            .font(.footnote).foregroundStyle(VKZPalette.textMuted)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        #endif
+
         if dynamicTypeSize.isAccessibilitySize {readyControls}
 
         #if canImport(UIKit)
@@ -67,6 +75,13 @@ struct WaitingRoomView: View {
           .background(VKZPalette.background.opacity(0.98))
           .overlay(alignment: .top) {VKZPalette.border.frame(height: 1)}
       }
+    }
+    .onAppear {
+      #if canImport(Network)
+      if store.isLiveNetworking && !isArena {
+        ArenaPeerLink.primeLocalNetworkPermission()
+      }
+      #endif
     }
   }
 

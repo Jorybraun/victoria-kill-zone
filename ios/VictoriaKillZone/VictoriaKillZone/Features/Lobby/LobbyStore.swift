@@ -81,8 +81,7 @@ final class LobbyStore: ObservableObject {
     environment: AppEnvironment = .phaseZeroShell,
     now: @escaping @Sendable () -> Date = { Date() },
     makeShotId: @escaping @Sendable () -> String = { UUID().uuidString },
-    makePeerLink: @escaping @MainActor (_ serviceName: String) -> (any DuelPeerLink)? =
-      DuelSession.defaultPeerLink
+    makePeerLink: (@MainActor (_ serviceName: String) -> (any DuelPeerLink)?)? = nil
   ) {
     self.environment = environment
     self.now = now

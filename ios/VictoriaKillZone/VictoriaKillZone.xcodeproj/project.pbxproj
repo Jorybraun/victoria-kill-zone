@@ -25,6 +25,7 @@
 		B00100000000000000000010 /* ConvexMobile in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000001 /* ConvexMobile */; };
 		B0010000000000000000001B /* PewPewSimulation in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000002 /* PewPewSimulation */; };
 		B00100000000000000000017 /* CombatTransport in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000003 /* CombatTransport */; };
+		B0010000000000000000001C /* CombatTransport in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000003 /* CombatTransport */; };
 		B00100000000000000000011 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000013 /* RootView.swift */; };
 		B00100000000000000000012 /* LaserFX.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000014 /* LaserFX.swift */; };
 		B00100000000000000000013 /* VoiceFireController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000015 /* VoiceFireController.swift */; };
@@ -38,6 +39,10 @@
 		B00200000000000000000003 /* ArenaFrameMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000003 /* ArenaFrameMetrics.swift */; };
 		B00200000000000000000004 /* ArenaLinkMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000004 /* ArenaLinkMessage.swift */; };
 		B00200000000000000000005 /* ArenaPeerLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000005 /* ArenaPeerLink.swift */; };
+		B00200000000000000000009 /* ArenaLinkFrameMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000009 /* ArenaLinkFrameMapper.swift */; };
+		B0020000000000000000000A /* CombatTransportArenaLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0020000000000000000000A /* CombatTransportArenaLink.swift */; };
+		B0020000000000000000000B /* FallbackArenaPeerLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0020000000000000000000B /* FallbackArenaPeerLink.swift */; };
+		B0020000000000000000000C /* ArenaLinkAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0020000000000000000000C /* ArenaLinkAuthenticator.swift */; };
 		B00200000000000000000006 /* SharedArenaSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000006 /* SharedArenaSession.swift */; };
 		B00200000000000000000007 /* SharedArenaHarnessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000007 /* SharedArenaHarnessView.swift */; };
 		B00200000000000000000008 /* ArenaShotTracer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00200000000000000000008 /* ArenaShotTracer.swift */; };
@@ -98,6 +103,9 @@
 		933A12D847D2BAC0F3EDF2CF /* RealtimeCommandStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D85D95F0315DB9AE5CC8BF1 /* RealtimeCommandStateTests.swift */; };
 		1902D232B2C0F07075114A90 /* RealtimeReferencePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BAE51F8DB45B928F47CF5C5 /* RealtimeReferencePanel.swift */; };
 		167D331E02D4F1E83F205377 /* DuelFrameReferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14305D579AAE59E0E85DAE0B /* DuelFrameReferenceTests.swift */; };
+		B00300000000000000000006 /* CombatTransportArenaLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000006 /* CombatTransportArenaLinkTests.swift */; };
+		B00300000000000000000007 /* FallbackArenaPeerLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000007 /* FallbackArenaPeerLinkTests.swift */; };
+		B00300000000000000000008 /* ArenaLinkAuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000008 /* ArenaLinkAuthenticatorTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -142,6 +150,10 @@
 		F00200000000000000000003 /* ArenaFrameMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArenaFrameMetrics.swift; sourceTree = "<group>"; };
 		F00200000000000000000004 /* ArenaLinkMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArenaLinkMessage.swift; sourceTree = "<group>"; };
 		F00200000000000000000005 /* ArenaPeerLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArenaPeerLink.swift; sourceTree = "<group>"; };
+		F00200000000000000000009 /* ArenaLinkFrameMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArenaLinkFrameMapper.swift; sourceTree = "<group>"; };
+		F0020000000000000000000A /* CombatTransportArenaLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CombatTransportArenaLink.swift; sourceTree = "<group>"; };
+		F0020000000000000000000B /* FallbackArenaPeerLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FallbackArenaPeerLink.swift; sourceTree = "<group>"; };
+		F0020000000000000000000C /* ArenaLinkAuthenticator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArenaLinkAuthenticator.swift; sourceTree = "<group>"; };
 		F00200000000000000000006 /* SharedArenaSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedArenaSession.swift; sourceTree = "<group>"; };
 		F00200000000000000000007 /* SharedArenaHarnessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedArenaHarnessView.swift; sourceTree = "<group>"; };
 		F00200000000000000000008 /* ArenaShotTracer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArenaShotTracer.swift; sourceTree = "<group>"; };
@@ -202,6 +214,9 @@
 		9D85D95F0315DB9AE5CC8BF1 /* RealtimeCommandStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/RealtimeCommandStateTests.swift"; sourceTree = SOURCE_ROOT; };
 		8BAE51F8DB45B928F47CF5C5 /* RealtimeReferencePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Realtime/RealtimeReferencePanel.swift"; sourceTree = SOURCE_ROOT; };
 		14305D579AAE59E0E85DAE0B /* DuelFrameReferenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/DuelFrameReferenceTests.swift"; sourceTree = SOURCE_ROOT; };
+		F00300000000000000000006 /* CombatTransportArenaLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CombatTransportArenaLinkTests.swift; sourceTree = "<group>"; };
+		F00300000000000000000007 /* FallbackArenaPeerLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FallbackArenaPeerLinkTests.swift; sourceTree = "<group>"; };
+		F00300000000000000000008 /* ArenaLinkAuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArenaLinkAuthenticatorTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -221,6 +236,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B0010000000000000000001C /* CombatTransport in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -408,6 +424,9 @@
 				F00400000000000000000004 /* DuelSessionTests.swift */,
 				F00500000000000000000002 /* CombatPresentationPolicyTests.swift */,
 				F00300000000000000000004 /* TargetingBlockerTests.swift */,
+				F00300000000000000000006 /* CombatTransportArenaLinkTests.swift */,
+				F00300000000000000000007 /* FallbackArenaPeerLinkTests.swift */,
+				F00300000000000000000008 /* ArenaLinkAuthenticatorTests.swift */,
 			);
 			path = VictoriaKillZoneTests;
 			sourceTree = "<group>";
@@ -428,8 +447,12 @@
 				F00200000000000000000002 /* SharedArenaLockPolicy.swift */,
 				F00200000000000000000003 /* ArenaFrameMetrics.swift */,
 				F00200000000000000000004 /* ArenaLinkMessage.swift */,
-				F00200000000000000000008 /* ArenaShotTracer.swift */,
 				F00200000000000000000005 /* ArenaPeerLink.swift */,
+				F00200000000000000000008 /* ArenaShotTracer.swift */,
+				F00200000000000000000009 /* ArenaLinkFrameMapper.swift */,
+				F0020000000000000000000A /* CombatTransportArenaLink.swift */,
+				F0020000000000000000000B /* FallbackArenaPeerLink.swift */,
+				F0020000000000000000000C /* ArenaLinkAuthenticator.swift */,
 				F00200000000000000000006 /* SharedArenaSession.swift */,
 				F00200000000000000000007 /* SharedArenaHarnessView.swift */,
 			);
@@ -475,6 +498,9 @@
 				TD0100000000000000000001 /* PBXTargetDependency */,
 			);
 			name = VictoriaKillZoneTests;
+			packageProductDependencies = (
+				PP0100000000000000000003 /* CombatTransport */,
+			);
 			productName = VictoriaKillZoneTests;
 			productReference = F00100000000000000000010 /* VictoriaKillZoneTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -588,8 +614,12 @@
 				B00200000000000000000002 /* SharedArenaLockPolicy.swift in Sources */,
 				B00200000000000000000003 /* ArenaFrameMetrics.swift in Sources */,
 				B00200000000000000000004 /* ArenaLinkMessage.swift in Sources */,
-				B00200000000000000000008 /* ArenaShotTracer.swift in Sources */,
 				B00200000000000000000005 /* ArenaPeerLink.swift in Sources */,
+				B00200000000000000000008 /* ArenaShotTracer.swift in Sources */,
+				B00200000000000000000009 /* ArenaLinkFrameMapper.swift in Sources */,
+				B0020000000000000000000A /* CombatTransportArenaLink.swift in Sources */,
+				B0020000000000000000000B /* FallbackArenaPeerLink.swift in Sources */,
+				B0020000000000000000000C /* ArenaLinkAuthenticator.swift in Sources */,
 				B00200000000000000000006 /* SharedArenaSession.swift in Sources */,
 				B00200000000000000000007 /* SharedArenaHarnessView.swift in Sources */,
 				B00100000000000000000007 /* LobbyStore.swift in Sources */,
@@ -637,6 +667,9 @@
 				B00400000000000000000004 /* DuelSessionTests.swift in Sources */,
 				B00500000000000000000002 /* CombatPresentationPolicyTests.swift in Sources */,
 				B00300000000000000000004 /* TargetingBlockerTests.swift in Sources */,
+				B00300000000000000000006 /* CombatTransportArenaLinkTests.swift in Sources */,
+				B00300000000000000000007 /* FallbackArenaPeerLinkTests.swift in Sources */,
+				B00300000000000000000008 /* ArenaLinkAuthenticatorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
