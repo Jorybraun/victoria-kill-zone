@@ -56,6 +56,10 @@ export type RejectReason =
   | "out_of_arena"
   | "location_stale"
   | "out_of_ammo"
+  | "reloading"
+  | "magazine_full"
+  | "already_reloading"
+  | "player_not_alive"
   | "cooldown_active"
   | "invalid_target"
   | "target_not_alive"
@@ -93,6 +97,7 @@ export interface PlayerState {
   shotsHit: number;
   headshots: number;
   lastShotAt: number | null;
+  reloadEndsAt: number | null;
   respawnAt: number | null;
   lastSeenAt: number;
   joinedAt: number;

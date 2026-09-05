@@ -23,7 +23,7 @@
 		B0010000000000000000000E /* GameSessionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000011 /* GameSessionModels.swift */; };
 		B0010000000000000000000F /* ConvexGameSessionClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000012 /* ConvexGameSessionClient.swift */; };
 		B00100000000000000000010 /* ConvexMobile in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000001 /* ConvexMobile */; };
-		B00100000000000000000016 /* PewPewSimulation in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000002 /* PewPewSimulation */; };
+		B0010000000000000000001B /* PewPewSimulation in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000002 /* PewPewSimulation */; };
 		B00100000000000000000017 /* CombatTransport in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000003 /* CombatTransport */; };
 		B00100000000000000000018 /* CombatTransport in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000003 /* CombatTransport */; };
 		B00100000000000000000011 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000013 /* RootView.swift */; };
@@ -54,6 +54,8 @@
 		B00400000000000000000003 /* GameLoopTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00400000000000000000003 /* GameLoopTrace.swift */; };
 		B00400000000000000000004 /* DuelSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00400000000000000000004 /* DuelSessionTests.swift */; };
 		B00300000000000000000004 /* TargetingBlockerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000004 /* TargetingBlockerTests.swift */; };
+		B00500000000000000000001 /* CombatPresentationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00500000000000000000001 /* CombatPresentationPolicy.swift */; };
+		B00500000000000000000002 /* CombatPresentationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00500000000000000000002 /* CombatPresentationPolicyTests.swift */; };
 		B00300000000000000000006 /* CombatTransportArenaLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000006 /* CombatTransportArenaLinkTests.swift */; };
 		B00300000000000000000007 /* FallbackArenaPeerLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000007 /* FallbackArenaPeerLinkTests.swift */; };
 		B00300000000000000000008 /* ArenaLinkAuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00300000000000000000008 /* ArenaLinkAuthenticatorTests.swift */; };
@@ -116,6 +118,8 @@
 		F00400000000000000000003 /* GameLoopTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameLoopTrace.swift; sourceTree = "<group>"; };
 		F00400000000000000000004 /* DuelSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuelSessionTests.swift; sourceTree = "<group>"; };
 		F00300000000000000000004 /* TargetingBlockerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetingBlockerTests.swift; sourceTree = "<group>"; };
+		F00500000000000000000001 /* CombatPresentationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CombatPresentationPolicy.swift; sourceTree = "<group>"; };
+		F00500000000000000000002 /* CombatPresentationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CombatPresentationPolicyTests.swift; sourceTree = "<group>"; };
 		F00300000000000000000006 /* CombatTransportArenaLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CombatTransportArenaLinkTests.swift; sourceTree = "<group>"; };
 		F00300000000000000000007 /* FallbackArenaPeerLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FallbackArenaPeerLinkTests.swift; sourceTree = "<group>"; };
 		F00300000000000000000008 /* ArenaLinkAuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArenaLinkAuthenticatorTests.swift; sourceTree = "<group>"; };
@@ -127,7 +131,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B00100000000000000000010 /* ConvexMobile in Frameworks */,
-				B00100000000000000000016 /* PewPewSimulation in Frameworks */,
+				B0010000000000000000001B /* PewPewSimulation in Frameworks */,
 				B00100000000000000000017 /* CombatTransport in Frameworks */,
 				B00100000000000000000014 /* AVFoundation.framework in Frameworks */,
 				B00100000000000000000015 /* Speech.framework in Frameworks */,
@@ -255,6 +259,7 @@
 			children = (
 				F0010000000000000000000B /* ActiveDuelView.swift */,
 				F00100000000000000000014 /* LaserFX.swift */,
+				F00500000000000000000001 /* CombatPresentationPolicy.swift */,
 				F00400000000000000000001 /* DuelSession.swift */,
 				F00400000000000000000002 /* DuelPeerLink.swift */,
 				F00400000000000000000003 /* GameLoopTrace.swift */,
@@ -276,6 +281,7 @@
 				F0010000000000000000000E /* LobbyStateMachineTests.swift */,
 				F00300000000000000000003 /* DuelInviteLinkTests.swift */,
 				F00400000000000000000004 /* DuelSessionTests.swift */,
+				F00500000000000000000002 /* CombatPresentationPolicyTests.swift */,
 				F00300000000000000000004 /* TargetingBlockerTests.swift */,
 				F00300000000000000000006 /* CombatTransportArenaLinkTests.swift */,
 				F00300000000000000000007 /* FallbackArenaPeerLinkTests.swift */,
@@ -453,6 +459,7 @@
 				B0010000000000000000000A /* WaitingRoomView.swift in Sources */,
 				B0010000000000000000000B /* ActiveDuelView.swift in Sources */,
 				B00100000000000000000012 /* LaserFX.swift in Sources */,
+				B00500000000000000000001 /* CombatPresentationPolicy.swift in Sources */,
 				B00100000000000000000013 /* VoiceFireController.swift in Sources */,
 				B0010000000000000000000C /* VKZTheme.swift in Sources */,
 				B00300000000000000000001 /* DuelInvite.swift in Sources */,
@@ -470,6 +477,7 @@
 				B0010000000000000000000D /* LobbyStateMachineTests.swift in Sources */,
 				B00300000000000000000003 /* DuelInviteLinkTests.swift in Sources */,
 				B00400000000000000000004 /* DuelSessionTests.swift in Sources */,
+				B00500000000000000000002 /* CombatPresentationPolicyTests.swift in Sources */,
 				B00300000000000000000004 /* TargetingBlockerTests.swift in Sources */,
 				B00300000000000000000006 /* CombatTransportArenaLinkTests.swift in Sources */,
 				B00300000000000000000007 /* FallbackArenaPeerLinkTests.swift in Sources */,

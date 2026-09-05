@@ -78,6 +78,7 @@ struct PlayerSnapshot: Codable, Identifiable, Equatable, Sendable {
   let deaths: Int
   let lifeState: PlayerLifeState
   let respawnAt: Double?
+  let reloadEndsAt: Double?
 
   init(
     id: String,
@@ -90,7 +91,8 @@ struct PlayerSnapshot: Codable, Identifiable, Equatable, Sendable {
     kills: Int = 0,
     deaths: Int = 0,
     lifeState: PlayerLifeState = .alive,
-    respawnAt: Double? = nil
+    respawnAt: Double? = nil,
+    reloadEndsAt: Double? = nil
   ) {
     self.id = id
     self.displayName = displayName
@@ -103,6 +105,7 @@ struct PlayerSnapshot: Codable, Identifiable, Equatable, Sendable {
     self.deaths = deaths
     self.lifeState = lifeState
     self.respawnAt = respawnAt
+    self.reloadEndsAt = reloadEndsAt
   }
 }
 
@@ -115,6 +118,7 @@ struct EventSnapshot: Codable, Identifiable, Equatable, Sendable {
   let targetPlayerId: String?
   let zone: String?
   let damage: Int?
+  var clientShotId: String? = nil
 }
 
 struct MatchSnapshot: Codable, Equatable, Sendable {
@@ -204,6 +208,11 @@ struct FireShotResult: Codable, Equatable, Sendable {
   let targetLifeState: PlayerLifeState?
   let eventId: String?
   let rejectReason: FireRejectReason?
+}
+
+struct ReloadResult: Equatable, Sendable {
+  let ammo: Int
+  let reloadEndsAt: Double
 }
 
 enum BackendErrorCode: String, Codable, Equatable, Sendable {

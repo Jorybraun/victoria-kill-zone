@@ -211,14 +211,14 @@ final class SidearmMechanicsTests: XCTestCase {
 
   // MARK: - Weapon gate
 
-  func testCooldownRefusesASecondPressWithinThreeHundredFiftyMs() throws {
+  func testCooldownRejectsAt100MsAndAcceptsAt150Ms() throws {
     var simulation = try warmDuel()
     _ = fire(&simulation, shotID: "one")
-    advanceFeedingPoses(&simulation, ticks: 5, positions: [(playerA, .zero), (playerB, bAt10)])
-    let tooSoon = fire(&simulation, shotID: "two")  // 300 ms later
+    advanceFeedingPoses(&simulation, ticks: 1, positions: [(playerA, .zero), (playerB, bAt10)])
+    let tooSoon = fire(&simulation, shotID: "two")  // 100 ms later
     XCTAssertEqual(refusals(in: tooSoon), [.cooldownActive])
     XCTAssertTrue(verdicts(in: tooSoon).isEmpty)
-    let onTime = fire(&simulation, shotID: "three")  // 350 ms after "one"
+    let onTime = fire(&simulation, shotID: "three")  // 150 ms after "one"
     XCTAssertEqual(verdicts(in: onTime), [.hit(zone: .torso, appliedDamage: 34)])
     XCTAssertEqual(simulation.player(playerA)?.ammo, 6)
   }

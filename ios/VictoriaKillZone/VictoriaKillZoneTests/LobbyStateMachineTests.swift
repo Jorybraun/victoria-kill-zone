@@ -1558,7 +1558,7 @@ private final class MatchAuthority: @unchecked Sendable {
   static let guestPlayerID = "guest-1"
   static let startingHealth = 100
   static let magazineSize = 8
-  static let fireCooldownMs: Double = 350
+  static let fireCooldownMs: Double = 150
   static let respawnDelayMs: Double = 5_000
   static let recentEventLimit = 40
   static let matchDurationMs = 180_000
@@ -1727,29 +1727,14 @@ private final class MatchAuthority: @unchecked Sendable {
   }
 
   func fire(shooterID: String, request: FireShotRequest) -> FireShotResult {
-    let validTarget =
-      request.targetId != nil && request.zone != nil && request.poseConfidence != nil
-    guard validTarget, let zone = request.zone, let confidence = request.poseConfidence else {
-      return FireShotResult(
-        accepted: false,
-        outcome: .rejected,
-        clientShotId: request.clientShotId,
-        replayed: false,
-        damage: 0,
-        shooterAmmo: player(shooterID == Self.hostPlayerID ? .host : .guest).ammo,
-        targetHealth: nil,
-        targetLifeState: nil,
-        eventId: nil,
-        rejectReason: .invalidTarget
-      )
-    }
     let (stored, replayed) = resolve(
       shooterID: shooterID,
       clientShotID: request.clientShotId,
-      zone: zone,
-      poseConfidence: confidence,
+      zone: request.zone ?? .torso,
+      poseConfidence: request.poseConfidence ?? 0,
       mode: .markerless,
-      claimedTargetID: request.targetId
+      claimedTargetID: request.targetId,
+      isMiss: request.targetId == nil || request.zone == nil
     )
     return FireShotResult(
       accepted: stored.accepted,
@@ -1771,7 +1756,8 @@ private final class MatchAuthority: @unchecked Sendable {
     zone: HitZone,
     poseConfidence: Double,
     mode: FireMode,
-    claimedTargetID: String? = nil
+    claimedTargetID: String? = nil,
+    isMiss: Bool = false
   ) -> (StoredShot, Bool) {
     let outcome: (StoredShot, Bool) = lock.withLock {
       let key = "\(shooterID)#\(clientShotID)"
@@ -1805,6 +1791,20 @@ private final class MatchAuthority: @unchecked Sendable {
       }
       if let lastShotAt = shooter.lastShotAt, now - lastShotAt < Self.fireCooldownMs {
         return store(rejection(reason: .fireCooldown, shooterAmmo: shooter.ammo))
+      }
+      if isMiss {
+        players[shooterIndex].ammo -= 1
+        players[shooterIndex].lastShotAt = now
+        let eventID = appendEventLocked(
+          type: .shot, actorPlayerID: shooter.id, targetPlayerID: nil,
+          zone: nil, damage: nil, message: "MISS"
+        )
+        return store(StoredShot(
+          outcome: .miss, accepted: true, damage: 0,
+          shooterAmmo: players[shooterIndex].ammo, targetHealth: nil,
+          targetLifeState: nil, eventID: eventID,
+          fireRejectReason: nil, debugRejectReason: nil
+        ))
       }
       let minimumConfidence = zone == .head ? 0.60 : 0.45
       guard poseConfidence >= minimumConfidence else {
@@ -2304,7 +2304,7 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
     XCTAssertNil(rig.guestStore.errorMessage)
     XCTAssertEqual(
       rig.guestStore.duel.markerlessShotState,
-      .failed(reason: .fireCooldown)
+      .confirmed(outcome: .hit, zone: .torso, damage: 34)
     )
     XCTAssertGreaterThan(
       rig.guestStore.duel.fireCooldownRemaining(at: rig.clock.now),
@@ -2354,8 +2354,8 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
       assertDeathVisibleToBothClients(rig, victim: victim, cycle: cycle)
 
       // Firing again while the victim is respawning must not corrupt either
-      // client: the debug path is rejected by the server, and the markerless
-      // path never leaves the client because the target is not alive.
+      // client: debug claims are rejected, while markerless fire without a
+      // live target spends a round as an authoritative miss.
       await rig.fire(attacker, publish: false)
       switch attacker {
       case .host:
@@ -2370,14 +2370,12 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
       case .guest:
         XCTAssertEqual(
           rig.guestStore.duel.markerlessShotState,
-          .confirmed(outcome: .kill, zone: .torso, damage: 32),
-          "cycle \(cycle): the markerless client guard must block the shot locally, "
-            + "leaving the previous confirmed kill state untouched"
+          .confirmed(outcome: .miss, zone: nil, damage: 0),
+          "cycle \(cycle): firing without a live target must be a miss"
         )
-        XCTAssertEqual(rig.guestStore.errorMessage, "PUT THE CROSSHAIR ON YOUR OPPONENT")
+        XCTAssertNil(rig.guestStore.errorMessage)
         rig.authority.record(
-          "cycle=\(cycle) shot-at-respawning-target attacker=guest blockedByClientGuard "
-            + "errorMessage=PUT THE CROSSHAIR ON YOUR OPPONENT"
+          "cycle=\(cycle) shot-at-respawning-target attacker=guest authoritativeMiss"
         )
       }
       rig.authority.publish()

@@ -45,7 +45,7 @@ export const ARENA_RADIUS_MAX_METERS = 60;
 export const ARENA_RADIUS_DEFAULT_METERS = 30;
 export const COUNTDOWN_MS = 3_000;
 export const MATCH_DURATION_MS = 180_000;
-export const FIRE_COOLDOWN_MS = 350;
+export const FIRE_COOLDOWN_MS = 150; // ADR 0007, 400 RPM ceiling
 export const RELOAD_DURATION_MS = 1_250;
 export const RESPAWN_DELAY_MS = 5_000;
 export const HEARTBEAT_INTERVAL_MS = 5_000;
@@ -719,7 +719,14 @@ export interface RecordVerdictArgs extends AuthenticatedPlayerArgs {
 Rules:
 
 - Thrown errors: HOST_ONLY when the caller is not `hostPlayerId`; MATCH_NOT_RUNNING when the phase is not running or the match has expired; INVALID_TARGET when `shooterPlayerId` is not a member. Authentication errors are unchanged.
-- Idempotency key is (matchId, clientShotId). A replay with an identical record returns the stored result with `replayed: true`; reuse with different adjudication fields returns a rejected IDEMPOTENCY_CONFLICT and changes nothing. `targetConfirmed` is excluded from the fingerprint so a later confirmation retry is a replay, not a conflict.
+- Idempotency key is (shooterPlayerId, clientShotId), with same-match membership required. `adjudicatedBy` must equal the authenticated host. An existing identical committed result remains replayable after match completion; lifecycle gates apply to new entries only. A replay with an identical record returns the stored result with `replayed: true`; reuse with different adjudication fields returns a rejected IDEMPOTENCY_CONFLICT and changes nothing. `targetConfirmed` is excluded from the fingerprint so a later confirmation retry is a replay, not a conflict.
 - Convex re-derives applied damage from `zone` through the same rules as `shots:fire` (`applyVerdict`), clamped to remaining health, and applies ammo, statistics, elimination, and respawn scheduling identically. Shooter-side gates the host already adjudicated (ammo, cooldown, geofence, pose confidence) are not re-checked; Convex re-checks only what it owns: shooter life state, target membership, and target life state. A `rejected` verdict writes a ledger row with rejectReason INVALID_TARGET (domain `host_rejected`) and no state or event change.
 - Events are the existing `shot` / `hit` / `eliminated` values, so current iOS and spectator decoders keep working. Events written by this path carry an additive optional `targetConfirmed: boolean | null`, which `queries:matchSnapshot` and `queries:spectatorSnapshot` surface as-is (omitted when null).
+- Shot timestamps and verdict damage/rewind must be finite and nonnegative; confidence, when present, must be within 0…1.
 - Ledger rows gain additive optional fields `mode: "verdict"`, `rewindMs`, `hostDamage`, `verdict`, `hostRejectionReason`, `adjudicatedBy`, `targetConfirmed`; existing rows stay valid.
+
+## Combat presentation and input amendment (ADR 0007)
+
+Sidearm cadence is 150 ms across native input, Convex and the deterministic simulation. `players:startReload` uses the existing authenticated arguments and returns `{ammo, reloadEndsAt}`. Private/public player projections expose optional `reloadEndsAt` while reloading. A non-null deadline locks fire until authoritative completion clears it, including scheduler delays; local time never grants ammunition. Native sessions heartbeat every 5 seconds while foregrounded; fire/reload rejects presence aged 15 seconds or more. A fresh camera ray without a target is an authoritative miss. See design slice 004 for presentation and docs/research/production-combat-review.md for proposed projectile contracts.
+
+Shot events additionally expose optional `clientShotId` (same ID as the fire request). Old rows omit it. Clients use it with the shooter identity to deduplicate peer prediction and durable events per shot; never suppress unrelated shots by a time window. Confirmation still applies damage feedback even when its cosmetic tracer was already shown. Consumers process every event in an ordered received batch.

@@ -126,7 +126,7 @@ export function resolveFire(
     return applyVerdict(shooter, opponent, { kind: "rejected", reason: "match_expired" }, identityFrom(request), now);
   }
 
-  if (!shooter.connected) {
+  if (!shooter.connected || now - shooter.lastSeenAt >= GAMEPLAY.presenceTimeoutMs) {
     return applyVerdict(shooter, opponent, { kind: "rejected", reason: "shooter_disconnected" }, identityFrom(request), now);
   }
 
@@ -136,6 +136,12 @@ export function resolveFire(
 
   if (locationGate !== null) {
     return applyVerdict(shooter, opponent, { kind: "rejected", reason: locationGate }, identityFrom(request), now);
+  }
+
+  // A delayed scheduler must not refill ammunition after an intervening shot.
+  // Completion owns both the ammo grant and clearing this lock atomically.
+  if (shooter.reloadEndsAt !== null) {
+    return applyVerdict(shooter, opponent, { kind: "rejected", reason: "reloading" }, identityFrom(request), now);
   }
 
   if (shooter.ammo <= 0) {
@@ -167,6 +173,7 @@ export function resolveFire(
     zone === undefined ||
     poseConfidence === undefined ||
     !Number.isFinite(poseConfidence) ||
+    poseConfidence > 1 ||
     poseConfidence < (zone === "head" ? 0.6 : 0.45)
   ) {
     return applyVerdict(shooter, opponent, { kind: "rejected", reason: "invalid_target" }, identityFrom(request), now);
@@ -281,6 +288,7 @@ export function applyVerdict(
     respawnAt = now + GAMEPLAY.respawnDelayMs;
     targetPatch.deaths = opponent.deaths + 1;
     targetPatch.respawnAt = respawnAt;
+    targetPatch.reloadEndsAt = null;
   }
 
   const event: EventDraft = eliminated
