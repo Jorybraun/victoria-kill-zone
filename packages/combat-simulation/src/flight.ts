@@ -6,6 +6,31 @@ import {clone, type SimulationCheckpoint} from "./state.js";
 export interface FlightSegment {fromMs: number; toMs: number; start: Vec3; end: Vec3; scale: number; geometryFromMs?: number; geometryToMs?: number}
 export interface FlightPath {projectile: ProjectileState; segments: FlightSegment[]; changes: CombatEvent[]; expires: boolean; endTimeMs: number}
 interface Collision {projectileId: string; targetId: string; atMs: number; distance: number; position: Vec3; shield: boolean; zone: HitZone}
+interface CollisionGeometry {
+  pairs: ReturnType<typeof colliderPairs>;
+  phones?: [ReturnType<typeof phoneAt>, ReturnType<typeof phoneAt>];
+}
+const MAX_COLLISION_GEOMETRIES = 128;
+
+/** Exact interval keys; the cache exists only while collecting one resolution's candidates. */
+function collisionGeometry(state: SimulationCheckpoint): (targetId: string, fromMs: number, toMs: number) => CollisionGeometry {
+  const targets = new Map<string, Map<number, Map<number, CollisionGeometry>>>();
+  let entries = 0;
+  return (targetId, fromMs, toMs) => {
+    const starts = targets.get(targetId), ends = starts?.get(fromMs);
+    const cached = ends?.get(toMs);
+    if (cached) return cached;
+    const geometry: CollisionGeometry = {pairs: colliderPairs(state, targetId, fromMs, toMs)};
+    // Preserve exact history selection on misses; excess intervals are never retained.
+    if (entries < MAX_COLLISION_GEOMETRIES) {
+      const targetStarts = starts ?? new Map<number, Map<number, CollisionGeometry>>();
+      const intervalEnds = ends ?? new Map<number, CollisionGeometry>();
+      intervalEnds.set(toMs, geometry); targetStarts.set(fromMs, intervalEnds); targets.set(targetId, targetStarts);
+      entries++;
+    }
+    return geometry;
+  };
+}
 
 export function timeScaleAt(state: SimulationCheckpoint, position: Vec3, direction: Vec3, atMs: number): number {
   const probe = add(position, mul(direction, 1e-7));
@@ -54,13 +79,13 @@ export function integrateFlight(state: SimulationCheckpoint, projectile: Project
   return {projectile: p, segments, changes, expires: time >= p.expiresAtMs - EPSILON || p.distanceTravelled >= state.snapshot.rules.weapon.rangeMeters - EPSILON, endTimeMs: time};
 }
 
-function collisions(state: SimulationCheckpoint, path: FlightPath): Collision[] {
+function collisions(state: SimulationCheckpoint, path: FlightPath, geometryAt: ReturnType<typeof collisionGeometry>): Collision[] {
   const candidates: Collision[] = [];
   for (const segment of path.segments) {
     const ga = segment.geometryFromMs ?? segment.fromMs, gb = segment.geometryToMs ?? segment.toMs;
     for (const target of state.snapshot.players) {
       if (target.playerId === path.projectile.shooterId || target.health <= 0) continue;
-      const pairs = colliderPairs(state, target.playerId, ga, gb);
+      const geometry = geometryAt(target.playerId, ga, gb), pairs = geometry.pairs;
       if (!pairs) throw new Error("Missing collision history");
       for (const [a, b] of pairs) {
         const u = sweepCollider(segment.start, segment.end, a, b, path.projectile.radius);
@@ -69,7 +94,7 @@ function collisions(state: SimulationCheckpoint, path: FlightPath): Collision[] 
           position: lerp(segment.start, segment.end, u), shield: false, zone: a.zone});
       }
       if (target.shield.activeUntilMs === null || target.shield.energy <= 0) continue;
-      const a = phoneAt(state, target.playerId, ga), b = phoneAt(state, target.playerId, gb);
+      const [a, b] = geometry.phones ??= [phoneAt(state, target.playerId, ga), phoneAt(state, target.playerId, gb)];
       if (!a || !b) throw new Error("Missing shield history");
       const na = normalized(a.normal), nb = normalized(b.normal);
       if (!na || !nb) continue;
@@ -93,7 +118,10 @@ function changed(player: CombatPlayerState): CombatEvent { return {kind: "player
  * when earlier hits break a shield or kill the nearest target.
  */
 export function resolveFlights(state: SimulationCheckpoint, paths: FlightPath[]): {events: CombatEvent[]; survivors: ProjectileState[]} {
-  const all = paths.flatMap(path => collisions(state, path)).sort((a, b) => a.atMs - b.atMs || a.projectileId.localeCompare(b.projectileId)
+  // Sweep helpers only read their geometry. All candidates are collected before
+  // the impact loop mutates health/shields; nothing is cached across resolutions.
+  const geometryAt = collisionGeometry(state);
+  const all = paths.flatMap(path => collisions(state, path, geometryAt)).sort((a, b) => a.atMs - b.atMs || a.projectileId.localeCompare(b.projectileId)
     || a.distance - b.distance || Number(b.shield) - Number(a.shield) || a.targetId.localeCompare(b.targetId) || a.zone.localeCompare(b.zone));
   const impacts = new Map<string, Collision>(), effects = new Map<string, CombatEvent[]>();
   for (const hit of all) {
