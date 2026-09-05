@@ -5,6 +5,39 @@ import XCTest
 
 @MainActor
 final class DuelSessionTests: XCTestCase {
+  func testLostFinalDebugRoundCanReplayExactIDWithEmptyMagazine() async throws {
+    let client = FakeGameSessionClient()
+    let duel = makeDuel(client: client)
+    defer { duel.reset() }
+    duel.receive(snapshot(phase: .running, hostAmmo: 1))
+    XCTAssertTrue(duel.canDebugFire)
+    await duel.performDebugFire() // Simulate an unavailable response after dispatch.
+    XCTAssertEqual(duel.debugShotState, .failed)
+    duel.receive(snapshot(phase: .running, hostAmmo: 0, guestHealth: 66))
+    XCTAssertTrue(duel.canDebugFire, "The retained request must remain retryable after the authority spends the final round")
+    client.debugFireResult = DebugFireResult(accepted: true, outcome: .hit,
+      clientShotId: "shot-1", replayed: true, damage: 34, shooterAmmo: 0,
+      targetHealth: 66, eventId: nil, rejectReason: nil)
+    await duel.performDebugFire()
+    XCTAssertEqual(client.debugShotIDs, ["shot-1", "shot-1"])
+    XCTAssertEqual(duel.debugShotState, .confirmed(damage: 34))
+    XCTAssertFalse(duel.canDebugFire, "A resolved request must not permit a new empty-magazine shot")
+  }
+
+  func testAuthoritativelyRejectedDebugShotDoesNotBypassEmptyMagazineGate() async throws {
+    let client = FakeGameSessionClient()
+    let duel = makeDuel(client: client)
+    defer { duel.reset() }
+    duel.receive(snapshot(phase: .running, hostAmmo: 1))
+    client.debugFireResult = DebugFireResult(accepted: false, outcome: .rejected,
+      clientShotId: "shot-1", replayed: false, damage: 0, shooterAmmo: 0,
+      targetHealth: 100, eventId: nil, rejectReason: .matchNotRunning)
+    await duel.performDebugFire()
+    duel.receive(snapshot(phase: .running, hostAmmo: 0))
+    XCTAssertEqual(duel.debugShotState, .failed)
+    XCTAssertFalse(duel.canDebugFire)
+  }
+
   func testLocalKillSnapshotShowsKillBanner() async throws {
     let duel = makeDuel()
     duel.receive(snapshot(phase: .running))
@@ -767,6 +800,7 @@ private final class FakeGameSessionClient: GameSessionClient, @unchecked Sendabl
   let availability = GameSessionAvailability.available
   var fireResult: FireShotResult?
   var debugFireResult: DebugFireResult?
+  var debugShotIDs: [String] = []
   var fireRequests: [FireShotRequest] = []
   var fireHandler: (@Sendable (FireShotRequest) async throws -> FireShotResult)?
   var heartbeatHandler: (@Sendable () async throws -> Void)?
@@ -809,6 +843,7 @@ private final class FakeGameSessionClient: GameSessionClient, @unchecked Sendabl
   }
 
   func debugFire(session: PlayerSession, clientShotId: String) async throws -> DebugFireResult {
+    debugShotIDs.append(clientShotId)
     guard let debugFireResult else { throw GameSessionClientError.notConfigured }
     return debugFireResult
   }

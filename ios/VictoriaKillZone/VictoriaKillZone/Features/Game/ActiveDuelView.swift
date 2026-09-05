@@ -22,6 +22,8 @@ struct ActiveDuelView: View {
   @State private var hitTask: Task<Void, Never>?
   @State private var damageTask: Task<Void, Never>?
   @State private var muzzleTask: Task<Void, Never>?
+  @State private var shotNotice: String?
+  @State private var shotNoticeTask: Task<Void, Never>?
 
   var body: some View {
     TimelineView(.periodic(from: .now, by: 0.05)) { context in
@@ -117,6 +119,11 @@ struct ActiveDuelView: View {
       combat.setSceneActive(false)
       clearFeedback()
       Task { await store.stopTargeting() }
+    }
+    .onChange(of: store.errorMessage) { _, message in
+      guard let message, duel.phase == .running else { return }
+      showShotNotice(message)
+      store.dismissError()
     }
     .onChange(of: scenePhase) { _, phase in
       voiceFire.setSceneActive(phase == .active)
@@ -425,6 +432,7 @@ struct ActiveDuelView: View {
   private var bottomStack: some View {
     VStack(spacing: 12) {
       latestEvent
+      shotNoticeView
       HStack(alignment: .bottom) {
         VStack(alignment: .leading, spacing: 5) {
           Text("STANDARD SIDEARM")
@@ -472,7 +480,11 @@ struct ActiveDuelView: View {
             .onChanged { value in
               if abs(value.translation.width) > 80 || abs(value.translation.height) > 80 {
                 combat.stopRepeatingFire()
-              } else { combat.startRepeatingFire() }
+              } else if combat.isTriggerHeld || combat.canFireMarkerless {
+                combat.startRepeatingFire()
+              } else {
+                showShotNotice(blockedShotNotice)
+              }
             }
             .onEnded { _ in combat.stopRepeatingFire() }
         )
@@ -577,6 +589,8 @@ struct ActiveDuelView: View {
   }
 
   private func clearFeedback() {
+    shotNoticeTask?.cancel()
+    shotNotice = nil
     hitTask?.cancel()
     damageTask?.cancel()
     muzzleTask?.cancel()
@@ -587,8 +601,56 @@ struct ActiveDuelView: View {
   }
 
   private func fireShot() {
-    guard combat.fireCooldownRemaining(at: Date()) == 0, combat.canFireMarkerless else { return }
+    guard combat.fireCooldownRemaining(at: Date()) == 0 else { return }
+    guard combat.canFireMarkerless else {
+      showShotNotice(blockedShotNotice)
+      return
+    }
     combat.fireMarkerless()
+  }
+
+  private var blockedShotNotice: String {
+    if isLocalRespawning { return "RESPAWNING" }
+    if combat.isReloading { return "RELOADING" }
+    if duel.opponent?.lifeState != .alive { return "OPPONENT IS RESPAWNING" }
+    if (duel.localPlayer?.ammo ?? 0) <= 0 { return "OUT OF AMMO" }
+    if !combat.presenceReady || store.isMatchInputLocked { return "RECONNECTING" }
+    return store.targetingSnapshot.bodyDetected
+      ? "AIM AT THE BODY"
+      : "NO TARGET — FIND YOUR OPPONENT"
+  }
+
+  private func showShotNotice(_ message: String) {
+    guard shotNotice != message else { return }
+    shotNoticeTask?.cancel()
+    withAnimation(.easeOut(duration: 0.15)) {
+      shotNotice = message
+    }
+    shotNoticeTask = Task { @MainActor in
+      try? await Task.sleep(for: .seconds(1.6))
+      guard !Task.isCancelled else { return }
+      withAnimation(.easeOut(duration: 0.2)) {
+        shotNotice = nil
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var shotNoticeView: some View {
+    ZStack {
+      if let shotNotice {
+        Text(shotNotice)
+          .font(.caption.bold().monospaced())
+          .foregroundStyle(VKZPalette.danger)
+          .padding(.horizontal, 12)
+          .padding(.vertical, 6)
+          .background(.black.opacity(0.7), in: Capsule())
+          .transition(.scale(scale: 0.9).combined(with: .opacity))
+          .accessibilityAddTraits(.updatesFrequently)
+      }
+    }
+    .frame(maxWidth: .infinity)
+    .frame(height: 30)
   }
 
   private var voiceStatusColor: Color {

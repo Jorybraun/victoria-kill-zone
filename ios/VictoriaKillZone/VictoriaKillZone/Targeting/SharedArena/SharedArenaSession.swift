@@ -142,7 +142,7 @@ struct SharedArenaSnapshot: Equatable, Sendable {
     private var awaitingRelocalization = false
     private var isRunning = false
 
-    init(role: ArenaRole, method: ArenaFrameMethod, link: any ArenaPeerLinking = ArenaPeerLink()) {
+    init(role: ArenaRole, method: ArenaFrameMethod, link: any ArenaPeerLinking = ArenaPeerLinkFactory.make(matchId: "shared-arena-harness", playerId: UUID().uuidString, joinSecret: "shared-arena-harness")) {
       self.role = role
       self.method = method
       self.link = link
@@ -471,6 +471,9 @@ struct SharedArenaSnapshot: Equatable, Sendable {
           state.tracers.lastEventAtMs = arrivalMs
         }
         publish()
+
+      case .shotRetracted:
+        break
       }
     }
 
