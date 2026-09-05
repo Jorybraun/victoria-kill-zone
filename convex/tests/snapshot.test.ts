@@ -63,16 +63,73 @@ describe("contract snapshots", () => {
     expect(snapshot.events[0]).toMatchObject({ actorPlayerId: "host", targetPlayerId: "guest" });
   });
 
-  it("derives finished once the authoritative running window expires", () => {
-    const snapshot = buildSpectatorSnapshot(
-      snapshotMatch(),
-      [player("host"), player("guest")],
-      [],
-      T0 + GAMEPLAY.matchDurationMs,
-    );
+  it.each([-1, 0, 1])("preserves legacy expiry at deadline offset %i on both views", (offset) => {
+    const match = snapshotMatch();
+    const players = [player("host"), player("guest")];
+    const now = T0 + GAMEPLAY.matchDurationMs + offset;
+    const phone = buildMatchSnapshot(match, "host", players, [], now);
+    const spectator = buildSpectatorSnapshot(match, players, [], now);
 
-    expect(snapshot.match.phase).toBe("finished");
-    expect(snapshot.match.endsAt).toBe(T0 + GAMEPLAY.matchDurationMs);
+    for (const snapshot of [phone, spectator]) {
+      expect(snapshot.match.phase).toBe(offset < 0 ? "running" : "finished");
+      expect(snapshot.match.endsAt).toBe(T0 + GAMEPLAY.matchDurationMs);
+      expect(snapshot.match).not.toHaveProperty("combatMode");
+    }
+  });
+
+  it.each(["running", "paused", "finished"] as const)(
+    "keeps the stored realtime %s projection authoritative across its old wall deadline",
+    (combatPhase) => {
+      const phase = combatPhase === "finished" ? "finished" : "running";
+      const match = snapshotMatch({
+        combatMode: "durableObject", combatPhase, maxPlayers: 4,
+        status: combatPhase === "finished" ? "ended" : "active", phase,
+      });
+      const players = [player("host"), player("guest")];
+      // A delayed projection can retain an elapsed estimated wall deadline.
+      // Conversely, an authoritative finish must apply even before that estimate.
+      for (const offset of [-1, 0, GAMEPLAY.matchDurationMs]) {
+        const now = T0 + GAMEPLAY.matchDurationMs + offset;
+        const phone = buildMatchSnapshot(match, "host", players, [], now);
+        const spectator = buildSpectatorSnapshot(match, players, [], now);
+        for (const snapshot of [phone, spectator]) {
+          expect(snapshot.serverNow).toBe(now);
+          expect(snapshot.match).toMatchObject({
+            combatMode: "durableObject", combatPhase, phase, maxPlayers: 4,
+            endsAt: T0 + GAMEPLAY.matchDurationMs,
+          });
+        }
+      }
+    },
+  );
+
+  it("does not finish a realtime lobby or calibration with no round deadline", () => {
+    const players = [player("host"), player("guest")];
+    for (const phase of ["lobby", "running"] as const) {
+      const match = snapshotMatch({ combatMode: "durableObject", combatPhase: "calibrating",
+        phase, status: phase === "lobby" ? "setup" : "active", startsAt: null, endsAt: null });
+      const now = T0 + GAMEPLAY.matchDurationMs * 2;
+      const phone = buildMatchSnapshot(match, "host", players, [], now);
+      const spectator = buildSpectatorSnapshot(match, players, [], now);
+      for (const snapshot of [phone, spectator]) {
+        expect(snapshot.match).toMatchObject({ combatMode: "durableObject", combatPhase: "calibrating", phase });
+        expect(snapshot.match).not.toHaveProperty("endsAt");
+      }
+    }
+  });
+
+  it("keeps realtime respawn and reload state until a new authority projection arrives", () => {
+    const match = snapshotMatch({ combatMode: "durableObject", combatPhase: "paused" });
+    const reloadEndsAt = T0 + 1_000, respawnAt = T0 + 5_000;
+    const players = [player("host", { ammo: 3, reloadEndsAt }),
+      player("guest", { health: 0, lifeState: "respawning", respawnAt })];
+    const now = T0 + 10_000;
+    const phone = buildMatchSnapshot(match, "host", players, [], now);
+    const spectator = buildSpectatorSnapshot(match, players, [], now);
+    for (const snapshot of [phone, spectator]) {
+      expect(snapshot.players[0]).toMatchObject({ ammo: 3, reloadEndsAt });
+      expect(snapshot.players[1]).toMatchObject({ health: 0, lifeState: "respawning", respawnAt });
+    }
   });
 
   it("projects respawn state and server-owned timestamp on both player views", () => {

@@ -8,10 +8,13 @@ import {
 import {
   isValidMatchCode,
   normalizeMatchCode,
-  viewKindForPhase,
+  viewKindForMatch,
+  displayPhase,
+  playerSlots,
+  PLAYER_SLOTS,
+  resultLabel,
   type SnapshotViewKind,
   type SpectatorErrorReason,
-  type SpectatorPlayerSnapshot,
   type SpectatorViewState,
 } from "../domain/spectator";
 import { formatTimestamp } from "../lib/format";
@@ -28,9 +31,9 @@ export interface SpectatorShellProps {
 function errorCopy(reason: SpectatorErrorReason): string {
   switch (reason) {
     case "not-found":
-      return "DUEL CODE NOT FOUND";
+      return "MATCH CODE NOT FOUND";
     case "network":
-      return "CAN’T REACH THE DUEL";
+      return "CAN’T REACH THE MATCH";
     case "unknown":
       return "SOMETHING WENT WRONG";
   }
@@ -70,7 +73,7 @@ function CodeSelectionView({
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!isValidMatchCode(code)) {
-      setValidationMessage("DUEL CODE NOT FOUND");
+      setValidationMessage("MATCH CODE NOT FOUND");
       return;
     }
 
@@ -87,18 +90,18 @@ function CodeSelectionView({
       <section className="selection-card" aria-labelledby="selection-heading">
         <div className="brand-lockup brand-lockup--selection">
           <p className="product-name">VICTORIA PEW PEW</p>
-          <p className="product-descriptor">MARKERLESS 1V1 DUEL</p>
+          <p className="product-descriptor">MARKERLESS MULTIPLAYER</p>
         </div>
 
         <h1 id="selection-heading">
-          {errorReason === undefined ? "NO DUEL SELECTED" : "WATCH DUEL"}
+          {errorReason === undefined ? "NO MATCH SELECTED" : "WATCH MATCH"}
         </h1>
         <p className="selection-card__lead">
           ENTER A 6-CHARACTER CODE TO WATCH
         </p>
 
         <form className="code-form" onSubmit={handleSubmit} noValidate>
-          <label htmlFor="duel-code">6-CHARACTER DUEL CODE</label>
+          <label htmlFor="duel-code">6-CHARACTER MATCH CODE</label>
           <div className="code-form__controls">
             <input
               id="duel-code"
@@ -120,7 +123,7 @@ function CodeSelectionView({
               data-testid="duel-code-input"
             />
             <button className="button button--primary" type="submit">
-              {errorReason === undefined ? "WATCH DUEL" : "TRY AGAIN"}
+              {errorReason === undefined ? "WATCH MATCH" : "TRY AGAIN"}
             </button>
           </div>
           <p id="duel-code-hint" className="field-hint">
@@ -149,14 +152,14 @@ function LoadingView({ code }: { code: string }) {
       <section className="loading-card" aria-labelledby="loading-heading">
         <div className="brand-lockup brand-lockup--selection">
           <p className="product-name">VICTORIA PEW PEW</p>
-          <p className="product-descriptor">MARKERLESS 1V1 DUEL</p>
+          <p className="product-descriptor">MARKERLESS MULTIPLAYER</p>
         </div>
         <h1 id="loading-heading" role="status">
-          CONNECTING TO DUEL…
+          CONNECTING TO MATCH…
         </h1>
         <dl className="retained-code">
           <div>
-            <dt>DUEL CODE</dt>
+            <dt>MATCH CODE</dt>
             <dd>{code}</dd>
           </div>
         </dl>
@@ -172,16 +175,6 @@ function LoadingView({ code }: { code: string }) {
 
 type DashboardState = Extract<SpectatorViewState, { snapshot: unknown }>;
 
-function playersForSlots(
-  players: readonly SpectatorPlayerSnapshot[],
-): readonly [SpectatorPlayerSnapshot | undefined, SpectatorPlayerSnapshot | undefined] {
-  const host = players.find((player) => player.role === "host") ?? players[0];
-  const guest =
-    players.find((player) => player.role === "guest") ??
-    players.find((player) => player.id !== host?.id);
-  return [host, guest];
-}
-
 function visibleKind(state: DashboardState): SnapshotViewKind {
   switch (state.kind) {
     case "waiting":
@@ -189,7 +182,7 @@ function visibleKind(state: DashboardState): SnapshotViewKind {
     case "ended":
       return state.kind;
     case "degraded":
-      return viewKindForPhase(state.snapshot.match.phase);
+      return viewKindForMatch(state.snapshot.match);
     case "recovery":
       return state.currentKind;
   }
@@ -218,7 +211,11 @@ function DashboardView({
   onRetry: () => void;
 }) {
   const { snapshot } = state;
-  const [playerA, playerB] = playersForSlots(snapshot.players);
+  const slots = playerSlots(snapshot);
+  const isArena = snapshot.match.combatMode === "durableObject";
+  const modeName = isArena ? "arena" : "duel";
+  const phase = displayPhase(snapshot.match);
+  const result = resultLabel(snapshot);
   const currentKind = visibleKind(state);
   const connection = feedConnection(state);
   const isDegraded = state.kind === "degraded";
@@ -228,7 +225,7 @@ function DashboardView({
       className={`spectator-app spectator-app--${currentKind}${isDegraded ? " is-stale" : ""}`}
     >
       <MatchHeader
-        key={`${snapshot.serverNow}-${connection}`}
+        key={`${snapshot.match.id}-${snapshot.serverNow}`}
         snapshot={snapshot}
         source={state.source}
         connection={connection}
@@ -237,8 +234,8 @@ function DashboardView({
       {state.kind === "degraded" ? (
         <section className="connection-banner connection-banner--degraded" role="status">
           <div>
-            <strong>LIVE FEED INTERRUPTED</strong>
-            <span>LAST SYNC {formatTimestamp(state.lastSyncedAt)}</span>
+            <strong>CONNECTION INTERRUPTED</strong>
+            <span>LAST UPDATE {formatTimestamp(state.lastSyncedAt)}</span>
           </div>
           <button className="button button--secondary" type="button" onClick={onRetry}>
             TRY AGAIN
@@ -253,18 +250,32 @@ function DashboardView({
           aria-live="polite"
           aria-atomic="true"
         >
-          <strong>LIVE FEED RESTORED</strong>
+          <strong>CONNECTION RESTORED</strong>
         </p>
       ) : null}
 
       <main
         className="dashboard"
         id="main-content"
-        aria-label={isDegraded ? "Last verified duel snapshot" : undefined}
+        aria-label={isDegraded ? `Last received ${modeName} snapshot` : undefined}
       >
-        <section className="player-grid" aria-label="Duel players">
-          <PlayerCard player={playerA} slot="A" serverNow={snapshot.serverNow} />
-          <PlayerCard player={playerB} slot="B" serverNow={snapshot.serverNow} />
+        {result === null ? null : (
+          <section className="result-panel" aria-label="Match result">
+            <p className="eyebrow">FINAL RESULT</p>
+            <h2>{result}</h2>
+          </section>
+        )}
+        <div className="roster-heading">
+          <h2>PLAYERS</h2>
+          <span>{snapshot.players.length} / {slots.length}</span>
+        </div>
+        <section className="player-grid" aria-label={isArena ? "Arena players" : "Duel players"}>
+          {slots.map((player, index) => (
+            <PlayerCard key={player?.id ?? `open-${index}`} player={player}
+              slot={PLAYER_SLOTS[index]!} serverNow={snapshot.serverNow}
+              mode={isArena ? "arena" : "classic"}
+              phase={phase} />
+          ))}
         </section>
         <EventFeed events={snapshot.events} />
 
@@ -274,12 +285,15 @@ function DashboardView({
             type="button"
             onClick={() => onSelectMatch(null)}
           >
-            WATCH ANOTHER DUEL
+            WATCH ANOTHER MATCH
           </button>
         ) : null}
       </main>
 
-      <footer className="app-footer">READ-ONLY SPECTATOR</footer>
+      <footer className="app-footer">
+        <p>READ-ONLY SPECTATOR · LAST UPDATE {formatTimestamp(snapshot.serverNow)}</p>
+        <p>Connection status describes this viewer’s link. Scores and events reflect the latest received match update.</p>
+      </footer>
     </div>
   );
 }
@@ -292,7 +306,7 @@ export function SpectatorShell({
   return (
     <>
       <a className="skip-link" href="#main-content">
-        SKIP TO DUEL
+        SKIP TO MATCH
       </a>
       {state.kind === "no-selection" ? (
         <CodeSelectionView

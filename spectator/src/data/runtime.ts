@@ -9,6 +9,12 @@ export function readDemoFixture(
   searchParams: URLSearchParams,
 ): DemoFixtureKind {
   switch (searchParams.get("demo")) {
+    case "arena": return "arena";
+    case "arena-degraded": return "arena-degraded";
+    case "arena-recovery": return "arena-recovery";
+    case "arena-calibrating": return "arena-calibrating";
+    case "arena-paused": return "arena-paused";
+    case "arena-ended": return "arena-ended";
     case "loading":
       return "loading";
     case "waiting":

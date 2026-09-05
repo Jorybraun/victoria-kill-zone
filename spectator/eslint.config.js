@@ -10,6 +10,11 @@ export default typescript.config(
   ...typescript.configs.recommendedTypeChecked,
   ...typescript.configs.stylisticTypeChecked,
   {
+    files: ["scripts/*.mjs"],
+    extends: [typescript.configs.disableTypeChecked],
+    languageOptions: {globals: {...globals.node, ...globals.browser}},
+  },
+  {
     files: ["**/*.{ts,tsx}"],
     languageOptions: {
       globals: globals.browser,

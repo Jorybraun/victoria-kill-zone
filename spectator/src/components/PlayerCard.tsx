@@ -1,12 +1,16 @@
 import {
   MAX_HEALTH,
   type SpectatorPlayerSnapshot,
+  type PlayerSlot,
+  type displayPhase,
 } from "../domain/spectator";
 import { clamp, formatCountdown } from "../lib/format";
 
 export interface PlayerCardProps {
   player: SpectatorPlayerSnapshot | undefined;
-  slot: "A" | "B";
+  slot: PlayerSlot;
+  mode?: "classic" | "arena";
+  phase?: ReturnType<typeof displayPhase>;
   serverNow: number;
 }
 
@@ -34,6 +38,7 @@ function hasCombatScore(
 function lifeStateCopy(
   player: SpectatorPlayerSnapshot,
   serverNow: number,
+  phase: ReturnType<typeof displayPhase>,
 ): string | null {
   switch (player.lifeState) {
     case undefined:
@@ -45,6 +50,7 @@ function lifeStateCopy(
     case "disconnected":
       return "DISCONNECTED";
     case "respawning": {
+      if (phase === "finished" || phase === "cancelled") return "ELIMINATED";
       if (player.respawnAt === undefined) {
         return "RESPAWNING";
       }
@@ -57,7 +63,7 @@ function lifeStateCopy(
   return null;
 }
 
-export function PlayerCard({ player, slot, serverNow }: PlayerCardProps) {
+export function PlayerCard({ player, slot, serverNow, mode = "classic", phase = "running" }: PlayerCardProps) {
   if (player === undefined) {
     return (
       <article
@@ -77,7 +83,8 @@ export function PlayerCard({ player, slot, serverNow }: PlayerCardProps) {
   }
 
   const health = clamp(player.health, 0, MAX_HEALTH);
-  const lifeCopy = lifeStateCopy(player, serverNow);
+  const lifeCopy = lifeStateCopy(player, serverNow, phase);
+  const showReadiness = mode === "classic" || phase === "lobby" || phase === "calibrating";
   const lifeStateClass =
     player.lifeState === undefined ? "" : ` player-card--${player.lifeState}`;
 
@@ -90,15 +97,15 @@ export function PlayerCard({ player, slot, serverNow }: PlayerCardProps) {
       <div className="player-card__heading">
         <div>
           <p className="eyebrow">
-            PLAYER {slot} · {player.role.toUpperCase()}
+            PLAYER {slot} · {mode === "arena" && player.role === "guest" ? "PLAYER" : player.role.toUpperCase()}
           </p>
           <h2 id={`player-${slot}-name`}>{player.displayName}</h2>
         </div>
         <div className="player-statuses" aria-label={`${player.displayName} status`}>
-          <StatusItem
+          {showReadiness ? <StatusItem
             label={player.ready ? "READY" : "NOT READY"}
             positive={player.ready}
-          />
+          /> : null}
           <StatusItem
             label={player.connected ? "CONNECTED" : "DISCONNECTED"}
             positive={player.connected}
@@ -109,12 +116,12 @@ export function PlayerCard({ player, slot, serverNow }: PlayerCardProps) {
       {lifeCopy === null ? null : (
         <p
           className={`life-state life-state--${player.lifeState}`}
-          aria-label={`${player.displayName} life state, ${player.lifeState}`}
+          aria-label={`${player.displayName} life state, ${lifeCopy}`}
           aria-live="polite"
           aria-atomic="true"
         >
           <span className="life-state__shape" aria-hidden="true" />
-          {lifeCopy}
+          <span className="life-state__label">{lifeCopy}</span>
         </p>
       )}
 
