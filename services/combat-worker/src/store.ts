@@ -91,10 +91,19 @@ export class RoomStore {
   }
 
   findCommand(playerId: string, commandId: string, sequence: number): StoredCommand | null {
-    return this.storage.sql.exec<StoredCommand>(
-      "SELECT client_sequence, command_id, fingerprint, event_sequence, result_json FROM commands WHERE player_id = ? AND (command_id = ? OR client_sequence = ?) ORDER BY client_sequence DESC LIMIT 1",
-      playerId, commandId, sequence,
-    ).toArray()[0] ?? null;
+    // Separate unique-key probes avoid scanning all retained commands for every
+    // new pose. Preserve the prior highest-sequence result when the keys collide.
+    const byId = this.storage.sql.exec<StoredCommand>(
+      "SELECT client_sequence, command_id, fingerprint, event_sequence, result_json FROM commands WHERE player_id = ? AND command_id = ?",
+      playerId, commandId,
+    ).toArray()[0];
+    const bySequence = this.storage.sql.exec<StoredCommand>(
+      "SELECT client_sequence, command_id, fingerprint, event_sequence, result_json FROM commands WHERE player_id = ? AND client_sequence = ?",
+      playerId, sequence,
+    ).toArray()[0];
+    if (byId === undefined) return bySequence ?? null;
+    if (bySequence === undefined) return byId;
+    return byId.client_sequence > bySequence.client_sequence ? byId : bySequence;
   }
 
   /** The output gate plus storage.sync at the caller precedes every broadcast. */

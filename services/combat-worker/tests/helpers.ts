@@ -142,7 +142,7 @@ export async function phoneInput(socket: SocketInbox, initial: Extract<ServerMes
   const sample = (): CommandEnvelope => send({ kind: "pose", observations: [], pose: {
     sequence: ++poseSequence, capturedAtMs: now(), position, orientation: [0, 0, 0, 1], tracking: "normal",
   } });
-  const stopTracking = (): void => { clearInterval(timer); timer = null; };
+  const stopTracking = (): void => { if (timer !== null) clearInterval(timer); timer = null; };
   return {
     send, sample, stopTracking,
     get poseSequence() { return poseSequence; },

@@ -1,0 +1,616 @@
+{
+  "generatedAt": "2026-09-05T18:49:29.568Z",
+  "sourceHead": "2c10a9ae33979246019543533d89504a30dc9845",
+  "environment": "local-workerd-synthetic",
+  "node": "v26.7.0",
+  "results": [
+    {
+      "name": "four-player miss-lanes: measured input, gameplay and durable event convergence",
+      "state": "failed",
+      "result": {
+        "scenario": "miss-lanes",
+        "activeLoadMs": 30000,
+        "activeElapsedMs": 30028,
+        "activeSimulatedMs": 30028,
+        "limitations": [
+          "local synthetic workerd; no device or cloud latency",
+          "maximum synthetic collider payload, not camera coverage evidence",
+          "delivery intervals are not server tick execution or CPU",
+          "projection endpoint disabled; outbox persistence only"
+        ],
+        "offeredPoseIntervalMs": 50,
+        "expectedPosesPerPlayer": 600,
+        "missedPumpSlots": 1,
+        "pumpLatenessMs": {
+          "samples": 599,
+          "p50": 1,
+          "p95": 12,
+          "p99": 35,
+          "max": 52
+        },
+        "maximumInputBytes": 11061,
+        "activeInputBytesIncludingReceiptsAndPings": 26671123,
+        "activeOutputBytes": 15086421,
+        "players": [
+          {
+            "playerId": "load-0",
+            "offered": {
+              "pose": 599,
+              "slowField": 3,
+              "fire": 88,
+              "reload": 11
+            },
+            "accepted": {
+              "pose": 599,
+              "slowField": 3,
+              "fire": 88,
+              "reload": 11
+            },
+            "refusals": {},
+            "acknowledgmentMs": {
+              "samples": 701,
+              "p50": 46,
+              "p95": 80,
+              "p99": 103,
+              "max": 118
+            },
+            "commandResultMs": {
+              "samples": 701,
+              "p50": 46,
+              "p95": 80,
+              "p99": 103,
+              "max": 118
+            },
+            "poseSendIntervalMs": {
+              "samples": 598,
+              "p50": 50,
+              "p95": 60,
+              "p99": 84,
+              "max": 99
+            },
+            "observedTickDeliveryMs": {
+              "samples": 591,
+              "p50": 50,
+              "p95": 63,
+              "p99": 99,
+              "max": 116
+            },
+            "tickGaps": 8,
+            "phaseWallMs": {
+              "running": 29881,
+              "paused": 147
+            },
+            "maximumProjectiles": 56,
+            "terminalReasons": {
+              "missExpired": 264,
+              "cancelled": 88
+            },
+            "missingEvents": 0,
+            "duplicateEvents": 0,
+            "snapshotHealedEvents": 0,
+            "commands": 806,
+            "acknowledgments": 806,
+            "results": 806
+          },
+          {
+            "playerId": "load-1",
+            "offered": {
+              "pose": 599,
+              "slowField": 3,
+              "fire": 88,
+              "reload": 11
+            },
+            "accepted": {
+              "pose": 599,
+              "slowField": 3,
+              "fire": 88,
+              "reload": 11
+            },
+            "refusals": {},
+            "acknowledgmentMs": {
+              "samples": 701,
+              "p50": 46,
+              "p95": 80,
+              "p99": 103,
+              "max": 118
+            },
+            "commandResultMs": {
+              "samples": 701,
+              "p50": 46,
+              "p95": 80,
+              "p99": 103,
+              "max": 118
+            },
+            "poseSendIntervalMs": {
+              "samples": 598,
+              "p50": 50,
+              "p95": 60,
+              "p99": 84,
+              "max": 98
+            },
+            "observedTickDeliveryMs": {
+              "samples": 591,
+              "p50": 50,
+              "p95": 63,
+              "p99": 99,
+              "max": 116
+            },
+            "tickGaps": 8,
+            "phaseWallMs": {
+              "running": 29881,
+              "paused": 147
+            },
+            "maximumProjectiles": 56,
+            "terminalReasons": {
+              "missExpired": 264,
+              "cancelled": 88
+            },
+            "missingEvents": 0,
+            "duplicateEvents": 0,
+            "snapshotHealedEvents": 0,
+            "commands": 805,
+            "acknowledgments": 805,
+            "results": 805
+          },
+          {
+            "playerId": "load-2",
+            "offered": {
+              "pose": 599,
+              "slowField": 3,
+              "fire": 88,
+              "reload": 11
+            },
+            "accepted": {
+              "pose": 597,
+              "slowField": 3,
+              "fire": 88,
+              "reload": 11
+            },
+            "refusals": {
+              "pose:poseStale": 2
+            },
+            "acknowledgmentMs": {
+              "samples": 701,
+              "p50": 46,
+              "p95": 84,
+              "p99": 103,
+              "max": 118
+            },
+            "commandResultMs": {
+              "samples": 701,
+              "p50": 46,
+              "p95": 84,
+              "p99": 103,
+              "max": 118
+            },
+            "poseSendIntervalMs": {
+              "samples": 598,
+              "p50": 50,
+              "p95": 59,
+              "p99": 84,
+              "max": 98
+            },
+            "observedTickDeliveryMs": {
+              "samples": 591,
+              "p50": 50,
+              "p95": 63,
+              "p99": 99,
+              "max": 116
+            },
+            "tickGaps": 8,
+            "phaseWallMs": {
+              "running": 29881,
+              "paused": 147
+            },
+            "maximumProjectiles": 56,
+            "terminalReasons": {
+              "missExpired": 264,
+              "cancelled": 88
+            },
+            "missingEvents": 0,
+            "duplicateEvents": 0,
+            "snapshotHealedEvents": 0,
+            "commands": 805,
+            "acknowledgments": 805,
+            "results": 805
+          },
+          {
+            "playerId": "load-3",
+            "offered": {
+              "pose": 599,
+              "slowField": 3,
+              "fire": 88,
+              "reload": 11
+            },
+            "accepted": {
+              "pose": 596,
+              "slowField": 3,
+              "fire": 88,
+              "reload": 11
+            },
+            "refusals": {
+              "pose:poseStale": 3
+            },
+            "acknowledgmentMs": {
+              "samples": 701,
+              "p50": 46,
+              "p95": 86,
+              "p99": 107,
+              "max": 174
+            },
+            "commandResultMs": {
+              "samples": 701,
+              "p50": 46,
+              "p95": 86,
+              "p99": 107,
+              "max": 173
+            },
+            "poseSendIntervalMs": {
+              "samples": 598,
+              "p50": 50,
+              "p95": 60,
+              "p99": 84,
+              "max": 98
+            },
+            "observedTickDeliveryMs": {
+              "samples": 591,
+              "p50": 50,
+              "p95": 63,
+              "p99": 99,
+              "max": 116
+            },
+            "tickGaps": 8,
+            "phaseWallMs": {
+              "running": 29881,
+              "paused": 147
+            },
+            "maximumProjectiles": 56,
+            "terminalReasons": {
+              "missExpired": 264,
+              "cancelled": 88
+            },
+            "missingEvents": 0,
+            "duplicateEvents": 0,
+            "snapshotHealedEvents": 0,
+            "commands": 805,
+            "acknowledgments": 805,
+            "results": 805
+          }
+        ],
+        "durable": {
+          "authorityEpoch": 1,
+          "eventWatermark": 7297,
+          "bulletCount": 352,
+          "ledgerEvents": 784,
+          "exactLedgerMatches": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "unresolvedBullets": 0,
+          "retainedCommands": 2048,
+          "checkpointBytes": 2012,
+          "databaseBytes": 23416832,
+          "projectionRows": 6,
+          "projectionProgress": {
+            "queued_sequence": 7297,
+            "delivered_sequence": 0
+          }
+        },
+        "errors": []
+      }
+    },
+    {
+      "name": "four-player opposing-combat: measured input, gameplay and durable event convergence",
+      "state": "passed",
+      "result": {
+        "scenario": "opposing-combat",
+        "activeLoadMs": 30000,
+        "activeElapsedMs": 30001,
+        "activeSimulatedMs": 30001,
+        "limitations": [
+          "local synthetic workerd; no device or cloud latency",
+          "maximum synthetic collider payload, not camera coverage evidence",
+          "delivery intervals are not server tick execution or CPU",
+          "projection endpoint disabled; outbox persistence only"
+        ],
+        "offeredPoseIntervalMs": 50,
+        "expectedPosesPerPlayer": 600,
+        "missedPumpSlots": 0,
+        "pumpLatenessMs": {
+          "samples": 600,
+          "p50": 2,
+          "p95": 2,
+          "p99": 3,
+          "max": 25
+        },
+        "maximumInputBytes": 11093,
+        "activeInputBytesIncludingReceiptsAndPings": 26744305,
+        "activeOutputBytes": 11368691,
+        "players": [
+          {
+            "playerId": "load-0",
+            "offered": {
+              "pose": 600,
+              "slowField": 3,
+              "fire": 131,
+              "reload": 5
+            },
+            "accepted": {
+              "pose": 600,
+              "slowField": 3,
+              "fire": 52,
+              "reload": 5
+            },
+            "refusals": {
+              "fire:notAlive": 1,
+              "fire:protected": 78
+            },
+            "acknowledgmentMs": {
+              "samples": 739,
+              "p50": 29,
+              "p95": 42,
+              "p99": 49,
+              "max": 79
+            },
+            "commandResultMs": {
+              "samples": 739,
+              "p50": 29,
+              "p95": 42,
+              "p99": 49,
+              "max": 79
+            },
+            "poseSendIntervalMs": {
+              "samples": 599,
+              "p50": 50,
+              "p95": 52,
+              "p99": 52,
+              "max": 75
+            },
+            "observedTickDeliveryMs": {
+              "samples": 597,
+              "p50": 50,
+              "p95": 56,
+              "p99": 63,
+              "max": 88
+            },
+            "tickGaps": 2,
+            "phaseWallMs": {
+              "running": 30001
+            },
+            "maximumProjectiles": 26,
+            "terminalReasons": {
+              "bodyHit": 50,
+              "missExpired": 72,
+              "shieldBlocked": 14
+            },
+            "missingEvents": 0,
+            "duplicateEvents": 0,
+            "snapshotHealedEvents": 0,
+            "commands": 843,
+            "acknowledgments": 843,
+            "results": 843
+          },
+          {
+            "playerId": "load-1",
+            "offered": {
+              "pose": 600,
+              "slowField": 3,
+              "shield": 101,
+              "fire": 37,
+              "reload": 1
+            },
+            "accepted": {
+              "pose": 600,
+              "slowField": 3,
+              "shield": 4,
+              "fire": 16,
+              "reload": 1
+            },
+            "refusals": {
+              "fire:protected": 19,
+              "shield:protected": 97,
+              "fire:notAlive": 2
+            },
+            "acknowledgmentMs": {
+              "samples": 742,
+              "p50": 30,
+              "p95": 44,
+              "p99": 51,
+              "max": 80
+            },
+            "commandResultMs": {
+              "samples": 742,
+              "p50": 30,
+              "p95": 43,
+              "p99": 50,
+              "max": 79
+            },
+            "poseSendIntervalMs": {
+              "samples": 599,
+              "p50": 50,
+              "p95": 51,
+              "p99": 53,
+              "max": 75
+            },
+            "observedTickDeliveryMs": {
+              "samples": 597,
+              "p50": 50,
+              "p95": 56,
+              "p99": 63,
+              "max": 88
+            },
+            "tickGaps": 2,
+            "phaseWallMs": {
+              "running": 30001
+            },
+            "maximumProjectiles": 26,
+            "terminalReasons": {
+              "bodyHit": 50,
+              "missExpired": 72,
+              "shieldBlocked": 14
+            },
+            "missingEvents": 0,
+            "duplicateEvents": 0,
+            "snapshotHealedEvents": 0,
+            "commands": 845,
+            "acknowledgments": 845,
+            "results": 845
+          },
+          {
+            "playerId": "load-2",
+            "offered": {
+              "pose": 600,
+              "slowField": 3,
+              "fire": 131,
+              "reload": 5
+            },
+            "accepted": {
+              "pose": 600,
+              "slowField": 3,
+              "fire": 52,
+              "reload": 5
+            },
+            "refusals": {
+              "fire:notAlive": 1,
+              "fire:protected": 78
+            },
+            "acknowledgmentMs": {
+              "samples": 739,
+              "p50": 29,
+              "p95": 42,
+              "p99": 49,
+              "max": 80
+            },
+            "commandResultMs": {
+              "samples": 739,
+              "p50": 29,
+              "p95": 42,
+              "p99": 49,
+              "max": 79
+            },
+            "poseSendIntervalMs": {
+              "samples": 599,
+              "p50": 50,
+              "p95": 52,
+              "p99": 53,
+              "max": 75
+            },
+            "observedTickDeliveryMs": {
+              "samples": 597,
+              "p50": 50,
+              "p95": 56,
+              "p99": 63,
+              "max": 89
+            },
+            "tickGaps": 2,
+            "phaseWallMs": {
+              "running": 30001
+            },
+            "maximumProjectiles": 26,
+            "terminalReasons": {
+              "bodyHit": 50,
+              "missExpired": 72,
+              "shieldBlocked": 14
+            },
+            "missingEvents": 0,
+            "duplicateEvents": 0,
+            "snapshotHealedEvents": 0,
+            "commands": 842,
+            "acknowledgments": 842,
+            "results": 842
+          },
+          {
+            "playerId": "load-3",
+            "offered": {
+              "pose": 600,
+              "slowField": 3,
+              "shield": 101,
+              "fire": 37,
+              "reload": 1
+            },
+            "accepted": {
+              "pose": 600,
+              "slowField": 3,
+              "shield": 4,
+              "fire": 16,
+              "reload": 1
+            },
+            "refusals": {
+              "fire:protected": 19,
+              "shield:protected": 97,
+              "fire:notAlive": 2
+            },
+            "acknowledgmentMs": {
+              "samples": 742,
+              "p50": 30,
+              "p95": 44,
+              "p99": 63,
+              "max": 91
+            },
+            "commandResultMs": {
+              "samples": 742,
+              "p50": 30,
+              "p95": 43,
+              "p99": 63,
+              "max": 91
+            },
+            "poseSendIntervalMs": {
+              "samples": 599,
+              "p50": 50,
+              "p95": 52,
+              "p99": 53,
+              "max": 74
+            },
+            "observedTickDeliveryMs": {
+              "samples": 597,
+              "p50": 50,
+              "p95": 56,
+              "p99": 63,
+              "max": 89
+            },
+            "tickGaps": 2,
+            "phaseWallMs": {
+              "running": 30001
+            },
+            "maximumProjectiles": 26,
+            "terminalReasons": {
+              "bodyHit": 50,
+              "missExpired": 72,
+              "shieldBlocked": 14
+            },
+            "missingEvents": 0,
+            "duplicateEvents": 0,
+            "snapshotHealedEvents": 0,
+            "commands": 845,
+            "acknowledgments": 845,
+            "results": 845
+          }
+        ],
+        "durable": {
+          "authorityEpoch": 1,
+          "eventWatermark": 7096,
+          "bulletCount": 136,
+          "ledgerEvents": 398,
+          "exactLedgerMatches": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "unresolvedBullets": 0,
+          "retainedCommands": 2048,
+          "checkpointBytes": 2016,
+          "databaseBytes": 21790720,
+          "projectionRows": 3,
+          "projectionProgress": {
+            "queued_sequence": 7096,
+            "delivered_sequence": 0
+          }
+        },
+        "errors": []
+      }
+    }
+  ]
+}

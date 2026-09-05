@@ -6,6 +6,7 @@ import {
 } from "@vkz/combat-protocol";
 import { CombatSimulation, parseCheckpoint } from "@vkz/combat-simulation";
 import { canonicalJson } from "./canonical.js";
+import { commandFingerprint, matchesFingerprint } from "./command-fingerprint.js";
 import { verifyBearerTicket } from "./auth.js";
 import { Connection } from "./connection.js";
 import { QueueFullError, SerialQueue } from "./serial-queue.js";
@@ -240,10 +241,11 @@ export class CombatRoom extends DurableObject<Env> {
   private admitCommand(connection: Connection, envelope: CommandEnvelope): void {
     if (this.simulation === null) return;
     const snapshot = this.simulation.snapshot();
-    const fingerprint = canonicalJson(envelope);
+    const canonical = canonicalJson(envelope);
+    const fingerprint = commandFingerprint(canonical);
     const existing = this.store.findCommand(connection.playerId, envelope.commandId, envelope.clientSequence);
     if (existing !== null) {
-      if (existing.command_id !== envelope.commandId || existing.client_sequence !== envelope.clientSequence || existing.fingerprint !== fingerprint) {
+      if (existing.command_id !== envelope.commandId || existing.client_sequence !== envelope.clientSequence || !matchesFingerprint(existing.fingerprint, fingerprint, canonical)) {
         this.error(connection, "idempotencyConflict", envelope.commandId);
         return;
       }
@@ -387,7 +389,9 @@ export class CombatRoom extends DurableObject<Env> {
     for (let offset = 0; offset < events.length; offset += EVENTS_PER_MESSAGE) {
       const batch = events.slice(offset, offset + EVENTS_PER_MESSAGE);
       const sequence = batch.at(-1)?.eventSequence;
-      for (const connection of this.connections.values()) connection.send({ type: "events", events: batch }, sequence);
+      const encoded = JSON.stringify({ type: "events", events: batch });
+      const bytes = encoder.encode(encoded).byteLength;
+      for (const connection of this.connections.values()) connection.sendEncoded({data: encoded, bytes}, sequence);
     }
   }
 

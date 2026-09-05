@@ -8,6 +8,24 @@ function connection(): { sender: Connection; receiver: WebSocket } {
 }
 
 describe("cumulative socket receipt accounting", () => {
+  it("accounts shared UTF-8 broadcasts independently for each recipient", () => {
+    const fast = connection(), slow = connection();
+    const data = "骨".repeat(40 * 1024);
+    const message = {data, bytes: new TextEncoder().encode(data).byteLength};
+    try {
+      expect(message.bytes).toBe(120 * 1024);
+      for (const client of [fast, slow]) {
+        expect(client.sender.sendEncoded(message, 1)).toBe(true);
+        expect(client.sender.sendEncoded(message, 2)).toBe(true);
+      }
+      expect(fast.sender.acknowledge(1)).toBe(true);
+      expect(fast.sender.sendEncoded(message, 3)).toBe(true);
+      expect(slow.sender.sendEncoded(message, 3)).toBe(false);
+    } finally {
+      for (const client of [fast, slow]) {client.sender.close(1000, "test-complete"); client.receiver.close();}
+    }
+  });
+
   it("retains later unacknowledged bytes after a partial receipt", () => {
     const { sender, receiver } = connection();
     expect(sender.sendSerialized("x".repeat(100 * 1024), 1)).toBe(true);
