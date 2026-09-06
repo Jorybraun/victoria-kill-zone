@@ -1,7 +1,24 @@
 import { LIMITS, type CombatCommand, type CombatPlayerState, type CombatSnapshot, type ServerEvent, type ServerMessage } from "@vkz/combat-protocol";
+import {NativeLoadClock} from "./native-clock.js";
+
+export interface LoadSocket {
+  readonly readyState: number;
+  accept(): void;
+  send(data: string): void;
+  close(code?: number, reason?: string): void;
+  addEventListener(type: "message", listener: (event: {data: unknown}) => void): void;
+  addEventListener(type: "error", listener: () => void): void;
+  addEventListener(type: "close", listener: (event: {code: number}) => void): void;
+}
 
 type Pending = {at: number; kind: CombatCommand["kind"]; shotId: string | null; capturedAtMs: number | null; measured: boolean; ack: boolean; result: boolean};
+type PendingPing = {
+  receive(message: Extract<ServerMessage, {type: "pong"}>): void;
+  cancel(error: Error): void;
+};
+type ClockBootstrap = {promise: Promise<void>; resolve(): void; reject(error: Error): void; replies: number; settled: boolean};
 const count = (map: Record<string, number>, key: string): void => {map[key] = (map[key] ?? 0) + 1;};
+const observed = (promise: Promise<void>): Promise<void> => {void promise.catch(() => undefined); return promise;};
 
 /** Synthetic local driver. Samples measure client-observed delivery, never server CPU time. */
 export class LoadClient {
@@ -19,7 +36,7 @@ export class LoadClient {
   readonly poseSendIntervalsMs: number[] = [];
   readonly poseCaptureIntervalsMs: number[] = [];
   readonly poseAgeAtResultMs: number[] = [];
-  readonly clockSamples: {atMatchMs: number; roundTripMs: number; adjustmentMs: number; authorityTick: number}[] = [];
+  readonly clockSamples: {atMatchMs: number; roundTripMs: number; adjustmentMs: number; authorityTick: number; uncertaintyMs: number | null}[] = [];
   readonly poseAnomalies: {tick: number; capturedAtMs: number; ageMs: number; reason: string | null}[] = [];
   readonly phaseChanges: {tick: number; matchTimeMs: number; phase: string; reason: string; sincePoseSendMs: number | null; estimatedMatchMs: number}[] = [];
   readonly diagnosticDrops = {clockSamples: 0, poseAnomalies: 0, phaseChanges: 0};
@@ -51,15 +68,26 @@ export class LoadClient {
   private lastPoseCaptureAt: number | null = null;
   private clockTime = 0;
   private clockAt = 0;
-  private readonly pongs = new Map<string, (message: Extract<ServerMessage, {type: "pong"}>) => void>();
+  private readonly nativeClock = new NativeLoadClock();
+  private nativeReady = false;
+  private closing = false;
+  private nativeHeartbeat: ReturnType<typeof setTimeout> | null = null;
+  private nativePingCount = 0;
+  private nativeBootstrap: ClockBootstrap | null = null;
+  private heartbeatFailure: ((error: Error) => void) | undefined;
+  private readonly pongs = new Map<string, PendingPing>();
   private readonly encoder = new TextEncoder();
 
-  constructor(readonly socket: WebSocket, readonly playerId: string) {
+  constructor(readonly socket: LoadSocket, readonly playerId: string, readonly clockMode: "receiveAnchor" | "native" = "receiveAnchor") {
     socket.addEventListener("message", event => {
       if (typeof event.data !== "string") {this.errors.push("nonTextOutput"); return;}
       if (this.measuring) this.measuredOutputBytes += this.encoder.encode(event.data).byteLength;
       const message = JSON.parse(event.data) as ServerMessage;
       if (message.type === "snapshot") {
+        if (this.snapshot !== null && (this.snapshot.authorityEpoch !== message.snapshot.authorityEpoch || this.snapshot.frameEpoch !== message.snapshot.frameEpoch)) {
+          this.nativeClock.reset(); this.nativeReady = false;
+          if (this.clockMode === "native") this.errors.push("authorityEpochChanged");
+        }
         if (this.snapshot !== null && message.eventSequence > this.latestEventSequence) {
           this.snapshotHealedEvents += message.eventSequence - this.latestEventSequence;
         }
@@ -85,34 +113,108 @@ export class LoadClient {
         if (pending.measured) {this.acknowledgmentMs.push(performance.now() - pending.at); this.measuredAcknowledgments++;}
         this.settle(message.commandId, pending);
       } else if (message.type === "pong") {
-        this.pongs.get(message.nonce)?.(message); this.pongs.delete(message.nonce);
+        this.pongs.get(message.nonce)?.receive(message);
       } else if (message.type === "error") this.errors.push(message.code);
     });
-    socket.addEventListener("error", () => {this.errors.push("socketError");});
+    socket.addEventListener("error", () => {
+      this.errors.push("socketError");
+      if (this.clockMode === "native") this.failNativeHeartbeat(new Error("Load socket error"));
+    });
+    socket.addEventListener("close", event => {
+      if (!this.closing) {
+        this.errors.push(`socketClosed:${event.code}`);
+        if (this.clockMode === "native") this.failNativeHeartbeat(new Error(`Load socket closed: ${event.code}`));
+      }
+      this.close();
+    });
     socket.accept();
   }
 
-  get matchTimeMs(): number {return this.clockTime + Math.max(0, performance.now() - this.clockAt);}
+  get matchTimeMs(): number {return this.clockMode === "native" ? this.nativeClock.matchTime(performance.now()) ?? 0
+    : this.clockTime + Math.max(0, performance.now() - this.clockAt);}
+  get clockReady(): boolean {return this.clockMode === "receiveAnchor" || this.nativeReady;}
+  get clockUncertaintyMs(): number {return this.clockMode === "native" ? this.nativeClock.uncertaintyMs : 1;}
 
-  async synchronizeClock(): Promise<void> {
+  bootstrapClock(onFailure?: (error: Error) => void): Promise<void> {
+    if (this.closing) return observed(Promise.reject(new Error("Load client closed")));
+    if (this.clockMode === "receiveAnchor") return this.synchronizeClock();
+    if (this.nativeBootstrap) return this.nativeBootstrap.promise;
+    let resolve!: () => void, reject!: (error: Error) => void;
+    const promise = observed(new Promise<void>((success, failure) => {resolve = success; reject = failure;}));
+    this.nativeBootstrap = {promise, resolve, reject, replies: 0, settled: false};
+    this.heartbeatFailure = onFailure;
+    this.pumpNativeClock();
+    return promise;
+  }
+
+  private pumpNativeClock(): void {
+    this.nativeHeartbeat = null;
+    if (this.closing) return;
+    const bootstrapPing = ++this.nativePingCount <= 5;
+    // Match the native send cadence; a delayed reply never delays another ping.
+    const reply = this.synchronizeClock();
+    if (!this.closing) this.nativeHeartbeat = setTimeout(() => {this.pumpNativeClock();}, this.nativePingCount < 5 ? 100 : 1000);
+    void reply.then(() => {
+      const bootstrap = this.nativeBootstrap;
+      if (this.closing || !bootstrapPing || !bootstrap || bootstrap.settled) return;
+      if (++bootstrap.replies < 5) return;
+      if (!this.clockReady) {this.failNativeHeartbeat(new Error("Clock did not become ready")); return;}
+      bootstrap.settled = true; bootstrap.resolve();
+    }, error => {this.failNativeHeartbeat(error instanceof Error ? error : new Error("Clock synchronization failed"));});
+  }
+
+  private failNativeHeartbeat(error: Error): void {
+    if (this.closing) return;
+    const bootstrap = this.nativeBootstrap, callback = bootstrap?.settled ? this.heartbeatFailure : undefined;
+    if (bootstrap && !bootstrap.settled) {bootstrap.settled = true; bootstrap.reject(error);}
+    this.close();
+    callback?.(error);
+  }
+
+  private checkNativeClock(now: number): boolean {
+    const wasReady = this.nativeReady;
+    this.nativeReady = this.nativeClock.isReady(now);
+    if (wasReady && !this.nativeReady) {
+      this.errors.push("clockQualityLost"); this.failNativeHeartbeat(new Error("Clock quality lost")); return false;
+    }
+    return true;
+  }
+
+  synchronizeClock(): Promise<void> {
+    if (this.closing || this.socket.readyState !== 1) return observed(Promise.reject(new Error("Load socket unavailable")));
     const nonce = crypto.randomUUID();
     const sentAt = performance.now();
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {this.pongs.delete(nonce); reject(new Error("Clock sync timed out"));}, 3000);
-      this.pongs.set(nonce, message => {
+    if (this.clockMode === "native" && !this.checkNativeClock(sentAt)) return observed(Promise.reject(new Error("Clock quality lost")));
+    return observed(new Promise<void>((resolve, reject) => {
+      const cancel = (error: Error): void => {
         clearTimeout(timeout);
+        if (this.pongs.delete(nonce)) reject(error);
+      };
+      const timeout = setTimeout(() => {cancel(new Error("Clock sync timed out"));}, 3000);
+      this.pongs.set(nonce, {cancel, receive: message => {
+        if (!this.pongs.delete(nonce)) return;
+        clearTimeout(timeout);
+        if (message.clientSentAtMs !== sentAt) {reject(new Error("Clock reply did not match its request")); return;}
+        const receivedAt = performance.now(), before = this.matchTimeMs;
+        if (this.clockMode === "native") {
+          this.nativeClock.observe({localSentMs: sentAt, serverReceivedMs: message.serverReceivedAtMs,
+            serverSentMs: message.serverSentAtMs, localReceivedMs: receivedAt});
+        }
         if (this.measuring) {
           if (this.clockSamples.length < 512) this.clockSamples.push({atMatchMs: message.serverSentAtMs,
-            roundTripMs: performance.now() - sentAt, adjustmentMs: message.serverSentAtMs - this.matchTimeMs,
-            authorityTick: this.latestAuthorityTick});
+            roundTripMs: receivedAt - sentAt, adjustmentMs: (this.clockMode === "native" ? this.matchTimeMs : message.serverSentAtMs) - before,
+            authorityTick: this.latestAuthorityTick, uncertaintyMs: this.clockMode === "native" && Number.isFinite(this.nativeClock.uncertaintyMs) ? this.nativeClock.uncertaintyMs : null});
           else this.diagnosticDrops.clockSamples++;
         }
+        if (this.clockMode === "native" && !this.checkNativeClock(receivedAt)) {reject(new Error("Clock quality lost")); return;}
         // Receive-side anchor deliberately underestimates by delivery time. This
         // local fixture does not claim the physical client's clock uncertainty.
-        this.clockTime = message.serverSentAtMs; this.clockAt = performance.now(); resolve();
-      });
-      this.wire({type: "ping", nonce, clientSentAtMs: sentAt});
-    });
+        if (this.clockMode === "receiveAnchor") {this.clockTime = message.serverSentAtMs; this.clockAt = performance.now();}
+        resolve();
+      }});
+      try {this.wire({type: "ping", nonce, clientSentAtMs: sentAt});}
+      catch (error) {cancel(error instanceof Error ? error : new Error("Clock ping send failed"));}
+    }));
   }
 
   beginMeasurement(): void {
@@ -122,7 +224,8 @@ export class LoadClient {
   endMeasurement(): void {this.recordPhase(); this.measuring = false;}
 
   send(command: CombatCommand): string {
-    if (!this.snapshot || this.socket.readyState !== WebSocket.OPEN) throw new Error("Load socket unavailable");
+    if (!this.snapshot || this.socket.readyState !== 1 || this.closing) throw new Error("Load socket unavailable");
+    if (!this.clockReady) throw new Error("Spatial load input requires a ready clock");
     const commandId = crypto.randomUUID();
     const message = {type: "command", envelope: {v: 1, commandId, clientSequence: ++this.sequence,
       authorityEpoch: this.snapshot.authorityEpoch, frameEpoch: this.snapshot.frameEpoch, sentAtMs: this.matchTimeMs, command}};
@@ -148,14 +251,23 @@ export class LoadClient {
   }
 
   hasPending(kind: string): boolean {return [...this.pending.values()].some(item => item.kind === kind);}
-  close(): void {if (this.socket.readyState === WebSocket.OPEN) this.socket.close(1000, "load-complete");}
+  close(): void {
+    this.closing = true; this.nativeReady = false; this.heartbeatFailure = undefined;
+    if (this.nativeHeartbeat !== null) clearTimeout(this.nativeHeartbeat);
+    this.nativeHeartbeat = null;
+    const error = new Error("Load client closed");
+    const bootstrap = this.nativeBootstrap;
+    if (bootstrap && !bootstrap.settled) {bootstrap.settled = true; bootstrap.reject(error);}
+    for (const ping of [...this.pongs.values()]) ping.cancel(error);
+    if (this.socket.readyState === 1) this.socket.close(1000, "load-complete");
+  }
   private wire(message: unknown): void {
     const data = typeof message === "string" ? message : JSON.stringify(message);
     if (this.measuring) this.measuredInputBytes += this.encoder.encode(data).byteLength;
     this.socket.send(data);
   }
   private settle(id: string, pending: Pending): void {if (pending.ack && pending.result) this.pending.delete(id);}
-  private receipt(): void {this.wire({type: "received", eventSequence: this.latestEventSequence});}
+  private receipt(): void {if (!this.closing && this.socket.readyState === 1) this.wire({type: "received", eventSequence: this.latestEventSequence});}
   private recordPhase(): void {
     if (this.measuring) this.phaseWallMs[this.phase] = (this.phaseWallMs[this.phase] ?? 0) + performance.now() - this.phaseAt;
     this.phaseAt = performance.now();
