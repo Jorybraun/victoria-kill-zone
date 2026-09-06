@@ -1,0 +1,3659 @@
+{
+  "generatedAt": "2026-09-06T23:01:52.043Z",
+  "sourceHead": "b52aa5a4b814be11cbe6dce278da40023d701ec1",
+  "sourceFilesSha256": {
+    "ios/VictoriaKillZone/VictoriaKillZone/Services/Realtime/CombatClock.swift": "522cc405384d024725de69cafc4ab5c74b9955a6dfcebb8a3640a5cdd9d4e09b",
+    "ios/VictoriaKillZone/VictoriaKillZone/Services/Realtime/RealtimeCombatSession.swift": "974addb70b26ea9f456c0ed70e44519aea1dbd0ecf9a6cb7bfde959829cd9409",
+    "packages/combat-protocol/src/index.ts": "d1e67cb11af7d20cc85994f97a374eff038d64bc8a30cc47a476722c0665b411",
+    "packages/combat-protocol/src/validation.ts": "3a943920a3694d06c22db434d98992654b4e3d7a5cc9f4f9c0c3ddfa75d795cb",
+    "packages/combat-simulation/src/flight.ts": "2d97514ed588fc46d23b96f5bf63a9224f7f36b5be28914d172cf36e1b5f409f",
+    "packages/combat-simulation/src/geometry.ts": "7027327ddd8c43cecbac076a80fa4ccc497c2dec2a55be3fde6a4a68c87e89a8",
+    "packages/combat-simulation/src/history.ts": "16f8db78cc956c3c72ffea1c283fc6147b5f0d7d365608b1fa021a137dd279d6",
+    "packages/combat-simulation/src/index.ts": "96d9dce63f8605a7a79f220468dff515aad7826fc6e6fb7154500a04fc00db9e",
+    "packages/combat-simulation/src/state.ts": "f14603cb89cc8668d6ed8fc603017945e723ef2b3deb2cf1265b62dc84c782b9",
+    "pnpm-lock.yaml": "07c06355e925ac2fadb85bfd18cd3be4896ccac3709176ce77bd72f986bb1147",
+    "services/combat-worker/benchmarks/catch-up-reporter.ts": "2b79a7f4baf8e06540fcb58014162cd3d2ca4f0694433302f4fa29b39a61cac5",
+    "services/combat-worker/benchmarks/four-player.load.ts": "5b5a34dcee4e21271c8c4fb16f23b31c0c3fdc9403f6830b08b33c0f3b90e227",
+    "services/combat-worker/benchmarks/four-player.node-load.ts": "59339d638865c34918c31f35e96ee3dde355ebfbb30d78fba4f0b3ee245e2cf6",
+    "services/combat-worker/benchmarks/load-client.ts": "044c2fe2798e1b85b86da86a604b357e0c10c6cf2cfba5c2b3c465f6cf6693a1",
+    "services/combat-worker/benchmarks/load-reporter.ts": "4f8b1fb17c8dbf7bcee7f00735a534fc3bd4ff51d1dca0e02507dfd48fdad645",
+    "services/combat-worker/benchmarks/load-runtime.ts": "70b38d6898b4e8ea62a84342dfaf350edd7e100cc8732d10737e9051ee1c5509",
+    "services/combat-worker/benchmarks/load-scenario.ts": "3bb8337843d46c8c0c8804ef3e4e6ab16e7cc77a829aed4ae59dc017c58a54f0",
+    "services/combat-worker/benchmarks/native-clock.ts": "3c6c528c89c0a419a0558c48bc0fe9296e1935e9d30f979151417a53ff028c7f",
+    "services/combat-worker/benchmarks/node-runtime.ts": "4892bd12877ce842bfeee2bf42330159cd17f9bbf55fbcda727f798ee10b44e2",
+    "services/combat-worker/benchmarks/runtime-profile.ts": "10bfa126c606fd5399091024af6648263b472e8c1f6bc405ae21da030640e23b",
+    "services/combat-worker/package.json": "992e5a27954fe84f5ed27ba2f84517ae0363691b5a6972a89ccdcc91fd3e674a",
+    "services/combat-worker/src/auth.ts": "56e5865f3b4b41bbcbed93dee4fb2764f965dfc4e49d7f175e2e58e598089312",
+    "services/combat-worker/src/bullet-ledger.ts": "659c6c891559bb2bbd0b64242bb1b48e272750abfa52d0a614992fd888355c25",
+    "services/combat-worker/src/cadence.ts": "c937076005802502537d47757bf5ddd8cf93cbd84c679ef3112bcec6a619f858",
+    "services/combat-worker/src/canonical.ts": "a4e1085c0915238ae1a21058a81ff02aeb2d28b462cb5e6ccdc347eaf20f8635",
+    "services/combat-worker/src/command-fingerprint.ts": "cd91d5ace7535abd45f303aefa2d70b36f198494499b4ee1ed4fccc8a1b13b31",
+    "services/combat-worker/src/connection.ts": "7ad776977296d18e9b24ad2b53862c1c606f97eb6a14c8d3c37ade09cbb5ddd7",
+    "services/combat-worker/src/index.ts": "70351c95695eb9202167a2f93f2e4bcb4bd9f3187455283f6d3af327265b312d",
+    "services/combat-worker/src/maps.ts": "b79e738fad0865c7c692f313e52e289c3232d135eb8a1b1829264043ca301b7e",
+    "services/combat-worker/src/projection-delivery.ts": "345cda479c5100635e1bddd683a3768e2ee48d4b95d411abc7f661071ae9c68d",
+    "services/combat-worker/src/projection-store.ts": "75bfb0a3115331992d4e233681d6381947c00b3df34c3935ceec363a2ecb3a0a",
+    "services/combat-worker/src/room.ts": "30a03e37a0b74b249a70d071da4b4f1e51dfb3320aeb0a8f088199f6b39e1b31",
+    "services/combat-worker/src/routes.ts": "8b2def872e15f36cb907cae24c9ba5111659818ff7722e27399afc3460e12b85",
+    "services/combat-worker/src/serial-queue.ts": "f024fe3f2280293302653e695255466e73485b3aa22e5fcb28166ec48b37f88c",
+    "services/combat-worker/src/store.ts": "8c286a0d2657b7abce1a7a2371bd0ecb904d03860d5eb85907b08ab669a8632f",
+    "services/combat-worker/tests/catch-up-input.test.ts": "078d6a302182f2e7874cb08b93e2c3c1521d5525d648d2389d6c89aa9889e50e",
+    "services/combat-worker/tests/helpers.ts": "afd8d6c8f2890364c9a2c73846f40f52696aa4227df40b5143dc7ab270209990",
+    "services/combat-worker/tsconfig.json": "3d629d3db06804501a2b28c824d4a6453d45b32ef7c14751ed10e01799c2ba14",
+    "services/combat-worker/vitest.config.ts": "6c9ac99c6fcc0a90cd30c9b36b50cc3f5bfd7ec1abfce3f6b1b9e0492f66b316",
+    "services/combat-worker/vitest.load.config.ts": "c52a98661c3dca10c91f2bfcb29c7fa51612353fbb8bcd9e55e1516cf72cad69",
+    "services/combat-worker/vitest.node-load.config.ts": "027c671711a86e89b22700216343c5eb1d4285157759b4e25da7e5326ddbd1d6",
+    "services/combat-worker/wrangler.jsonc": "fc6e1da75bba2074cc8c1fc6df07652e572ef4b8759f6ebef3fc2b82e8d7dcd0"
+  },
+  "environment": "node-client-workerd-authority",
+  "node": "v26.7.0",
+  "results": [
+    {
+      "name": "independent Node client miss-lanes: native clock and durable event convergence",
+      "state": "failed",
+      "failures": [
+        {
+          "name": "Error",
+          "message": "Clock quality lost"
+        }
+      ],
+      "result": {
+        "scenario": "miss-lanes",
+        "environment": "node-client-workerd-authority",
+        "clockMode": "native",
+        "activeLoadMs": 180000,
+        "activeElapsedMs": 80677.869167,
+        "interruptedBeforeReconciliation": true,
+        "failure": "Clock quality lost",
+        "players": [
+          {
+            "playerId": "load-0",
+            "errors": [],
+            "offered": {
+              "pose": 1613,
+              "slowField": 9,
+              "fire": 227,
+              "reload": 28
+            },
+            "accepted": {
+              "pose": 1607,
+              "slowField": 8,
+              "fire": 227,
+              "reload": 28
+            },
+            "refusals": {
+              "pose:poseStale": 2
+            },
+            "pendingCommands": 5,
+            "clockSamples": [
+              {
+                "atMatchMs": 2421,
+                "roundTripMs": 0.6834170000001905,
+                "adjustmentMs": -0.09437549999984185,
+                "authorityTick": 48,
+                "uncertaintyMs": 0.3417085000000952
+              },
+              {
+                "atMatchMs": 3424,
+                "roundTripMs": 3.4697919999998703,
+                "adjustmentMs": 0.018000000000029104,
+                "authorityTick": 68,
+                "uncertaintyMs": 0.3417085000000952
+              },
+              {
+                "atMatchMs": 4424,
+                "roundTripMs": 3.2106250000006185,
+                "adjustmentMs": 0.011459000000286323,
+                "authorityTick": 88,
+                "uncertaintyMs": 0.3417085000000952
+              },
+              {
+                "atMatchMs": 5422,
+                "roundTripMs": 0.6307079999996859,
+                "adjustmentMs": -0.5290204999992056,
+                "authorityTick": 108,
+                "uncertaintyMs": 0.3153539999998429
+              },
+              {
+                "atMatchMs": 6423,
+                "roundTripMs": 0.825249999999869,
+                "adjustmentMs": 0.013417000000117696,
+                "authorityTick": 128,
+                "uncertaintyMs": 0.3153539999998429
+              },
+              {
+                "atMatchMs": 7424,
+                "roundTripMs": 0.7916249999998399,
+                "adjustmentMs": 0.012167000000772532,
+                "authorityTick": 148,
+                "uncertaintyMs": 0.5541659999998956
+              },
+              {
+                "atMatchMs": 8425,
+                "roundTripMs": 0.7282500000001164,
+                "adjustmentMs": 0.009749999999257852,
+                "authorityTick": 168,
+                "uncertaintyMs": 0.3153539999998429
+              },
+              {
+                "atMatchMs": 9426,
+                "roundTripMs": 0.7677910000002157,
+                "adjustmentMs": 0.015749999998661224,
+                "authorityTick": 188,
+                "uncertaintyMs": 0.3153539999998429
+              },
+              {
+                "atMatchMs": 10427,
+                "roundTripMs": 0.6289580000011483,
+                "adjustmentMs": 0.16612399999939953,
+                "authorityTick": 208,
+                "uncertaintyMs": 0.31447900000057416
+              },
+              {
+                "atMatchMs": 11428,
+                "roundTripMs": 0.6441660000000411,
+                "adjustmentMs": 0.01133300000037707,
+                "authorityTick": 228,
+                "uncertaintyMs": 0.31447900000057416
+              },
+              {
+                "atMatchMs": 12429,
+                "roundTripMs": 0.6838329999991402,
+                "adjustmentMs": 0.01208299999962037,
+                "authorityTick": 248,
+                "uncertaintyMs": 0.31447900000057416
+              },
+              {
+                "atMatchMs": 13430,
+                "roundTripMs": 0.6761249999999563,
+                "adjustmentMs": 0.010999999998603016,
+                "authorityTick": 268,
+                "uncertaintyMs": 0.31447900000057416
+              },
+              {
+                "atMatchMs": 14431,
+                "roundTripMs": 0.633665999999721,
+                "adjustmentMs": 0.05212500000016007,
+                "authorityTick": 288,
+                "uncertaintyMs": 0.31447900000057416
+              },
+              {
+                "atMatchMs": 15432,
+                "roundTripMs": 0.6416250000002037,
+                "adjustmentMs": 0.010792000000947155,
+                "authorityTick": 308,
+                "uncertaintyMs": 0.35437500000080036
+              },
+              {
+                "atMatchMs": 16434,
+                "roundTripMs": 0.7098340000011376,
+                "adjustmentMs": 0.01558400000067195,
+                "authorityTick": 328,
+                "uncertaintyMs": 0.4937079999999696
+              },
+              {
+                "atMatchMs": 17436,
+                "roundTripMs": 0.8393329999998969,
+                "adjustmentMs": 0.012374999998428393,
+                "authorityTick": 348,
+                "uncertaintyMs": 0.3866250000010041
+              },
+              {
+                "atMatchMs": 18437,
+                "roundTripMs": 0.6496660000011616,
+                "adjustmentMs": 0.009124999996856786,
+                "authorityTick": 368,
+                "uncertaintyMs": 0.31447900000057416
+              },
+              {
+                "atMatchMs": 19438,
+                "roundTripMs": 0.76416700000118,
+                "adjustmentMs": 0.013542000000597909,
+                "authorityTick": 388,
+                "uncertaintyMs": 0.31447900000057416
+              },
+              {
+                "atMatchMs": 20439,
+                "roundTripMs": 0.8068749999983993,
+                "adjustmentMs": -0.046936999995523365,
+                "authorityTick": 408,
+                "uncertaintyMs": 0.3168329999998605
+              },
+              {
+                "atMatchMs": 21441,
+                "roundTripMs": 0.7118749999972351,
+                "adjustmentMs": 0.005042000000685221,
+                "authorityTick": 428,
+                "uncertaintyMs": 0.3168329999998605
+              },
+              {
+                "atMatchMs": 22442,
+                "roundTripMs": 0.7357499999998254,
+                "adjustmentMs": 0.03250000000116415,
+                "authorityTick": 448,
+                "uncertaintyMs": 0.32279099999868777
+              },
+              {
+                "atMatchMs": 23443,
+                "roundTripMs": 1.1339159999988624,
+                "adjustmentMs": 0.012749999998050043,
+                "authorityTick": 468,
+                "uncertaintyMs": 0.3168329999998605
+              },
+              {
+                "atMatchMs": 24444,
+                "roundTripMs": 0.9301249999989523,
+                "adjustmentMs": -0.28639550000298186,
+                "authorityTick": 488,
+                "uncertaintyMs": 0.5934589999997115
+              },
+              {
+                "atMatchMs": 25445,
+                "roundTripMs": 0.6175409999996191,
+                "adjustmentMs": 0.2594589999971504,
+                "authorityTick": 508,
+                "uncertaintyMs": 0.30877049999980954
+              },
+              {
+                "atMatchMs": 26446,
+                "roundTripMs": 0.9125830000011774,
+                "adjustmentMs": 0.018040999999357155,
+                "authorityTick": 528,
+                "uncertaintyMs": 0.30877049999980954
+              },
+              {
+                "atMatchMs": 27447,
+                "roundTripMs": 0.8080829999998969,
+                "adjustmentMs": 0.013874999996914994,
+                "authorityTick": 548,
+                "uncertaintyMs": 0.3389999999999418
+              },
+              {
+                "atMatchMs": 28472,
+                "roundTripMs": 29.013041999998677,
+                "adjustmentMs": 0.029832999996870058,
+                "authorityTick": 569,
+                "uncertaintyMs": 0.30877049999980954
+              },
+              {
+                "atMatchMs": 29449,
+                "roundTripMs": 0.6937919999982114,
+                "adjustmentMs": 0.011249999999563443,
+                "authorityTick": 588,
+                "uncertaintyMs": 0.34408299999995506
+              },
+              {
+                "atMatchMs": 30450,
+                "roundTripMs": 0.6710830000010901,
+                "adjustmentMs": 0.015666999999666587,
+                "authorityTick": 608,
+                "uncertaintyMs": 0.30877049999980954
+              },
+              {
+                "atMatchMs": 31456,
+                "roundTripMs": 5.993207999999868,
+                "adjustmentMs": 0.011500000000523869,
+                "authorityTick": 628,
+                "uncertaintyMs": 0.30877049999980954
+              },
+              {
+                "atMatchMs": 32467,
+                "roundTripMs": 15.778374999994412,
+                "adjustmentMs": 0.011208999996597413,
+                "authorityTick": 649,
+                "uncertaintyMs": 0.30877049999980954
+              },
+              {
+                "atMatchMs": 33462,
+                "roundTripMs": 10.73241699999926,
+                "adjustmentMs": 0.013041999991401099,
+                "authorityTick": 669,
+                "uncertaintyMs": 0.30877049999980954
+              },
+              {
+                "atMatchMs": 34461,
+                "roundTripMs": 8.003874999994878,
+                "adjustmentMs": 0.011375000001862645,
+                "authorityTick": 689,
+                "uncertaintyMs": 0.30877049999980954
+              },
+              {
+                "atMatchMs": 35463,
+                "roundTripMs": 8.473959000002651,
+                "adjustmentMs": 0.27843700000084937,
+                "authorityTick": 709,
+                "uncertaintyMs": 0.33554150000054506
+              },
+              {
+                "atMatchMs": 36463,
+                "roundTripMs": 7.9273749999993015,
+                "adjustmentMs": 0.012791000001016073,
+                "authorityTick": 729,
+                "uncertaintyMs": 0.33554150000054506
+              },
+              {
+                "atMatchMs": 37467,
+                "roundTripMs": 10.59783299999981,
+                "adjustmentMs": 0.01145800000813324,
+                "authorityTick": 749,
+                "uncertaintyMs": 0.33554150000054506
+              },
+              {
+                "atMatchMs": 38465,
+                "roundTripMs": 8.28175000000192,
+                "adjustmentMs": 0.014000000010128133,
+                "authorityTick": 769,
+                "uncertaintyMs": 0.354749999998603
+              },
+              {
+                "atMatchMs": 39466,
+                "roundTripMs": 9.801958000003651,
+                "adjustmentMs": 0.012333999999100342,
+                "authorityTick": 789,
+                "uncertaintyMs": 0.33554150000054506
+              },
+              {
+                "atMatchMs": 40473,
+                "roundTripMs": 16.059541999995417,
+                "adjustmentMs": 2.143771499991999,
+                "authorityTick": 809,
+                "uncertaintyMs": 2.996603999999934
+              },
+              {
+                "atMatchMs": 41466,
+                "roundTripMs": 9.037541999998211,
+                "adjustmentMs": 1.5476870000056806,
+                "authorityTick": 829,
+                "uncertaintyMs": 3.6408750000009604
+              },
+              {
+                "atMatchMs": 42467,
+                "roundTripMs": 9.772750000003725,
+                "adjustmentMs": 0.015292000010958873,
+                "authorityTick": 849,
+                "uncertaintyMs": 3.6408750000009604
+              },
+              {
+                "atMatchMs": 43470,
+                "roundTripMs": 11.407291999996232,
+                "adjustmentMs": 0.015958000003593042,
+                "authorityTick": 869,
+                "uncertaintyMs": 3.6408750000009604
+              },
+              {
+                "atMatchMs": 44466,
+                "roundTripMs": 6.780542000000423,
+                "adjustmentMs": -0.8896879999956582,
+                "authorityTick": 889,
+                "uncertaintyMs": 2.8902710000002116
+              },
+              {
+                "atMatchMs": 45469,
+                "roundTripMs": 10.243624999995518,
+                "adjustmentMs": 0.02599999999802094,
+                "authorityTick": 909,
+                "uncertaintyMs": 2.8902710000002116
+              },
+              {
+                "atMatchMs": 46467,
+                "roundTripMs": 6.958874999996624,
+                "adjustmentMs": 0.012625000003026798,
+                "authorityTick": 929,
+                "uncertaintyMs": 2.8902710000002116
+              },
+              {
+                "atMatchMs": 47469,
+                "roundTripMs": 7.944292000000132,
+                "adjustmentMs": 0.015082999991136603,
+                "authorityTick": 949,
+                "uncertaintyMs": 2.8902710000002116
+              },
+              {
+                "atMatchMs": 48464,
+                "roundTripMs": 2.8245410000017728,
+                "adjustmentMs": -2.074833500009845,
+                "authorityTick": 969,
+                "uncertaintyMs": 1.4122705000008864
+              },
+              {
+                "atMatchMs": 49464,
+                "roundTripMs": 3.465374999999767,
+                "adjustmentMs": 0.009833999996772036,
+                "authorityTick": 989,
+                "uncertaintyMs": 1.4122705000008864
+              },
+              {
+                "atMatchMs": 50464,
+                "roundTripMs": 3.1192080000037095,
+                "adjustmentMs": 0.01245799999742303,
+                "authorityTick": 1009,
+                "uncertaintyMs": 1.4122705000008864
+              },
+              {
+                "atMatchMs": 51469,
+                "roundTripMs": 8.099957999998878,
+                "adjustmentMs": 0.019209000005503185,
+                "authorityTick": 1029,
+                "uncertaintyMs": 1.4122705000008864
+              },
+              {
+                "atMatchMs": 52465,
+                "roundTripMs": 3.719250000001921,
+                "adjustmentMs": 0.011249999995925464,
+                "authorityTick": 1049,
+                "uncertaintyMs": 1.4122705000008864
+              },
+              {
+                "atMatchMs": 53465,
+                "roundTripMs": 3.1730830000014976,
+                "adjustmentMs": 0.012374999991152436,
+                "authorityTick": 1069,
+                "uncertaintyMs": 1.4122705000008864
+              },
+              {
+                "atMatchMs": 54466,
+                "roundTripMs": 4.54149999999936,
+                "adjustmentMs": 0.013500000000931323,
+                "authorityTick": 1089,
+                "uncertaintyMs": 1.4122705000008864
+              },
+              {
+                "atMatchMs": 55469,
+                "roundTripMs": 6.556165999994846,
+                "adjustmentMs": 0.013167000011890195,
+                "authorityTick": 1109,
+                "uncertaintyMs": 1.4122705000008864
+              },
+              {
+                "atMatchMs": 56475,
+                "roundTripMs": 12.35108400000172,
+                "adjustmentMs": 0.014624999996158294,
+                "authorityTick": 1129,
+                "uncertaintyMs": 1.4122705000008864
+              },
+              {
+                "atMatchMs": 57470,
+                "roundTripMs": 7.300834000001487,
+                "adjustmentMs": 0.012166999993496574,
+                "authorityTick": 1149,
+                "uncertaintyMs": 1.4122705000008864
+              },
+              {
+                "atMatchMs": 58475,
+                "roundTripMs": 11.515999999995984,
+                "adjustmentMs": -0.06029149999812944,
+                "authorityTick": 1169,
+                "uncertaintyMs": 1.5596040000018547
+              },
+              {
+                "atMatchMs": 59504,
+                "roundTripMs": 39.44937499999651,
+                "adjustmentMs": 0.027957999998761807,
+                "authorityTick": 1190,
+                "uncertaintyMs": 1.5596040000018547
+              },
+              {
+                "atMatchMs": 60471,
+                "roundTripMs": 6.241915999999037,
+                "adjustmentMs": 0.0680625000022701,
+                "authorityTick": 1209,
+                "uncertaintyMs": 1.5865415000007488
+              },
+              {
+                "atMatchMs": 61467,
+                "roundTripMs": 0.531541999996989,
+                "adjustmentMs": -0.8457705000037095,
+                "authorityTick": 1229,
+                "uncertaintyMs": 0.2657709999984945
+              },
+              {
+                "atMatchMs": 62471,
+                "roundTripMs": 4.130290999994031,
+                "adjustmentMs": 0.006582999994861893,
+                "authorityTick": 1249,
+                "uncertaintyMs": 0.30141700000240235
+              },
+              {
+                "atMatchMs": 63469,
+                "roundTripMs": 2.523332999997365,
+                "adjustmentMs": 0.00566600000456674,
+                "authorityTick": 1269,
+                "uncertaintyMs": 0.2657709999984945
+              },
+              {
+                "atMatchMs": 64468,
+                "roundTripMs": 0.5233329999973648,
+                "adjustmentMs": 0.34068750000733417,
+                "authorityTick": 1289,
+                "uncertaintyMs": 0.2616664999986824
+              },
+              {
+                "atMatchMs": 65471,
+                "roundTripMs": 2.7587920000078157,
+                "adjustmentMs": 0.007582999998703599,
+                "authorityTick": 1309,
+                "uncertaintyMs": 0.2616664999986824
+              },
+              {
+                "atMatchMs": 66472,
+                "roundTripMs": 3.425082999994629,
+                "adjustmentMs": 0.008667000001878478,
+                "authorityTick": 1329,
+                "uncertaintyMs": 0.2616664999986824
+              },
+              {
+                "atMatchMs": 67470,
+                "roundTripMs": 0.6408329999976559,
+                "adjustmentMs": 0.007083000004058704,
+                "authorityTick": 1349,
+                "uncertaintyMs": 0.3822080000027199
+              },
+              {
+                "atMatchMs": 68471,
+                "roundTripMs": 0.5821250000008149,
+                "adjustmentMs": 0.006917000006069429,
+                "authorityTick": 1369,
+                "uncertaintyMs": 0.2616664999986824
+              },
+              {
+                "atMatchMs": 69472,
+                "roundTripMs": 0.6544579999899724,
+                "adjustmentMs": 0.003708000003825873,
+                "authorityTick": 1388,
+                "uncertaintyMs": 0.2616664999986824
+              },
+              {
+                "atMatchMs": 70490,
+                "roundTripMs": 17.574666999993497,
+                "adjustmentMs": 0.006166999999550171,
+                "authorityTick": 1409,
+                "uncertaintyMs": 0.2616664999986824
+              },
+              {
+                "atMatchMs": 71473,
+                "roundTripMs": 0.6502499999915017,
+                "adjustmentMs": 0.005874999988009222,
+                "authorityTick": 1429,
+                "uncertaintyMs": 0.4650000000037835
+              },
+              {
+                "atMatchMs": 72473,
+                "roundTripMs": 0.8488330000109272,
+                "adjustmentMs": 0.006416999996872619,
+                "authorityTick": 1449,
+                "uncertaintyMs": 0.44149999999353895
+              },
+              {
+                "atMatchMs": 73474,
+                "roundTripMs": 0.7142080000048736,
+                "adjustmentMs": 0.006249999991268851,
+                "authorityTick": 1469,
+                "uncertaintyMs": 0.3057079999925918
+              },
+              {
+                "atMatchMs": 74475,
+                "roundTripMs": 0.6387499999982538,
+                "adjustmentMs": -0.16697900000144728,
+                "authorityTick": 1489,
+                "uncertaintyMs": 0.29106250000040745
+              },
+              {
+                "atMatchMs": 75476,
+                "roundTripMs": 0.5617080000083661,
+                "adjustmentMs": -0.19970850000390783,
+                "authorityTick": 1509,
+                "uncertaintyMs": 0.28085400000418304
+              },
+              {
+                "atMatchMs": 76477,
+                "roundTripMs": 0.692083999994793,
+                "adjustmentMs": 0.006416999996872619,
+                "authorityTick": 1529,
+                "uncertaintyMs": 0.28085400000418304
+              },
+              {
+                "atMatchMs": 77478,
+                "roundTripMs": 0.6073749999923166,
+                "adjustmentMs": 0.0027500000142026693,
+                "authorityTick": 1549,
+                "uncertaintyMs": 0.28085400000418304
+              },
+              {
+                "atMatchMs": 78478,
+                "roundTripMs": 0.5406660000007832,
+                "adjustmentMs": 0.25577099999645725,
+                "authorityTick": 1569,
+                "uncertaintyMs": 0.2703330000003916
+              },
+              {
+                "atMatchMs": 79477,
+                "roundTripMs": 0.6209999999991851,
+                "adjustmentMs": 0.006292000005487353,
+                "authorityTick": 1589,
+                "uncertaintyMs": 0.7206659999937983
+              },
+              {
+                "atMatchMs": 80518,
+                "roundTripMs": 39.80912499999977,
+                "adjustmentMs": 0.006750000000465661,
+                "authorityTick": 1610,
+                "uncertaintyMs": 0.2703330000003916
+              },
+              {
+                "atMatchMs": 81480,
+                "roundTripMs": 0.5614999999961583,
+                "adjustmentMs": 0.010458000004291534,
+                "authorityTick": 1629,
+                "uncertaintyMs": 0.45537500000500586
+              },
+              {
+                "atMatchMs": 82482,
+                "roundTripMs": 0.5506250000034925,
+                "adjustmentMs": 0.004040999978315085,
+                "authorityTick": 1649,
+                "uncertaintyMs": 0.45537500000500586
+              }
+            ],
+            "clockUncertaintyMs": 0.45537500000500586,
+            "phaseChanges": [
+              {
+                "tick": 667,
+                "matchTimeMs": 33350,
+                "phase": "paused",
+                "reason": "spatialCoverageLost",
+                "sincePoseSendMs": 44.60150000000431,
+                "estimatedMatchMs": 33400.8562295
+              },
+              {
+                "tick": 668,
+                "matchTimeMs": 33400,
+                "phase": "running",
+                "reason": "spatialCoverageRestored",
+                "sincePoseSendMs": 30.867458000000624,
+                "estimatedMatchMs": 33436.4102705
+              },
+              {
+                "tick": 1172,
+                "matchTimeMs": 58600,
+                "phase": "paused",
+                "reason": "spatialCoverageLost",
+                "sincePoseSendMs": 16.17145800000435,
+                "estimatedMatchMs": 58674.670146
+              },
+              {
+                "tick": 1173,
+                "matchTimeMs": 58650,
+                "phase": "running",
+                "reason": "spatialCoverageRestored",
+                "sincePoseSendMs": 46.49275000000489,
+                "estimatedMatchMs": 58704.991188
+              }
+            ],
+            "phaseWallMs": {
+              "running": 80611.964208,
+              "paused": 65.82966699999088
+            },
+            "terminalReasons": {
+              "missExpired": 804,
+              "cancelled": 64
+            }
+          },
+          {
+            "playerId": "load-1",
+            "errors": [
+              "clockQualityLost"
+            ],
+            "offered": {
+              "pose": 1613,
+              "slowField": 9,
+              "fire": 227,
+              "reload": 28
+            },
+            "accepted": {
+              "pose": 1607,
+              "slowField": 8,
+              "fire": 227,
+              "reload": 28
+            },
+            "refusals": {
+              "pose:poseStale": 2
+            },
+            "pendingCommands": 5,
+            "clockSamples": [
+              {
+                "atMatchMs": 2845,
+                "roundTripMs": 0.7784169999999904,
+                "adjustmentMs": 0.009707999999591266,
+                "authorityTick": 56,
+                "uncertaintyMs": 0.21958349999999882
+              },
+              {
+                "atMatchMs": 3847,
+                "roundTripMs": 0.8577080000004571,
+                "adjustmentMs": 0.01004099999954633,
+                "authorityTick": 76,
+                "uncertaintyMs": 0.21958349999999882
+              },
+              {
+                "atMatchMs": 4848,
+                "roundTripMs": 0.8540840000005119,
+                "adjustmentMs": 0.01191599999947357,
+                "authorityTick": 96,
+                "uncertaintyMs": 0.21958349999999882
+              },
+              {
+                "atMatchMs": 5849,
+                "roundTripMs": 1.0139579999995476,
+                "adjustmentMs": 0.01879200000075798,
+                "authorityTick": 116,
+                "uncertaintyMs": 0.21958349999999882
+              },
+              {
+                "atMatchMs": 6850,
+                "roundTripMs": 0.9659579999997732,
+                "adjustmentMs": 0.011292000000139524,
+                "authorityTick": 136,
+                "uncertaintyMs": 0.21958349999999882
+              },
+              {
+                "atMatchMs": 7861,
+                "roundTripMs": 10.18829199999891,
+                "adjustmentMs": 0.009625000000596629,
+                "authorityTick": 157,
+                "uncertaintyMs": 0.21958349999999882
+              },
+              {
+                "atMatchMs": 8863,
+                "roundTripMs": 11.832250000001295,
+                "adjustmentMs": 0.010334000000511878,
+                "authorityTick": 177,
+                "uncertaintyMs": 0.21958349999999882
+              },
+              {
+                "atMatchMs": 9863,
+                "roundTripMs": 11.520791999999346,
+                "adjustmentMs": 0.02124999999978172,
+                "authorityTick": 197,
+                "uncertaintyMs": 0.21958349999999882
+              },
+              {
+                "atMatchMs": 10863,
+                "roundTripMs": 10.328417000000627,
+                "adjustmentMs": -0.2845419999994192,
+                "authorityTick": 217,
+                "uncertaintyMs": 0.3892084999999952
+              },
+              {
+                "atMatchMs": 11864,
+                "roundTripMs": 10.409959000000526,
+                "adjustmentMs": 0.010666000000128406,
+                "authorityTick": 237,
+                "uncertaintyMs": 0.3892084999999952
+              },
+              {
+                "atMatchMs": 12864,
+                "roundTripMs": 9.364792000000307,
+                "adjustmentMs": 0.1180834999995568,
+                "authorityTick": 257,
+                "uncertaintyMs": 0.5088749999995343
+              },
+              {
+                "atMatchMs": 13864,
+                "roundTripMs": 8.291790999999648,
+                "adjustmentMs": 0.01374999999825377,
+                "authorityTick": 277,
+                "uncertaintyMs": 0.5665840000001481
+              },
+              {
+                "atMatchMs": 14864,
+                "roundTripMs": 7.778375000001688,
+                "adjustmentMs": 0.4389789999986533,
+                "authorityTick": 297,
+                "uncertaintyMs": 0.4829789999998866
+              },
+              {
+                "atMatchMs": 15866,
+                "roundTripMs": 8.954834000000119,
+                "adjustmentMs": 0.012917000000015832,
+                "authorityTick": 317,
+                "uncertaintyMs": 0.4829789999998866
+              },
+              {
+                "atMatchMs": 16867,
+                "roundTripMs": 9.78141599999799,
+                "adjustmentMs": 3.3746664999962377,
+                "authorityTick": 337,
+                "uncertaintyMs": 3.645895499999824
+              },
+              {
+                "atMatchMs": 17865,
+                "roundTripMs": 7.469042000000627,
+                "adjustmentMs": 0.014250000000174623,
+                "authorityTick": 357,
+                "uncertaintyMs": 3.645895499999824
+              },
+              {
+                "atMatchMs": 18864,
+                "roundTripMs": 6.455832999999984,
+                "adjustmentMs": -1.279062999998132,
+                "authorityTick": 377,
+                "uncertaintyMs": 3.227916499999992
+              },
+              {
+                "atMatchMs": 19866,
+                "roundTripMs": 8.354166000000987,
+                "adjustmentMs": 0.02041599999938626,
+                "authorityTick": 397,
+                "uncertaintyMs": 3.227916499999992
+              },
+              {
+                "atMatchMs": 20865,
+                "roundTripMs": 7.36895899999945,
+                "adjustmentMs": 0.013125000001309672,
+                "authorityTick": 417,
+                "uncertaintyMs": 3.227916499999992
+              },
+              {
+                "atMatchMs": 21863,
+                "roundTripMs": 4.626625000000786,
+                "adjustmentMs": -0.8969380000016827,
+                "authorityTick": 437,
+                "uncertaintyMs": 2.313312500000393
+              },
+              {
+                "atMatchMs": 22865,
+                "roundTripMs": 7.149583000002167,
+                "adjustmentMs": 0.013250000003608875,
+                "authorityTick": 457,
+                "uncertaintyMs": 2.313312500000393
+              },
+              {
+                "atMatchMs": 23869,
+                "roundTripMs": 11.66137499999968,
+                "adjustmentMs": 0.03445800000190502,
+                "authorityTick": 477,
+                "uncertaintyMs": 2.313312500000393
+              },
+              {
+                "atMatchMs": 24866,
+                "roundTripMs": 7.60175000000163,
+                "adjustmentMs": 0.020625000004656613,
+                "authorityTick": 497,
+                "uncertaintyMs": 2.313312500000393
+              },
+              {
+                "atMatchMs": 25868,
+                "roundTripMs": 10.078249999998661,
+                "adjustmentMs": 0.03966699999728007,
+                "authorityTick": 517,
+                "uncertaintyMs": 2.313312500000393
+              },
+              {
+                "atMatchMs": 26867,
+                "roundTripMs": 8.164541000001918,
+                "adjustmentMs": 0.013500000000931323,
+                "authorityTick": 537,
+                "uncertaintyMs": 2.313312500000393
+              },
+              {
+                "atMatchMs": 27865,
+                "roundTripMs": 5.620333000002574,
+                "adjustmentMs": 0.01695800000015879,
+                "authorityTick": 557,
+                "uncertaintyMs": 2.313312500000393
+              },
+              {
+                "atMatchMs": 28870,
+                "roundTripMs": 9.70008400000006,
+                "adjustmentMs": 0.014416999998502433,
+                "authorityTick": 577,
+                "uncertaintyMs": 2.313312500000393
+              },
+              {
+                "atMatchMs": 29864,
+                "roundTripMs": 3.516833999998198,
+                "adjustmentMs": -0.5009375000008731,
+                "authorityTick": 597,
+                "uncertaintyMs": 1.758416999999099
+              },
+              {
+                "atMatchMs": 30870,
+                "roundTripMs": 8.307166999999026,
+                "adjustmentMs": 0.013291000002936926,
+                "authorityTick": 617,
+                "uncertaintyMs": 1.758416999999099
+              },
+              {
+                "atMatchMs": 31865,
+                "roundTripMs": 3.446709000003466,
+                "adjustmentMs": 0.2570624999971187,
+                "authorityTick": 637,
+                "uncertaintyMs": 1.223354500001733
+              },
+              {
+                "atMatchMs": 32873,
+                "roundTripMs": 13.283083999995142,
+                "adjustmentMs": 0.021957999997539446,
+                "authorityTick": 657,
+                "uncertaintyMs": 1.223354500001733
+              },
+              {
+                "atMatchMs": 33885,
+                "roundTripMs": 23.55620800000179,
+                "adjustmentMs": 0.015207999997073784,
+                "authorityTick": 676,
+                "uncertaintyMs": 1.223354500001733
+              },
+              {
+                "atMatchMs": 34864,
+                "roundTripMs": 1.662665999996534,
+                "adjustmentMs": -0.6177705000009155,
+                "authorityTick": 697,
+                "uncertaintyMs": 0.831332999998267
+              },
+              {
+                "atMatchMs": 35865,
+                "roundTripMs": 2.2095419999968726,
+                "adjustmentMs": 0.017999999996391125,
+                "authorityTick": 717,
+                "uncertaintyMs": 0.831332999998267
+              },
+              {
+                "atMatchMs": 36868,
+                "roundTripMs": 3.694207999993523,
+                "adjustmentMs": 0.012625000003026798,
+                "authorityTick": 737,
+                "uncertaintyMs": 0.831332999998267
+              },
+              {
+                "atMatchMs": 37866,
+                "roundTripMs": 1.5923750000001746,
+                "adjustmentMs": -0.08456249999289867,
+                "authorityTick": 757,
+                "uncertaintyMs": 0.7961875000000873
+              },
+              {
+                "atMatchMs": 38870,
+                "roundTripMs": 5.136208999996597,
+                "adjustmentMs": 0.014583000011043623,
+                "authorityTick": 777,
+                "uncertaintyMs": 0.7961875000000873
+              },
+              {
+                "atMatchMs": 39874,
+                "roundTripMs": 10.829166999996232,
+                "adjustmentMs": 0.017375000010360964,
+                "authorityTick": 797,
+                "uncertaintyMs": 0.7961875000000873
+              },
+              {
+                "atMatchMs": 40868,
+                "roundTripMs": 3.845375000004424,
+                "adjustmentMs": 0.017082999998820014,
+                "authorityTick": 817,
+                "uncertaintyMs": 0.7961875000000873
+              },
+              {
+                "atMatchMs": 41868,
+                "roundTripMs": 2.8107079999972484,
+                "adjustmentMs": 0.01554200000828132,
+                "authorityTick": 837,
+                "uncertaintyMs": 0.7961875000000873
+              },
+              {
+                "atMatchMs": 42876,
+                "roundTripMs": 10.806958000001032,
+                "adjustmentMs": 0.01425000000745058,
+                "authorityTick": 857,
+                "uncertaintyMs": 0.7961875000000873
+              },
+              {
+                "atMatchMs": 43873,
+                "roundTripMs": 7.84295800000109,
+                "adjustmentMs": 0.014167000001179986,
+                "authorityTick": 877,
+                "uncertaintyMs": 0.7961875000000873
+              },
+              {
+                "atMatchMs": 44868,
+                "roundTripMs": 2.968624999994063,
+                "adjustmentMs": 0.017334000003756955,
+                "authorityTick": 897,
+                "uncertaintyMs": 0.7961875000000873
+              },
+              {
+                "atMatchMs": 45870,
+                "roundTripMs": 4.245375000005879,
+                "adjustmentMs": 0.013499999986379407,
+                "authorityTick": 917,
+                "uncertaintyMs": 0.7961875000000873
+              },
+              {
+                "atMatchMs": 46867,
+                "roundTripMs": 2.1235840000008466,
+                "adjustmentMs": 0.019291000004159287,
+                "authorityTick": 937,
+                "uncertaintyMs": 0.7961875000000873
+              },
+              {
+                "atMatchMs": 47868,
+                "roundTripMs": 2.3630839999968885,
+                "adjustmentMs": 0.05877150000014808,
+                "authorityTick": 957,
+                "uncertaintyMs": 1.0617920000004233
+              },
+              {
+                "atMatchMs": 48868,
+                "roundTripMs": 1.2550830000036513,
+                "adjustmentMs": -0.8166665000026114,
+                "authorityTick": 977,
+                "uncertaintyMs": 0.6275415000018256
+              },
+              {
+                "atMatchMs": 49870,
+                "roundTripMs": 3.510499999996682,
+                "adjustmentMs": 0.01612500000919681,
+                "authorityTick": 997,
+                "uncertaintyMs": 0.6275415000018256
+              },
+              {
+                "atMatchMs": 50869,
+                "roundTripMs": 1.1542499999995925,
+                "adjustmentMs": 0.3207914999948116,
+                "authorityTick": 1017,
+                "uncertaintyMs": 0.07712499999979627
+              },
+              {
+                "atMatchMs": 51869,
+                "roundTripMs": 0.8283749999973224,
+                "adjustmentMs": 0.01641699999163393,
+                "authorityTick": 1037,
+                "uncertaintyMs": 0.07712499999979627
+              },
+              {
+                "atMatchMs": 52877,
+                "roundTripMs": 8.187833999996656,
+                "adjustmentMs": 0.013584000000264496,
+                "authorityTick": 1057,
+                "uncertaintyMs": 0.07712499999979627
+              },
+              {
+                "atMatchMs": 53871,
+                "roundTripMs": 0.7189999999973224,
+                "adjustmentMs": 0.012749999994412065,
+                "authorityTick": 1077,
+                "uncertaintyMs": 0.07712499999979627
+              },
+              {
+                "atMatchMs": 54876,
+                "roundTripMs": 5.702958000001672,
+                "adjustmentMs": 0.009957999995094724,
+                "authorityTick": 1097,
+                "uncertaintyMs": 0.07712499999979627
+              },
+              {
+                "atMatchMs": 55872,
+                "roundTripMs": 0.5636250000025029,
+                "adjustmentMs": 0.01237500000570435,
+                "authorityTick": 1117,
+                "uncertaintyMs": 0.07712499999979627
+              },
+              {
+                "atMatchMs": 56873,
+                "roundTripMs": 0.8329169999997248,
+                "adjustmentMs": 0.02704200000152923,
+                "authorityTick": 1137,
+                "uncertaintyMs": 0.07712499999979627
+              },
+              {
+                "atMatchMs": 57889,
+                "roundTripMs": 16.40808300000208,
+                "adjustmentMs": 0.01179200000478886,
+                "authorityTick": 1157,
+                "uncertaintyMs": 0.07712499999979627
+              },
+              {
+                "atMatchMs": 58877,
+                "roundTripMs": 3.0455000000001746,
+                "adjustmentMs": 0.010000000009313226,
+                "authorityTick": 1177,
+                "uncertaintyMs": 0.07712499999979627
+              },
+              {
+                "atMatchMs": 59876,
+                "roundTripMs": 0.5995419999962905,
+                "adjustmentMs": 0.004750000007334165,
+                "authorityTick": 1197,
+                "uncertaintyMs": 0.21925000000192085
+              },
+              {
+                "atMatchMs": 60887,
+                "roundTripMs": 10.481208000004699,
+                "adjustmentMs": 0.11781250000058208,
+                "authorityTick": 1217,
+                "uncertaintyMs": 0.28181250000125146
+              },
+              {
+                "atMatchMs": 61879,
+                "roundTripMs": 0.5630419999943115,
+                "adjustmentMs": -0.2939994999978808,
+                "authorityTick": 1237,
+                "uncertaintyMs": 0.28152099999715574
+              },
+              {
+                "atMatchMs": 62879,
+                "roundTripMs": 0.6106670000008307,
+                "adjustmentMs": 0.005290999994031154,
+                "authorityTick": 1257,
+                "uncertaintyMs": 0.28152099999715574
+              },
+              {
+                "atMatchMs": 63879,
+                "roundTripMs": 0.6715000000040163,
+                "adjustmentMs": 0.005916999994951766,
+                "authorityTick": 1277,
+                "uncertaintyMs": 0.28152099999715574
+              },
+              {
+                "atMatchMs": 64879,
+                "roundTripMs": 0.6679580000054557,
+                "adjustmentMs": 0.007291000001714565,
+                "authorityTick": 1297,
+                "uncertaintyMs": 0.4344169999967562
+              },
+              {
+                "atMatchMs": 65881,
+                "roundTripMs": 0.7126250000001164,
+                "adjustmentMs": 0.010250000006635673,
+                "authorityTick": 1317,
+                "uncertaintyMs": 0.28152099999715574
+              },
+              {
+                "atMatchMs": 66882,
+                "roundTripMs": 0.6809170000051381,
+                "adjustmentMs": 0.006750000000465661,
+                "authorityTick": 1337,
+                "uncertaintyMs": 0.28152099999715574
+              },
+              {
+                "atMatchMs": 67882,
+                "roundTripMs": 0.6652499999909196,
+                "adjustmentMs": 0.007874999995692633,
+                "authorityTick": 1357,
+                "uncertaintyMs": 0.5119580000027781
+              },
+              {
+                "atMatchMs": 68884,
+                "roundTripMs": 1.9142500000016298,
+                "adjustmentMs": 0.01729200000409037,
+                "authorityTick": 1377,
+                "uncertaintyMs": 0.28152099999715574
+              },
+              {
+                "atMatchMs": 69885,
+                "roundTripMs": 0.8088339999958407,
+                "adjustmentMs": 0.007041000004392117,
+                "authorityTick": 1397,
+                "uncertaintyMs": 0.28152099999715574
+              },
+              {
+                "atMatchMs": 70886,
+                "roundTripMs": 0.6491670000104932,
+                "adjustmentMs": 0.006584000002476387,
+                "authorityTick": 1417,
+                "uncertaintyMs": 0.28152099999715574
+              },
+              {
+                "atMatchMs": 71886,
+                "roundTripMs": 0.760708000001614,
+                "adjustmentMs": -0.04281150001042988,
+                "authorityTick": 1437,
+                "uncertaintyMs": 0.30533350000041537
+              },
+              {
+                "atMatchMs": 72887,
+                "roundTripMs": 0.9033749999944121,
+                "adjustmentMs": 0.14624899998307228,
+                "authorityTick": 1457,
+                "uncertaintyMs": 0.3245835000052466
+              },
+              {
+                "atMatchMs": 73887,
+                "roundTripMs": 1.1228330000012647,
+                "adjustmentMs": 0.017749999999068677,
+                "authorityTick": 1477,
+                "uncertaintyMs": 0.3245835000052466
+              },
+              {
+                "atMatchMs": 74908,
+                "roundTripMs": 21.080375000005006,
+                "adjustmentMs": 0.006290999997872859,
+                "authorityTick": 1498,
+                "uncertaintyMs": 0.3245835000052466
+              },
+              {
+                "atMatchMs": 75888,
+                "roundTripMs": 0.5911249999917345,
+                "adjustmentMs": -0.6512280000024475,
+                "authorityTick": 1517,
+                "uncertaintyMs": 0.29556249999586726
+              },
+              {
+                "atMatchMs": 76888,
+                "roundTripMs": 0.7067919999972219,
+                "adjustmentMs": 0.006916999991517514,
+                "authorityTick": 1537,
+                "uncertaintyMs": 0.29556249999586726
+              },
+              {
+                "atMatchMs": 77890,
+                "roundTripMs": 0.7427499999903375,
+                "adjustmentMs": 0.008042000001296401,
+                "authorityTick": 1557,
+                "uncertaintyMs": 0.6115410000056727
+              },
+              {
+                "atMatchMs": 78890,
+                "roundTripMs": 0.7757920000003651,
+                "adjustmentMs": 0.007958000001963228,
+                "authorityTick": 1577,
+                "uncertaintyMs": 0.29556249999586726
+              },
+              {
+                "atMatchMs": 79892,
+                "roundTripMs": 0.7182089999987511,
+                "adjustmentMs": 0.006750000000465661,
+                "authorityTick": 1597,
+                "uncertaintyMs": 0.2989159999997355
+              },
+              {
+                "atMatchMs": 80892,
+                "roundTripMs": 0.6294170000037411,
+                "adjustmentMs": 0.007542000006651506,
+                "authorityTick": 1617,
+                "uncertaintyMs": 0.29556249999586726
+              },
+              {
+                "atMatchMs": 81893,
+                "roundTripMs": 0.7707090000039898,
+                "adjustmentMs": 0.007916000002296641,
+                "authorityTick": 1637,
+                "uncertaintyMs": 0.29556249999586726
+              },
+              {
+                "atMatchMs": 82850,
+                "roundTripMs": 94.64425000001211,
+                "adjustmentMs": 0.005791000003227964,
+                "authorityTick": 1656,
+                "uncertaintyMs": 43.35174999998708
+              }
+            ],
+            "clockUncertaintyMs": 43.35174999998708,
+            "phaseChanges": [
+              {
+                "tick": 667,
+                "matchTimeMs": 33350,
+                "phase": "paused",
+                "reason": "spatialCoverageLost",
+                "sincePoseSendMs": 44.4934160000048,
+                "estimatedMatchMs": 33402.3933545
+              },
+              {
+                "tick": 668,
+                "matchTimeMs": 33400,
+                "phase": "running",
+                "reason": "spatialCoverageRestored",
+                "sincePoseSendMs": 30.851291999999376,
+                "estimatedMatchMs": 33437.9759375
+              },
+              {
+                "tick": 1172,
+                "matchTimeMs": 58600,
+                "phase": "paused",
+                "reason": "spatialCoverageLost",
+                "sincePoseSendMs": 16.156708000002254,
+                "estimatedMatchMs": 58674.18674999999
+              },
+              {
+                "tick": 1173,
+                "matchTimeMs": 58650,
+                "phase": "running",
+                "reason": "spatialCoverageRestored",
+                "sincePoseSendMs": 46.35633300000336,
+                "estimatedMatchMs": 58704.387
+              }
+            ],
+            "phaseWallMs": {
+              "running": 80612.011708,
+              "paused": 65.78612399999838
+            },
+            "terminalReasons": {
+              "missExpired": 804,
+              "cancelled": 64
+            }
+          },
+          {
+            "playerId": "load-2",
+            "errors": [],
+            "offered": {
+              "pose": 1613,
+              "slowField": 9,
+              "fire": 227,
+              "reload": 28
+            },
+            "accepted": {
+              "pose": 1607,
+              "slowField": 8,
+              "fire": 227,
+              "reload": 28
+            },
+            "refusals": {
+              "pose:poseStale": 2
+            },
+            "pendingCommands": 5,
+            "clockSamples": [
+              {
+                "atMatchMs": 3279,
+                "roundTripMs": 0.7066670000003796,
+                "adjustmentMs": 0.010750000000371074,
+                "authorityTick": 65,
+                "uncertaintyMs": 0.34618750000004184
+              },
+              {
+                "atMatchMs": 4280,
+                "roundTripMs": 0.6052500000005239,
+                "adjustmentMs": 0.033562499999789,
+                "authorityTick": 85,
+                "uncertaintyMs": 0.30262500000026193
+              },
+              {
+                "atMatchMs": 5295,
+                "roundTripMs": 14.05133300000034,
+                "adjustmentMs": 0.014915999999175256,
+                "authorityTick": 105,
+                "uncertaintyMs": 0.30262500000026193
+              },
+              {
+                "atMatchMs": 6283,
+                "roundTripMs": 0.7724589999997988,
+                "adjustmentMs": 0.01058400000056281,
+                "authorityTick": 125,
+                "uncertaintyMs": 0.7432910000006814
+              },
+              {
+                "atMatchMs": 7284,
+                "roundTripMs": 1.0157920000001468,
+                "adjustmentMs": 0.012166000000433996,
+                "authorityTick": 145,
+                "uncertaintyMs": 0.4224580000009155
+              },
+              {
+                "atMatchMs": 8285,
+                "roundTripMs": 0.8648329999996349,
+                "adjustmentMs": 0.009458999998969375,
+                "authorityTick": 165,
+                "uncertaintyMs": 0.3567080000011629
+              },
+              {
+                "atMatchMs": 9286,
+                "roundTripMs": 0.7527079999999842,
+                "adjustmentMs": 0.010999999998603016,
+                "authorityTick": 185,
+                "uncertaintyMs": 0.5483750000003056
+              },
+              {
+                "atMatchMs": 10287,
+                "roundTripMs": 0.8767919999991136,
+                "adjustmentMs": 0.010874999999941792,
+                "authorityTick": 205,
+                "uncertaintyMs": 0.41654100000050676
+              },
+              {
+                "atMatchMs": 11288,
+                "roundTripMs": 0.7242500000011205,
+                "adjustmentMs": 0.011833000000478933,
+                "authorityTick": 225,
+                "uncertaintyMs": 0.3508750000000873
+              },
+              {
+                "atMatchMs": 12289,
+                "roundTripMs": 0.8884580000012647,
+                "adjustmentMs": 0.011957999999140156,
+                "authorityTick": 245,
+                "uncertaintyMs": 0.5282079999997222
+              },
+              {
+                "atMatchMs": 13290,
+                "roundTripMs": 0.6970000000001164,
+                "adjustmentMs": 0.010915999999269843,
+                "authorityTick": 265,
+                "uncertaintyMs": 0.30262500000026193
+              },
+              {
+                "atMatchMs": 14291,
+                "roundTripMs": 1.0326249999998254,
+                "adjustmentMs": 0.08224999999947613,
+                "authorityTick": 285,
+                "uncertaintyMs": 0.3485000000000582
+              },
+              {
+                "atMatchMs": 15292,
+                "roundTripMs": 0.7114590000001044,
+                "adjustmentMs": 0.01525000000037835,
+                "authorityTick": 305,
+                "uncertaintyMs": 0.3485000000000582
+              },
+              {
+                "atMatchMs": 16293,
+                "roundTripMs": 0.7721249999995052,
+                "adjustmentMs": 0.012500000000727596,
+                "authorityTick": 325,
+                "uncertaintyMs": 0.3485000000000582
+              },
+              {
+                "atMatchMs": 17294,
+                "roundTripMs": 0.8065839999981108,
+                "adjustmentMs": 0.013500000000931323,
+                "authorityTick": 345,
+                "uncertaintyMs": 0.3485000000000582
+              },
+              {
+                "atMatchMs": 18295,
+                "roundTripMs": 0.800083000001905,
+                "adjustmentMs": 0.012833999997383216,
+                "authorityTick": 365,
+                "uncertaintyMs": 0.5689999999995052
+              },
+              {
+                "atMatchMs": 19296,
+                "roundTripMs": 0.7657910000016273,
+                "adjustmentMs": 0.012375000002066372,
+                "authorityTick": 385,
+                "uncertaintyMs": 0.4147499999999127
+              },
+              {
+                "atMatchMs": 20297,
+                "roundTripMs": 0.7104999999974098,
+                "adjustmentMs": 0.011040999997931067,
+                "authorityTick": 405,
+                "uncertaintyMs": 0.416958000001614
+              },
+              {
+                "atMatchMs": 21298,
+                "roundTripMs": 0.8228330000019923,
+                "adjustmentMs": 0.018083999999362277,
+                "authorityTick": 425,
+                "uncertaintyMs": 0.6382499999999709
+              },
+              {
+                "atMatchMs": 22299,
+                "roundTripMs": 0.942416999998386,
+                "adjustmentMs": 0.013167000000976259,
+                "authorityTick": 445,
+                "uncertaintyMs": 0.3485000000000582
+              },
+              {
+                "atMatchMs": 23300,
+                "roundTripMs": 0.9072500000002037,
+                "adjustmentMs": 0.43708300000071176,
+                "authorityTick": 465,
+                "uncertaintyMs": 0.3552499999987049
+              },
+              {
+                "atMatchMs": 24318,
+                "roundTripMs": 17.480917000000773,
+                "adjustmentMs": 0.015250000004016329,
+                "authorityTick": 486,
+                "uncertaintyMs": 0.3552499999987049
+              },
+              {
+                "atMatchMs": 25315,
+                "roundTripMs": 12.561208000002807,
+                "adjustmentMs": 0.01224999999976717,
+                "authorityTick": 506,
+                "uncertaintyMs": 0.3552499999987049
+              },
+              {
+                "atMatchMs": 26315,
+                "roundTripMs": 11.351666999998997,
+                "adjustmentMs": 0.016959000000497326,
+                "authorityTick": 526,
+                "uncertaintyMs": 0.3552499999987049
+              },
+              {
+                "atMatchMs": 27315,
+                "roundTripMs": 9.429458000002342,
+                "adjustmentMs": 0.013459000001603272,
+                "authorityTick": 546,
+                "uncertaintyMs": 0.3552499999987049
+              },
+              {
+                "atMatchMs": 28315,
+                "roundTripMs": 9.264375000002474,
+                "adjustmentMs": 0.015417000002344139,
+                "authorityTick": 566,
+                "uncertaintyMs": 0.3552499999987049
+              },
+              {
+                "atMatchMs": 29314,
+                "roundTripMs": 7.631667000001471,
+                "adjustmentMs": 0.012500000004365575,
+                "authorityTick": 586,
+                "uncertaintyMs": 0.3552499999987049
+              },
+              {
+                "atMatchMs": 30315,
+                "roundTripMs": 8.015708000002633,
+                "adjustmentMs": 0.2913754999972298,
+                "authorityTick": 606,
+                "uncertaintyMs": 0.41141650000099617
+              },
+              {
+                "atMatchMs": 31319,
+                "roundTripMs": 11.938999999998487,
+                "adjustmentMs": 0.01604149999911897,
+                "authorityTick": 626,
+                "uncertaintyMs": 0.45362500000010186
+              },
+              {
+                "atMatchMs": 32325,
+                "roundTripMs": 19.169415999997,
+                "adjustmentMs": 0.011916999996174127,
+                "authorityTick": 646,
+                "uncertaintyMs": 0.45362500000010186
+              },
+              {
+                "atMatchMs": 33300,
+                "roundTripMs": 56.125417000002926,
+                "adjustmentMs": 3.129667500004871,
+                "authorityTick": 665,
+                "uncertaintyMs": 14.481999999999971
+              },
+              {
+                "atMatchMs": 34324,
+                "roundTripMs": 17.589540999993915,
+                "adjustmentMs": 0.011665999998513144,
+                "authorityTick": 686,
+                "uncertaintyMs": 3.8158335000007355
+              },
+              {
+                "atMatchMs": 35315,
+                "roundTripMs": 7.990124999996624,
+                "adjustmentMs": 0.01770799999940209,
+                "authorityTick": 706,
+                "uncertaintyMs": 3.8158335000007355
+              },
+              {
+                "atMatchMs": 36322,
+                "roundTripMs": 14.2065419999999,
+                "adjustmentMs": 0.014917000000423286,
+                "authorityTick": 726,
+                "uncertaintyMs": 3.8158335000007355
+              },
+              {
+                "atMatchMs": 37320,
+                "roundTripMs": 12.052333999999973,
+                "adjustmentMs": 0.012291000006371178,
+                "authorityTick": 746,
+                "uncertaintyMs": 3.8158335000007355
+              },
+              {
+                "atMatchMs": 38336,
+                "roundTripMs": 28.088458999998693,
+                "adjustmentMs": 0.012957999999343883,
+                "authorityTick": 766,
+                "uncertaintyMs": 3.8158335000007355
+              },
+              {
+                "atMatchMs": 39314,
+                "roundTripMs": 5.67108300000109,
+                "adjustmentMs": -1.4159999999974389,
+                "authorityTick": 786,
+                "uncertaintyMs": 2.835541500000545
+              },
+              {
+                "atMatchMs": 40317,
+                "roundTripMs": 8.193041999998968,
+                "adjustmentMs": 0.01591700001154095,
+                "authorityTick": 806,
+                "uncertaintyMs": 2.835541500000545
+              },
+              {
+                "atMatchMs": 41315,
+                "roundTripMs": 6.421583000003011,
+                "adjustmentMs": 0.01620800000091549,
+                "authorityTick": 826,
+                "uncertaintyMs": 2.835541500000545
+              },
+              {
+                "atMatchMs": 42317,
+                "roundTripMs": 8.489165999999386,
+                "adjustmentMs": 0.01470800000242889,
+                "authorityTick": 846,
+                "uncertaintyMs": 2.835541500000545
+              },
+              {
+                "atMatchMs": 43326,
+                "roundTripMs": 17.641624999996566,
+                "adjustmentMs": 0.013625000006868504,
+                "authorityTick": 866,
+                "uncertaintyMs": 2.835541500000545
+              },
+              {
+                "atMatchMs": 44324,
+                "roundTripMs": 15.346792000003916,
+                "adjustmentMs": 0.015207999997073784,
+                "authorityTick": 886,
+                "uncertaintyMs": 2.835541500000545
+              },
+              {
+                "atMatchMs": 45316,
+                "roundTripMs": 6.863499999999476,
+                "adjustmentMs": 0.01474999998754356,
+                "authorityTick": 906,
+                "uncertaintyMs": 2.835541500000545
+              },
+              {
+                "atMatchMs": 46316,
+                "roundTripMs": 6.458207999996375,
+                "adjustmentMs": 0.012917000000015832,
+                "authorityTick": 926,
+                "uncertaintyMs": 2.835541500000545
+              },
+              {
+                "atMatchMs": 47314,
+                "roundTripMs": 4.572375000003376,
+                "adjustmentMs": -0.5497699999978067,
+                "authorityTick": 946,
+                "uncertaintyMs": 2.286187500001688
+              },
+              {
+                "atMatchMs": 48315,
+                "roundTripMs": 4.563999999998487,
+                "adjustmentMs": 0.15110449999338016,
+                "authorityTick": 966,
+                "uncertaintyMs": 2.2819999999992433
+              },
+              {
+                "atMatchMs": 49317,
+                "roundTripMs": 6.10320800000045,
+                "adjustmentMs": 0.012583000003360212,
+                "authorityTick": 986,
+                "uncertaintyMs": 2.2819999999992433
+              },
+              {
+                "atMatchMs": 50314,
+                "roundTripMs": 3.9825829999972484,
+                "adjustmentMs": 0.14166649999970105,
+                "authorityTick": 1006,
+                "uncertaintyMs": 1.9912914999986242
+              },
+              {
+                "atMatchMs": 51316,
+                "roundTripMs": 4.744958000002953,
+                "adjustmentMs": 0.01374999999825377,
+                "authorityTick": 1026,
+                "uncertaintyMs": 1.9912914999986242
+              },
+              {
+                "atMatchMs": 52316,
+                "roundTripMs": 4.395457999999053,
+                "adjustmentMs": 0.01591700001154095,
+                "authorityTick": 1046,
+                "uncertaintyMs": 1.9912914999986242
+              },
+              {
+                "atMatchMs": 53314,
+                "roundTripMs": 2.7813749999986612,
+                "adjustmentMs": -0.9802290000079665,
+                "authorityTick": 1066,
+                "uncertaintyMs": 1.3906874999993306
+              },
+              {
+                "atMatchMs": 54318,
+                "roundTripMs": 5.846959000002244,
+                "adjustmentMs": 0.014666000002762303,
+                "authorityTick": 1086,
+                "uncertaintyMs": 1.3906874999993306
+              },
+              {
+                "atMatchMs": 55316,
+                "roundTripMs": 3.6697500000009313,
+                "adjustmentMs": 0.009417000008397736,
+                "authorityTick": 1106,
+                "uncertaintyMs": 1.3906874999993306
+              },
+              {
+                "atMatchMs": 56316,
+                "roundTripMs": 2.6161250000004657,
+                "adjustmentMs": -0.05574999999953434,
+                "authorityTick": 1126,
+                "uncertaintyMs": 1.3080625000002328
+              },
+              {
+                "atMatchMs": 57320,
+                "roundTripMs": 6.309207999998762,
+                "adjustmentMs": 0.015958000003593042,
+                "authorityTick": 1146,
+                "uncertaintyMs": 1.3080625000002328
+              },
+              {
+                "atMatchMs": 58319,
+                "roundTripMs": 4.977458999994269,
+                "adjustmentMs": 0.010291999999026302,
+                "authorityTick": 1166,
+                "uncertaintyMs": 1.3080625000002328
+              },
+              {
+                "atMatchMs": 59315,
+                "roundTripMs": 0.3961669999989681,
+                "adjustmentMs": -1.2358539999986533,
+                "authorityTick": 1186,
+                "uncertaintyMs": 0.19808349999948405
+              },
+              {
+                "atMatchMs": 60317,
+                "roundTripMs": 1.8979159999944386,
+                "adjustmentMs": 0.005084000003989786,
+                "authorityTick": 1206,
+                "uncertaintyMs": 0.19808349999948405
+              },
+              {
+                "atMatchMs": 61317,
+                "roundTripMs": 1.861417000000074,
+                "adjustmentMs": 0.0066250000018044375,
+                "authorityTick": 1226,
+                "uncertaintyMs": 0.19808349999948405
+              },
+              {
+                "atMatchMs": 62325,
+                "roundTripMs": 9.557791999999608,
+                "adjustmentMs": 0.006332999997539446,
+                "authorityTick": 1246,
+                "uncertaintyMs": 0.519124999998894
+              },
+              {
+                "atMatchMs": 63318,
+                "roundTripMs": 2.2583749999976135,
+                "adjustmentMs": 0.006000000001222361,
+                "authorityTick": 1266,
+                "uncertaintyMs": 0.6916669999991427
+              },
+              {
+                "atMatchMs": 64318,
+                "roundTripMs": 1.6963749999995343,
+                "adjustmentMs": 0.005875000002561137,
+                "authorityTick": 1286,
+                "uncertaintyMs": 0.6237919999985024
+              },
+              {
+                "atMatchMs": 65322,
+                "roundTripMs": 5.45908299999428,
+                "adjustmentMs": 0.010167000000365078,
+                "authorityTick": 1306,
+                "uncertaintyMs": 0.5817920000044978
+              },
+              {
+                "atMatchMs": 66319,
+                "roundTripMs": 3.3833750000048894,
+                "adjustmentMs": 0.014208999986294657,
+                "authorityTick": 1326,
+                "uncertaintyMs": 0.19808349999948405
+              },
+              {
+                "atMatchMs": 67320,
+                "roundTripMs": 3.4385419999889564,
+                "adjustmentMs": 0.008957999991253018,
+                "authorityTick": 1346,
+                "uncertaintyMs": 0.21162500000355067
+              },
+              {
+                "atMatchMs": 68318,
+                "roundTripMs": 1.1445420000090962,
+                "adjustmentMs": 0.009541999985231087,
+                "authorityTick": 1366,
+                "uncertaintyMs": 0.23499999999330612
+              },
+              {
+                "atMatchMs": 69319,
+                "roundTripMs": 2.3352080000040587,
+                "adjustmentMs": 0.7824379999947269,
+                "authorityTick": 1386,
+                "uncertaintyMs": 0.34818749999976717
+              },
+              {
+                "atMatchMs": 70370,
+                "roundTripMs": 36.8918330000015,
+                "adjustmentMs": 0.01087500000721775,
+                "authorityTick": 1406,
+                "uncertaintyMs": 0.34818749999976717
+              },
+              {
+                "atMatchMs": 71335,
+                "roundTripMs": 0.6768750000046566,
+                "adjustmentMs": -0.6635000000096625,
+                "authorityTick": 1426,
+                "uncertaintyMs": 0.3384375000023283
+              },
+              {
+                "atMatchMs": 72337,
+                "roundTripMs": 0.7518749999871943,
+                "adjustmentMs": 0.007374999986495823,
+                "authorityTick": 1446,
+                "uncertaintyMs": 0.3384375000023283
+              },
+              {
+                "atMatchMs": 73338,
+                "roundTripMs": 0.8966250000084983,
+                "adjustmentMs": 0.0077089999977033585,
+                "authorityTick": 1466,
+                "uncertaintyMs": 0.3743749999994179
+              },
+              {
+                "atMatchMs": 74339,
+                "roundTripMs": 0.6458330000023125,
+                "adjustmentMs": 0.06414599998970516,
+                "authorityTick": 1486,
+                "uncertaintyMs": 0.32291650000115624
+              },
+              {
+                "atMatchMs": 75340,
+                "roundTripMs": 0.7128749999974389,
+                "adjustmentMs": 0.007666999998036772,
+                "authorityTick": 1506,
+                "uncertaintyMs": 0.32291650000115624
+              },
+              {
+                "atMatchMs": 76341,
+                "roundTripMs": 0.8751670000056038,
+                "adjustmentMs": 0.00720799999544397,
+                "authorityTick": 1526,
+                "uncertaintyMs": 0.32291650000115624
+              },
+              {
+                "atMatchMs": 77343,
+                "roundTripMs": 1.319499999997788,
+                "adjustmentMs": 0.013042000005953014,
+                "authorityTick": 1546,
+                "uncertaintyMs": 0.32291650000115624
+              },
+              {
+                "atMatchMs": 78344,
+                "roundTripMs": 0.5540000000037253,
+                "adjustmentMs": 0.48095850000390783,
+                "authorityTick": 1566,
+                "uncertaintyMs": 0.27700000000186265
+              },
+              {
+                "atMatchMs": 79345,
+                "roundTripMs": 0.7132090000086464,
+                "adjustmentMs": 0.006582999994861893,
+                "authorityTick": 1586,
+                "uncertaintyMs": 0.28145799999765586
+              },
+              {
+                "atMatchMs": 80376,
+                "roundTripMs": 32.861791000002995,
+                "adjustmentMs": 0.0056250000052386895,
+                "authorityTick": 1607,
+                "uncertaintyMs": 0.27700000000186265
+              },
+              {
+                "atMatchMs": 81346,
+                "roundTripMs": 0.523457999996026,
+                "adjustmentMs": -0.776521000007051,
+                "authorityTick": 1626,
+                "uncertaintyMs": 0.261728999998013
+              },
+              {
+                "atMatchMs": 82348,
+                "roundTripMs": 0.7014590000035241,
+                "adjustmentMs": 0.006750000000465661,
+                "authorityTick": 1646,
+                "uncertaintyMs": 0.261728999998013
+              }
+            ],
+            "clockUncertaintyMs": 0.261728999998013,
+            "phaseChanges": [
+              {
+                "tick": 667,
+                "matchTimeMs": 33350,
+                "phase": "paused",
+                "reason": "spatialCoverageLost",
+                "sincePoseSendMs": 44.242458000000624,
+                "estimatedMatchMs": 33404.3883745
+              },
+              {
+                "tick": 668,
+                "matchTimeMs": 33400,
+                "phase": "running",
+                "reason": "spatialCoverageRestored",
+                "sincePoseSendMs": 30.9643750000032,
+                "estimatedMatchMs": 33440.3264585
+              },
+              {
+                "tick": 1172,
+                "matchTimeMs": 58600,
+                "phase": "paused",
+                "reason": "spatialCoverageLost",
+                "sincePoseSendMs": 16.142625000000407,
+                "estimatedMatchMs": 58674.8272285
+              },
+              {
+                "tick": 1173,
+                "matchTimeMs": 58650,
+                "phase": "running",
+                "reason": "spatialCoverageRestored",
+                "sincePoseSendMs": 46.41112499999872,
+                "estimatedMatchMs": 58705.0956875
+              }
+            ],
+            "phaseWallMs": {
+              "running": 80611.725374,
+              "paused": 66.06437500000175
+            },
+            "terminalReasons": {
+              "missExpired": 804,
+              "cancelled": 64
+            }
+          },
+          {
+            "playerId": "load-3",
+            "errors": [],
+            "offered": {
+              "pose": 1613,
+              "slowField": 9,
+              "fire": 227,
+              "reload": 28
+            },
+            "accepted": {
+              "pose": 1607,
+              "slowField": 8,
+              "fire": 227,
+              "reload": 28
+            },
+            "refusals": {
+              "pose:poseStale": 2
+            },
+            "pendingCommands": 5,
+            "clockSamples": [
+              {
+                "atMatchMs": 2713,
+                "roundTripMs": 8.847333000000162,
+                "adjustmentMs": 0.02599999999983993,
+                "authorityTick": 54,
+                "uncertaintyMs": 0.3427085000000716
+              },
+              {
+                "atMatchMs": 3717,
+                "roundTripMs": 13.605999999999767,
+                "adjustmentMs": 0.008958000000347965,
+                "authorityTick": 74,
+                "uncertaintyMs": 0.3427085000000716
+              },
+              {
+                "atMatchMs": 4713,
+                "roundTripMs": 7.540915999999925,
+                "adjustmentMs": 0.017291999999542895,
+                "authorityTick": 94,
+                "uncertaintyMs": 0.3427085000000716
+              },
+              {
+                "atMatchMs": 5716,
+                "roundTripMs": 8.385458000000654,
+                "adjustmentMs": 0.01020799999969313,
+                "authorityTick": 114,
+                "uncertaintyMs": 0.3427085000000716
+              },
+              {
+                "atMatchMs": 6717,
+                "roundTripMs": 9.454333000000588,
+                "adjustmentMs": 0.011124999999992724,
+                "authorityTick": 134,
+                "uncertaintyMs": 0.3427085000000716
+              },
+              {
+                "atMatchMs": 7720,
+                "roundTripMs": 11.409999999999854,
+                "adjustmentMs": 0.012666999999055406,
+                "authorityTick": 154,
+                "uncertaintyMs": 0.3427085000000716
+              },
+              {
+                "atMatchMs": 8717,
+                "roundTripMs": 6.890416000000187,
+                "adjustmentMs": 0.012875000000349246,
+                "authorityTick": 174,
+                "uncertaintyMs": 0.3427085000000716
+              },
+              {
+                "atMatchMs": 9713,
+                "roundTripMs": 3.60950000000048,
+                "adjustmentMs": 0.010500000000320142,
+                "authorityTick": 194,
+                "uncertaintyMs": 0.3427085000000716
+              },
+              {
+                "atMatchMs": 10715,
+                "roundTripMs": 4.154207999999926,
+                "adjustmentMs": 0.01900000000023283,
+                "authorityTick": 214,
+                "uncertaintyMs": 0.3427085000000716
+              },
+              {
+                "atMatchMs": 11714,
+                "roundTripMs": 3.993124999999054,
+                "adjustmentMs": 0.6987914999990608,
+                "authorityTick": 234,
+                "uncertaintyMs": 1.80475000000024
+              },
+              {
+                "atMatchMs": 12714,
+                "roundTripMs": 4.103166000000783,
+                "adjustmentMs": 0.01154099999985192,
+                "authorityTick": 254,
+                "uncertaintyMs": 1.80475000000024
+              },
+              {
+                "atMatchMs": 13720,
+                "roundTripMs": 10.25012500000048,
+                "adjustmentMs": 0.018999999996594852,
+                "authorityTick": 274,
+                "uncertaintyMs": 1.80475000000024
+              },
+              {
+                "atMatchMs": 14717,
+                "roundTripMs": 6.202750000000378,
+                "adjustmentMs": 0.011500000000523869,
+                "authorityTick": 294,
+                "uncertaintyMs": 1.80475000000024
+              },
+              {
+                "atMatchMs": 15715,
+                "roundTripMs": 3.718209000002389,
+                "adjustmentMs": 0.013458999997965293,
+                "authorityTick": 314,
+                "uncertaintyMs": 1.80475000000024
+              },
+              {
+                "atMatchMs": 16716,
+                "roundTripMs": 4.371999999999389,
+                "adjustmentMs": 0.01204199999847333,
+                "authorityTick": 334,
+                "uncertaintyMs": 1.80475000000024
+              },
+              {
+                "atMatchMs": 17715,
+                "roundTripMs": 3.324291999997513,
+                "adjustmentMs": 0.2743129999980738,
+                "authorityTick": 354,
+                "uncertaintyMs": 1.6621459999987565
+              },
+              {
+                "atMatchMs": 18716,
+                "roundTripMs": 4.120332999998936,
+                "adjustmentMs": 0.02237500000046566,
+                "authorityTick": 374,
+                "uncertaintyMs": 1.6621459999987565
+              },
+              {
+                "atMatchMs": 19717,
+                "roundTripMs": 5.348125000000437,
+                "adjustmentMs": 0.016292000000248663,
+                "authorityTick": 394,
+                "uncertaintyMs": 1.6621459999987565
+              },
+              {
+                "atMatchMs": 20716,
+                "roundTripMs": 5.3504160000011325,
+                "adjustmentMs": 0.01358299999992596,
+                "authorityTick": 414,
+                "uncertaintyMs": 1.6621459999987565
+              },
+              {
+                "atMatchMs": 21714,
+                "roundTripMs": 3.396375000000262,
+                "adjustmentMs": 0.010999999998603016,
+                "authorityTick": 434,
+                "uncertaintyMs": 1.6621459999987565
+              },
+              {
+                "atMatchMs": 22716,
+                "roundTripMs": 4.584416999998211,
+                "adjustmentMs": 0.01654200000120909,
+                "authorityTick": 454,
+                "uncertaintyMs": 1.6621459999987565
+              },
+              {
+                "atMatchMs": 23717,
+                "roundTripMs": 4.639333000002807,
+                "adjustmentMs": 0.015457999998034211,
+                "authorityTick": 474,
+                "uncertaintyMs": 1.6621459999987565
+              },
+              {
+                "atMatchMs": 24715,
+                "roundTripMs": 2.4667500000032305,
+                "adjustmentMs": -0.5183130000004894,
+                "authorityTick": 494,
+                "uncertaintyMs": 1.2333750000016153
+              },
+              {
+                "atMatchMs": 25715,
+                "roundTripMs": 3.5092079999994894,
+                "adjustmentMs": 0.013542000000597909,
+                "authorityTick": 514,
+                "uncertaintyMs": 1.2333750000016153
+              },
+              {
+                "atMatchMs": 26716,
+                "roundTripMs": 3.9822500000009313,
+                "adjustmentMs": 0.01795799999672454,
+                "authorityTick": 534,
+                "uncertaintyMs": 1.2333750000016153
+              },
+              {
+                "atMatchMs": 27714,
+                "roundTripMs": 2.296749999997701,
+                "adjustmentMs": -0.33449999999720603,
+                "authorityTick": 554,
+                "uncertaintyMs": 1.1483749999988504
+              },
+              {
+                "atMatchMs": 28715,
+                "roundTripMs": 3.0182500000009895,
+                "adjustmentMs": 0.0282500000030268,
+                "authorityTick": 574,
+                "uncertaintyMs": 1.1483749999988504
+              },
+              {
+                "atMatchMs": 29715,
+                "roundTripMs": 2.3182919999999285,
+                "adjustmentMs": 0.011833000004116911,
+                "authorityTick": 594,
+                "uncertaintyMs": 1.1483749999988504
+              },
+              {
+                "atMatchMs": 30717,
+                "roundTripMs": 4.116915999999037,
+                "adjustmentMs": 0.012834000001021195,
+                "authorityTick": 614,
+                "uncertaintyMs": 1.1483749999988504
+              },
+              {
+                "atMatchMs": 31721,
+                "roundTripMs": 7.72899999999936,
+                "adjustmentMs": 0.01170799999817973,
+                "authorityTick": 634,
+                "uncertaintyMs": 1.1483749999988504
+              },
+              {
+                "atMatchMs": 32765,
+                "roundTripMs": 50.61708400000498,
+                "adjustmentMs": 0.022583999998460058,
+                "authorityTick": 655,
+                "uncertaintyMs": 1.1483749999988504
+              },
+              {
+                "atMatchMs": 33716,
+                "roundTripMs": 0.3953330000003916,
+                "adjustmentMs": -0.19233250000252156,
+                "authorityTick": 674,
+                "uncertaintyMs": 0.1976665000001958
+              },
+              {
+                "atMatchMs": 34728,
+                "roundTripMs": 11.802209000001312,
+                "adjustmentMs": 0.013290999995660968,
+                "authorityTick": 694,
+                "uncertaintyMs": 0.1976665000001958
+              },
+              {
+                "atMatchMs": 35717,
+                "roundTripMs": 0.4555830000026617,
+                "adjustmentMs": 0.01275000000896398,
+                "authorityTick": 714,
+                "uncertaintyMs": 0.1976665000001958
+              },
+              {
+                "atMatchMs": 36717,
+                "roundTripMs": 0.5308330000043497,
+                "adjustmentMs": 0.011624999999185093,
+                "authorityTick": 734,
+                "uncertaintyMs": 0.1976665000001958
+              },
+              {
+                "atMatchMs": 37718,
+                "roundTripMs": 0.5646249999990687,
+                "adjustmentMs": 0.015249999996740371,
+                "authorityTick": 754,
+                "uncertaintyMs": 0.1976665000001958
+              },
+              {
+                "atMatchMs": 38719,
+                "roundTripMs": 1.8013329999957932,
+                "adjustmentMs": 0.01654199999757111,
+                "authorityTick": 774,
+                "uncertaintyMs": 0.1976665000001958
+              },
+              {
+                "atMatchMs": 39719,
+                "roundTripMs": 0.48633300000074087,
+                "adjustmentMs": 0.011290999987977557,
+                "authorityTick": 794,
+                "uncertaintyMs": 0.1976665000001958
+              },
+              {
+                "atMatchMs": 40720,
+                "roundTripMs": 0.5683340000032331,
+                "adjustmentMs": 0.011124999989988282,
+                "authorityTick": 814,
+                "uncertaintyMs": 0.3660829999935231
+              },
+              {
+                "atMatchMs": 41722,
+                "roundTripMs": 1.9561249999969732,
+                "adjustmentMs": 0.012500000011641532,
+                "authorityTick": 834,
+                "uncertaintyMs": 0.1976665000001958
+              },
+              {
+                "atMatchMs": 42725,
+                "roundTripMs": 4.348749999997381,
+                "adjustmentMs": 0.012667000002693385,
+                "authorityTick": 854,
+                "uncertaintyMs": 0.1976665000001958
+              },
+              {
+                "atMatchMs": 43767,
+                "roundTripMs": 46.803124999998545,
+                "adjustmentMs": -0.18154200000572018,
+                "authorityTick": 875,
+                "uncertaintyMs": 0.22779150000133086
+              },
+              {
+                "atMatchMs": 44722,
+                "roundTripMs": 0.6162079999994603,
+                "adjustmentMs": 0.01529100000334438,
+                "authorityTick": 894,
+                "uncertaintyMs": 0.22779150000133086
+              },
+              {
+                "atMatchMs": 45723,
+                "roundTripMs": 0.8081249999959255,
+                "adjustmentMs": 0.30249999999796273,
+                "authorityTick": 914,
+                "uncertaintyMs": 0.6338749999995343
+              },
+              {
+                "atMatchMs": 46725,
+                "roundTripMs": 0.7934590000004391,
+                "adjustmentMs": 0.0044999999954598024,
+                "authorityTick": 934,
+                "uncertaintyMs": 0.6338749999995343
+              },
+              {
+                "atMatchMs": 47726,
+                "roundTripMs": 0.5763329999972484,
+                "adjustmentMs": 0.012417000005370937,
+                "authorityTick": 954,
+                "uncertaintyMs": 0.3830000000016298
+              },
+              {
+                "atMatchMs": 48727,
+                "roundTripMs": 0.650459000004048,
+                "adjustmentMs": 0.00366700001177378,
+                "authorityTick": 974,
+                "uncertaintyMs": 0.3830000000016298
+              },
+              {
+                "atMatchMs": 49728,
+                "roundTripMs": 0.7386249999981374,
+                "adjustmentMs": -0.5154584999982035,
+                "authorityTick": 994,
+                "uncertaintyMs": 0.28416700000161654
+              },
+              {
+                "atMatchMs": 50729,
+                "roundTripMs": 0.9395409999997355,
+                "adjustmentMs": 0.11145749999559484,
+                "authorityTick": 1014,
+                "uncertaintyMs": 0.2881664999986242
+              },
+              {
+                "atMatchMs": 51730,
+                "roundTripMs": 0.8315000000002328,
+                "adjustmentMs": 0.012499999997089617,
+                "authorityTick": 1034,
+                "uncertaintyMs": 0.2881664999986242
+              },
+              {
+                "atMatchMs": 52731,
+                "roundTripMs": 0.7252500000031432,
+                "adjustmentMs": 0.01116599999659229,
+                "authorityTick": 1054,
+                "uncertaintyMs": 0.2881664999986242
+              },
+              {
+                "atMatchMs": 53732,
+                "roundTripMs": 0.9026670000021113,
+                "adjustmentMs": 0.03341599999112077,
+                "authorityTick": 1074,
+                "uncertaintyMs": 0.2881664999986242
+              },
+              {
+                "atMatchMs": 54779,
+                "roundTripMs": 47.07937499999389,
+                "adjustmentMs": 0.013707999998587184,
+                "authorityTick": 1095,
+                "uncertaintyMs": 0.2881664999986242
+              },
+              {
+                "atMatchMs": 55734,
+                "roundTripMs": 0.5092919999951846,
+                "adjustmentMs": 0.17577049999090377,
+                "authorityTick": 1114,
+                "uncertaintyMs": 0.2546459999975923
+              },
+              {
+                "atMatchMs": 56734,
+                "roundTripMs": 0.7344589999993332,
+                "adjustmentMs": 0.012707999994745478,
+                "authorityTick": 1134,
+                "uncertaintyMs": 0.5144579999978305
+              },
+              {
+                "atMatchMs": 57736,
+                "roundTripMs": 0.6440829999992275,
+                "adjustmentMs": 0.010334000005968846,
+                "authorityTick": 1154,
+                "uncertaintyMs": 0.2546459999975923
+              },
+              {
+                "atMatchMs": 58750,
+                "roundTripMs": 38.03216599999723,
+                "adjustmentMs": 0.009875000003376044,
+                "authorityTick": 1174,
+                "uncertaintyMs": 0.2546459999975923
+              },
+              {
+                "atMatchMs": 59737,
+                "roundTripMs": 0.5099580000023707,
+                "adjustmentMs": 0.0064999999885912985,
+                "authorityTick": 1194,
+                "uncertaintyMs": 0.2546459999975923
+              },
+              {
+                "atMatchMs": 60738,
+                "roundTripMs": 0.6710830000010901,
+                "adjustmentMs": 0.008916999999200925,
+                "authorityTick": 1214,
+                "uncertaintyMs": 0.2546459999975923
+              },
+              {
+                "atMatchMs": 61739,
+                "roundTripMs": 0.5965419999993173,
+                "adjustmentMs": 0.005791999996290542,
+                "authorityTick": 1234,
+                "uncertaintyMs": 0.3255829999980051
+              },
+              {
+                "atMatchMs": 62739,
+                "roundTripMs": 0.6485830000019632,
+                "adjustmentMs": 0.005957999994279817,
+                "authorityTick": 1254,
+                "uncertaintyMs": 0.2926249999945867
+              },
+              {
+                "atMatchMs": 63739,
+                "roundTripMs": 0.6906250000029104,
+                "adjustmentMs": 0.008167000007233582,
+                "authorityTick": 1274,
+                "uncertaintyMs": 0.46724999999423744
+              },
+              {
+                "atMatchMs": 64740,
+                "roundTripMs": 0.680292000004556,
+                "adjustmentMs": 0.006750000000465661,
+                "authorityTick": 1294,
+                "uncertaintyMs": 0.6252499999973224
+              },
+              {
+                "atMatchMs": 65741,
+                "roundTripMs": 0.8089170000021113,
+                "adjustmentMs": -0.24029200000222772,
+                "authorityTick": 1314,
+                "uncertaintyMs": 0.25497900000118534
+              },
+              {
+                "atMatchMs": 66743,
+                "roundTripMs": 0.8787500000034925,
+                "adjustmentMs": 0.00720799999544397,
+                "authorityTick": 1334,
+                "uncertaintyMs": 0.25497900000118534
+              },
+              {
+                "atMatchMs": 67744,
+                "roundTripMs": 1.185124999989057,
+                "adjustmentMs": 0.0056250000052386895,
+                "authorityTick": 1354,
+                "uncertaintyMs": 0.25497900000118534
+              },
+              {
+                "atMatchMs": 68745,
+                "roundTripMs": 0.7910830000037095,
+                "adjustmentMs": 0.007250000009662472,
+                "authorityTick": 1374,
+                "uncertaintyMs": 0.315374999998312
+              },
+              {
+                "atMatchMs": 69745,
+                "roundTripMs": 0.7653750000026776,
+                "adjustmentMs": -0.11520800000289455,
+                "authorityTick": 1394,
+                "uncertaintyMs": 0.5115829999995185
+              },
+              {
+                "atMatchMs": 70746,
+                "roundTripMs": 0.6550419999985024,
+                "adjustmentMs": 0.0068749999918509275,
+                "authorityTick": 1414,
+                "uncertaintyMs": 0.29827099999965867
+              },
+              {
+                "atMatchMs": 71747,
+                "roundTripMs": 0.665499999988242,
+                "adjustmentMs": 0.014270499988924712,
+                "authorityTick": 1434,
+                "uncertaintyMs": 0.3242915000009816
+              },
+              {
+                "atMatchMs": 72747,
+                "roundTripMs": 0.7243750000052387,
+                "adjustmentMs": -0.015854499986744486,
+                "authorityTick": 1454,
+                "uncertaintyMs": 0.3275209999992512
+              },
+              {
+                "atMatchMs": 73778,
+                "roundTripMs": 26.033083999995142,
+                "adjustmentMs": 0.007792000003973953,
+                "authorityTick": 1475,
+                "uncertaintyMs": 0.3275209999992512
+              },
+              {
+                "atMatchMs": 74766,
+                "roundTripMs": 12.545832999996492,
+                "adjustmentMs": 0.006999999997788109,
+                "authorityTick": 1495,
+                "uncertaintyMs": 0.3275209999992512
+              },
+              {
+                "atMatchMs": 75762,
+                "roundTripMs": 6.362166999999317,
+                "adjustmentMs": 0.005541999998968095,
+                "authorityTick": 1515,
+                "uncertaintyMs": 0.4021249999932479
+              },
+              {
+                "atMatchMs": 76764,
+                "roundTripMs": 8.022583999991184,
+                "adjustmentMs": 0.005917000002227724,
+                "authorityTick": 1535,
+                "uncertaintyMs": 0.3275209999992512
+              },
+              {
+                "atMatchMs": 77770,
+                "roundTripMs": 12.88841699999466,
+                "adjustmentMs": 0.015083000005688518,
+                "authorityTick": 1555,
+                "uncertaintyMs": 0.4375
+              },
+              {
+                "atMatchMs": 78766,
+                "roundTripMs": 9.114332999990438,
+                "adjustmentMs": 0.0076249999983701855,
+                "authorityTick": 1575,
+                "uncertaintyMs": 0.3275209999992512
+              },
+              {
+                "atMatchMs": 79782,
+                "roundTripMs": 24.870542000004207,
+                "adjustmentMs": 0.006999999997788109,
+                "authorityTick": 1595,
+                "uncertaintyMs": 0.3275209999992512
+              },
+              {
+                "atMatchMs": 80806,
+                "roundTripMs": 48.931749999988824,
+                "adjustmentMs": 0.09631199999421369,
+                "authorityTick": 1615,
+                "uncertaintyMs": 0.332749999994121
+              },
+              {
+                "atMatchMs": 81766,
+                "roundTripMs": 9.326916999998502,
+                "adjustmentMs": -0.10672949999570847,
+                "authorityTick": 1635,
+                "uncertaintyMs": 0.36218750000261934
+              },
+              {
+                "atMatchMs": 82750,
+                "roundTripMs": 8.21866699999373,
+                "adjustmentMs": 3.287229000008665,
+                "authorityTick": 1654,
+                "uncertaintyMs": 13.70966700000281
+              }
+            ],
+            "clockUncertaintyMs": 13.70966700000281,
+            "phaseChanges": [
+              {
+                "tick": 667,
+                "matchTimeMs": 33350,
+                "phase": "paused",
+                "reason": "spatialCoverageLost",
+                "sincePoseSendMs": 44.40979099999822,
+                "estimatedMatchMs": 33401.504916
+              },
+              {
+                "tick": 668,
+                "matchTimeMs": 33400,
+                "phase": "running",
+                "reason": "spatialCoverageRestored",
+                "sincePoseSendMs": 30.88499999999476,
+                "estimatedMatchMs": 33437.199958000005
+              },
+              {
+                "tick": 1172,
+                "matchTimeMs": 58600,
+                "phase": "paused",
+                "reason": "spatialCoverageLost",
+                "sincePoseSendMs": 16.10066600000573,
+                "estimatedMatchMs": 58674.136812
+              },
+              {
+                "tick": 1173,
+                "matchTimeMs": 58650,
+                "phase": "running",
+                "reason": "spatialCoverageRestored",
+                "sincePoseSendMs": 46.40666600000259,
+                "estimatedMatchMs": 58704.442811999994
+              }
+            ],
+            "phaseWallMs": {
+              "running": 80611.79833399999,
+              "paused": 66.00054100000125
+            },
+            "terminalReasons": {
+              "missExpired": 804,
+              "cancelled": 64
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "independent Node client opposing-combat: native clock and durable event convergence",
+      "state": "failed",
+      "failures": [
+        {
+          "name": "Error",
+          "message": "Spatial load input requires a ready clock"
+        }
+      ],
+      "result": {
+        "scenario": "opposing-combat",
+        "environment": "node-client-workerd-authority",
+        "clockMode": "native",
+        "activeLoadMs": 180000,
+        "activeElapsedMs": 27381.449167,
+        "interruptedBeforeReconciliation": true,
+        "failure": "Spatial load input requires a ready clock",
+        "players": [
+          {
+            "playerId": "load-0",
+            "errors": [
+              "epochMismatch",
+              "authorityEpochChanged",
+              "epochMismatch",
+              "epochMismatch",
+              "epochMismatch",
+              "epochMismatch"
+            ],
+            "offered": {
+              "pose": 547,
+              "slowField": 3,
+              "fire": 89,
+              "reload": 5
+            },
+            "accepted": {
+              "pose": 542,
+              "slowField": 3,
+              "fire": 50,
+              "reload": 5
+            },
+            "refusals": {
+              "fire:poseStale": 1,
+              "fire:notAlive": 1,
+              "fire:protected": 37
+            },
+            "pendingCommands": 5,
+            "clockSamples": [
+              {
+                "atMatchMs": 2413,
+                "roundTripMs": 0.5150829999911366,
+                "adjustmentMs": -0.4605204999970738,
+                "authorityTick": 48,
+                "uncertaintyMs": 0.2575414999955683
+              },
+              {
+                "atMatchMs": 3414,
+                "roundTripMs": 0.4521669999958249,
+                "adjustmentMs": 0.37512599999899976,
+                "authorityTick": 68,
+                "uncertaintyMs": 0.22608349999791244
+              },
+              {
+                "atMatchMs": 4418,
+                "roundTripMs": 4.270250000001397,
+                "adjustmentMs": 0.015749999991385266,
+                "authorityTick": 88,
+                "uncertaintyMs": 0.22608349999791244
+              },
+              {
+                "atMatchMs": 5416,
+                "roundTripMs": 0.4648340000130702,
+                "adjustmentMs": 0.008958000005804934,
+                "authorityTick": 108,
+                "uncertaintyMs": 0.29733299998770235
+              },
+              {
+                "atMatchMs": 6416,
+                "roundTripMs": 0.5321249999979045,
+                "adjustmentMs": 0.012082999994163401,
+                "authorityTick": 128,
+                "uncertaintyMs": 0.24891699999716366
+              },
+              {
+                "atMatchMs": 7418,
+                "roundTripMs": 0.46583400000235997,
+                "adjustmentMs": 0.011333000002196059,
+                "authorityTick": 148,
+                "uncertaintyMs": 0.22608349999791244
+              },
+              {
+                "atMatchMs": 8418,
+                "roundTripMs": 0.6161670000001322,
+                "adjustmentMs": 0.012000000002444722,
+                "authorityTick": 168,
+                "uncertaintyMs": 0.22608349999791244
+              },
+              {
+                "atMatchMs": 9419,
+                "roundTripMs": 0.9590000000025611,
+                "adjustmentMs": 0.014834000001428649,
+                "authorityTick": 188,
+                "uncertaintyMs": 0.22608349999791244
+              },
+              {
+                "atMatchMs": 10420,
+                "roundTripMs": 0.4973750000062864,
+                "adjustmentMs": 0.020457999999052845,
+                "authorityTick": 208,
+                "uncertaintyMs": 0.22608349999791244
+              },
+              {
+                "atMatchMs": 11420,
+                "roundTripMs": 0.4602500000037253,
+                "adjustmentMs": 0.00991700000304263,
+                "authorityTick": 228,
+                "uncertaintyMs": 0.22608349999791244
+              },
+              {
+                "atMatchMs": 12421,
+                "roundTripMs": 0.4425829999963753,
+                "adjustmentMs": -0.13337500000488944,
+                "authorityTick": 248,
+                "uncertaintyMs": 0.22129149999818765
+              },
+              {
+                "atMatchMs": 13423,
+                "roundTripMs": 0.5044579999957932,
+                "adjustmentMs": 0.02074999999604188,
+                "authorityTick": 268,
+                "uncertaintyMs": 0.23391700001229765
+              },
+              {
+                "atMatchMs": 14423,
+                "roundTripMs": 0.7814170000056038,
+                "adjustmentMs": 0.012458000011974946,
+                "authorityTick": 288,
+                "uncertaintyMs": 0.22129149999818765
+              },
+              {
+                "atMatchMs": 15424,
+                "roundTripMs": 0.6472499999945285,
+                "adjustmentMs": 0.011790999997174367,
+                "authorityTick": 308,
+                "uncertaintyMs": 0.22129149999818765
+              },
+              {
+                "atMatchMs": 16426,
+                "roundTripMs": 1.4149170000018785,
+                "adjustmentMs": 0.016250000000582077,
+                "authorityTick": 328,
+                "uncertaintyMs": 0.22129149999818765
+              },
+              {
+                "atMatchMs": 17426,
+                "roundTripMs": 0.9537089999939781,
+                "adjustmentMs": 0.015457999994396232,
+                "authorityTick": 348,
+                "uncertaintyMs": 0.22129149999818765
+              },
+              {
+                "atMatchMs": 18427,
+                "roundTripMs": 0.4757919999974547,
+                "adjustmentMs": 0.01295800000661984,
+                "authorityTick": 368,
+                "uncertaintyMs": 0.2834999999977299
+              },
+              {
+                "atMatchMs": 19428,
+                "roundTripMs": 0.8897920000017621,
+                "adjustmentMs": 0.025292000005720183,
+                "authorityTick": 388,
+                "uncertaintyMs": 0.22129149999818765
+              },
+              {
+                "atMatchMs": 20431,
+                "roundTripMs": 8.048125000001164,
+                "adjustmentMs": 0.018541999990702607,
+                "authorityTick": 408,
+                "uncertaintyMs": 0.22129149999818765
+              },
+              {
+                "atMatchMs": 21429,
+                "roundTripMs": 0.6222910000069533,
+                "adjustmentMs": 0.019333000003825873,
+                "authorityTick": 428,
+                "uncertaintyMs": 0.27179199999955017
+              },
+              {
+                "atMatchMs": 22429,
+                "roundTripMs": 0.7029170000023441,
+                "adjustmentMs": 0.31347949999326374,
+                "authorityTick": 448,
+                "uncertaintyMs": 0.23789599999872735
+              },
+              {
+                "atMatchMs": 23430,
+                "roundTripMs": 0.9631250000093132,
+                "adjustmentMs": 0.012124999993829988,
+                "authorityTick": 468,
+                "uncertaintyMs": 0.23789599999872735
+              },
+              {
+                "atMatchMs": 24430,
+                "roundTripMs": 0.6605419999978039,
+                "adjustmentMs": 0.010999999998603016,
+                "authorityTick": 488,
+                "uncertaintyMs": 0.49699999999575084
+              },
+              {
+                "atMatchMs": 25432,
+                "roundTripMs": 0.5370839999959571,
+                "adjustmentMs": 0.009541999999783002,
+                "authorityTick": 508,
+                "uncertaintyMs": 0.2384580000070855
+              },
+              {
+                "atMatchMs": 26432,
+                "roundTripMs": 0.5700419999920996,
+                "adjustmentMs": 0.009792000011657365,
+                "authorityTick": 528,
+                "uncertaintyMs": 0.5512920000037411
+              },
+              {
+                "atMatchMs": 27433,
+                "roundTripMs": 0.5026249999937136,
+                "adjustmentMs": 0.010499999989406206,
+                "authorityTick": 548,
+                "uncertaintyMs": 0.27524999999877764
+              },
+              {
+                "atMatchMs": 28434,
+                "roundTripMs": 0.767041999992216,
+                "adjustmentMs": -0.27379150000342634,
+                "authorityTick": 568,
+                "uncertaintyMs": 0.2513124999968568
+              },
+              {
+                "atMatchMs": 29352,
+                "roundTripMs": 182.47516699999687,
+                "adjustmentMs": 29443.2464165,
+                "authorityTick": 587,
+                "uncertaintyMs": 91.23758349999844
+              }
+            ],
+            "clockUncertaintyMs": 91.23758349999844,
+            "phaseChanges": [
+              {
+                "tick": 115,
+                "matchTimeMs": 5750,
+                "phase": "paused",
+                "reason": "spatialCoverageLost",
+                "sincePoseSendMs": 12.478749999994761,
+                "estimatedMatchMs": 5783.902083499997
+              },
+              {
+                "tick": 116,
+                "matchTimeMs": 5800,
+                "phase": "running",
+                "reason": "spatialCoverageRestored",
+                "sincePoseSendMs": 18.984666000003926,
+                "estimatedMatchMs": 5813.804500500002
+              },
+              {
+                "tick": 587,
+                "matchTimeMs": 29350,
+                "phase": "paused",
+                "reason": "authorityRecovered",
+                "sincePoseSendMs": 20.84475000000384,
+                "estimatedMatchMs": 29614.719146499992
+              }
+            ],
+            "phaseWallMs": {
+              "running": 27321.934041999993,
+              "paused": 59.43924900000275
+            },
+            "terminalReasons": {
+              "bodyHit": 50,
+              "cancelled": 12,
+              "missExpired": 60,
+              "shieldBlocked": 12
+            }
+          },
+          {
+            "playerId": "load-1",
+            "errors": [
+              "epochMismatch",
+              "authorityEpochChanged",
+              "epochMismatch",
+              "epochMismatch",
+              "epochMismatch",
+              "epochMismatch",
+              "epochMismatch"
+            ],
+            "offered": {
+              "pose": 547,
+              "slowField": 3,
+              "shield": 65,
+              "fire": 31,
+              "reload": 1
+            },
+            "accepted": {
+              "pose": 541,
+              "slowField": 3,
+              "shield": 3,
+              "fire": 17,
+              "reload": 1
+            },
+            "refusals": {
+              "pose:poseStale": 1,
+              "fire:protected": 14,
+              "shield:protected": 62
+            },
+            "pendingCommands": 5,
+            "clockSamples": [
+              {
+                "atMatchMs": 2837,
+                "roundTripMs": 0.8050409999996191,
+                "adjustmentMs": 0.010458000004291534,
+                "authorityTick": 56,
+                "uncertaintyMs": 0.5132920000032755
+              },
+              {
+                "atMatchMs": 3838,
+                "roundTripMs": 0.9351250000036089,
+                "adjustmentMs": 0.03800000000046566,
+                "authorityTick": 76,
+                "uncertaintyMs": 0.35122899999987567
+              },
+              {
+                "atMatchMs": 4839,
+                "roundTripMs": 0.6957499999989523,
+                "adjustmentMs": -0.03802100001485087,
+                "authorityTick": 96,
+                "uncertaintyMs": 0.34787499999947613
+              },
+              {
+                "atMatchMs": 5841,
+                "roundTripMs": 0.5690830000094138,
+                "adjustmentMs": 0.4276255000004312,
+                "authorityTick": 116,
+                "uncertaintyMs": 0.2845415000047069
+              },
+              {
+                "atMatchMs": 6841,
+                "roundTripMs": 0.6304999999993015,
+                "adjustmentMs": 0.012499999997089617,
+                "authorityTick": 136,
+                "uncertaintyMs": 0.2845415000047069
+              },
+              {
+                "atMatchMs": 7842,
+                "roundTripMs": 0.6421249999984866,
+                "adjustmentMs": 0.013292000003275461,
+                "authorityTick": 156,
+                "uncertaintyMs": 0.2845415000047069
+              },
+              {
+                "atMatchMs": 8843,
+                "roundTripMs": 0.8042089999944437,
+                "adjustmentMs": 0.01374999999825377,
+                "authorityTick": 176,
+                "uncertaintyMs": 0.2845415000047069
+              },
+              {
+                "atMatchMs": 9844,
+                "roundTripMs": 1.4308749999909196,
+                "adjustmentMs": 0.014582999996491708,
+                "authorityTick": 196,
+                "uncertaintyMs": 0.2845415000047069
+              },
+              {
+                "atMatchMs": 10847,
+                "roundTripMs": 2.4595419999968726,
+                "adjustmentMs": 0.011499999993247911,
+                "authorityTick": 216,
+                "uncertaintyMs": 0.2845415000047069
+              },
+              {
+                "atMatchMs": 11847,
+                "roundTripMs": 2.1083329999964917,
+                "adjustmentMs": 0.018250000008265488,
+                "authorityTick": 236,
+                "uncertaintyMs": 0.2845415000047069
+              },
+              {
+                "atMatchMs": 12848,
+                "roundTripMs": 2.9029589999991003,
+                "adjustmentMs": 0.03258300000743475,
+                "authorityTick": 256,
+                "uncertaintyMs": 0.2845415000047069
+              },
+              {
+                "atMatchMs": 13847,
+                "roundTripMs": 2.736958000008599,
+                "adjustmentMs": 0.03387500000826549,
+                "authorityTick": 276,
+                "uncertaintyMs": 0.2845415000047069
+              },
+              {
+                "atMatchMs": 14848,
+                "roundTripMs": 3.355542000004789,
+                "adjustmentMs": 0.011417000001529232,
+                "authorityTick": 296,
+                "uncertaintyMs": 0.2845415000047069
+              },
+              {
+                "atMatchMs": 15847,
+                "roundTripMs": 2.003082999988692,
+                "adjustmentMs": -0.23320849999436177,
+                "authorityTick": 316,
+                "uncertaintyMs": 0.31524999999965075
+              },
+              {
+                "atMatchMs": 16848,
+                "roundTripMs": 3.8804999999993015,
+                "adjustmentMs": -0.03164550001383759,
+                "authorityTick": 336,
+                "uncertaintyMs": 0.3210624999992433
+              },
+              {
+                "atMatchMs": 17850,
+                "roundTripMs": 3.689125000004424,
+                "adjustmentMs": 0.18166700001165736,
+                "authorityTick": 356,
+                "uncertaintyMs": 0.42908399998850655
+              },
+              {
+                "atMatchMs": 18848,
+                "roundTripMs": 1.3925000000017462,
+                "adjustmentMs": 0.6979374999937136,
+                "authorityTick": 376,
+                "uncertaintyMs": 0.6962500000008731
+              },
+              {
+                "atMatchMs": 19848,
+                "roundTripMs": 2.5288330000039423,
+                "adjustmentMs": 0.019125000006170012,
+                "authorityTick": 396,
+                "uncertaintyMs": 0.6962500000008731
+              },
+              {
+                "atMatchMs": 20850,
+                "roundTripMs": 5.54833299999882,
+                "adjustmentMs": 0.011459000001195818,
+                "authorityTick": 416,
+                "uncertaintyMs": 0.6962500000008731
+              },
+              {
+                "atMatchMs": 21859,
+                "roundTripMs": 13.927333000014187,
+                "adjustmentMs": 0.013042000005953014,
+                "authorityTick": 437,
+                "uncertaintyMs": 0.6962500000008731
+              },
+              {
+                "atMatchMs": 22849,
+                "roundTripMs": 1.796042000001762,
+                "adjustmentMs": 0.010999999998603016,
+                "authorityTick": 456,
+                "uncertaintyMs": 0.6962500000008731
+              },
+              {
+                "atMatchMs": 23858,
+                "roundTripMs": 20.268041999996058,
+                "adjustmentMs": 0.012667000002693385,
+                "authorityTick": 477,
+                "uncertaintyMs": 0.6962500000008731
+              },
+              {
+                "atMatchMs": 24856,
+                "roundTripMs": 9.177416999998968,
+                "adjustmentMs": 0.013124999997671694,
+                "authorityTick": 497,
+                "uncertaintyMs": 0.6962500000008731
+              },
+              {
+                "atMatchMs": 25849,
+                "roundTripMs": 0.3543330000102287,
+                "adjustmentMs": 0.0027919999993173406,
+                "authorityTick": 516,
+                "uncertaintyMs": 0.6962500000008731
+              },
+              {
+                "atMatchMs": 26862,
+                "roundTripMs": 14.138624999992317,
+                "adjustmentMs": 0.008999999990919605,
+                "authorityTick": 537,
+                "uncertaintyMs": 0.6962500000008731
+              },
+              {
+                "atMatchMs": 27850,
+                "roundTripMs": 0.5307919999904698,
+                "adjustmentMs": -0.4073540000244975,
+                "authorityTick": 556,
+                "uncertaintyMs": 0.2653959999952349
+              },
+              {
+                "atMatchMs": 28850,
+                "roundTripMs": 0.6823339999973541,
+                "adjustmentMs": 0.014708999995491467,
+                "authorityTick": 576,
+                "uncertaintyMs": 0.2653959999952349
+              }
+            ],
+            "clockUncertaintyMs": null,
+            "phaseChanges": [
+              {
+                "tick": 115,
+                "matchTimeMs": 5750,
+                "phase": "paused",
+                "reason": "spatialCoverageLost",
+                "sincePoseSendMs": 12.443375000002561,
+                "estimatedMatchMs": 5783.72099999999
+              },
+              {
+                "tick": 116,
+                "matchTimeMs": 5800,
+                "phase": "running",
+                "reason": "spatialCoverageRestored",
+                "sincePoseSendMs": 18.79862499999581,
+                "estimatedMatchMs": 5813.500541999994
+              },
+              {
+                "tick": 587,
+                "matchTimeMs": 29350,
+                "phase": "paused",
+                "reason": "authorityRecovered",
+                "sincePoseSendMs": 20.55333400001109,
+                "estimatedMatchMs": 29614.938395999998
+              }
+            ],
+            "phaseWallMs": {
+              "running": 27321.955541000003,
+              "paused": 59.42595699999947
+            },
+            "terminalReasons": {
+              "bodyHit": 50,
+              "cancelled": 12,
+              "missExpired": 60,
+              "shieldBlocked": 12
+            }
+          },
+          {
+            "playerId": "load-2",
+            "errors": [
+              "epochMismatch",
+              "authorityEpochChanged",
+              "epochMismatch",
+              "epochMismatch",
+              "epochMismatch",
+              "epochMismatch"
+            ],
+            "offered": {
+              "pose": 547,
+              "slowField": 3,
+              "fire": 88,
+              "reload": 5
+            },
+            "accepted": {
+              "pose": 541,
+              "slowField": 3,
+              "fire": 50,
+              "reload": 5
+            },
+            "refusals": {
+              "pose:poseStale": 1,
+              "fire:poseMismatch": 1,
+              "fire:protected": 37
+            },
+            "pendingCommands": 5,
+            "clockSamples": [
+              {
+                "atMatchMs": 3262,
+                "roundTripMs": 8.1643330000079,
+                "adjustmentMs": 0.010834000000613742,
+                "authorityTick": 65,
+                "uncertaintyMs": 0.26679199999489356
+              },
+              {
+                "atMatchMs": 4262,
+                "roundTripMs": 6.6475829999981215,
+                "adjustmentMs": 0.015167000005021691,
+                "authorityTick": 85,
+                "uncertaintyMs": 0.23825000000942964
+              },
+              {
+                "atMatchMs": 5257,
+                "roundTripMs": 1.3652500000025611,
+                "adjustmentMs": 0.008249999998952262,
+                "authorityTick": 105,
+                "uncertaintyMs": 0.7715830000015558
+              },
+              {
+                "atMatchMs": 6261,
+                "roundTripMs": 4.43908399999782,
+                "adjustmentMs": 0.011500000007799827,
+                "authorityTick": 125,
+                "uncertaintyMs": 0.6524580000113929
+              },
+              {
+                "atMatchMs": 7258,
+                "roundTripMs": 1.8618750000023283,
+                "adjustmentMs": 0.026750000004540198,
+                "authorityTick": 145,
+                "uncertaintyMs": 0.4654579999987618
+              },
+              {
+                "atMatchMs": 8278,
+                "roundTripMs": 17.640458000008948,
+                "adjustmentMs": 0.016457999998237938,
+                "authorityTick": 165,
+                "uncertaintyMs": 0.23343749999912689
+              },
+              {
+                "atMatchMs": 9262,
+                "roundTripMs": 0.48662499999045394,
+                "adjustmentMs": 0.009583999999449588,
+                "authorityTick": 185,
+                "uncertaintyMs": 0.23343749999912689
+              },
+              {
+                "atMatchMs": 10264,
+                "roundTripMs": 2.0480419999948936,
+                "adjustmentMs": 0.014917000007699244,
+                "authorityTick": 205,
+                "uncertaintyMs": 0.23343749999912689
+              },
+              {
+                "atMatchMs": 11263,
+                "roundTripMs": 0.3759580000041751,
+                "adjustmentMs": 0.4475415000197245,
+                "authorityTick": 225,
+                "uncertaintyMs": 0.18797900000208756
+              },
+              {
+                "atMatchMs": 12263,
+                "roundTripMs": 0.4550840000010794,
+                "adjustmentMs": 0.013542000000597909,
+                "authorityTick": 245,
+                "uncertaintyMs": 0.18797900000208756
+              },
+              {
+                "atMatchMs": 13264,
+                "roundTripMs": 2.1618750000052387,
+                "adjustmentMs": 0.012582999988808297,
+                "authorityTick": 265,
+                "uncertaintyMs": 0.18797900000208756
+              },
+              {
+                "atMatchMs": 14263,
+                "roundTripMs": 0.475417000008747,
+                "adjustmentMs": 0.010999999998603016,
+                "authorityTick": 285,
+                "uncertaintyMs": 0.18797900000208756
+              },
+              {
+                "atMatchMs": 15264,
+                "roundTripMs": 0.644417000003159,
+                "adjustmentMs": 0.013833999997586943,
+                "authorityTick": 305,
+                "uncertaintyMs": 0.36937500000203727
+              },
+              {
+                "atMatchMs": 16266,
+                "roundTripMs": 0.5379169999941951,
+                "adjustmentMs": 0.012042000002111308,
+                "authorityTick": 325,
+                "uncertaintyMs": 0.18797900000208756
+              },
+              {
+                "atMatchMs": 17267,
+                "roundTripMs": 1.4714160000003176,
+                "adjustmentMs": 0.013458999994327314,
+                "authorityTick": 345,
+                "uncertaintyMs": 0.18797900000208756
+              },
+              {
+                "atMatchMs": 18267,
+                "roundTripMs": 1.4159579999977723,
+                "adjustmentMs": 0.02104200000758283,
+                "authorityTick": 365,
+                "uncertaintyMs": 0.18797900000208756
+              },
+              {
+                "atMatchMs": 19267,
+                "roundTripMs": 0.5592909999977564,
+                "adjustmentMs": 0.023417000003973953,
+                "authorityTick": 385,
+                "uncertaintyMs": 0.2524170000106096
+              },
+              {
+                "atMatchMs": 20271,
+                "roundTripMs": 3.573499999998603,
+                "adjustmentMs": 0.013833999997586943,
+                "authorityTick": 405,
+                "uncertaintyMs": 0.18797900000208756
+              },
+              {
+                "atMatchMs": 21270,
+                "roundTripMs": 0.7315410000010161,
+                "adjustmentMs": 0.004415999996126629,
+                "authorityTick": 425,
+                "uncertaintyMs": 0.18797900000208756
+              },
+              {
+                "atMatchMs": 22271,
+                "roundTripMs": 0.45429199999489356,
+                "adjustmentMs": -0.13445800000044983,
+                "authorityTick": 445,
+                "uncertaintyMs": 0.22714599999744678
+              },
+              {
+                "atMatchMs": 23273,
+                "roundTripMs": 0.5621659999887925,
+                "adjustmentMs": 0.011749999990570359,
+                "authorityTick": 465,
+                "uncertaintyMs": 0.37204200000996934
+              },
+              {
+                "atMatchMs": 24275,
+                "roundTripMs": 2.817332999999053,
+                "adjustmentMs": 0.012624999988474883,
+                "authorityTick": 485,
+                "uncertaintyMs": 0.22714599999744678
+              },
+              {
+                "atMatchMs": 25275,
+                "roundTripMs": 0.4804169999988517,
+                "adjustmentMs": 0.009707999997772276,
+                "authorityTick": 505,
+                "uncertaintyMs": 0.22714599999744678
+              },
+              {
+                "atMatchMs": 26276,
+                "roundTripMs": 0.383957999991253,
+                "adjustmentMs": -0.34229199998662807,
+                "authorityTick": 525,
+                "uncertaintyMs": 0.1919789999956265
+              },
+              {
+                "atMatchMs": 27278,
+                "roundTripMs": 0.5752919999940787,
+                "adjustmentMs": 0.008375000004889444,
+                "authorityTick": 545,
+                "uncertaintyMs": 0.4338750000024447
+              },
+              {
+                "atMatchMs": 28278,
+                "roundTripMs": 0.6252910000039265,
+                "adjustmentMs": 0.012083000008715317,
+                "authorityTick": 565,
+                "uncertaintyMs": 0.4650419999961741
+              },
+              {
+                "atMatchMs": 29279,
+                "roundTripMs": 0.7316670000000158,
+                "adjustmentMs": 0.015499999994062819,
+                "authorityTick": 585,
+                "uncertaintyMs": 0.1919789999956265
+              }
+            ],
+            "clockUncertaintyMs": null,
+            "phaseChanges": [
+              {
+                "tick": 115,
+                "matchTimeMs": 5750,
+                "phase": "paused",
+                "reason": "spatialCoverageLost",
+                "sincePoseSendMs": 11.785708000010345,
+                "estimatedMatchMs": 5783.780937499992
+              },
+              {
+                "tick": 116,
+                "matchTimeMs": 5800,
+                "phase": "running",
+                "reason": "spatialCoverageRestored",
+                "sincePoseSendMs": 18.798915999999736,
+                "estimatedMatchMs": 5813.612187499995
+              },
+              {
+                "tick": 587,
+                "matchTimeMs": 29350,
+                "phase": "paused",
+                "reason": "authorityRecovered",
+                "sincePoseSendMs": 20.71708299999591,
+                "estimatedMatchMs": 29614.558936999994
+              }
+            ],
+            "phaseWallMs": {
+              "running": 27322.01962600001,
+              "paused": 59.37741800000367
+            },
+            "terminalReasons": {
+              "bodyHit": 50,
+              "cancelled": 12,
+              "missExpired": 60,
+              "shieldBlocked": 12
+            }
+          },
+          {
+            "playerId": "load-3",
+            "errors": [
+              "epochMismatch",
+              "authorityEpochChanged",
+              "epochMismatch",
+              "epochMismatch",
+              "epochMismatch",
+              "epochMismatch",
+              "epochMismatch"
+            ],
+            "offered": {
+              "pose": 547,
+              "slowField": 3,
+              "shield": 64,
+              "fire": 32,
+              "reload": 1
+            },
+            "accepted": {
+              "pose": 541,
+              "slowField": 3,
+              "shield": 3,
+              "fire": 17,
+              "reload": 1
+            },
+            "refusals": {
+              "pose:poseStale": 1,
+              "fire:protected": 14,
+              "shield:protected": 61,
+              "fire:notAlive": 1
+            },
+            "pendingCommands": 5,
+            "clockSamples": [
+              {
+                "atMatchMs": 2696,
+                "roundTripMs": 1.3171670000010636,
+                "adjustmentMs": 0.01374999999825377,
+                "authorityTick": 53,
+                "uncertaintyMs": 0.25912500000413274
+              },
+              {
+                "atMatchMs": 3699,
+                "roundTripMs": 4.006250000005821,
+                "adjustmentMs": 0.010708000001613982,
+                "authorityTick": 73,
+                "uncertaintyMs": 0.25912500000413274
+              },
+              {
+                "atMatchMs": 4697,
+                "roundTripMs": 2.2935409999918193,
+                "adjustmentMs": 0.012667000002693385,
+                "authorityTick": 93,
+                "uncertaintyMs": 0.25912500000413274
+              },
+              {
+                "atMatchMs": 5782,
+                "roundTripMs": 86.16216700000223,
+                "adjustmentMs": 0.00979199999710545,
+                "authorityTick": 115,
+                "uncertaintyMs": 0.25912500000413274
+              },
+              {
+                "atMatchMs": 6700,
+                "roundTripMs": 2.0489999999990687,
+                "adjustmentMs": 0.01029200000630226,
+                "authorityTick": 133,
+                "uncertaintyMs": 0.25912500000413274
+              },
+              {
+                "atMatchMs": 7699,
+                "roundTripMs": 0.47954200000094716,
+                "adjustmentMs": -0.6526459999877261,
+                "authorityTick": 153,
+                "uncertaintyMs": 0.23977100000047358
+              },
+              {
+                "atMatchMs": 8707,
+                "roundTripMs": 8.626749999995809,
+                "adjustmentMs": 0.040084000007482246,
+                "authorityTick": 174,
+                "uncertaintyMs": 0.23977100000047358
+              },
+              {
+                "atMatchMs": 9711,
+                "roundTripMs": 10.989499999996042,
+                "adjustmentMs": 0.011708000005455688,
+                "authorityTick": 194,
+                "uncertaintyMs": 0.5300420000057784
+              },
+              {
+                "atMatchMs": 10710,
+                "roundTripMs": 9.627083999992465,
+                "adjustmentMs": 0.015250000011292286,
+                "authorityTick": 214,
+                "uncertaintyMs": 0.23977100000047358
+              },
+              {
+                "atMatchMs": 11713,
+                "roundTripMs": 11.031749999994645,
+                "adjustmentMs": 0.012709000002359971,
+                "authorityTick": 234,
+                "uncertaintyMs": 0.5378340000097523
+              },
+              {
+                "atMatchMs": 12710,
+                "roundTripMs": 7.0896669999929145,
+                "adjustmentMs": 0.017250000004423782,
+                "authorityTick": 254,
+                "uncertaintyMs": 0.26116700001148274
+              },
+              {
+                "atMatchMs": 13732,
+                "roundTripMs": 28.39312500000233,
+                "adjustmentMs": 0.012625000003026798,
+                "authorityTick": 274,
+                "uncertaintyMs": 0.23977100000047358
+              },
+              {
+                "atMatchMs": 14708,
+                "roundTripMs": 2.6298749999987194,
+                "adjustmentMs": 0.008708000008482486,
+                "authorityTick": 294,
+                "uncertaintyMs": 0.3055000000167638
+              },
+              {
+                "atMatchMs": 15713,
+                "roundTripMs": 7.886291999995592,
+                "adjustmentMs": 0.013332999995327555,
+                "authorityTick": 314,
+                "uncertaintyMs": 0.4727920000004815
+              },
+              {
+                "atMatchMs": 16707,
+                "roundTripMs": 1.3687910000007832,
+                "adjustmentMs": 0.011708999998518266,
+                "authorityTick": 334,
+                "uncertaintyMs": 0.39483400000608526
+              },
+              {
+                "atMatchMs": 17707,
+                "roundTripMs": 1.2739169999986188,
+                "adjustmentMs": 0.9489794999972219,
+                "authorityTick": 354,
+                "uncertaintyMs": 0.6369584999993094
+              },
+              {
+                "atMatchMs": 18708,
+                "roundTripMs": 2.936874999999418,
+                "adjustmentMs": 0.020124999995459802,
+                "authorityTick": 374,
+                "uncertaintyMs": 0.6369584999993094
+              },
+              {
+                "atMatchMs": 19706,
+                "roundTripMs": 1.6286249999975553,
+                "adjustmentMs": 0.011958999995840713,
+                "authorityTick": 394,
+                "uncertaintyMs": 0.6369584999993094
+              },
+              {
+                "atMatchMs": 20707,
+                "roundTripMs": 1.143292000007932,
+                "adjustmentMs": 0.030979500006651506,
+                "authorityTick": 414,
+                "uncertaintyMs": 0.571646000003966
+              },
+              {
+                "atMatchMs": 21714,
+                "roundTripMs": 8.04262499998731,
+                "adjustmentMs": 0.010666999995009974,
+                "authorityTick": 434,
+                "uncertaintyMs": 0.571646000003966
+              },
+              {
+                "atMatchMs": 22713,
+                "roundTripMs": 5.729832999990322,
+                "adjustmentMs": 0.012917000000015832,
+                "authorityTick": 454,
+                "uncertaintyMs": 0.571646000003966
+              },
+              {
+                "atMatchMs": 23709,
+                "roundTripMs": 1.7547919999924488,
+                "adjustmentMs": 0.017125000013038516,
+                "authorityTick": 474,
+                "uncertaintyMs": 0.571646000003966
+              },
+              {
+                "atMatchMs": 24717,
+                "roundTripMs": 9.422166999996989,
+                "adjustmentMs": 0.012374999991152436,
+                "authorityTick": 494,
+                "uncertaintyMs": 0.571646000003966
+              },
+              {
+                "atMatchMs": 25739,
+                "roundTripMs": 30.837291999996523,
+                "adjustmentMs": 0.011624999999185093,
+                "authorityTick": 514,
+                "uncertaintyMs": 0.571646000003966
+              },
+              {
+                "atMatchMs": 26710,
+                "roundTripMs": 0.43774999999732245,
+                "adjustmentMs": -1.1249369999859482,
+                "authorityTick": 534,
+                "uncertaintyMs": 0.21887499999866122
+              },
+              {
+                "atMatchMs": 27711,
+                "roundTripMs": 0.5605000000068685,
+                "adjustmentMs": 0.014582999996491708,
+                "authorityTick": 554,
+                "uncertaintyMs": 0.32124999999359716
+              },
+              {
+                "atMatchMs": 28711,
+                "roundTripMs": 0.5591669999994338,
+                "adjustmentMs": 0.015292000010958873,
+                "authorityTick": 574,
+                "uncertaintyMs": 0.26404099999490427
+              }
+            ],
+            "clockUncertaintyMs": null,
+            "phaseChanges": [
+              {
+                "tick": 115,
+                "matchTimeMs": 5750,
+                "phase": "paused",
+                "reason": "spatialCoverageLost",
+                "sincePoseSendMs": 11.716500000009546,
+                "estimatedMatchMs": 5784.690833000001
+              },
+              {
+                "tick": 116,
+                "matchTimeMs": 5800,
+                "phase": "running",
+                "reason": "spatialCoverageRestored",
+                "sincePoseSendMs": 18.748292000003858,
+                "estimatedMatchMs": 5814.458707999991
+              },
+              {
+                "tick": 587,
+                "matchTimeMs": 29350,
+                "phase": "paused",
+                "reason": "authorityRecovered",
+                "sincePoseSendMs": 20.704583999991883,
+                "estimatedMatchMs": 29614.61033400001
+              }
+            ],
+            "phaseWallMs": {
+              "running": 27322.12129200001,
+              "paused": 59.27550000001793
+            },
+            "terminalReasons": {
+              "bodyHit": 50,
+              "cancelled": 12,
+              "missExpired": 60,
+              "shieldBlocked": 12
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

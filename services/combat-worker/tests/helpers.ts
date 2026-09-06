@@ -152,7 +152,7 @@ export function phoneInput(socket: SocketInbox, initial: Extract<ServerMessage, 
 
 type ScheduledRoom = {
   queue: Pick<SerialQueue, "run">;
-  cadence: { reset(now: number): void };
+  cadence: { reset(now: number): void; inputTick(currentTick: number, receivedAtMs: number): number };
   simulation: Pick<CombatSimulation, "snapshot"> | null;
   pending: readonly { command: CommandEnvelope }[];
   stopTimer(): void;
@@ -174,6 +174,9 @@ export async function manuallyScheduledRoom(matchId: string) {
       if (room.simulation !== null) throw new Error("Install the fixture scheduler before connecting phones");
       room.stopTimer();
       room.scheduleTick = () => {};
+      // This fixture owns logical tick assignment as well as the timer. Real
+      // arrival intervals are exercised separately by the catch-up regression.
+      room.cadence.inputTick = currentTick => currentTick + 1;
     });
   });
   let matchTimeMs = 0;
