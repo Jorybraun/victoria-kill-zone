@@ -7,6 +7,9 @@ export class TickCadence {
   stalled(now: number): boolean { return now - this.anchor > 250; }
   delay(now: number): number { return Math.max(1, LIMITS.tickMs - Math.max(0, now - this.anchor)); }
   committedTick(): void { this.anchor += LIMITS.tickMs; }
+  inputTick(currentTick: number, receivedAtMs: number): number {
+    return currentTick + Math.max(1, Math.ceil((receivedAtMs - this.anchor) / LIMITS.tickMs));
+  }
   interpolate(matchTimeMs: number, now: number): number {
     return matchTimeMs + Math.min(LIMITS.tickMs, Math.max(0, now - this.anchor));
   }

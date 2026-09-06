@@ -8,16 +8,19 @@ import type { Reporter, TestCase } from "vitest/node";
 export class LoadReporter implements Reporter {
   private readonly results: unknown[] = [];
   private readonly source = sourceManifest();
+  constructor(private readonly filename = "last-load.json", private readonly environment = "local-workerd-synthetic") {}
   onTestCaseResult(test: TestCase): void {
     const annotation = test.annotations().find(item => item.type === "vkz-load");
-    this.results.push({name: test.name, state: test.result().state,
+    const outcome = test.result();
+    this.results.push({name: test.name, state: outcome.state,
+      failures: (outcome.errors ?? []).slice(0, 8).map(error => ({name: error.name, message: error.message.slice(0, 2000)})),
       result: annotation ? JSON.parse(annotation.message) as unknown : null});
     mkdirSync("reports", {recursive: true});
-    writeFileSync("reports/last-load.json", JSON.stringify({
+    writeFileSync(join("reports", this.filename), JSON.stringify({
       generatedAt: new Date().toISOString(), ...this.source,
-      environment: "local-workerd-synthetic", node: process.version, results: this.results,
+      environment: this.environment, node: process.version, results: this.results,
     }, null, 2) + "\n");
-    process.stdout.write(`Load evidence: reports/last-load.json (${test.result().state})\n`);
+    process.stdout.write(`Load evidence: reports/${this.filename} (${test.result().state})\n`);
   }
 }
 
@@ -33,7 +36,9 @@ function sourceManifest(): {sourceHead: string; sourceFilesSha256: Record<string
     }
   };
   for (const directory of ["services/combat-worker/src", "services/combat-worker/benchmarks", "packages/combat-protocol/src", "packages/combat-simulation/src"]) walk(join(root, directory));
-  for (const file of ["pnpm-lock.yaml", "services/combat-worker/package.json", "services/combat-worker/tsconfig.json", "services/combat-worker/vitest.config.ts", "services/combat-worker/vitest.load.config.ts", "services/combat-worker/wrangler.jsonc", "services/combat-worker/tests/helpers.ts"]) files.push(join(root, file));
+  for (const file of ["pnpm-lock.yaml", "services/combat-worker/package.json", "services/combat-worker/tsconfig.json", "services/combat-worker/vitest.config.ts", "services/combat-worker/vitest.load.config.ts", "services/combat-worker/vitest.node-load.config.ts", "services/combat-worker/wrangler.jsonc", "services/combat-worker/tests/helpers.ts", "services/combat-worker/tests/catch-up-input.test.ts",
+    "ios/VictoriaKillZone/VictoriaKillZone/Services/Realtime/CombatClock.swift",
+    "ios/VictoriaKillZone/VictoriaKillZone/Services/Realtime/RealtimeCombatSession.swift"]) files.push(join(root, file));
   return {sourceHead: execFileSync("git", ["rev-parse", "HEAD"], {encoding: "utf8"}).trim(),
     sourceFilesSha256: Object.fromEntries(files.sort().map(path => [relative(root, path), createHash("sha256").update(readFileSync(path)).digest("hex")]))};
 }

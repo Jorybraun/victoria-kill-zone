@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:load": "vitest run --config vitest.load.config.ts",
+    "test:load:node": "vitest run --config vitest.node-load.config.ts",
     "types": "wrangler types worker-configuration.d.ts --strict-vars false"
   },
   "dependencies": {
