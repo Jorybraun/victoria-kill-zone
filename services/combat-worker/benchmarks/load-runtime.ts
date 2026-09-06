@@ -22,4 +22,5 @@ export interface LoadRuntime {
   upgrade(ticket: CombatTicketClaims): Promise<{status: number; webSocket: LoadSocket | null}>;
   readDurable(matchId: string): Promise<DurableLoadState>;
   installProfile?(matchId: string): Promise<RuntimeProfile>;
+  beginDiagnostics?(matchId: string): Promise<void>;
 }

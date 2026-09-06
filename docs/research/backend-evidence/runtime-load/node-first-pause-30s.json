@@ -1,0 +1,3314 @@
+{
+  "generatedAt": "2026-09-06T23:39:50.891Z",
+  "sourceHead": "7a1a529eb31e14b40f8ede9df2cefb667ff80244",
+  "sourceFilesSha256": {
+    "ios/VictoriaKillZone/VictoriaKillZone/Services/Realtime/CombatClock.swift": "522cc405384d024725de69cafc4ab5c74b9955a6dfcebb8a3640a5cdd9d4e09b",
+    "ios/VictoriaKillZone/VictoriaKillZone/Services/Realtime/RealtimeCombatSession.swift": "974addb70b26ea9f456c0ed70e44519aea1dbd0ecf9a6cb7bfde959829cd9409",
+    "packages/combat-protocol/src/index.ts": "d1e67cb11af7d20cc85994f97a374eff038d64bc8a30cc47a476722c0665b411",
+    "packages/combat-protocol/src/validation.ts": "3a943920a3694d06c22db434d98992654b4e3d7a5cc9f4f9c0c3ddfa75d795cb",
+    "packages/combat-simulation/src/flight.ts": "2d97514ed588fc46d23b96f5bf63a9224f7f36b5be28914d172cf36e1b5f409f",
+    "packages/combat-simulation/src/geometry.ts": "7027327ddd8c43cecbac076a80fa4ccc497c2dec2a55be3fde6a4a68c87e89a8",
+    "packages/combat-simulation/src/history.ts": "16f8db78cc956c3c72ffea1c283fc6147b5f0d7d365608b1fa021a137dd279d6",
+    "packages/combat-simulation/src/index.ts": "96d9dce63f8605a7a79f220468dff515aad7826fc6e6fb7154500a04fc00db9e",
+    "packages/combat-simulation/src/state.ts": "f14603cb89cc8668d6ed8fc603017945e723ef2b3deb2cf1265b62dc84c782b9",
+    "pnpm-lock.yaml": "07c06355e925ac2fadb85bfd18cd3be4896ccac3709176ce77bd72f986bb1147",
+    "services/combat-worker/benchmarks/catch-up-reporter.ts": "2b79a7f4baf8e06540fcb58014162cd3d2ca4f0694433302f4fa29b39a61cac5",
+    "services/combat-worker/benchmarks/first-pause-trace.ts": "c75985a3cffc50c6c150f30a601190655080b5875c0a939154920f7c2bbba4a6",
+    "services/combat-worker/benchmarks/four-player.load.ts": "5b5a34dcee4e21271c8c4fb16f23b31c0c3fdc9403f6830b08b33c0f3b90e227",
+    "services/combat-worker/benchmarks/four-player.node-load.ts": "fec6626857f4bffc89c989c7c95b90d97c70695d1b9199291bfe8f0cb0b9c56d",
+    "services/combat-worker/benchmarks/load-client.ts": "044c2fe2798e1b85b86da86a604b357e0c10c6cf2cfba5c2b3c465f6cf6693a1",
+    "services/combat-worker/benchmarks/load-reporter.ts": "c733b9b976b44af89de1a049b58bf057c9498d374177d9fbb35ccdd7c408e09a",
+    "services/combat-worker/benchmarks/load-runtime.ts": "8be265193893a23c65fe5efc2dafd9049c3d17d982301a002317de879c5a6c52",
+    "services/combat-worker/benchmarks/load-scenario.ts": "27a1f4fe35d603d7e3edc0978ed4268772eb4ff1c6e7cbaf034993b0cc8ece25",
+    "services/combat-worker/benchmarks/native-clock.ts": "3c6c528c89c0a419a0558c48bc0fe9296e1935e9d30f979151417a53ff028c7f",
+    "services/combat-worker/benchmarks/node-runtime.ts": "609e5a37b62a65cbc6111792214523cab8d422c374627587cd3fd931206d2198",
+    "services/combat-worker/benchmarks/runtime-profile.ts": "10bfa126c606fd5399091024af6648263b472e8c1f6bc405ae21da030640e23b",
+    "services/combat-worker/benchmarks/trace-worker.ts": "241ce26066847d6e00d51e652f5b81fd8aa677645fe408c87213893d15b72f46",
+    "services/combat-worker/benchmarks/wrangler.trace.jsonc": "aed79121e0999c8229ae87d3daed498e185e8bec0acc9aa1cd37a4be3f04dbbc",
+    "services/combat-worker/package.json": "992e5a27954fe84f5ed27ba2f84517ae0363691b5a6972a89ccdcc91fd3e674a",
+    "services/combat-worker/src/auth.ts": "56e5865f3b4b41bbcbed93dee4fb2764f965dfc4e49d7f175e2e58e598089312",
+    "services/combat-worker/src/bullet-ledger.ts": "659c6c891559bb2bbd0b64242bb1b48e272750abfa52d0a614992fd888355c25",
+    "services/combat-worker/src/cadence.ts": "c937076005802502537d47757bf5ddd8cf93cbd84c679ef3112bcec6a619f858",
+    "services/combat-worker/src/canonical.ts": "a4e1085c0915238ae1a21058a81ff02aeb2d28b462cb5e6ccdc347eaf20f8635",
+    "services/combat-worker/src/command-fingerprint.ts": "cd91d5ace7535abd45f303aefa2d70b36f198494499b4ee1ed4fccc8a1b13b31",
+    "services/combat-worker/src/connection.ts": "7ad776977296d18e9b24ad2b53862c1c606f97eb6a14c8d3c37ade09cbb5ddd7",
+    "services/combat-worker/src/index.ts": "70351c95695eb9202167a2f93f2e4bcb4bd9f3187455283f6d3af327265b312d",
+    "services/combat-worker/src/maps.ts": "b79e738fad0865c7c692f313e52e289c3232d135eb8a1b1829264043ca301b7e",
+    "services/combat-worker/src/projection-delivery.ts": "345cda479c5100635e1bddd683a3768e2ee48d4b95d411abc7f661071ae9c68d",
+    "services/combat-worker/src/projection-store.ts": "75bfb0a3115331992d4e233681d6381947c00b3df34c3935ceec363a2ecb3a0a",
+    "services/combat-worker/src/room.ts": "30a03e37a0b74b249a70d071da4b4f1e51dfb3320aeb0a8f088199f6b39e1b31",
+    "services/combat-worker/src/routes.ts": "8b2def872e15f36cb907cae24c9ba5111659818ff7722e27399afc3460e12b85",
+    "services/combat-worker/src/serial-queue.ts": "f024fe3f2280293302653e695255466e73485b3aa22e5fcb28166ec48b37f88c",
+    "services/combat-worker/src/store.ts": "8c286a0d2657b7abce1a7a2371bd0ecb904d03860d5eb85907b08ab669a8632f",
+    "services/combat-worker/tests/catch-up-input.test.ts": "7f57786f38fffca1c48083efa92e559a5fd63576044e8c14562d53ed54f47e4a",
+    "services/combat-worker/tests/helpers.ts": "afd8d6c8f2890364c9a2c73846f40f52696aa4227df40b5143dc7ab270209990",
+    "services/combat-worker/tsconfig.json": "3d629d3db06804501a2b28c824d4a6453d45b32ef7c14751ed10e01799c2ba14",
+    "services/combat-worker/vitest.config.ts": "6c9ac99c6fcc0a90cd30c9b36b50cc3f5bfd7ec1abfce3f6b1b9e0492f66b316",
+    "services/combat-worker/vitest.load.config.ts": "c52a98661c3dca10c91f2bfcb29c7fa51612353fbb8bcd9e55e1516cf72cad69",
+    "services/combat-worker/vitest.node-load.config.ts": "027c671711a86e89b22700216343c5eb1d4285157759b4e25da7e5326ddbd1d6",
+    "services/combat-worker/wrangler.jsonc": "fc6e1da75bba2074cc8c1fc6df07652e572ef4b8759f6ebef3fc2b82e8d7dcd0"
+  },
+  "environment": "node-client-workerd-authority",
+  "node": "v26.7.0",
+  "results": [
+    {
+      "name": "independent Node client miss-lanes: native clock and durable event convergence",
+      "state": "passed",
+      "failures": [],
+      "result": {
+        "scenario": "miss-lanes",
+        "environment": "node-client-workerd-authority",
+        "clockMode": "native",
+        "activeLoadMs": 30000,
+        "activeElapsedMs": 30000.762708000002,
+        "estimatedClockElapsedMs": 30001.384271000003,
+        "observedAuthorityElapsedMs": 30050,
+        "runtimeProfile": null,
+        "limitations": [
+          "local synthetic workerd; no device or cloud latency",
+          "maximum synthetic collider payload, not camera coverage evidence",
+          "delivery intervals are not server tick execution or CPU",
+          "projection endpoint disabled; outbox persistence only"
+        ],
+        "offeredPoseIntervalMs": 50,
+        "expectedPosesPerPlayer": 600,
+        "missedPumpSlots": 0,
+        "pumpLatenessMs": {
+          "samples": 600,
+          "p50": 0.54,
+          "p95": 1.23,
+          "p99": 1.33,
+          "max": 25.62
+        },
+        "maximumInputBytes": 11126,
+        "activeInputBytesIncludingReceiptsAndPings": 26834296,
+        "activeOutputBytes": 15974606,
+        "players": [
+          {
+            "playerId": "load-0",
+            "offered": {
+              "pose": 600,
+              "slowField": 3,
+              "fire": 88,
+              "reload": 11
+            },
+            "accepted": {
+              "pose": 600,
+              "slowField": 3,
+              "fire": 88,
+              "reload": 11
+            },
+            "refusals": {},
+            "acknowledgmentMs": {
+              "samples": 702,
+              "p50": 26.03,
+              "p95": 29.15,
+              "p99": 31.54,
+              "max": 87.09
+            },
+            "commandResultMs": {
+              "samples": 702,
+              "p50": 25.39,
+              "p95": 28.37,
+              "p99": 30.1,
+              "max": 84.04
+            },
+            "poseSendIntervalMs": {
+              "samples": 599,
+              "p50": 50.02,
+              "p95": 51.39,
+              "p99": 51.88,
+              "max": 74.97
+            },
+            "poseCaptureIntervalMs": {
+              "samples": 599,
+              "p50": 50.02,
+              "p95": 51.38,
+              "p99": 51.88,
+              "max": 74.96
+            },
+            "poseAgeAtResultMs": {
+              "samples": 600,
+              "p50": 14.06,
+              "p95": 15.25,
+              "p99": 15.88,
+              "max": 63.9
+            },
+            "clockSamples": [
+              {
+                "atMatchMs": 2418,
+                "roundTripMs": 0.42295899999999165,
+                "adjustmentMs": 0.025083500000619097,
+                "authorityTick": 48,
+                "uncertaintyMs": 0.21147949999999582
+              },
+              {
+                "atMatchMs": 3419,
+                "roundTripMs": 0.4422500000000582,
+                "adjustmentMs": 0.013666999999259133,
+                "authorityTick": 68,
+                "uncertaintyMs": 0.5064170000000559
+              },
+              {
+                "atMatchMs": 4420,
+                "roundTripMs": 0.4172499999995125,
+                "adjustmentMs": 0.27489650000006804,
+                "authorityTick": 88,
+                "uncertaintyMs": 0.20862499999975626
+              },
+              {
+                "atMatchMs": 5421,
+                "roundTripMs": 0.5842079999993075,
+                "adjustmentMs": 0.010458000000653556,
+                "authorityTick": 108,
+                "uncertaintyMs": 0.20862499999975626
+              },
+              {
+                "atMatchMs": 6422,
+                "roundTripMs": 0.641791000000012,
+                "adjustmentMs": 0.0046249999995779945,
+                "authorityTick": 128,
+                "uncertaintyMs": 0.20862499999975626
+              },
+              {
+                "atMatchMs": 7422,
+                "roundTripMs": 0.8213749999995343,
+                "adjustmentMs": 0.019874999999956344,
+                "authorityTick": 148,
+                "uncertaintyMs": 0.20862499999975626
+              },
+              {
+                "atMatchMs": 8424,
+                "roundTripMs": 0.6485830000001442,
+                "adjustmentMs": 0.004790999999386258,
+                "authorityTick": 168,
+                "uncertaintyMs": 0.20862499999975626
+              },
+              {
+                "atMatchMs": 9425,
+                "roundTripMs": 0.5737079999998969,
+                "adjustmentMs": 0.011416999999710242,
+                "authorityTick": 188,
+                "uncertaintyMs": 0.24720799999886367
+              },
+              {
+                "atMatchMs": 10426,
+                "roundTripMs": 0.7118749999990541,
+                "adjustmentMs": 0.012416999999913969,
+                "authorityTick": 208,
+                "uncertaintyMs": 0.20862499999975626
+              },
+              {
+                "atMatchMs": 11428,
+                "roundTripMs": 0.7065419999998994,
+                "adjustmentMs": 0.011209000000235392,
+                "authorityTick": 228,
+                "uncertaintyMs": 0.35583299999962037
+              },
+              {
+                "atMatchMs": 12429,
+                "roundTripMs": 0.819999999999709,
+                "adjustmentMs": 0.009125000000494765,
+                "authorityTick": 248,
+                "uncertaintyMs": 0.3834999999999127
+              },
+              {
+                "atMatchMs": 13430,
+                "roundTripMs": 0.886583999999857,
+                "adjustmentMs": 0.004999999999199645,
+                "authorityTick": 268,
+                "uncertaintyMs": 0.3834999999999127
+              },
+              {
+                "atMatchMs": 14430,
+                "roundTripMs": 0.7031669999996666,
+                "adjustmentMs": 0.33522899999843503,
+                "authorityTick": 288,
+                "uncertaintyMs": 0.3363329999992857
+              },
+              {
+                "atMatchMs": 15431,
+                "roundTripMs": 0.8481250000004366,
+                "adjustmentMs": 0.009625000000596629,
+                "authorityTick": 308,
+                "uncertaintyMs": 0.28685399999994843
+              },
+              {
+                "atMatchMs": 16433,
+                "roundTripMs": 0.7742500000022119,
+                "adjustmentMs": 0.008790999996563187,
+                "authorityTick": 328,
+                "uncertaintyMs": 0.28685399999994843
+              },
+              {
+                "atMatchMs": 17434,
+                "roundTripMs": 0.7951670000002196,
+                "adjustmentMs": 0.003958000001148321,
+                "authorityTick": 348,
+                "uncertaintyMs": 0.28685399999994843
+              },
+              {
+                "atMatchMs": 18436,
+                "roundTripMs": 1.3661250000004657,
+                "adjustmentMs": 0.007332999997743173,
+                "authorityTick": 368,
+                "uncertaintyMs": 0.28685399999994843
+              },
+              {
+                "atMatchMs": 19437,
+                "roundTripMs": 1.509249999999156,
+                "adjustmentMs": 0.25377100000332575,
+                "authorityTick": 388,
+                "uncertaintyMs": 0.254624999999578
+              },
+              {
+                "atMatchMs": 20438,
+                "roundTripMs": 2.308959000001778,
+                "adjustmentMs": 0.010499999996682163,
+                "authorityTick": 408,
+                "uncertaintyMs": 0.254624999999578
+              },
+              {
+                "atMatchMs": 21437,
+                "roundTripMs": 1.195958000000246,
+                "adjustmentMs": 0.01033300000563031,
+                "authorityTick": 428,
+                "uncertaintyMs": 0.254624999999578
+              },
+              {
+                "atMatchMs": 22438,
+                "roundTripMs": 2.1767089999993914,
+                "adjustmentMs": 0.011582999999518506,
+                "authorityTick": 448,
+                "uncertaintyMs": 0.254624999999578
+              },
+              {
+                "atMatchMs": 23438,
+                "roundTripMs": 1.1319170000024315,
+                "adjustmentMs": 0.010583000002952758,
+                "authorityTick": 468,
+                "uncertaintyMs": 0.254624999999578
+              },
+              {
+                "atMatchMs": 24438,
+                "roundTripMs": 1.1211250000014843,
+                "adjustmentMs": 0.010958999999274965,
+                "authorityTick": 488,
+                "uncertaintyMs": 0.254624999999578
+              },
+              {
+                "atMatchMs": 25438,
+                "roundTripMs": 1.1507910000000265,
+                "adjustmentMs": 0.00999999999476131,
+                "authorityTick": 508,
+                "uncertaintyMs": 0.254624999999578
+              },
+              {
+                "atMatchMs": 26440,
+                "roundTripMs": 2.3349170000001322,
+                "adjustmentMs": 0.010249999999359716,
+                "authorityTick": 528,
+                "uncertaintyMs": 0.254624999999578
+              },
+              {
+                "atMatchMs": 27437,
+                "roundTripMs": 1.1655419999988226,
+                "adjustmentMs": 0.009540999999444466,
+                "authorityTick": 548,
+                "uncertaintyMs": 0.254624999999578
+              },
+              {
+                "atMatchMs": 28439,
+                "roundTripMs": 2.024874999999156,
+                "adjustmentMs": 0.03262499999982538,
+                "authorityTick": 568,
+                "uncertaintyMs": 0.254624999999578
+              },
+              {
+                "atMatchMs": 29440,
+                "roundTripMs": 2.648750000000291,
+                "adjustmentMs": 0.2736044999983278,
+                "authorityTick": 588,
+                "uncertaintyMs": 0.5605625000007421
+              },
+              {
+                "atMatchMs": 30439,
+                "roundTripMs": 0.823166999998648,
+                "adjustmentMs": -0.43443699999625096,
+                "authorityTick": 608,
+                "uncertaintyMs": 0.411583499999324
+              },
+              {
+                "atMatchMs": 31439,
+                "roundTripMs": 0.5332500000004075,
+                "adjustmentMs": -0.025250499998946907,
+                "authorityTick": 628,
+                "uncertaintyMs": 0.2666250000002037
+              }
+            ],
+            "poseAnomalies": [],
+            "phaseChanges": [],
+            "diagnosticDrops": {
+              "clockSamples": 0,
+              "poseAnomalies": 0,
+              "phaseChanges": 0
+            },
+            "observedTickDeliveryMs": {
+              "samples": 599,
+              "p50": 50.07,
+              "p95": 52.33,
+              "p99": 54.5,
+              "max": 108.86
+            },
+            "tickGaps": 0,
+            "phaseWallMs": {
+              "running": 30000.865125
+            },
+            "maximumProjectiles": 56,
+            "terminalReasons": {
+              "missExpired": 352
+            },
+            "missingEvents": 0,
+            "duplicateEvents": 0,
+            "snapshotHealedEvents": 0,
+            "commands": 808,
+            "acknowledgments": 808,
+            "results": 808
+          },
+          {
+            "playerId": "load-1",
+            "offered": {
+              "pose": 600,
+              "slowField": 3,
+              "fire": 88,
+              "reload": 11
+            },
+            "accepted": {
+              "pose": 600,
+              "slowField": 3,
+              "fire": 88,
+              "reload": 11
+            },
+            "refusals": {},
+            "acknowledgmentMs": {
+              "samples": 702,
+              "p50": 25.95,
+              "p95": 29.07,
+              "p99": 31.47,
+              "max": 86.96
+            },
+            "commandResultMs": {
+              "samples": 702,
+              "p50": 25.28,
+              "p95": 28.11,
+              "p99": 30.51,
+              "max": 78.7
+            },
+            "poseSendIntervalMs": {
+              "samples": 599,
+              "p50": 50.03,
+              "p95": 51.37,
+              "p99": 51.9,
+              "max": 75.13
+            },
+            "poseCaptureIntervalMs": {
+              "samples": 599,
+              "p50": 50.02,
+              "p95": 51.38,
+              "p99": 51.9,
+              "max": 75.07
+            },
+            "poseAgeAtResultMs": {
+              "samples": 600,
+              "p50": 14.19,
+              "p95": 15.37,
+              "p99": 16.11,
+              "max": 64.01
+            },
+            "clockSamples": [
+              {
+                "atMatchMs": 2847,
+                "roundTripMs": 0.5507920000000013,
+                "adjustmentMs": 0.0045419999996738625,
+                "authorityTick": 56,
+                "uncertaintyMs": 0.2166669999999158
+              },
+              {
+                "atMatchMs": 3847,
+                "roundTripMs": 0.6537920000000668,
+                "adjustmentMs": 0.009624999999687134,
+                "authorityTick": 76,
+                "uncertaintyMs": 0.2166669999999158
+              },
+              {
+                "atMatchMs": 4848,
+                "roundTripMs": 0.5534589999997479,
+                "adjustmentMs": 0.008166999999957625,
+                "authorityTick": 96,
+                "uncertaintyMs": 0.2166669999999158
+              },
+              {
+                "atMatchMs": 5850,
+                "roundTripMs": 0.59637500000008,
+                "adjustmentMs": 0.003666000000521308,
+                "authorityTick": 116,
+                "uncertaintyMs": 0.2166669999999158
+              },
+              {
+                "atMatchMs": 6850,
+                "roundTripMs": 0.7998749999997017,
+                "adjustmentMs": 0.012625000000298314,
+                "authorityTick": 136,
+                "uncertaintyMs": 0.2166669999999158
+              },
+              {
+                "atMatchMs": 7863,
+                "roundTripMs": 12.346874999999272,
+                "adjustmentMs": 0.015208000000711763,
+                "authorityTick": 157,
+                "uncertaintyMs": 0.2166669999999158
+              },
+              {
+                "atMatchMs": 8862,
+                "roundTripMs": 10.822416999999405,
+                "adjustmentMs": 0.010624999998981366,
+                "authorityTick": 177,
+                "uncertaintyMs": 0.2421250000006694
+              },
+              {
+                "atMatchMs": 9862,
+                "roundTripMs": 8.953750000000582,
+                "adjustmentMs": 0.01674999999886495,
+                "authorityTick": 197,
+                "uncertaintyMs": 0.7393749999991996
+              },
+              {
+                "atMatchMs": 10863,
+                "roundTripMs": 9.296916999999667,
+                "adjustmentMs": -0.03660350000245671,
+                "authorityTick": 217,
+                "uncertaintyMs": 0.6776250000002619
+              },
+              {
+                "atMatchMs": 11864,
+                "roundTripMs": 9.59387500000048,
+                "adjustmentMs": 0.010124999998879503,
+                "authorityTick": 237,
+                "uncertaintyMs": 0.27672949999987395
+              },
+              {
+                "atMatchMs": 12859,
+                "roundTripMs": 3.1310840000005555,
+                "adjustmentMs": 0.018749999999272404,
+                "authorityTick": 257,
+                "uncertaintyMs": 0.27672949999987395
+              },
+              {
+                "atMatchMs": 13860,
+                "roundTripMs": 2.0834579999991547,
+                "adjustmentMs": 0.03416599999945902,
+                "authorityTick": 277,
+                "uncertaintyMs": 0.5290839999997843
+              },
+              {
+                "atMatchMs": 14863,
+                "roundTripMs": 4.352333000000726,
+                "adjustmentMs": 0.05212500000016007,
+                "authorityTick": 297,
+                "uncertaintyMs": 0.5377920000000813
+              },
+              {
+                "atMatchMs": 15862,
+                "roundTripMs": 2.44550000000163,
+                "adjustmentMs": 0.012125000001105946,
+                "authorityTick": 317,
+                "uncertaintyMs": 0.5972919999994701
+              },
+              {
+                "atMatchMs": 16863,
+                "roundTripMs": 2.317957999999635,
+                "adjustmentMs": 1.2628755000005185,
+                "authorityTick": 337,
+                "uncertaintyMs": 1.0417289999995774
+              },
+              {
+                "atMatchMs": 17866,
+                "roundTripMs": 4.827125000003434,
+                "adjustmentMs": 0.011333000002196059,
+                "authorityTick": 357,
+                "uncertaintyMs": 1.0417289999995774
+              },
+              {
+                "atMatchMs": 18863,
+                "roundTripMs": 1.9328329999989364,
+                "adjustmentMs": 0.1438544999982696,
+                "authorityTick": 377,
+                "uncertaintyMs": 0.9664164999994682
+              },
+              {
+                "atMatchMs": 19862,
+                "roundTripMs": 1.0087080000012065,
+                "adjustmentMs": -1.1933124999995925,
+                "authorityTick": 397,
+                "uncertaintyMs": 0.5043540000006033
+              },
+              {
+                "atMatchMs": 20863,
+                "roundTripMs": 0.46120800000062445,
+                "adjustmentMs": 0.22383300000001327,
+                "authorityTick": 417,
+                "uncertaintyMs": 0.23060400000031223
+              },
+              {
+                "atMatchMs": 21866,
+                "roundTripMs": 3.152125000000524,
+                "adjustmentMs": 0.009708000001410255,
+                "authorityTick": 437,
+                "uncertaintyMs": 0.3780000000006112
+              },
+              {
+                "atMatchMs": 22866,
+                "roundTripMs": 3.7585830000025453,
+                "adjustmentMs": 0.010708999998314539,
+                "authorityTick": 457,
+                "uncertaintyMs": 0.23060400000031223
+              },
+              {
+                "atMatchMs": 23864,
+                "roundTripMs": 1.2012080000022252,
+                "adjustmentMs": 0.009792000000743428,
+                "authorityTick": 477,
+                "uncertaintyMs": 0.23060400000031223
+              },
+              {
+                "atMatchMs": 24864,
+                "roundTripMs": 0.501165999998193,
+                "adjustmentMs": 0.009249999999155989,
+                "authorityTick": 497,
+                "uncertaintyMs": 0.23060400000031223
+              },
+              {
+                "atMatchMs": 25864,
+                "roundTripMs": 0.5000419999996666,
+                "adjustmentMs": 0.009749999997438863,
+                "authorityTick": 517,
+                "uncertaintyMs": 0.23060400000031223
+              },
+              {
+                "atMatchMs": 26865,
+                "roundTripMs": 0.6026249999995343,
+                "adjustmentMs": 0.010666999998647952,
+                "authorityTick": 537,
+                "uncertaintyMs": 0.23060400000031223
+              },
+              {
+                "atMatchMs": 27866,
+                "roundTripMs": 0.7082910000026459,
+                "adjustmentMs": 0.005415999999968335,
+                "authorityTick": 557,
+                "uncertaintyMs": 0.23060400000031223
+              },
+              {
+                "atMatchMs": 28865,
+                "roundTripMs": 0.4613339999996242,
+                "adjustmentMs": 0.009375000001455192,
+                "authorityTick": 577,
+                "uncertaintyMs": 0.4220409999979893
+              },
+              {
+                "atMatchMs": 29866,
+                "roundTripMs": 0.5535410000011325,
+                "adjustmentMs": 0.009666999998444226,
+                "authorityTick": 597,
+                "uncertaintyMs": 0.23060400000031223
+              },
+              {
+                "atMatchMs": 30867,
+                "roundTripMs": 0.5453339999985474,
+                "adjustmentMs": -0.4120210000000952,
+                "authorityTick": 617,
+                "uncertaintyMs": 0.5262499999989814
+              },
+              {
+                "atMatchMs": 31868,
+                "roundTripMs": 0.4833749999961583,
+                "adjustmentMs": 0.009583999999449588,
+                "authorityTick": 637,
+                "uncertaintyMs": 0.5953750000007858
+              }
+            ],
+            "poseAnomalies": [],
+            "phaseChanges": [],
+            "diagnosticDrops": {
+              "clockSamples": 0,
+              "poseAnomalies": 0,
+              "phaseChanges": 0
+            },
+            "observedTickDeliveryMs": {
+              "samples": 599,
+              "p50": 50.06,
+              "p95": 52.4,
+              "p99": 54.54,
+              "max": 103.59
+            },
+            "tickGaps": 0,
+            "phaseWallMs": {
+              "running": 30000.891416
+            },
+            "maximumProjectiles": 56,
+            "terminalReasons": {
+              "missExpired": 352
+            },
+            "missingEvents": 0,
+            "duplicateEvents": 0,
+            "snapshotHealedEvents": 0,
+            "commands": 807,
+            "acknowledgments": 807,
+            "results": 807
+          },
+          {
+            "playerId": "load-2",
+            "offered": {
+              "pose": 600,
+              "slowField": 3,
+              "fire": 88,
+              "reload": 11
+            },
+            "accepted": {
+              "pose": 600,
+              "slowField": 3,
+              "fire": 88,
+              "reload": 11
+            },
+            "refusals": {},
+            "acknowledgmentMs": {
+              "samples": 702,
+              "p50": 25.91,
+              "p95": 29.02,
+              "p99": 31.41,
+              "max": 86.88
+            },
+            "commandResultMs": {
+              "samples": 702,
+              "p50": 25.31,
+              "p95": 28.18,
+              "p99": 30.55,
+              "max": 83.92
+            },
+            "poseSendIntervalMs": {
+              "samples": 599,
+              "p50": 50.03,
+              "p95": 51.37,
+              "p99": 51.92,
+              "max": 75.2
+            },
+            "poseCaptureIntervalMs": {
+              "samples": 599,
+              "p50": 50.02,
+              "p95": 51.39,
+              "p99": 51.91,
+              "max": 75.18
+            },
+            "poseAgeAtResultMs": {
+              "samples": 600,
+              "p50": 13.89,
+              "p95": 15.15,
+              "p99": 15.41,
+              "max": 64.15
+            },
+            "clockSamples": [
+              {
+                "atMatchMs": 2338,
+                "roundTripMs": 3.945709000000079,
+                "adjustmentMs": 0.014000000000123691,
+                "authorityTick": 45,
+                "uncertaintyMs": 0.284770500000036
+              },
+              {
+                "atMatchMs": 3339,
+                "roundTripMs": 4.645207999999911,
+                "adjustmentMs": 0.03129200000057608,
+                "authorityTick": 66,
+                "uncertaintyMs": 0.284770500000036
+              },
+              {
+                "atMatchMs": 4338,
+                "roundTripMs": 2.0113750000000437,
+                "adjustmentMs": 0.007625000000189175,
+                "authorityTick": 86,
+                "uncertaintyMs": 0.284770500000036
+              },
+              {
+                "atMatchMs": 5341,
+                "roundTripMs": 5.749832999999853,
+                "adjustmentMs": 0.008667000000059488,
+                "authorityTick": 106,
+                "uncertaintyMs": 0.284770500000036
+              },
+              {
+                "atMatchMs": 6340,
+                "roundTripMs": 4.9522500000002765,
+                "adjustmentMs": 0.008875000000443833,
+                "authorityTick": 126,
+                "uncertaintyMs": 0.284770500000036
+              },
+              {
+                "atMatchMs": 7338,
+                "roundTripMs": 1.5263750000012806,
+                "adjustmentMs": 0.6142089999993914,
+                "authorityTick": 146,
+                "uncertaintyMs": 0.2631875000006403
+              },
+              {
+                "atMatchMs": 8339,
+                "roundTripMs": 2.782791999999972,
+                "adjustmentMs": 0.008707999999387539,
+                "authorityTick": 166,
+                "uncertaintyMs": 0.2631875000006403
+              },
+              {
+                "atMatchMs": 9342,
+                "roundTripMs": 5.478917000000365,
+                "adjustmentMs": 0.010082999999212916,
+                "authorityTick": 186,
+                "uncertaintyMs": 0.2631875000006403
+              },
+              {
+                "atMatchMs": 10338,
+                "roundTripMs": 1.5547919999989972,
+                "adjustmentMs": 0.010457999998834566,
+                "authorityTick": 206,
+                "uncertaintyMs": 0.2631875000006403
+              },
+              {
+                "atMatchMs": 11339,
+                "roundTripMs": 2.8754160000007687,
+                "adjustmentMs": 0.01058299999931478,
+                "authorityTick": 226,
+                "uncertaintyMs": 0.2631875000006403
+              },
+              {
+                "atMatchMs": 12339,
+                "roundTripMs": 1.2999999999992724,
+                "adjustmentMs": 0.011291999999230029,
+                "authorityTick": 246,
+                "uncertaintyMs": 0.2631875000006403
+              },
+              {
+                "atMatchMs": 13350,
+                "roundTripMs": 12.57983299999978,
+                "adjustmentMs": 0.01787500000136788,
+                "authorityTick": 266,
+                "uncertaintyMs": 0.2631875000006403
+              },
+              {
+                "atMatchMs": 14341,
+                "roundTripMs": 2.432082999999693,
+                "adjustmentMs": 0.011167000000568805,
+                "authorityTick": 286,
+                "uncertaintyMs": 0.2631875000006403
+              },
+              {
+                "atMatchMs": 15340,
+                "roundTripMs": 1.1781250000003638,
+                "adjustmentMs": 0.009833999998591025,
+                "authorityTick": 306,
+                "uncertaintyMs": 0.2631875000006403
+              },
+              {
+                "atMatchMs": 16342,
+                "roundTripMs": 3.073959000001196,
+                "adjustmentMs": 0.01862500000061118,
+                "authorityTick": 326,
+                "uncertaintyMs": 0.2631875000006403
+              },
+              {
+                "atMatchMs": 17346,
+                "roundTripMs": 6.602249999999913,
+                "adjustmentMs": -0.07308399999601534,
+                "authorityTick": 346,
+                "uncertaintyMs": 0.5890625000001819
+              },
+              {
+                "atMatchMs": 18340,
+                "roundTripMs": 0.42966599999999744,
+                "adjustmentMs": -0.4844374999993306,
+                "authorityTick": 366,
+                "uncertaintyMs": 0.21483299999999872
+              },
+              {
+                "atMatchMs": 19341,
+                "roundTripMs": 0.5309999999990396,
+                "adjustmentMs": 0.005166999995708466,
+                "authorityTick": 386,
+                "uncertaintyMs": 0.21483299999999872
+              },
+              {
+                "atMatchMs": 20341,
+                "roundTripMs": 0.45091600000159815,
+                "adjustmentMs": 0.012124999993829988,
+                "authorityTick": 406,
+                "uncertaintyMs": 0.2537499999998545
+              },
+              {
+                "atMatchMs": 21348,
+                "roundTripMs": 1.8571670000019367,
+                "adjustmentMs": 0.025834000000031665,
+                "authorityTick": 426,
+                "uncertaintyMs": 0.21483299999999872
+              },
+              {
+                "atMatchMs": 22350,
+                "roundTripMs": 0.7022920000017621,
+                "adjustmentMs": 0.024459000000206288,
+                "authorityTick": 446,
+                "uncertaintyMs": 0.43041599999924074
+              },
+              {
+                "atMatchMs": 23365,
+                "roundTripMs": 15.35816700000214,
+                "adjustmentMs": 0.011624999999185093,
+                "authorityTick": 467,
+                "uncertaintyMs": 0.21483299999999872
+              },
+              {
+                "atMatchMs": 24361,
+                "roundTripMs": 11.715249999997468,
+                "adjustmentMs": 0.009790999996766914,
+                "authorityTick": 487,
+                "uncertaintyMs": 0.21483299999999872
+              },
+              {
+                "atMatchMs": 25366,
+                "roundTripMs": 14.402458000000479,
+                "adjustmentMs": 0.012499999997089617,
+                "authorityTick": 507,
+                "uncertaintyMs": 0.21483299999999872
+              },
+              {
+                "atMatchMs": 26363,
+                "roundTripMs": 10.249708999999712,
+                "adjustmentMs": 0.012458999997761566,
+                "authorityTick": 527,
+                "uncertaintyMs": 0.21483299999999872
+              },
+              {
+                "atMatchMs": 27365,
+                "roundTripMs": 10.66108300000269,
+                "adjustmentMs": 0.009708000005048234,
+                "authorityTick": 547,
+                "uncertaintyMs": 0.5975829999988491
+              },
+              {
+                "atMatchMs": 28365,
+                "roundTripMs": 10.435584000002564,
+                "adjustmentMs": 0.27316699999937555,
+                "authorityTick": 567,
+                "uncertaintyMs": 0.22545800000079907
+              },
+              {
+                "atMatchMs": 29364,
+                "roundTripMs": 8.310999999997875,
+                "adjustmentMs": 0.010458000000653556,
+                "authorityTick": 587,
+                "uncertaintyMs": 0.22545800000079907
+              },
+              {
+                "atMatchMs": 30361,
+                "roundTripMs": 4.399083000000246,
+                "adjustmentMs": 0.3131459999967774,
+                "authorityTick": 607,
+                "uncertaintyMs": 0.35114600000088103
+              },
+              {
+                "atMatchMs": 31362,
+                "roundTripMs": 3.770249999997759,
+                "adjustmentMs": 0.008874999999534339,
+                "authorityTick": 627,
+                "uncertaintyMs": 0.35114600000088103
+              }
+            ],
+            "poseAnomalies": [],
+            "phaseChanges": [],
+            "diagnosticDrops": {
+              "clockSamples": 0,
+              "poseAnomalies": 0,
+              "phaseChanges": 0
+            },
+            "observedTickDeliveryMs": {
+              "samples": 599,
+              "p50": 50.05,
+              "p95": 52.36,
+              "p99": 54.56,
+              "max": 108.84
+            },
+            "tickGaps": 0,
+            "phaseWallMs": {
+              "running": 30000.892207999997
+            },
+            "maximumProjectiles": 56,
+            "terminalReasons": {
+              "missExpired": 352
+            },
+            "missingEvents": 0,
+            "duplicateEvents": 0,
+            "snapshotHealedEvents": 0,
+            "commands": 807,
+            "acknowledgments": 807,
+            "results": 807
+          },
+          {
+            "playerId": "load-3",
+            "offered": {
+              "pose": 600,
+              "slowField": 3,
+              "fire": 88,
+              "reload": 11
+            },
+            "accepted": {
+              "pose": 600,
+              "slowField": 3,
+              "fire": 88,
+              "reload": 11
+            },
+            "refusals": {},
+            "acknowledgmentMs": {
+              "samples": 702,
+              "p50": 25.86,
+              "p95": 28.96,
+              "p99": 31.33,
+              "max": 86.87
+            },
+            "commandResultMs": {
+              "samples": 702,
+              "p50": 25.3,
+              "p95": 28.09,
+              "p99": 29.98,
+              "max": 86.72
+            },
+            "poseSendIntervalMs": {
+              "samples": 599,
+              "p50": 50.03,
+              "p95": 51.37,
+              "p99": 51.93,
+              "max": 75.28
+            },
+            "poseCaptureIntervalMs": {
+              "samples": 599,
+              "p50": 50.03,
+              "p95": 51.37,
+              "p99": 51.92,
+              "max": 75.28
+            },
+            "poseAgeAtResultMs": {
+              "samples": 600,
+              "p50": 14.19,
+              "p95": 15.36,
+              "p99": 15.84,
+              "max": 64.21
+            },
+            "clockSamples": [
+              {
+                "atMatchMs": 2684,
+                "roundTripMs": 0.5689579999998386,
+                "adjustmentMs": 0.009374999999636202,
+                "authorityTick": 53,
+                "uncertaintyMs": 0.29424999999991996
+              },
+              {
+                "atMatchMs": 3686,
+                "roundTripMs": 1.2024590000000899,
+                "adjustmentMs": 0.00766600000042672,
+                "authorityTick": 73,
+                "uncertaintyMs": 0.5610829999995985
+              },
+              {
+                "atMatchMs": 4688,
+                "roundTripMs": 2.6672920000000886,
+                "adjustmentMs": 0.00820800000019517,
+                "authorityTick": 93,
+                "uncertaintyMs": 0.1217709999998533
+              },
+              {
+                "atMatchMs": 5689,
+                "roundTripMs": 3.277082999999948,
+                "adjustmentMs": 0.010167000000365078,
+                "authorityTick": 113,
+                "uncertaintyMs": 0.13624999999956344
+              },
+              {
+                "atMatchMs": 6689,
+                "roundTripMs": 3.1877919999997175,
+                "adjustmentMs": 0.012208000000100583,
+                "authorityTick": 133,
+                "uncertaintyMs": 0.35483300000032614
+              },
+              {
+                "atMatchMs": 7689,
+                "roundTripMs": 2.8855419999999867,
+                "adjustmentMs": 0.009792000000743428,
+                "authorityTick": 153,
+                "uncertaintyMs": 0.7079579999990528
+              },
+              {
+                "atMatchMs": 8695,
+                "roundTripMs": 8.924332999999024,
+                "adjustmentMs": 0.01229100000091421,
+                "authorityTick": 173,
+                "uncertaintyMs": 0.3775420000001759
+              },
+              {
+                "atMatchMs": 9689,
+                "roundTripMs": 3.309166000000914,
+                "adjustmentMs": 0.009874999999738066,
+                "authorityTick": 193,
+                "uncertaintyMs": 0.26854199999979755
+              },
+              {
+                "atMatchMs": 10690,
+                "roundTripMs": 3.1510830000006536,
+                "adjustmentMs": 0.010083999999551452,
+                "authorityTick": 213,
+                "uncertaintyMs": 0.6731669999990118
+              },
+              {
+                "atMatchMs": 11688,
+                "roundTripMs": 1.5554580000007263,
+                "adjustmentMs": 0.47166599999764003,
+                "authorityTick": 233,
+                "uncertaintyMs": 0.2844789999999193
+              },
+              {
+                "atMatchMs": 12688,
+                "roundTripMs": 0.8682919999992009,
+                "adjustmentMs": -0.09562499999992724,
+                "authorityTick": 253,
+                "uncertaintyMs": 0.43414599999960046
+              },
+              {
+                "atMatchMs": 13689,
+                "roundTripMs": 1.2587500000008731,
+                "adjustmentMs": 0.011082999999416643,
+                "authorityTick": 273,
+                "uncertaintyMs": 0.43414599999960046
+              },
+              {
+                "atMatchMs": 14689,
+                "roundTripMs": 0.5240410000005795,
+                "adjustmentMs": 0.0014585000008082716,
+                "authorityTick": 293,
+                "uncertaintyMs": 0.26202050000028976
+              },
+              {
+                "atMatchMs": 15690,
+                "roundTripMs": 0.49629100000311155,
+                "adjustmentMs": 0.0788749999992433,
+                "authorityTick": 313,
+                "uncertaintyMs": 0.24814550000155577
+              },
+              {
+                "atMatchMs": 16690,
+                "roundTripMs": 0.489291999998386,
+                "adjustmentMs": -0.24762550000014016,
+                "authorityTick": 333,
+                "uncertaintyMs": 0.244645999999193
+              },
+              {
+                "atMatchMs": 17691,
+                "roundTripMs": 0.5273330000018177,
+                "adjustmentMs": 0.010625000002619345,
+                "authorityTick": 353,
+                "uncertaintyMs": 0.3473339999982272
+              },
+              {
+                "atMatchMs": 18692,
+                "roundTripMs": 0.629958000001352,
+                "adjustmentMs": 0.010042000001703855,
+                "authorityTick": 373,
+                "uncertaintyMs": 0.244645999999193
+              },
+              {
+                "atMatchMs": 19693,
+                "roundTripMs": 0.49404100000174367,
+                "adjustmentMs": 0.010417000001325505,
+                "authorityTick": 393,
+                "uncertaintyMs": 0.244645999999193
+              },
+              {
+                "atMatchMs": 20694,
+                "roundTripMs": 0.561916000002384,
+                "adjustmentMs": 0.011375000001862645,
+                "authorityTick": 413,
+                "uncertaintyMs": 0.33658399999694666
+              },
+              {
+                "atMatchMs": 21695,
+                "roundTripMs": 0.5581249999995634,
+                "adjustmentMs": 0.011624999999185093,
+                "authorityTick": 433,
+                "uncertaintyMs": 0.5269999999982247
+              },
+              {
+                "atMatchMs": 22695,
+                "roundTripMs": 0.5910829999993439,
+                "adjustmentMs": 0.010332999998354353,
+                "authorityTick": 453,
+                "uncertaintyMs": 0.244645999999193
+              },
+              {
+                "atMatchMs": 23696,
+                "roundTripMs": 0.5620420000013837,
+                "adjustmentMs": 0.011375000001862645,
+                "authorityTick": 473,
+                "uncertaintyMs": 0.40129199999864795
+              },
+              {
+                "atMatchMs": 24698,
+                "roundTripMs": 0.6996670000007725,
+                "adjustmentMs": 0.012542000000394182,
+                "authorityTick": 493,
+                "uncertaintyMs": 0.3748749999977008
+              },
+              {
+                "atMatchMs": 25700,
+                "roundTripMs": 0.6794169999993755,
+                "adjustmentMs": 0.013209000000642845,
+                "authorityTick": 513,
+                "uncertaintyMs": 0.40829200000007404
+              },
+              {
+                "atMatchMs": 26700,
+                "roundTripMs": 0.6665830000019923,
+                "adjustmentMs": 0.015667500003473833,
+                "authorityTick": 533,
+                "uncertaintyMs": 0.24702050000087183
+              },
+              {
+                "atMatchMs": 27713,
+                "roundTripMs": 11.797249999999622,
+                "adjustmentMs": 0.010666000001947396,
+                "authorityTick": 554,
+                "uncertaintyMs": 0.4644159999988915
+              },
+              {
+                "atMatchMs": 28713,
+                "roundTripMs": 11.320583000000624,
+                "adjustmentMs": 0.011665999998513144,
+                "authorityTick": 574,
+                "uncertaintyMs": 0.40408300000126474
+              },
+              {
+                "atMatchMs": 29711,
+                "roundTripMs": 8.598042000001442,
+                "adjustmentMs": 0.5692080000007991,
+                "authorityTick": 594,
+                "uncertaintyMs": 0.2790624999997817
+              },
+              {
+                "atMatchMs": 30717,
+                "roundTripMs": 13.505042000000685,
+                "adjustmentMs": 0.011332999994920101,
+                "authorityTick": 614,
+                "uncertaintyMs": 0.2790624999997817
+              },
+              {
+                "atMatchMs": 31712,
+                "roundTripMs": 7.695083999999042,
+                "adjustmentMs": -0.11179149999952642,
+                "authorityTick": 634,
+                "uncertaintyMs": 0.28102100000069186
+              }
+            ],
+            "poseAnomalies": [],
+            "phaseChanges": [],
+            "diagnosticDrops": {
+              "clockSamples": 0,
+              "poseAnomalies": 0,
+              "phaseChanges": 0
+            },
+            "observedTickDeliveryMs": {
+              "samples": 599,
+              "p50": 50.1,
+              "p95": 52.36,
+              "p99": 54.6,
+              "max": 111.58
+            },
+            "tickGaps": 0,
+            "phaseWallMs": {
+              "running": 30000.8925
+            },
+            "maximumProjectiles": 56,
+            "terminalReasons": {
+              "missExpired": 352
+            },
+            "missingEvents": 0,
+            "duplicateEvents": 0,
+            "snapshotHealedEvents": 0,
+            "commands": 807,
+            "acknowledgments": 807,
+            "results": 807
+          }
+        ],
+        "durable": {
+          "authorityEpoch": 1,
+          "eventWatermark": 7314,
+          "bulletCount": 352,
+          "ledgerEvents": 784,
+          "exactLedgerMatches": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "shotIdentityMatches": {
+            "acceptedFireCount": 352,
+            "uniqueAcceptedShots": 352,
+            "spawnsMatchAccepted": true,
+            "terminalsMatchAccepted": true
+          },
+          "unresolvedBullets": 0,
+          "retainedCommands": 2048,
+          "checkpointBytes": 2014,
+          "databaseBytes": null,
+          "projectionRows": 6,
+          "projectionProgress": {
+            "queued_sequence": 7314,
+            "delivered_sequence": 0
+          }
+        },
+        "errors": []
+      },
+      "diagnostics": {
+        "enabled": true,
+        "armed": true,
+        "traces": [],
+        "malformedRecords": 0
+      }
+    },
+    {
+      "name": "independent Node client opposing-combat: native clock and durable event convergence",
+      "state": "passed",
+      "failures": [],
+      "result": {
+        "scenario": "opposing-combat",
+        "environment": "node-client-workerd-authority",
+        "clockMode": "native",
+        "activeLoadMs": 30000,
+        "activeElapsedMs": 30000.516500000005,
+        "estimatedClockElapsedMs": 30000.553270499993,
+        "observedAuthorityElapsedMs": 30050,
+        "runtimeProfile": null,
+        "limitations": [
+          "local synthetic workerd; no device or cloud latency",
+          "maximum synthetic collider payload, not camera coverage evidence",
+          "delivery intervals are not server tick execution or CPU",
+          "projection endpoint disabled; outbox persistence only"
+        ],
+        "offeredPoseIntervalMs": 50,
+        "expectedPosesPerPlayer": 600,
+        "missedPumpSlots": 0,
+        "pumpLatenessMs": {
+          "samples": 600,
+          "p50": 0.46,
+          "p95": 1.3,
+          "p99": 1.93,
+          "max": 8.45
+        },
+        "maximumInputBytes": 11158,
+        "activeInputBytesIncludingReceiptsAndPings": 26892369,
+        "activeOutputBytes": 11479947,
+        "players": [
+          {
+            "playerId": "load-0",
+            "offered": {
+              "pose": 600,
+              "slowField": 3,
+              "fire": 131,
+              "reload": 5
+            },
+            "accepted": {
+              "pose": 600,
+              "slowField": 3,
+              "fire": 52,
+              "reload": 5
+            },
+            "refusals": {
+              "fire:notAlive": 1,
+              "fire:protected": 78
+            },
+            "acknowledgmentMs": {
+              "samples": 739,
+              "p50": 27.82,
+              "p95": 32.81,
+              "p99": 39.61,
+              "max": 83.32
+            },
+            "commandResultMs": {
+              "samples": 739,
+              "p50": 27.05,
+              "p95": 31.91,
+              "p99": 37.44,
+              "max": 80.58
+            },
+            "poseSendIntervalMs": {
+              "samples": 599,
+              "p50": 50.02,
+              "p95": 50.96,
+              "p99": 51.41,
+              "max": 57.58
+            },
+            "poseCaptureIntervalMs": {
+              "samples": 599,
+              "p50": 50.02,
+              "p95": 50.98,
+              "p99": 51.41,
+              "max": 57.54
+            },
+            "poseAgeAtResultMs": {
+              "samples": 600,
+              "p50": 20.01,
+              "p95": 20.66,
+              "p99": 21.29,
+              "max": 70.23
+            },
+            "clockSamples": [
+              {
+                "atMatchMs": 2414,
+                "roundTripMs": 0.7759579999983544,
+                "adjustmentMs": 0.015249999996740371,
+                "authorityTick": 48,
+                "uncertaintyMs": 0.592333000004146
+              },
+              {
+                "atMatchMs": 3414,
+                "roundTripMs": 0.40249999999650754,
+                "adjustmentMs": 0.2756870000011986,
+                "authorityTick": 68,
+                "uncertaintyMs": 0.20124999999825377
+              },
+              {
+                "atMatchMs": 4414,
+                "roundTripMs": 0.40691700000024866,
+                "adjustmentMs": 0.00891599999886239,
+                "authorityTick": 88,
+                "uncertaintyMs": 0.20124999999825377
+              },
+              {
+                "atMatchMs": 5415,
+                "roundTripMs": 0.5260830000042915,
+                "adjustmentMs": 0.010750000001280569,
+                "authorityTick": 108,
+                "uncertaintyMs": 0.20124999999825377
+              },
+              {
+                "atMatchMs": 6416,
+                "roundTripMs": 0.44441599999845494,
+                "adjustmentMs": 0.010915999999269843,
+                "authorityTick": 128,
+                "uncertaintyMs": 0.49441700000170385
+              },
+              {
+                "atMatchMs": 7416,
+                "roundTripMs": 0.5257090000013704,
+                "adjustmentMs": 0.010457999997015577,
+                "authorityTick": 148,
+                "uncertaintyMs": 0.20124999999825377
+              },
+              {
+                "atMatchMs": 8417,
+                "roundTripMs": 0.5010829999955604,
+                "adjustmentMs": 0.010416999997687526,
+                "authorityTick": 168,
+                "uncertaintyMs": 0.2235419999997248
+              },
+              {
+                "atMatchMs": 9418,
+                "roundTripMs": 0.4785420000043814,
+                "adjustmentMs": 0.010458999997354113,
+                "authorityTick": 188,
+                "uncertaintyMs": 0.20124999999825377
+              },
+              {
+                "atMatchMs": 10419,
+                "roundTripMs": 0.5994169999976293,
+                "adjustmentMs": 0.011166999996930826,
+                "authorityTick": 208,
+                "uncertaintyMs": 0.20124999999825377
+              },
+              {
+                "atMatchMs": 11420,
+                "roundTripMs": 0.43908400000509573,
+                "adjustmentMs": 0.009040999997523613,
+                "authorityTick": 228,
+                "uncertaintyMs": 0.2530829999996058
+              },
+              {
+                "atMatchMs": 12421,
+                "roundTripMs": 0.4413330000024871,
+                "adjustmentMs": 0.009916999995766673,
+                "authorityTick": 248,
+                "uncertaintyMs": 0.20124999999825377
+              },
+              {
+                "atMatchMs": 13422,
+                "roundTripMs": 1.1054579999981797,
+                "adjustmentMs": 0.20035400000051595,
+                "authorityTick": 268,
+                "uncertaintyMs": 0.052728999999089865
+              },
+              {
+                "atMatchMs": 14422,
+                "roundTripMs": 0.5783750000045984,
+                "adjustmentMs": 0.011832999996840954,
+                "authorityTick": 288,
+                "uncertaintyMs": 0.052728999999089865
+              },
+              {
+                "atMatchMs": 15423,
+                "roundTripMs": 0.6783749999958673,
+                "adjustmentMs": 0.013333000002603512,
+                "authorityTick": 308,
+                "uncertaintyMs": 0.052728999999089865
+              },
+              {
+                "atMatchMs": 16425,
+                "roundTripMs": 0.7330419999998412,
+                "adjustmentMs": 0.011583000006794464,
+                "authorityTick": 328,
+                "uncertaintyMs": 0.052728999999089865
+              },
+              {
+                "atMatchMs": 17425,
+                "roundTripMs": 0.6459590000013122,
+                "adjustmentMs": 0.0141250000015134,
+                "authorityTick": 348,
+                "uncertaintyMs": 0.052728999999089865
+              },
+              {
+                "atMatchMs": 18426,
+                "roundTripMs": 0.8346670000028098,
+                "adjustmentMs": 0.014250000000174623,
+                "authorityTick": 368,
+                "uncertaintyMs": 0.052728999999089865
+              },
+              {
+                "atMatchMs": 19427,
+                "roundTripMs": 0.7467909999977564,
+                "adjustmentMs": 0.011542000000190455,
+                "authorityTick": 388,
+                "uncertaintyMs": 0.052728999999089865
+              },
+              {
+                "atMatchMs": 20427,
+                "roundTripMs": 0.6307090000045719,
+                "adjustmentMs": 0.01449999999749707,
+                "authorityTick": 408,
+                "uncertaintyMs": 0.052728999999089865
+              },
+              {
+                "atMatchMs": 21428,
+                "roundTripMs": 1.2962919999990845,
+                "adjustmentMs": 0.013584000000264496,
+                "authorityTick": 428,
+                "uncertaintyMs": 0.052728999999089865
+              },
+              {
+                "atMatchMs": 22431,
+                "roundTripMs": 2.0372089999946184,
+                "adjustmentMs": 0.011542000000190455,
+                "authorityTick": 448,
+                "uncertaintyMs": 0.052728999999089865
+              },
+              {
+                "atMatchMs": 23430,
+                "roundTripMs": 0.7705829999977141,
+                "adjustmentMs": -0.14524949999758974,
+                "authorityTick": 468,
+                "uncertaintyMs": 0.2891875000022992
+              },
+              {
+                "atMatchMs": 24431,
+                "roundTripMs": 1.3908749999973224,
+                "adjustmentMs": 0.19958300000143936,
+                "authorityTick": 488,
+                "uncertaintyMs": 0.31535450000228593
+              },
+              {
+                "atMatchMs": 25431,
+                "roundTripMs": 1.4225829999995767,
+                "adjustmentMs": 0.008916999999200925,
+                "authorityTick": 508,
+                "uncertaintyMs": 0.31535450000228593
+              },
+              {
+                "atMatchMs": 26431,
+                "roundTripMs": 1.3234169999996084,
+                "adjustmentMs": 0.006417000004148576,
+                "authorityTick": 528,
+                "uncertaintyMs": 0.31535450000228593
+              },
+              {
+                "atMatchMs": 27430,
+                "roundTripMs": 0.9824169999992591,
+                "adjustmentMs": 0.004916999998386018,
+                "authorityTick": 548,
+                "uncertaintyMs": 0.31535450000228593
+              },
+              {
+                "atMatchMs": 28432,
+                "roundTripMs": 2.334458999990602,
+                "adjustmentMs": 0.00595900000189431,
+                "authorityTick": 568,
+                "uncertaintyMs": 0.31535450000228593
+              },
+              {
+                "atMatchMs": 29432,
+                "roundTripMs": 2.1651249999995343,
+                "adjustmentMs": 0.00770800000464078,
+                "authorityTick": 588,
+                "uncertaintyMs": 0.31535450000228593
+              },
+              {
+                "atMatchMs": 30435,
+                "roundTripMs": 5.669500000003609,
+                "adjustmentMs": -0.44889600000169594,
+                "authorityTick": 608,
+                "uncertaintyMs": 0.38529149999885703
+              },
+              {
+                "atMatchMs": 31432,
+                "roundTripMs": 1.6817079999891575,
+                "adjustmentMs": 0.006750000000465661,
+                "authorityTick": 628,
+                "uncertaintyMs": 0.755542000009882
+              }
+            ],
+            "poseAnomalies": [],
+            "phaseChanges": [
+              {
+                "tick": 47,
+                "matchTimeMs": 2350,
+                "phase": "paused",
+                "reason": "spatialCoverageLost",
+                "sincePoseSendMs": null,
+                "estimatedMatchMs": 2355.541145999996
+              },
+              {
+                "tick": 48,
+                "matchTimeMs": 2400,
+                "phase": "running",
+                "reason": "spatialCoverageRestored",
+                "sincePoseSendMs": 26.48924999999872,
+                "estimatedMatchMs": 2406.4959789999994
+              }
+            ],
+            "diagnosticDrops": {
+              "clockSamples": 0,
+              "poseAnomalies": 0,
+              "phaseChanges": 0
+            },
+            "observedTickDeliveryMs": {
+              "samples": 599,
+              "p50": 50.01,
+              "p95": 52.37,
+              "p99": 57.62,
+              "max": 98.77
+            },
+            "tickGaps": 0,
+            "phaseWallMs": {
+              "running": 29949.644541,
+              "paused": 50.943584000000556
+            },
+            "maximumProjectiles": 26,
+            "terminalReasons": {
+              "bodyHit": 50,
+              "missExpired": 72,
+              "shieldBlocked": 14
+            },
+            "missingEvents": 0,
+            "duplicateEvents": 0,
+            "snapshotHealedEvents": 0,
+            "commands": 844,
+            "acknowledgments": 844,
+            "results": 844
+          },
+          {
+            "playerId": "load-1",
+            "offered": {
+              "pose": 600,
+              "slowField": 3,
+              "shield": 101,
+              "fire": 38,
+              "reload": 1
+            },
+            "accepted": {
+              "pose": 600,
+              "slowField": 3,
+              "shield": 4,
+              "fire": 16,
+              "reload": 1
+            },
+            "refusals": {
+              "fire:protected": 20,
+              "shield:protected": 97,
+              "fire:notAlive": 2
+            },
+            "acknowledgmentMs": {
+              "samples": 743,
+              "p50": 27.83,
+              "p95": 32.73,
+              "p99": 39.55,
+              "max": 83.21
+            },
+            "commandResultMs": {
+              "samples": 743,
+              "p50": 27.16,
+              "p95": 31.97,
+              "p99": 38.94,
+              "max": 80.54
+            },
+            "poseSendIntervalMs": {
+              "samples": 599,
+              "p50": 50.03,
+              "p95": 50.96,
+              "p99": 51.42,
+              "max": 57.66
+            },
+            "poseCaptureIntervalMs": {
+              "samples": 599,
+              "p50": 50.03,
+              "p95": 51.03,
+              "p99": 51.58,
+              "max": 57.58
+            },
+            "poseAgeAtResultMs": {
+              "samples": 600,
+              "p50": 19.68,
+              "p95": 20.67,
+              "p99": 20.9,
+              "max": 69.66
+            },
+            "clockSamples": [
+              {
+                "atMatchMs": 2832,
+                "roundTripMs": 1.9504160000069533,
+                "adjustmentMs": 0.008832999999867752,
+                "authorityTick": 56,
+                "uncertaintyMs": 0.25456250000206637
+              },
+              {
+                "atMatchMs": 3833,
+                "roundTripMs": 1.7352499999979045,
+                "adjustmentMs": 0.008249999998952262,
+                "authorityTick": 76,
+                "uncertaintyMs": 0.5039169999981823
+              },
+              {
+                "atMatchMs": 4833,
+                "roundTripMs": 1.4851669999989099,
+                "adjustmentMs": 0.012625000003026798,
+                "authorityTick": 96,
+                "uncertaintyMs": 0.42712500000197906
+              },
+              {
+                "atMatchMs": 5833,
+                "roundTripMs": 1.088792000002286,
+                "adjustmentMs": 0.02049999999871943,
+                "authorityTick": 116,
+                "uncertaintyMs": 0.25456250000206637
+              },
+              {
+                "atMatchMs": 6834,
+                "roundTripMs": 0.4678750000020955,
+                "adjustmentMs": 0.8311249999969732,
+                "authorityTick": 136,
+                "uncertaintyMs": 0.23393750000104774
+              },
+              {
+                "atMatchMs": 7836,
+                "roundTripMs": 1.7265409999963595,
+                "adjustmentMs": 0.0221670000028098,
+                "authorityTick": 156,
+                "uncertaintyMs": 0.23393750000104774
+              },
+              {
+                "atMatchMs": 8835,
+                "roundTripMs": 0.5077079999973648,
+                "adjustmentMs": 0.013542000000597909,
+                "authorityTick": 176,
+                "uncertaintyMs": 0.23393750000104774
+              },
+              {
+                "atMatchMs": 9836,
+                "roundTripMs": 0.4992500000007567,
+                "adjustmentMs": 0.0368330000055721,
+                "authorityTick": 196,
+                "uncertaintyMs": 0.23393750000104774
+              },
+              {
+                "atMatchMs": 10837,
+                "roundTripMs": 0.5342920000039157,
+                "adjustmentMs": 0.009875000003376044,
+                "authorityTick": 216,
+                "uncertaintyMs": 0.651625000002241
+              },
+              {
+                "atMatchMs": 11837,
+                "roundTripMs": 0.4923750000016298,
+                "adjustmentMs": 0.00966599999810569,
+                "authorityTick": 236,
+                "uncertaintyMs": 0.6605419999978039
+              },
+              {
+                "atMatchMs": 12838,
+                "roundTripMs": 0.5811669999966398,
+                "adjustmentMs": 0.011834000004455447,
+                "authorityTick": 256,
+                "uncertaintyMs": 0.4449170000007143
+              },
+              {
+                "atMatchMs": 13839,
+                "roundTripMs": 0.5909170000013546,
+                "adjustmentMs": 0.008792000000539701,
+                "authorityTick": 276,
+                "uncertaintyMs": 0.23393750000104774
+              },
+              {
+                "atMatchMs": 14840,
+                "roundTripMs": 0.7683329999999842,
+                "adjustmentMs": 0.01429199999984121,
+                "authorityTick": 296,
+                "uncertaintyMs": 0.23393750000104774
+              },
+              {
+                "atMatchMs": 15841,
+                "roundTripMs": 0.5705000000016298,
+                "adjustmentMs": 0.004332999997131992,
+                "authorityTick": 316,
+                "uncertaintyMs": 0.23393750000104774
+              },
+              {
+                "atMatchMs": 16841,
+                "roundTripMs": 0.7800419999985024,
+                "adjustmentMs": -0.6577919999981532,
+                "authorityTick": 336,
+                "uncertaintyMs": 0.2461875000008149
+              },
+              {
+                "atMatchMs": 17842,
+                "roundTripMs": 0.45799999999871943,
+                "adjustmentMs": 0.7834375000020373,
+                "authorityTick": 356,
+                "uncertaintyMs": 0.22899999999935972
+              },
+              {
+                "atMatchMs": 18843,
+                "roundTripMs": 0.6790840000030585,
+                "adjustmentMs": 0.013124999997671694,
+                "authorityTick": 376,
+                "uncertaintyMs": 0.22899999999935972
+              },
+              {
+                "atMatchMs": 19844,
+                "roundTripMs": 0.8251249999957508,
+                "adjustmentMs": 0.01224999999976717,
+                "authorityTick": 396,
+                "uncertaintyMs": 0.6142910000089614
+              },
+              {
+                "atMatchMs": 20845,
+                "roundTripMs": 0.6251669999983278,
+                "adjustmentMs": 0.014083000001846813,
+                "authorityTick": 416,
+                "uncertaintyMs": 0.4159580000086862
+              },
+              {
+                "atMatchMs": 21845,
+                "roundTripMs": 0.5666249999994761,
+                "adjustmentMs": 0.011334000002534594,
+                "authorityTick": 436,
+                "uncertaintyMs": 0.6286660000077973
+              },
+              {
+                "atMatchMs": 22846,
+                "roundTripMs": 0.7826249999998254,
+                "adjustmentMs": 0.009417000001121778,
+                "authorityTick": 456,
+                "uncertaintyMs": 0.24391600000308244
+              },
+              {
+                "atMatchMs": 23847,
+                "roundTripMs": 0.9911250000004657,
+                "adjustmentMs": 0.00841700000455603,
+                "authorityTick": 476,
+                "uncertaintyMs": 0.22899999999935972
+              },
+              {
+                "atMatchMs": 24847,
+                "roundTripMs": 0.6882089999999152,
+                "adjustmentMs": 0.008792000000539701,
+                "authorityTick": 496,
+                "uncertaintyMs": 0.582791000000725
+              },
+              {
+                "atMatchMs": 25849,
+                "roundTripMs": 0.6861669999998412,
+                "adjustmentMs": 0.00737499999377178,
+                "authorityTick": 516,
+                "uncertaintyMs": 0.22899999999935972
+              },
+              {
+                "atMatchMs": 26849,
+                "roundTripMs": 0.5877089999994496,
+                "adjustmentMs": 0.006708000000799075,
+                "authorityTick": 536,
+                "uncertaintyMs": 0.22899999999935972
+              },
+              {
+                "atMatchMs": 27850,
+                "roundTripMs": 0.7799999999988358,
+                "adjustmentMs": -0.6739785000027041,
+                "authorityTick": 556,
+                "uncertaintyMs": 0.28331249999973807
+              },
+              {
+                "atMatchMs": 28854,
+                "roundTripMs": 3.807249999998021,
+                "adjustmentMs": 0.005499999999301508,
+                "authorityTick": 577,
+                "uncertaintyMs": 0.28331249999973807
+              },
+              {
+                "atMatchMs": 29865,
+                "roundTripMs": 14.39629099999729,
+                "adjustmentMs": 0.008583000002545305,
+                "authorityTick": 597,
+                "uncertaintyMs": 0.28331249999973807
+              },
+              {
+                "atMatchMs": 30866,
+                "roundTripMs": 14.094542000006186,
+                "adjustmentMs": 0.01087500000721775,
+                "authorityTick": 617,
+                "uncertaintyMs": 0.7306659999994736
+              },
+              {
+                "atMatchMs": 31857,
+                "roundTripMs": 4.432333999997354,
+                "adjustmentMs": 0.49158299999544397,
+                "authorityTick": 637,
+                "uncertaintyMs": 0.2938544999997248
+              }
+            ],
+            "poseAnomalies": [],
+            "phaseChanges": [
+              {
+                "tick": 47,
+                "matchTimeMs": 2350,
+                "phase": "paused",
+                "reason": "spatialCoverageLost",
+                "sincePoseSendMs": null,
+                "estimatedMatchMs": 2355.511895500007
+              },
+              {
+                "tick": 48,
+                "matchTimeMs": 2400,
+                "phase": "running",
+                "reason": "spatialCoverageRestored",
+                "sincePoseSendMs": 26.403125000004366,
+                "estimatedMatchMs": 2406.401937500006
+              }
+            ],
+            "diagnosticDrops": {
+              "clockSamples": 0,
+              "poseAnomalies": 0,
+              "phaseChanges": 0
+            },
+            "observedTickDeliveryMs": {
+              "samples": 599,
+              "p50": 50.01,
+              "p95": 52.34,
+              "p99": 57.39,
+              "max": 98.9
+            },
+            "tickGaps": 0,
+            "phaseWallMs": {
+              "running": 29949.71795900001,
+              "paused": 50.88950000000477
+            },
+            "maximumProjectiles": 26,
+            "terminalReasons": {
+              "bodyHit": 50,
+              "missExpired": 72,
+              "shieldBlocked": 14
+            },
+            "missingEvents": 0,
+            "duplicateEvents": 0,
+            "snapshotHealedEvents": 0,
+            "commands": 847,
+            "acknowledgments": 847,
+            "results": 847
+          },
+          {
+            "playerId": "load-2",
+            "offered": {
+              "pose": 600,
+              "slowField": 3,
+              "fire": 131,
+              "reload": 5
+            },
+            "accepted": {
+              "pose": 600,
+              "slowField": 3,
+              "fire": 52,
+              "reload": 5
+            },
+            "refusals": {
+              "fire:notAlive": 1,
+              "fire:protected": 78
+            },
+            "acknowledgmentMs": {
+              "samples": 739,
+              "p50": 27.66,
+              "p95": 32.68,
+              "p99": 39.47,
+              "max": 83.15
+            },
+            "commandResultMs": {
+              "samples": 739,
+              "p50": 26.98,
+              "p95": 32.01,
+              "p99": 37.75,
+              "max": 80.52
+            },
+            "poseSendIntervalMs": {
+              "samples": 599,
+              "p50": 50.03,
+              "p95": 51.03,
+              "p99": 51.44,
+              "max": 57.79
+            },
+            "poseCaptureIntervalMs": {
+              "samples": 599,
+              "p50": 50.03,
+              "p95": 51.03,
+              "p99": 51.43,
+              "max": 57.78
+            },
+            "poseAgeAtResultMs": {
+              "samples": 600,
+              "p50": 19.58,
+              "p95": 20.32,
+              "p99": 20.8,
+              "max": 69.82
+            },
+            "clockSamples": [
+              {
+                "atMatchMs": 2350,
+                "roundTripMs": 5.129457999995793,
+                "adjustmentMs": 0.007083999997121282,
+                "authorityTick": 45,
+                "uncertaintyMs": 0.3767919999991136
+              },
+              {
+                "atMatchMs": 3348,
+                "roundTripMs": 0.777457999996841,
+                "adjustmentMs": 0.009375000001455192,
+                "authorityTick": 66,
+                "uncertaintyMs": 0.3767919999991136
+              },
+              {
+                "atMatchMs": 4349,
+                "roundTripMs": 0.6972090000053868,
+                "adjustmentMs": 0.5443955000009737,
+                "authorityTick": 86,
+                "uncertaintyMs": 0.3486045000026934
+              },
+              {
+                "atMatchMs": 5355,
+                "roundTripMs": 6.291166999995767,
+                "adjustmentMs": 0.016625000003841706,
+                "authorityTick": 107,
+                "uncertaintyMs": 0.3486045000026934
+              },
+              {
+                "atMatchMs": 6360,
+                "roundTripMs": 8.647624999997788,
+                "adjustmentMs": 0.009874999996100087,
+                "authorityTick": 127,
+                "uncertaintyMs": 0.3486045000026934
+              },
+              {
+                "atMatchMs": 7360,
+                "roundTripMs": 8.208750000005239,
+                "adjustmentMs": 0.009333999994851183,
+                "authorityTick": 147,
+                "uncertaintyMs": 0.48700000000098953
+              },
+              {
+                "atMatchMs": 8361,
+                "roundTripMs": 8.822207999997772,
+                "adjustmentMs": 0.010792000000947155,
+                "authorityTick": 167,
+                "uncertaintyMs": 0.3486045000026934
+              },
+              {
+                "atMatchMs": 9360,
+                "roundTripMs": 6.339083999999275,
+                "adjustmentMs": 0.011333000002196059,
+                "authorityTick": 187,
+                "uncertaintyMs": 0.3486045000026934
+              },
+              {
+                "atMatchMs": 10360,
+                "roundTripMs": 5.0928750000020955,
+                "adjustmentMs": 0.011832999996840954,
+                "authorityTick": 207,
+                "uncertaintyMs": 0.3486045000026934
+              },
+              {
+                "atMatchMs": 11362,
+                "roundTripMs": 5.699457999995502,
+                "adjustmentMs": 0.011166000003868248,
+                "authorityTick": 227,
+                "uncertaintyMs": 0.3486045000026934
+              },
+              {
+                "atMatchMs": 12361,
+                "roundTripMs": 3.5367499999993015,
+                "adjustmentMs": 0.009916000002704095,
+                "authorityTick": 247,
+                "uncertaintyMs": 0.3486045000026934
+              },
+              {
+                "atMatchMs": 13371,
+                "roundTripMs": 23.8625419999953,
+                "adjustmentMs": 0.020250000001396984,
+                "authorityTick": 267,
+                "uncertaintyMs": 0.3486045000026934
+              },
+              {
+                "atMatchMs": 14368,
+                "roundTripMs": 7.69774999999936,
+                "adjustmentMs": 1.4257704999981797,
+                "authorityTick": 287,
+                "uncertaintyMs": 1.7683749999996508
+              },
+              {
+                "atMatchMs": 15361,
+                "roundTripMs": 0.5289170000032755,
+                "adjustmentMs": -1.5341245000017807,
+                "authorityTick": 307,
+                "uncertaintyMs": 0.26445850000163773
+              },
+              {
+                "atMatchMs": 16363,
+                "roundTripMs": 0.7340410000033444,
+                "adjustmentMs": 0.01229099999909522,
+                "authorityTick": 327,
+                "uncertaintyMs": 0.39358399999764515
+              },
+              {
+                "atMatchMs": 17364,
+                "roundTripMs": 1.0368329999982961,
+                "adjustmentMs": 0.015040999998745974,
+                "authorityTick": 347,
+                "uncertaintyMs": 0.26445850000163773
+              },
+              {
+                "atMatchMs": 18364,
+                "roundTripMs": 0.51416700000118,
+                "adjustmentMs": 0.27537499999743886,
+                "authorityTick": 367,
+                "uncertaintyMs": 0.25708350000059
+              },
+              {
+                "atMatchMs": 19365,
+                "roundTripMs": 0.5835420000003069,
+                "adjustmentMs": 0.030958999996073544,
+                "authorityTick": 387,
+                "uncertaintyMs": 0.25708350000059
+              },
+              {
+                "atMatchMs": 20366,
+                "roundTripMs": 0.6211669999975129,
+                "adjustmentMs": 0.014624999996158294,
+                "authorityTick": 407,
+                "uncertaintyMs": 0.25708350000059
+              },
+              {
+                "atMatchMs": 21368,
+                "roundTripMs": 0.5246249999981956,
+                "adjustmentMs": 0.0141250000015134,
+                "authorityTick": 427,
+                "uncertaintyMs": 0.25708350000059
+              },
+              {
+                "atMatchMs": 22368,
+                "roundTripMs": 0.37524999999732245,
+                "adjustmentMs": 0.15974950000236277,
+                "authorityTick": 447,
+                "uncertaintyMs": 0.18762499999866122
+              },
+              {
+                "atMatchMs": 23373,
+                "roundTripMs": 4.464459000002535,
+                "adjustmentMs": 0.00720799999544397,
+                "authorityTick": 467,
+                "uncertaintyMs": 0.18762499999866122
+              },
+              {
+                "atMatchMs": 24370,
+                "roundTripMs": 0.5200409999961266,
+                "adjustmentMs": 0.008374999997613486,
+                "authorityTick": 487,
+                "uncertaintyMs": 0.23566700000083074
+              },
+              {
+                "atMatchMs": 25371,
+                "roundTripMs": 0.5787920000002487,
+                "adjustmentMs": 0.008999999998195563,
+                "authorityTick": 507,
+                "uncertaintyMs": 0.6168330000000424
+              },
+              {
+                "atMatchMs": 26373,
+                "roundTripMs": 0.5519999999960419,
+                "adjustmentMs": 0.0070840000043972395,
+                "authorityTick": 527,
+                "uncertaintyMs": 0.18762499999866122
+              },
+              {
+                "atMatchMs": 27373,
+                "roundTripMs": 0.3818329999994603,
+                "adjustmentMs": 0.005000000004656613,
+                "authorityTick": 547,
+                "uncertaintyMs": 0.18762499999866122
+              },
+              {
+                "atMatchMs": 28375,
+                "roundTripMs": 0.8397079999995185,
+                "adjustmentMs": 0.007459000000380911,
+                "authorityTick": 567,
+                "uncertaintyMs": 0.18762499999866122
+              },
+              {
+                "atMatchMs": 29376,
+                "roundTripMs": 0.76212499999383,
+                "adjustmentMs": 0.009791000004042871,
+                "authorityTick": 587,
+                "uncertaintyMs": 0.5140000000028522
+              },
+              {
+                "atMatchMs": 30376,
+                "roundTripMs": 0.5104169999976875,
+                "adjustmentMs": 0.007250000009662472,
+                "authorityTick": 607,
+                "uncertaintyMs": 0.4810829999987618
+              },
+              {
+                "atMatchMs": 31376,
+                "roundTripMs": 0.5452920000097947,
+                "adjustmentMs": 0.008209000006900169,
+                "authorityTick": 627,
+                "uncertaintyMs": 0.47420799999235896
+              }
+            ],
+            "poseAnomalies": [],
+            "phaseChanges": [
+              {
+                "tick": 47,
+                "matchTimeMs": 2350,
+                "phase": "paused",
+                "reason": "spatialCoverageLost",
+                "sincePoseSendMs": null,
+                "estimatedMatchMs": 2355.6222500000003
+              },
+              {
+                "tick": 48,
+                "matchTimeMs": 2400,
+                "phase": "running",
+                "reason": "spatialCoverageRestored",
+                "sincePoseSendMs": 26.35791700000118,
+                "estimatedMatchMs": 2406.491833
+              }
+            ],
+            "diagnosticDrops": {
+              "clockSamples": 0,
+              "poseAnomalies": 0,
+              "phaseChanges": 0
+            },
+            "observedTickDeliveryMs": {
+              "samples": 599,
+              "p50": 50.01,
+              "p95": 52.42,
+              "p99": 57.57,
+              "max": 98.72
+            },
+            "tickGaps": 0,
+            "phaseWallMs": {
+              "running": 29949.738416999986,
+              "paused": 50.869041999998444
+            },
+            "maximumProjectiles": 26,
+            "terminalReasons": {
+              "bodyHit": 50,
+              "missExpired": 72,
+              "shieldBlocked": 14
+            },
+            "missingEvents": 0,
+            "duplicateEvents": 0,
+            "snapshotHealedEvents": 0,
+            "commands": 843,
+            "acknowledgments": 843,
+            "results": 843
+          },
+          {
+            "playerId": "load-3",
+            "offered": {
+              "pose": 600,
+              "slowField": 3,
+              "shield": 101,
+              "fire": 38,
+              "reload": 1
+            },
+            "accepted": {
+              "pose": 600,
+              "slowField": 3,
+              "shield": 4,
+              "fire": 16,
+              "reload": 1
+            },
+            "refusals": {
+              "fire:protected": 20,
+              "shield:protected": 97,
+              "fire:notAlive": 2
+            },
+            "acknowledgmentMs": {
+              "samples": 743,
+              "p50": 27.7,
+              "p95": 32.64,
+              "p99": 39.46,
+              "max": 83.11
+            },
+            "commandResultMs": {
+              "samples": 743,
+              "p50": 27.15,
+              "p95": 32,
+              "p99": 39.06,
+              "max": 81.72
+            },
+            "poseSendIntervalMs": {
+              "samples": 599,
+              "p50": 50.03,
+              "p95": 51,
+              "p99": 51.45,
+              "max": 57.93
+            },
+            "poseCaptureIntervalMs": {
+              "samples": 599,
+              "p50": 50.02,
+              "p95": 51.03,
+              "p99": 51.44,
+              "max": 57.94
+            },
+            "poseAgeAtResultMs": {
+              "samples": 600,
+              "p50": 19.63,
+              "p95": 20.34,
+              "p99": 20.98,
+              "max": 69.17
+            },
+            "clockSamples": [
+              {
+                "atMatchMs": 2682,
+                "roundTripMs": 2.276792000004207,
+                "adjustmentMs": 0.008542000003217254,
+                "authorityTick": 53,
+                "uncertaintyMs": 0.4725419999922451
+              },
+              {
+                "atMatchMs": 3684,
+                "roundTripMs": 3.316624999999476,
+                "adjustmentMs": 0.007707999997364823,
+                "authorityTick": 73,
+                "uncertaintyMs": 0.39270899999246467
+              },
+              {
+                "atMatchMs": 4685,
+                "roundTripMs": 4.822124999998778,
+                "adjustmentMs": 0.010500000003958121,
+                "authorityTick": 93,
+                "uncertaintyMs": 0.28566700000010314
+              },
+              {
+                "atMatchMs": 5683,
+                "roundTripMs": 1.7986669999954756,
+                "adjustmentMs": 0.008791999993263744,
+                "authorityTick": 113,
+                "uncertaintyMs": 0.28566700000010314
+              },
+              {
+                "atMatchMs": 6683,
+                "roundTripMs": 2.0039169999945443,
+                "adjustmentMs": 0.009540999999444466,
+                "authorityTick": 133,
+                "uncertaintyMs": 0.28566700000010314
+              },
+              {
+                "atMatchMs": 7684,
+                "roundTripMs": 3.287292000000889,
+                "adjustmentMs": 0.010874999999941792,
+                "authorityTick": 153,
+                "uncertaintyMs": 0.28566700000010314
+              },
+              {
+                "atMatchMs": 8683,
+                "roundTripMs": 3.150166999999783,
+                "adjustmentMs": 0.01033300000563031,
+                "authorityTick": 173,
+                "uncertaintyMs": 0.28566700000010314
+              },
+              {
+                "atMatchMs": 9684,
+                "roundTripMs": 3.39433299999655,
+                "adjustmentMs": 0.011999999995168764,
+                "authorityTick": 193,
+                "uncertaintyMs": 0.28566700000010314
+              },
+              {
+                "atMatchMs": 10685,
+                "roundTripMs": 4.783167000001413,
+                "adjustmentMs": 0.013249999996332917,
+                "authorityTick": 213,
+                "uncertaintyMs": 0.28566700000010314
+              },
+              {
+                "atMatchMs": 11685,
+                "roundTripMs": 4.068833000004815,
+                "adjustmentMs": 0.8325629999962985,
+                "authorityTick": 233,
+                "uncertaintyMs": 0.6383960000021034
+              },
+              {
+                "atMatchMs": 12686,
+                "roundTripMs": 4.509833999996772,
+                "adjustmentMs": -0.06360349999886239,
+                "authorityTick": 253,
+                "uncertaintyMs": 0.8993334999977378
+              },
+              {
+                "atMatchMs": 13700,
+                "roundTripMs": 18.870999999999185,
+                "adjustmentMs": 0.018667000003915746,
+                "authorityTick": 273,
+                "uncertaintyMs": 0.8993334999977378
+              },
+              {
+                "atMatchMs": 14684,
+                "roundTripMs": 1.0946250000051805,
+                "adjustmentMs": -0.4470209999999497,
+                "authorityTick": 293,
+                "uncertaintyMs": 0.04731250000259024
+              },
+              {
+                "atMatchMs": 15684,
+                "roundTripMs": 0.7139590000006137,
+                "adjustmentMs": 0.011749999997846317,
+                "authorityTick": 313,
+                "uncertaintyMs": 0.04731250000259024
+              },
+              {
+                "atMatchMs": 16685,
+                "roundTripMs": 1.2974170000015874,
+                "adjustmentMs": 0.013249999996332917,
+                "authorityTick": 333,
+                "uncertaintyMs": 0.04731250000259024
+              },
+              {
+                "atMatchMs": 17684,
+                "roundTripMs": 0.3666670000020531,
+                "adjustmentMs": 0.009457999993173871,
+                "authorityTick": 353,
+                "uncertaintyMs": 0.2586250000022119
+              },
+              {
+                "atMatchMs": 18684,
+                "roundTripMs": 0.8193749999991269,
+                "adjustmentMs": 0.010291000005963724,
+                "authorityTick": 373,
+                "uncertaintyMs": 0.15550000000803266
+              },
+              {
+                "atMatchMs": 19685,
+                "roundTripMs": 1.4010419999976875,
+                "adjustmentMs": 0.009459000000788365,
+                "authorityTick": 393,
+                "uncertaintyMs": 0.04731250000259024
+              },
+              {
+                "atMatchMs": 20685,
+                "roundTripMs": 1.6531249999970896,
+                "adjustmentMs": 0.012374999998428393,
+                "authorityTick": 413,
+                "uncertaintyMs": 0.04731250000259024
+              },
+              {
+                "atMatchMs": 21686,
+                "roundTripMs": 2.433083000003535,
+                "adjustmentMs": 0.0141250000015134,
+                "authorityTick": 433,
+                "uncertaintyMs": 0.04731250000259024
+              },
+              {
+                "atMatchMs": 22685,
+                "roundTripMs": 0.6498330000031274,
+                "adjustmentMs": 0.04754099999991013,
+                "authorityTick": 453,
+                "uncertaintyMs": 0.04731250000259024
+              },
+              {
+                "atMatchMs": 23686,
+                "roundTripMs": 0.6541250000009313,
+                "adjustmentMs": 0.008957999998528976,
+                "authorityTick": 473,
+                "uncertaintyMs": 0.26416700000481796
+              },
+              {
+                "atMatchMs": 24686,
+                "roundTripMs": 0.6129160000054981,
+                "adjustmentMs": -0.3852289999995264,
+                "authorityTick": 493,
+                "uncertaintyMs": 0.18333350000102655
+              },
+              {
+                "atMatchMs": 25687,
+                "roundTripMs": 0.4639580000002752,
+                "adjustmentMs": 0.0058330000028945506,
+                "authorityTick": 513,
+                "uncertaintyMs": 0.18333350000102655
+              },
+              {
+                "atMatchMs": 26688,
+                "roundTripMs": 0.6009589999957825,
+                "adjustmentMs": 0.006332999997539446,
+                "authorityTick": 533,
+                "uncertaintyMs": 0.18333350000102655
+              },
+              {
+                "atMatchMs": 27689,
+                "roundTripMs": 0.3265840000094613,
+                "adjustmentMs": -0.10924949999753153,
+                "authorityTick": 553,
+                "uncertaintyMs": 0.16329200000473065
+              },
+              {
+                "atMatchMs": 28691,
+                "roundTripMs": 0.7312919999967562,
+                "adjustmentMs": 0.008040999993681908,
+                "authorityTick": 573,
+                "uncertaintyMs": 0.20329200000560377
+              },
+              {
+                "atMatchMs": 29691,
+                "roundTripMs": 0.48958399999537505,
+                "adjustmentMs": 0.006667000008746982,
+                "authorityTick": 593,
+                "uncertaintyMs": 0.17487500001152512
+              },
+              {
+                "atMatchMs": 30692,
+                "roundTripMs": 0.5026249999937136,
+                "adjustmentMs": 0.006458000003476627,
+                "authorityTick": 613,
+                "uncertaintyMs": 0.3492090000072494
+              },
+              {
+                "atMatchMs": 31693,
+                "roundTripMs": 0.4521250000107102,
+                "adjustmentMs": 0.006666000001132488,
+                "authorityTick": 633,
+                "uncertaintyMs": 0.26320899999700487
+              }
+            ],
+            "poseAnomalies": [],
+            "phaseChanges": [
+              {
+                "tick": 47,
+                "matchTimeMs": 2350,
+                "phase": "paused",
+                "reason": "spatialCoverageLost",
+                "sincePoseSendMs": null,
+                "estimatedMatchMs": 2356.0359170000083
+              },
+              {
+                "tick": 48,
+                "matchTimeMs": 2400,
+                "phase": "running",
+                "reason": "spatialCoverageRestored",
+                "sincePoseSendMs": 26.294624999994994,
+                "estimatedMatchMs": 2406.8870830000087
+              }
+            ],
+            "diagnosticDrops": {
+              "clockSamples": 0,
+              "poseAnomalies": 0,
+              "phaseChanges": 0
+            },
+            "observedTickDeliveryMs": {
+              "samples": 599,
+              "p50": 50.02,
+              "p95": 52.41,
+              "p99": 57.53,
+              "max": 102.69
+            },
+            "tickGaps": 0,
+            "phaseWallMs": {
+              "running": 29949.756500000003,
+              "paused": 50.85145900000498
+            },
+            "maximumProjectiles": 26,
+            "terminalReasons": {
+              "bodyHit": 50,
+              "missExpired": 72,
+              "shieldBlocked": 14
+            },
+            "missingEvents": 0,
+            "duplicateEvents": 0,
+            "snapshotHealedEvents": 0,
+            "commands": 847,
+            "acknowledgments": 847,
+            "results": 847
+          }
+        ],
+        "durable": {
+          "authorityEpoch": 1,
+          "eventWatermark": 7110,
+          "bulletCount": 136,
+          "ledgerEvents": 398,
+          "exactLedgerMatches": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "shotIdentityMatches": {
+            "acceptedFireCount": 136,
+            "uniqueAcceptedShots": 136,
+            "spawnsMatchAccepted": true,
+            "terminalsMatchAccepted": true
+          },
+          "unresolvedBullets": 0,
+          "retainedCommands": 2048,
+          "checkpointBytes": 2018,
+          "databaseBytes": null,
+          "projectionRows": 3,
+          "projectionProgress": {
+            "queued_sequence": 7110,
+            "delivered_sequence": 0
+          }
+        },
+        "errors": []
+      },
+      "diagnostics": {
+        "enabled": true,
+        "armed": true,
+        "traces": [
+          {
+            "version": 1,
+            "units": "workerd monotonic milliseconds; client captures are logical match milliseconds",
+            "authorityEpoch": 1,
+            "tick": 47,
+            "matchTimeMs": 2350,
+            "reason": "spatialCoverageLost",
+            "coverage": {
+              "fromMs": 2300,
+              "toMs": 2350,
+              "interval": false
+            },
+            "failedPlayers": [
+              {
+                "playerId": "load-0",
+                "connected": true,
+                "frameReady": true,
+                "health": 100,
+                "phoneAtEnd": false,
+                "collidersCoverInterval": false,
+                "phoneSamples": [
+                  {
+                    "sequence": 1,
+                    "capturedAtMs": 1679.1483959999969,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 2,
+                    "capturedAtMs": 1729.156062999995,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 3,
+                    "capturedAtMs": 1779.8148959999962,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 4,
+                    "capturedAtMs": 1830.2553129999942,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 5,
+                    "capturedAtMs": 1879.6546039999957,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 6,
+                    "capturedAtMs": 1929.7175209999987,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 7,
+                    "capturedAtMs": 1980.0887289999955,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 8,
+                    "capturedAtMs": 2029.4598539999934,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 9,
+                    "capturedAtMs": 2079.302103999995,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 10,
+                    "capturedAtMs": 2129.3715209999937,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 11,
+                    "capturedAtMs": 2179.2516879999966,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 12,
+                    "capturedAtMs": 2229.727353999995,
+                    "tracking": "normal"
+                  }
+                ],
+                "bodyHistories": [
+                  {
+                    "observerId": "load-1",
+                    "observerReady": true,
+                    "observerPhoneAtEnd": false,
+                    "coversFrom": false,
+                    "coversTo": false,
+                    "sampleTimesMs": [
+                      1679.1435205000016,
+                      1729.176104500002,
+                      1779.8419375000012,
+                      1830.2178955000054,
+                      1879.6440625000032,
+                      1929.7088545000079,
+                      1980.0814375000045,
+                      2029.4572295000035,
+                      2079.2880625000034,
+                      2129.359354500004,
+                      2179.2756455000053,
+                      2229.7514795000025
+                    ]
+                  },
+                  {
+                    "observerId": "load-2",
+                    "observerReady": true,
+                    "observerPhoneAtEnd": false,
+                    "coversFrom": false,
+                    "coversTo": false,
+                    "sampleTimesMs": [
+                      1679.2845420000012,
+                      1729.305042,
+                      1779.9724170000045,
+                      1830.3423330000005,
+                      1879.770375,
+                      1929.846000000005,
+                      1980.2070000000022,
+                      2029.5850419999988,
+                      2079.4137499999997,
+                      2129.4915830000027,
+                      2179.414875000002,
+                      2229.884167000004
+                    ]
+                  },
+                  {
+                    "observerId": "load-3",
+                    "observerReady": true,
+                    "observerPhoneAtEnd": false,
+                    "coversFrom": false,
+                    "coversTo": false,
+                    "sampleTimesMs": [
+                      1679.7588330000071,
+                      1729.7419170000067,
+                      1780.410542000005,
+                      1830.7741250000036,
+                      1880.204583000006,
+                      1930.2782080000034,
+                      1980.6394170000058,
+                      2030.0187080000032,
+                      2079.848208000003,
+                      2129.9273750000066,
+                      2179.899250000002,
+                      2230.3207080000066
+                    ]
+                  }
+                ]
+              },
+              {
+                "playerId": "load-1",
+                "connected": true,
+                "frameReady": true,
+                "health": 100,
+                "phoneAtEnd": false,
+                "collidersCoverInterval": false,
+                "phoneSamples": [
+                  {
+                    "sequence": 1,
+                    "capturedAtMs": 1679.1435205000016,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 2,
+                    "capturedAtMs": 1729.176104500002,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 3,
+                    "capturedAtMs": 1779.8419375000012,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 4,
+                    "capturedAtMs": 1830.2178955000054,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 5,
+                    "capturedAtMs": 1879.6440625000032,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 6,
+                    "capturedAtMs": 1929.7088545000079,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 7,
+                    "capturedAtMs": 1980.0814375000045,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 8,
+                    "capturedAtMs": 2029.4572295000035,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 9,
+                    "capturedAtMs": 2079.2880625000034,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 10,
+                    "capturedAtMs": 2129.359354500004,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 11,
+                    "capturedAtMs": 2179.2756455000053,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 12,
+                    "capturedAtMs": 2229.7514795000025,
+                    "tracking": "normal"
+                  }
+                ],
+                "bodyHistories": [
+                  {
+                    "observerId": "load-0",
+                    "observerReady": true,
+                    "observerPhoneAtEnd": false,
+                    "coversFrom": false,
+                    "coversTo": false,
+                    "sampleTimesMs": [
+                      1679.1483959999969,
+                      1729.156062999995,
+                      1779.8148959999962,
+                      1830.2553129999942,
+                      1879.6546039999957,
+                      1929.7175209999987,
+                      1980.0887289999955,
+                      2029.4598539999934,
+                      2079.302103999995,
+                      2129.3715209999937,
+                      2179.2516879999966,
+                      2229.727353999995
+                    ]
+                  },
+                  {
+                    "observerId": "load-2",
+                    "observerReady": true,
+                    "observerPhoneAtEnd": false,
+                    "coversFrom": false,
+                    "coversTo": false,
+                    "sampleTimesMs": [
+                      1679.2845420000012,
+                      1729.305042,
+                      1779.9724170000045,
+                      1830.3423330000005,
+                      1879.770375,
+                      1929.846000000005,
+                      1980.2070000000022,
+                      2029.5850419999988,
+                      2079.4137499999997,
+                      2129.4915830000027,
+                      2179.414875000002,
+                      2229.884167000004
+                    ]
+                  },
+                  {
+                    "observerId": "load-3",
+                    "observerReady": true,
+                    "observerPhoneAtEnd": false,
+                    "coversFrom": false,
+                    "coversTo": false,
+                    "sampleTimesMs": [
+                      1679.7588330000071,
+                      1729.7419170000067,
+                      1780.410542000005,
+                      1830.7741250000036,
+                      1880.204583000006,
+                      1930.2782080000034,
+                      1980.6394170000058,
+                      2030.0187080000032,
+                      2079.848208000003,
+                      2129.9273750000066,
+                      2179.899250000002,
+                      2230.3207080000066
+                    ]
+                  }
+                ]
+              },
+              {
+                "playerId": "load-2",
+                "connected": true,
+                "frameReady": true,
+                "health": 100,
+                "phoneAtEnd": false,
+                "collidersCoverInterval": false,
+                "phoneSamples": [
+                  {
+                    "sequence": 1,
+                    "capturedAtMs": 1679.2845420000012,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 2,
+                    "capturedAtMs": 1729.305042,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 3,
+                    "capturedAtMs": 1779.9724170000045,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 4,
+                    "capturedAtMs": 1830.3423330000005,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 5,
+                    "capturedAtMs": 1879.770375,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 6,
+                    "capturedAtMs": 1929.846000000005,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 7,
+                    "capturedAtMs": 1980.2070000000022,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 8,
+                    "capturedAtMs": 2029.5850419999988,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 9,
+                    "capturedAtMs": 2079.4137499999997,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 10,
+                    "capturedAtMs": 2129.4915830000027,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 11,
+                    "capturedAtMs": 2179.414875000002,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 12,
+                    "capturedAtMs": 2229.884167000004,
+                    "tracking": "normal"
+                  }
+                ],
+                "bodyHistories": [
+                  {
+                    "observerId": "load-1",
+                    "observerReady": true,
+                    "observerPhoneAtEnd": false,
+                    "coversFrom": false,
+                    "coversTo": false,
+                    "sampleTimesMs": [
+                      1679.1435205000016,
+                      1729.176104500002,
+                      1779.8419375000012,
+                      1830.2178955000054,
+                      1879.6440625000032,
+                      1929.7088545000079,
+                      1980.0814375000045,
+                      2029.4572295000035,
+                      2079.2880625000034,
+                      2129.359354500004,
+                      2179.2756455000053,
+                      2229.7514795000025
+                    ]
+                  },
+                  {
+                    "observerId": "load-0",
+                    "observerReady": true,
+                    "observerPhoneAtEnd": false,
+                    "coversFrom": false,
+                    "coversTo": false,
+                    "sampleTimesMs": [
+                      1679.1483959999969,
+                      1729.156062999995,
+                      1779.8148959999962,
+                      1830.2553129999942,
+                      1879.6546039999957,
+                      1929.7175209999987,
+                      1980.0887289999955,
+                      2029.4598539999934,
+                      2079.302103999995,
+                      2129.3715209999937,
+                      2179.2516879999966,
+                      2229.727353999995
+                    ]
+                  },
+                  {
+                    "observerId": "load-3",
+                    "observerReady": true,
+                    "observerPhoneAtEnd": false,
+                    "coversFrom": false,
+                    "coversTo": false,
+                    "sampleTimesMs": [
+                      1679.7588330000071,
+                      1729.7419170000067,
+                      1780.410542000005,
+                      1830.7741250000036,
+                      1880.204583000006,
+                      1930.2782080000034,
+                      1980.6394170000058,
+                      2030.0187080000032,
+                      2079.848208000003,
+                      2129.9273750000066,
+                      2179.899250000002,
+                      2230.3207080000066
+                    ]
+                  }
+                ]
+              },
+              {
+                "playerId": "load-3",
+                "connected": true,
+                "frameReady": true,
+                "health": 100,
+                "phoneAtEnd": false,
+                "collidersCoverInterval": false,
+                "phoneSamples": [
+                  {
+                    "sequence": 1,
+                    "capturedAtMs": 1679.7588330000071,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 2,
+                    "capturedAtMs": 1729.7419170000067,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 3,
+                    "capturedAtMs": 1780.410542000005,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 4,
+                    "capturedAtMs": 1830.7741250000036,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 5,
+                    "capturedAtMs": 1880.204583000006,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 6,
+                    "capturedAtMs": 1930.2782080000034,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 7,
+                    "capturedAtMs": 1980.6394170000058,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 8,
+                    "capturedAtMs": 2030.0187080000032,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 9,
+                    "capturedAtMs": 2079.848208000003,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 10,
+                    "capturedAtMs": 2129.9273750000066,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 11,
+                    "capturedAtMs": 2179.899250000002,
+                    "tracking": "normal"
+                  },
+                  {
+                    "sequence": 12,
+                    "capturedAtMs": 2230.3207080000066,
+                    "tracking": "normal"
+                  }
+                ],
+                "bodyHistories": [
+                  {
+                    "observerId": "load-1",
+                    "observerReady": true,
+                    "observerPhoneAtEnd": false,
+                    "coversFrom": false,
+                    "coversTo": false,
+                    "sampleTimesMs": [
+                      1679.1435205000016,
+                      1729.176104500002,
+                      1779.8419375000012,
+                      1830.2178955000054,
+                      1879.6440625000032,
+                      1929.7088545000079,
+                      1980.0814375000045,
+                      2029.4572295000035,
+                      2079.2880625000034,
+                      2129.359354500004,
+                      2179.2756455000053,
+                      2229.7514795000025
+                    ]
+                  },
+                  {
+                    "observerId": "load-0",
+                    "observerReady": true,
+                    "observerPhoneAtEnd": false,
+                    "coversFrom": false,
+                    "coversTo": false,
+                    "sampleTimesMs": [
+                      1679.1483959999969,
+                      1729.156062999995,
+                      1779.8148959999962,
+                      1830.2553129999942,
+                      1879.6546039999957,
+                      1929.7175209999987,
+                      1980.0887289999955,
+                      2029.4598539999934,
+                      2079.302103999995,
+                      2129.3715209999937,
+                      2179.2516879999966,
+                      2229.727353999995
+                    ]
+                  },
+                  {
+                    "observerId": "load-2",
+                    "observerReady": true,
+                    "observerPhoneAtEnd": false,
+                    "coversFrom": false,
+                    "coversTo": false,
+                    "sampleTimesMs": [
+                      1679.2845420000012,
+                      1729.305042,
+                      1779.9724170000045,
+                      1830.3423330000005,
+                      1879.770375,
+                      1929.846000000005,
+                      1980.2070000000022,
+                      2029.5850419999988,
+                      2079.4137499999997,
+                      2129.4915830000027,
+                      2179.414875000002,
+                      2229.884167000004
+                    ]
+                  }
+                ]
+              }
+            ],
+            "acceptedPoses": [
+              {
+                "playerId": "load-0",
+                "sequence": 12,
+                "capturedAtMs": 2229.727353999995,
+                "ageMs": 120.2726460000049
+              },
+              {
+                "playerId": "load-1",
+                "sequence": 12,
+                "capturedAtMs": 2229.7514795000025,
+                "ageMs": 120.24852049999754
+              },
+              {
+                "playerId": "load-2",
+                "sequence": 12,
+                "capturedAtMs": 2229.884167000004,
+                "ageMs": 120.1158329999962
+              },
+              {
+                "playerId": "load-3",
+                "sequence": 12,
+                "capturedAtMs": 2230.3207080000066,
+                "ageMs": 119.67929199999344
+              }
+            ],
+            "inputs": [
+              {
+                "playerId": "load-0",
+                "clientSequence": 15,
+                "kind": "pose",
+                "receivedAtMs": 1788737956325,
+                "queueEnteredAtMs": 1788737956325,
+                "admittedAtMs": 1788737956325,
+                "queueDelayMs": 0,
+                "sentAtMs": 2346.996103999998,
+                "captureMs": 2346.9646039999934,
+                "poseSequence": 13,
+                "plannedTick": 48,
+                "consumedTick": null,
+                "accepted": null,
+                "refusal": null
+              },
+              {
+                "playerId": "load-1",
+                "clientSequence": 14,
+                "kind": "pose",
+                "receivedAtMs": 1788737956326,
+                "queueEnteredAtMs": 1788737956326,
+                "admittedAtMs": 1788737956326,
+                "queueDelayMs": 0,
+                "sentAtMs": 2346.9925625000033,
+                "captureMs": 2346.961895500004,
+                "poseSequence": 13,
+                "plannedTick": 48,
+                "consumedTick": null,
+                "accepted": null,
+                "refusal": null
+              },
+              {
+                "playerId": "load-3",
+                "clientSequence": 14,
+                "kind": "pose",
+                "receivedAtMs": 1788737956326,
+                "queueEnteredAtMs": 1788737956326,
+                "admittedAtMs": 1788737956326,
+                "queueDelayMs": 0,
+                "sentAtMs": 2347.6695420000033,
+                "captureMs": 2347.6585420000047,
+                "poseSequence": 13,
+                "plannedTick": 48,
+                "consumedTick": null,
+                "accepted": null,
+                "refusal": null
+              },
+              {
+                "playerId": "load-2",
+                "clientSequence": 14,
+                "kind": "pose",
+                "receivedAtMs": 1788737956326,
+                "queueEnteredAtMs": 1788737956326,
+                "admittedAtMs": 1788737956327,
+                "queueDelayMs": 0,
+                "sentAtMs": 2347.1997919999994,
+                "captureMs": 2347.190542000004,
+                "poseSequence": 13,
+                "plannedTick": 48,
+                "consumedTick": null,
+                "accepted": null,
+                "refusal": null
+              }
+            ],
+            "ticks": [
+              {
+                "tick": 47,
+                "matchTimeMs": 2350,
+                "enteredAtMs": 1788737956329,
+                "cadenceAnchorMs": 1788737956274,
+                "cadenceLagMs": 55,
+                "pending": 4,
+                "eligible": 0,
+                "acceptedPoses": [
+                  {
+                    "playerId": "load-0",
+                    "sequence": 12,
+                    "capturedAtMs": 2229.727353999995,
+                    "ageMs": 70.2726460000049
+                  },
+                  {
+                    "playerId": "load-1",
+                    "sequence": 12,
+                    "capturedAtMs": 2229.7514795000025,
+                    "ageMs": 70.24852049999754
+                  },
+                  {
+                    "playerId": "load-2",
+                    "sequence": 12,
+                    "capturedAtMs": 2229.884167000004,
+                    "ageMs": 70.1158329999962
+                  },
+                  {
+                    "playerId": "load-3",
+                    "sequence": 12,
+                    "capturedAtMs": 2230.3207080000066,
+                    "ageMs": 69.67929199999344
+                  }
+                ]
+              }
+            ],
+            "commitSucceeded": true,
+            "droppedInputs": 0,
+            "droppedTicks": 0,
+            "limits": {
+              "inputs": 64,
+              "ticks": 8,
+              "logBytes": 32768
+            }
+          }
+        ],
+        "malformedRecords": 0
+      }
+    }
+  ]
+}

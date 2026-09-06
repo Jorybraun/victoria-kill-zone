@@ -9,5 +9,10 @@ for (const scenario of loadScenarios) it(`independent Node client ${scenario}: n
   try {
     session = await createNodeRuntime(signal);
     await runLoadScenario(scenario, __VKZ_LOAD_MS__, session.runtime, annotate, signal);
-  } finally {await session?.close();}
+  } finally {
+    try {
+      const diagnostics = session?.diagnostics();
+      if (diagnostics) await annotate(JSON.stringify(diagnostics), "vkz-runtime-trace");
+    } finally {await session?.close();}
+  }
 });
