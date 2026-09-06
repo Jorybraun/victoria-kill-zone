@@ -1,0 +1,2 @@
+# Install in addition to ../cad/requirements.txt
+matplotlib==3.11.1
