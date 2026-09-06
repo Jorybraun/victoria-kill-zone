@@ -67,15 +67,20 @@ export class Connection {
   }
 
   sendSerialized(message: string, eventSequence?: number): boolean {
+    return this.sendEncoded({data: message, bytes: encoder.encode(message).byteLength}, eventSequence);
+  }
+
+  /** Server-encoded messages only; the room computes this byte length once per broadcast. */
+  sendEncoded(message: {readonly data: string; readonly bytes: number}, eventSequence?: number): boolean {
     if (this.socket.readyState !== WebSocket.OPEN) return false;
-    const bytes = encoder.encode(message).byteLength;
+    const {data, bytes} = message;
     const sentThrough = Math.max(this.sentSequence, eventSequence ?? this.sentSequence);
     if (bytes > LIMITS.serverMessageBytes || this.outstandingBytes + bytes > MAX_UNACKNOWLEDGED_BYTES || sentThrough - this.receivedSequence > MAX_UNACKNOWLEDGED_EVENTS) {
       this.close(4008, "resume-required");
       return false;
     }
     try {
-      this.socket.send(message);
+      this.socket.send(data);
       this.outstandingBytes += bytes;
       this.bytesBySequence.set(sentThrough, (this.bytesBySequence.get(sentThrough) ?? 0) + bytes);
       this.sentSequence = sentThrough;
