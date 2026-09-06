@@ -1,0 +1,126 @@
+{
+  "browser": "152.0.7977.77",
+  "evidence": "Actual React components with deterministic demo snapshots in headless Chromium; not production-network or iPhone evidence.",
+  "results": [
+    {
+      "name": "arena-desktop",
+      "fixture": "arena",
+      "textScale": 1,
+      "width": 1280,
+      "scrollWidth": 1280,
+      "heading": "LIVE ARENA",
+      "overflowingContent": [],
+      "players": [
+        "ROOK",
+        "VALE",
+        "EMBER",
+        "NORTH STAR OF THE MOUNTAIN"
+      ]
+    },
+    {
+      "name": "arena-phone",
+      "fixture": "arena",
+      "textScale": 1,
+      "width": 375,
+      "scrollWidth": 375,
+      "heading": "LIVE ARENA",
+      "overflowingContent": [],
+      "players": [
+        "ROOK",
+        "VALE",
+        "EMBER",
+        "NORTH STAR OF THE MOUNTAIN"
+      ]
+    },
+    {
+      "name": "aligning-phone",
+      "fixture": "arena-calibrating",
+      "textScale": 1,
+      "width": 375,
+      "scrollWidth": 375,
+      "heading": "ALIGNING ARENA",
+      "overflowingContent": [],
+      "players": [
+        "ROOK",
+        "VALE",
+        "EMBER",
+        "NORTH STAR OF THE MOUNTAIN"
+      ]
+    },
+    {
+      "name": "paused-phone",
+      "fixture": "arena-paused",
+      "textScale": 1,
+      "width": 375,
+      "scrollWidth": 375,
+      "heading": "ARENA PAUSED",
+      "overflowingContent": [],
+      "players": [
+        "ROOK",
+        "VALE",
+        "EMBER",
+        "NORTH STAR OF THE MOUNTAIN"
+      ]
+    },
+    {
+      "name": "results-desktop",
+      "fixture": "arena-ended",
+      "textScale": 1,
+      "width": 1280,
+      "scrollWidth": 1280,
+      "heading": "ARENA COMPLETE",
+      "overflowingContent": [],
+      "players": [
+        "ROOK",
+        "VALE",
+        "EMBER",
+        "NORTH STAR OF THE MOUNTAIN"
+      ]
+    },
+    {
+      "name": "interrupted-phone",
+      "fixture": "arena-degraded",
+      "textScale": 1,
+      "width": 375,
+      "scrollWidth": 375,
+      "heading": "LAST RECEIVED STATE",
+      "overflowingContent": [],
+      "players": [
+        "ROOK",
+        "VALE",
+        "EMBER",
+        "NORTH STAR OF THE MOUNTAIN"
+      ]
+    },
+    {
+      "name": "restored-phone",
+      "fixture": "arena-recovery",
+      "textScale": 1,
+      "width": 375,
+      "scrollWidth": 375,
+      "heading": "LIVE ARENA",
+      "overflowingContent": [],
+      "players": [
+        "ROOK",
+        "VALE",
+        "EMBER",
+        "NORTH STAR OF THE MOUNTAIN"
+      ]
+    },
+    {
+      "name": "arena-phone-text-200",
+      "fixture": "arena",
+      "textScale": 2,
+      "width": 375,
+      "scrollWidth": 375,
+      "heading": "LIVE ARENA",
+      "overflowingContent": [],
+      "players": [
+        "ROOK",
+        "VALE",
+        "EMBER",
+        "NORTH STAR OF THE MOUNTAIN"
+      ]
+    }
+  ]
+}

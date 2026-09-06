@@ -111,6 +111,7 @@ export const debugFire = mutation({
     if (match === null) {
       fail("MATCH_NOT_FOUND");
     }
+    if (match.combatMode !== undefined) fail("COMBAT_AUTHORITY_REQUIRED");
     const existing = await loadShot(ctx, shooter._id, args.clientShotId);
     if (existing !== null) {
       // Never reinterpret a markerless miss or a host verdict as a debug hit.
@@ -185,6 +186,7 @@ export const fire = mutation({
     if (match === null) {
       fail("MATCH_NOT_FOUND");
     }
+    if (match.combatMode !== undefined) fail("COMBAT_AUTHORITY_REQUIRED");
 
     if (
       args.clientShotId.trim().length === 0 ||
@@ -272,6 +274,7 @@ export const recordVerdict = mutation({
     if (match === null) {
       fail("MATCH_NOT_FOUND");
     }
+    if (match.combatMode !== undefined) fail("COMBAT_AUTHORITY_REQUIRED");
     if (match.hostPlayerId !== caller._id) {
       fail("HOST_ONLY");
     }

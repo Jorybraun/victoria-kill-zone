@@ -29,7 +29,7 @@ export function EventFeed({ events }: EventFeedProps) {
           <p className="eyebrow">AUTHORITATIVE FEED</p>
           <h2 id="event-feed-heading">EVENT FEED</h2>
         </div>
-        <span className="event-count">{recentEvents.length} EVENTS</span>
+        <span className="event-count">{recentEvents.length} {recentEvents.length === 1 ? "EVENT" : "EVENTS"}</span>
       </div>
 
       {recentEvents.length === 0 ? (

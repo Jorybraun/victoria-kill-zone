@@ -68,6 +68,8 @@ struct WaitingRoom: Equatable, Sendable {
   let localPlayerID: String
   let hostPlayerID: String
   var players: [LobbyPlayer]
+  var combatMode: CombatMode? = nil
+  var maxPlayers: Int = 2
 
   var localPlayer: LobbyPlayer? {
     players.first { $0.id == localPlayerID }
@@ -78,11 +80,12 @@ struct WaitingRoom: Equatable, Sendable {
   }
 
   var isFull: Bool {
-    players.count == 2
+    players.count >= maxPlayers
   }
 
   var allPlayersReady: Bool {
-    isFull && players.allSatisfy { $0.isReady && $0.isConnected }
+    players.count >= 2 && players.count <= maxPlayers
+      && players.allSatisfy { $0.isReady && $0.isConnected }
   }
 
   var canLocalPlayerStart: Bool {

@@ -31,17 +31,11 @@ let package = Package(
       exclude: [
         "App/VictoriaKillZoneApp.swift",
         "Info.plist",
+        "Assets.xcassets",
+        "PrivacyInfo.xcprivacy",
       ],
-      sources: [
-        "App/AppEnvironment.swift",
-        "App/RootView.swift",
-        "DesignSystem",
-        "Domain",
-        "Features",
-        "Services",
-        "Targeting/TargetingSession.swift",
-        "Targeting/BodyTargetingGeometry.swift",
-        "Targeting/SharedArena",
+      resources: [
+        .copy("Features/Game/SkeletonAssets"),
       ],
       linkerSettings: [
         .linkedFramework("AVFoundation", .when(platforms: [.iOS])),
