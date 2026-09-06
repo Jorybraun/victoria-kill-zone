@@ -20,6 +20,8 @@ final class CombatTransportArenaLinkTests: XCTestCase {
 
     pair.host.start(role: .host)
     pair.guest.start(role: .guest)
+    waitForSend(pair.host, beyond: 0)
+    waitForSend(pair.guest, beyond: 0)
     pump(pair.fabric, until: {
       pair.hostRecorder.contains(state: .connected) &&
         pair.guestRecorder.contains(state: .connected)
@@ -45,15 +47,12 @@ final class CombatTransportArenaLinkTests: XCTestCase {
       if pair.guestRecorder.containsShot(hostShot) { guestMessage.fulfill() }
     }
 
+    let guestBytesBeforeSend = pair.guest.stats.bytesOut
+    let hostBytesBeforeSend = pair.host.stats.bytesOut
     pair.guest.send(.shotTracer(guestShot))
     pair.host.send(.shotTracer(hostShot))
-    let sendDeadline = Date(timeIntervalSinceNow: 2)
-    while (pair.guest.stats.bytesOut == 0 || pair.host.stats.bytesOut == 0) &&
-      Date() < sendDeadline {
-      RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.005))
-    }
-    XCTAssertGreaterThan(pair.guest.stats.bytesOut, 0)
-    XCTAssertGreaterThan(pair.host.stats.bytesOut, 0)
+    waitForSend(pair.guest, beyond: guestBytesBeforeSend)
+    waitForSend(pair.host, beyond: hostBytesBeforeSend)
     pump(pair.fabric, until: {
       pair.hostRecorder.containsShot(guestShot) &&
         pair.guestRecorder.containsShot(hostShot)
@@ -72,12 +71,9 @@ final class CombatTransportArenaLinkTests: XCTestCase {
       if message == .shotRetracted(shotId: "host#1") { received.fulfill() }
     }
 
+    let bytesBeforeSend = pair.host.stats.bytesOut
     pair.host.send(.shotRetracted(shotId: "host#1"))
-    let sendDeadline = Date(timeIntervalSinceNow: 2)
-    while pair.host.stats.bytesOut == 0 && Date() < sendDeadline {
-      RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.005))
-    }
-    XCTAssertGreaterThan(pair.host.stats.bytesOut, 0)
+    waitForSend(pair.host, beyond: bytesBeforeSend)
     pump(pair.fabric, until: {
       pair.guestRecorder.contains(message: .shotRetracted(shotId: "host#1"))
     })
@@ -95,12 +91,9 @@ final class CombatTransportArenaLinkTests: XCTestCase {
       if message == .worldMap(worldMap) { received.fulfill() }
     }
 
+    let bytesBeforeSend = pair.host.stats.bytesOut
     pair.host.send(.worldMap(worldMap))
-    let sendDeadline = Date(timeIntervalSinceNow: 2)
-    while pair.host.stats.bytesOut == 0 && Date() < sendDeadline {
-      RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.005))
-    }
-    XCTAssertGreaterThan(pair.host.stats.bytesOut, 0)
+    waitForSend(pair.host, beyond: bytesBeforeSend)
     pump(pair.fabric, timeout: 10, until: {
       pair.guestRecorder.contains(message: .worldMap(worldMap))
     })
@@ -110,7 +103,7 @@ final class CombatTransportArenaLinkTests: XCTestCase {
   }
 
   func testWrongMatchFailsHostAndDropsSubsequentMessages() throws {
-    let fabric = LoopbackFabric(playerCount: 2)
+    let fabric = SerializedLoopbackFabric()
     let hostRecorder = Recorder()
     let guestRecorder = Recorder()
     let host = CombatTransportArenaLink(
@@ -158,12 +151,9 @@ final class CombatTransportArenaLinkTests: XCTestCase {
       pair.hostRecorder.recordMessage(message)
       if case .shotTracer = message { received.fulfill() }
     }
+    let bytesBeforeSend = pair.guest.stats.bytesOut
     pair.guest.send(.shotTracer(try tracer(shotId: "guest#1", shooter: "guest")))
-    let sendDeadline = Date(timeIntervalSinceNow: 2)
-    while pair.guest.stats.bytesOut == 0 && Date() < sendDeadline {
-      RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.005))
-    }
-    XCTAssertGreaterThan(pair.guest.stats.bytesOut, 0)
+    waitForSend(pair.guest, beyond: bytesBeforeSend)
     pump(pair.fabric, until: { pair.hostRecorder.messageCount > 0 })
     wait(for: [received], timeout: 1)
 
@@ -177,15 +167,21 @@ final class CombatTransportArenaLinkTests: XCTestCase {
     let pair = makePair()
     pair.host.start(role: .host)
     pair.guest.start(role: .guest)
+    // Sending the hello follows receive-handler installation on each adapter's
+    // queue. Do not advance simulated delivery until both endpoints can receive.
+    waitForSend(pair.host, beyond: 0)
+    waitForSend(pair.guest, beyond: 0)
     pump(pair.fabric, until: {
       pair.hostRecorder.contains(state: .connected) &&
         pair.guestRecorder.contains(state: .connected)
     })
+    XCTAssertTrue(pair.hostRecorder.contains(state: .connected), "Host handshake did not complete")
+    XCTAssertTrue(pair.guestRecorder.contains(state: .connected), "Guest handshake did not complete")
     return pair
   }
 
   private func makePair() -> Pair {
-    let fabric = LoopbackFabric(playerCount: 2)
+    let fabric = SerializedLoopbackFabric()
     let hostRecorder = Recorder()
     let guestRecorder = Recorder()
     let host = CombatTransportArenaLink(
@@ -212,7 +208,7 @@ final class CombatTransportArenaLinkTests: XCTestCase {
   }
 
   private func pump(
-    _ fabric: LoopbackFabric,
+    _ fabric: SerializedLoopbackFabric,
     timeout: TimeInterval = 2,
     until predicate: @escaping () -> Bool
   ) {
@@ -221,6 +217,19 @@ final class CombatTransportArenaLinkTests: XCTestCase {
       fabric.advance(to: fabric.nowMs + 1)
       RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.001))
     }
+  }
+
+  private func waitForSend(
+    _ link: CombatTransportArenaLink,
+    beyond previousBytes: Int,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    let deadline = Date(timeIntervalSinceNow: 2)
+    while link.stats.bytesOut <= previousBytes && Date() < deadline {
+      RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.001))
+    }
+    XCTAssertGreaterThan(link.stats.bytesOut, previousBytes, file: file, line: line)
   }
 
   private func tracer(shotId: String, shooter: String) throws -> ArenaShotTracer {
@@ -236,11 +245,53 @@ final class CombatTransportArenaLinkTests: XCTestCase {
   }
 
   private struct Pair {
-    let fabric: LoopbackFabric
+    let fabric: SerializedLoopbackFabric
     let host: CombatTransportArenaLink
     let guest: CombatTransportArenaLink
     let hostRecorder: Recorder
     let guestRecorder: Recorder
+  }
+
+  /// The simulator is synchronous, while the adapters use independent queues.
+  /// Serialize all simulator reads/writes, including handler installation and
+  /// delivery, so this fixture does not race its event array or drop callbacks.
+  private final class SerializedLoopbackFabric: @unchecked Sendable {
+    private let fabric = LoopbackFabric(playerCount: 2)
+    private let lock = NSRecursiveLock()
+
+    var host: any PeerLink { Endpoint(base: fabric.host, lock: lock) }
+
+    func client(slot: UInt8) -> any PeerLink {
+      Endpoint(base: fabric.client(slot: slot), lock: lock)
+    }
+
+    var nowMs: Int64 { lock.withLock { fabric.nowMs } }
+
+    func advance(to timestamp: Int64) {
+      lock.withLock { fabric.advance(to: timestamp) }
+    }
+
+    private final class Endpoint: PeerLink, @unchecked Sendable {
+      private let base: LoopbackEndpoint
+      private let lock: NSRecursiveLock
+
+      init(base: LoopbackEndpoint, lock: NSRecursiveLock) {
+        self.base = base
+        self.lock = lock
+      }
+
+      var remoteSlot: UInt8 { base.remoteSlot }
+      var evidenceTier: TransportEvidenceTier { base.evidenceTier }
+      var deliversOrderedReliableFrames: Bool { base.deliversOrderedReliableFrames }
+      func start() { lock.withLock { base.start() } }
+      func stop() { lock.withLock { base.stop() } }
+      func send(_ frame: TransportFrame) throws {
+        try lock.withLock { try base.send(frame) }
+      }
+      func setReceiveHandler(_ handler: PeerLinkReceiveHandler?) {
+        lock.withLock { base.setReceiveHandler(handler) }
+      }
+    }
   }
 
   private final class Recorder: @unchecked Sendable {

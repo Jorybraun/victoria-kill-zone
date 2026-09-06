@@ -111,13 +111,25 @@ export const debugFire = mutation({
     if (match === null) {
       fail("MATCH_NOT_FOUND");
     }
-    const players = await listPlayers(ctx, match._id);
-    const opponent = players.find((player) => player._id !== shooter._id) ?? null;
-
     const existing = await loadShot(ctx, shooter._id, args.clientShotId);
     if (existing !== null) {
-      return debugResultFromStored(existing, opponent?.health ?? 100);
+      // Never reinterpret a markerless miss or a host verdict as a debug hit.
+      // Rows without a mode predate markerless fire and belong to G2.
+      if (existing.mode !== undefined && existing.mode !== "debug") {
+        return {
+          ...conflictResult(args.clientShotId, shooter.ammo),
+          outcome: "rejected",
+          targetHealth: 100,
+        };
+      }
+      const legacyTarget = existing.targetHealth == null && existing.targetId !== null
+        ? await loadMatchPlayer(ctx, match._id, existing.targetId)
+        : null;
+      return debugResultFromStored(existing, legacyTarget?.health ?? 100);
     }
+
+    const players = await listPlayers(ctx, match._id);
+    const opponent = players.find((player) => player._id !== shooter._id) ?? null;
 
     const now = Date.now();
     const request: FireRequest = {
@@ -176,6 +188,9 @@ export const fire = mutation({
 
     if (
       args.clientShotId.trim().length === 0 ||
+      !validTimestamp(args.firedAtClient) ||
+      (args.poseConfidence !== undefined &&
+        (!Number.isFinite(args.poseConfidence) || args.poseConfidence < 0 || args.poseConfidence > 1)) ||
       !validVector(args.origin) ||
       !validVector(args.direction) ||
       !validVector(args.impact)
@@ -203,8 +218,10 @@ export const fire = mutation({
       return conflictResult(args.clientShotId, shooter.ammo);
     }
 
-    const players = await listPlayers(ctx, match._id);
-    const opponent = players.find((player) => player._id !== shooter._id) ?? null;
+    // Read only the named target. A miss has no target read, and other players'
+    // pose/presence writes cannot invalidate this shot's transaction read set.
+    const opponent =
+      args.targetId === undefined ? null : await loadMatchPlayer(ctx, match._id, args.targetId);
     const now = Date.now();
     // Centerless matches follow the same ungated migration rule as debug fire;
     // arena-centered matches retain the authoritative geofence gate.
@@ -255,14 +272,20 @@ export const recordVerdict = mutation({
     if (match === null) {
       fail("MATCH_NOT_FOUND");
     }
-    const now = Date.now();
-    const gate = verdictGate(toMatchState(match), caller._id, now);
-    if (gate !== null) {
-      fail(gate);
+    if (match.hostPlayerId !== caller._id) {
+      fail("HOST_ONLY");
+    }
+    if (args.record.adjudicatedBy !== caller._id) {
+      fail("INVALID_TARGET");
     }
 
     if (
       args.record.clientShotId.trim().length === 0 ||
+      !validTimestamp(args.record.firedAtClient) ||
+      !Number.isFinite(args.record.damage) ||
+      args.record.damage < 0 ||
+      !Number.isFinite(args.record.rewindMs) ||
+      args.record.rewindMs < 0 ||
       !validVector(args.record.origin) ||
       !validVector(args.record.direction) ||
       !validVector(args.record.impact)
@@ -275,23 +298,34 @@ export const recordVerdict = mutation({
       targetConfirmed: args.record.targetConfirmed ?? null,
     };
     const fingerprint = verdictFingerprint(record);
-    const existing = await loadShotForMatch(ctx, match._id, record.clientShotId);
+    const existing = await loadShot(ctx, args.record.shooterPlayerId, record.clientShotId);
     if (existing !== null) {
-      if (existing.mode === "verdict" && existing.claimFingerprint === fingerprint) {
+      if (
+        existing.matchId === match._id &&
+        existing.mode === "verdict" &&
+        existing.claimFingerprint === fingerprint
+      ) {
         return fireResultFromStored(existing);
       }
       return conflictResult(record.clientShotId, caller.ammo);
     }
 
-    const players = await listPlayers(ctx, match._id);
-    const shooter = players.find((player) => player._id === record.shooterPlayerId);
-    if (shooter === undefined) {
+    // A committed result remains replayable after death or match completion.
+    // Lifecycle gates apply only to a new ledger entry.
+    const now = Date.now();
+    const gate = verdictGate(toMatchState(match), caller._id, now);
+    if (gate !== null) {
+      fail(gate);
+    }
+
+    const shooter = await loadMatchPlayer(ctx, match._id, args.record.shooterPlayerId);
+    if (shooter === null) {
       fail("INVALID_TARGET");
     }
     const target =
-      record.targetPlayerId === null
+      args.record.targetPlayerId === null
         ? null
-        : (players.find((player) => player._id === record.targetPlayerId) ?? null);
+        : await loadMatchPlayer(ctx, match._id, args.record.targetPlayerId);
     const plan = resolveVerdictRecord(
       toPlayerState(shooter),
       target === null ? null : toPlayerState(target),
@@ -346,6 +380,7 @@ async function persistPlan(
   if (event !== undefined) {
     eventId = await appendEvent(ctx, {
       matchId: match._id,
+      clientShotId: request.clientShotId,
       type: extra.forceG2HitEvent ? "hit" : event.type,
       actorPlayerId: shooter._id,
       targetPlayerId: event.targetPlayerId === null ? null : (target?._id ?? null),
@@ -383,7 +418,9 @@ async function persistPlan(
     mode: extra.mode,
     claimFingerprint: extra.claimFingerprint,
     shooterAmmo: plan.result.shooterAmmo,
-    targetHealth: plan.result.targetHealth ?? null,
+    // G2 always returns a targetHealth, including for rejections. Preserve that
+    // same value in the ledger so retries never read a later target's health.
+    targetHealth: plan.result.targetHealth ?? (extra.mode === "debug" ? target?.health ?? 100 : null),
     targetLifeState: plan.result.targetLifeState ?? null,
     eventId,
     createdAt: Date.now(),
@@ -421,19 +458,6 @@ async function loadShot(
     .query("shots")
     .withIndex("by_shooter_and_client_shot_id", (q) =>
       q.eq("shooterId", shooterId).eq("clientShotId", clientShotId),
-    )
-    .unique();
-}
-
-async function loadShotForMatch(
-  ctx: MutationCtx,
-  matchId: Id<"matches">,
-  clientShotId: string,
-): Promise<Doc<"shots"> | null> {
-  return await ctx.db
-    .query("shots")
-    .withIndex("by_match_and_client_shot_id", (q) =>
-      q.eq("matchId", matchId).eq("clientShotId", clientShotId),
     )
     .unique();
 }
@@ -551,4 +575,17 @@ function debugErrorCode(reason: NonNullable<FirePlan["result"]["rejectReason"]>)
 
 function validVector(vector: number[] | null | undefined): boolean {
   return vector === undefined || vector === null || (vector.length === 3 && vector.every(Number.isFinite));
+}
+
+function validTimestamp(value: number): boolean {
+  return Number.isFinite(value) && value >= 0;
+}
+
+async function loadMatchPlayer(
+  ctx: MutationCtx,
+  matchId: Id<"matches">,
+  playerId: Id<"players">,
+): Promise<Doc<"players"> | null> {
+  const player = await ctx.db.get(playerId);
+  return player?.matchId === matchId ? player : null;
 }

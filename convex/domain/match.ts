@@ -119,6 +119,7 @@ export function newPlayer(
     shotsHit: 0,
     headshots: 0,
     lastShotAt: null,
+    reloadEndsAt: null,
     respawnAt: null,
     lastSeenAt: now,
     joinedAt: now,
@@ -265,6 +266,7 @@ export function planActivateMatch(
       health: GAMEPLAY.startingHealth,
       ammo: GAMEPLAY.magazineSize,
       lastShotAt: null,
+      reloadEndsAt: null,
       respawnAt: null,
     },
   };

@@ -36,19 +36,23 @@ if [[ -n "$xcode_project" ]]; then
   xcode_project_dir="$(dirname "$xcode_project")"
   build_root="$(mktemp -d "${TMPDIR:-/tmp}/vkz-ios-verification.XXXXXX")"
 
-  for xcode_target in VictoriaKillZone VictoriaKillZoneTests; do
+  # Debug for both targets, plus a Release build of the app: the TestFlight
+  # archive is a Release build, and #if DEBUG / #else code paths have already
+  # broken an archive that a Debug-only gate waved through.
+  for build in "VictoriaKillZone Debug" "VictoriaKillZoneTests Debug" "VictoriaKillZone Release"; do
+    read -r xcode_target configuration <<<"$build"
     env DEVELOPER_DIR="$xcode_developer_dir" xcodebuild -quiet \
       -project "$xcode_project" \
       -target "$xcode_target" \
       -sdk iphonesimulator \
-      -configuration Debug \
+      -configuration "$configuration" \
       -clonedSourcePackagesDirPath "$xcode_project_dir/.build" \
       -disableAutomaticPackageResolution \
       CODE_SIGNING_ALLOWED=NO \
       ARCHS=arm64 \
       ONLY_ACTIVE_ARCH=YES \
-      SYMROOT="$build_root/$xcode_target-products" \
-      OBJROOT="$build_root/$xcode_target-intermediates" \
+      SYMROOT="$build_root/$xcode_target-$configuration-products" \
+      OBJROOT="$build_root/$xcode_target-$configuration-intermediates" \
       build 2>&1 | sanitize_xcode_output
   done
 fi

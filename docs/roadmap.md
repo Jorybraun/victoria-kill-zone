@@ -164,3 +164,7 @@ Phases are gates, not dates. Every phase ends with physical-device evidence. B-t
 - **Convex verdict-latency risk** is contained by design (provisional local verdicts, durable confirmation) but must be measured before ADR 0004.
 - **Open-world safety** (strangers, streets, pointing phones at people) is a product-safety design problem before it is a technical one. Phase 3 gate includes it explicitly.
 - **Rewrite gravity.** The re-founding is layered precisely so the current game keeps working while L1/L3 grow beside it. If a slice can't ship without breaking the playable build, it's sliced wrong.
+
+## 2026-09-04 combat-quality review
+
+[ADR 0007](decisions/0007-combat-feedback-and-cadence.md) and [slice 004](../design/slices/004-combat-feedback-and-cadence.md) deliver the playable-duel feedback/cadence/reload hardening before authority migration. [Production combat review](research/production-combat-review.md) records remaining security, spatial, authority, identity and performance gaps, plus proposed contracts for actual projectiles, slowdown fields and phone shields. Next dependency is measured shared-map calibration (ADR 0006), followed by one connected combat authority; a Durable Object per match remains a benchmark candidate, not an adopted production backend.

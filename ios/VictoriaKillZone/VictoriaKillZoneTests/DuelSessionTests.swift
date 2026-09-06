@@ -1,9 +1,43 @@
 import Foundation
+import Combine
 import XCTest
 @testable import VictoriaKillZone
 
 @MainActor
 final class DuelSessionTests: XCTestCase {
+  func testLostFinalDebugRoundCanReplayExactIDWithEmptyMagazine() async throws {
+    let client = FakeGameSessionClient()
+    let duel = makeDuel(client: client)
+    defer { duel.reset() }
+    duel.receive(snapshot(phase: .running, hostAmmo: 1))
+    XCTAssertTrue(duel.canDebugFire)
+    await duel.performDebugFire() // Simulate an unavailable response after dispatch.
+    XCTAssertEqual(duel.debugShotState, .failed)
+    duel.receive(snapshot(phase: .running, hostAmmo: 0, guestHealth: 66))
+    XCTAssertTrue(duel.canDebugFire, "The retained request must remain retryable after the authority spends the final round")
+    client.debugFireResult = DebugFireResult(accepted: true, outcome: .hit,
+      clientShotId: "shot-1", replayed: true, damage: 34, shooterAmmo: 0,
+      targetHealth: 66, eventId: nil, rejectReason: nil)
+    await duel.performDebugFire()
+    XCTAssertEqual(client.debugShotIDs, ["shot-1", "shot-1"])
+    XCTAssertEqual(duel.debugShotState, .confirmed(damage: 34))
+    XCTAssertFalse(duel.canDebugFire, "A resolved request must not permit a new empty-magazine shot")
+  }
+
+  func testAuthoritativelyRejectedDebugShotDoesNotBypassEmptyMagazineGate() async throws {
+    let client = FakeGameSessionClient()
+    let duel = makeDuel(client: client)
+    defer { duel.reset() }
+    duel.receive(snapshot(phase: .running, hostAmmo: 1))
+    client.debugFireResult = DebugFireResult(accepted: false, outcome: .rejected,
+      clientShotId: "shot-1", replayed: false, damage: 0, shooterAmmo: 0,
+      targetHealth: 100, eventId: nil, rejectReason: .matchNotRunning)
+    await duel.performDebugFire()
+    duel.receive(snapshot(phase: .running, hostAmmo: 0))
+    XCTAssertEqual(duel.debugShotState, .failed)
+    XCTAssertFalse(duel.canDebugFire)
+  }
+
   func testLocalKillSnapshotShowsKillBanner() async throws {
     let duel = makeDuel()
     duel.receive(snapshot(phase: .running))
@@ -187,7 +221,7 @@ final class DuelSessionTests: XCTestCase {
     XCTAssertEqual(tracer.shooterPlayerId, "host-1")
   }
 
-  func testConvexMissSuppressedWithinTwoSecondsOfPeerTracerButHitStillRendered()
+  func testMatchingShotIDSuppressesOnlyTheTracerAndPreservesConfirmedHit()
     async throws
   {
     let link = FakeDuelPeerLink()
@@ -214,10 +248,12 @@ final class DuelSessionTests: XCTestCase {
         actorPlayerId: "guest-1",
         targetPlayerId: "host-1",
         zone: "torso",
-        damage: nil
+        damage: nil,
+        clientShotId: "guest-shot"
       )
     ]))
     XCTAssertEqual(duel.incomingShot?.eventID, "peer:guest-shot")
+    XCTAssertTrue(duel.incomingShots.isEmpty)
 
     duel.receive(snapshot(phase: .running, events: [
       EventSnapshot(
@@ -228,16 +264,117 @@ final class DuelSessionTests: XCTestCase {
         actorPlayerId: "guest-1",
         targetPlayerId: "host-1",
         zone: "torso",
-        damage: 34
+        damage: 34,
+        clientShotId: "guest-shot"
       )
     ]))
     XCTAssertEqual(duel.incomingShot?.eventID, "opponent-hit")
     XCTAssertTrue(duel.incomingShot?.hit == true)
+    XCTAssertFalse(duel.incomingShot?.renderTracer == true)
+    XCTAssertEqual(duel.incomingShots.count, 1)
 
     duel.receive(snapshot(phase: .running, events: [
       eliminatedEvent(actorPlayerID: "guest-1", targetPlayerID: "host-1")
     ]))
     XCTAssertEqual(duel.incomingShot?.eventID, "event-eliminated")
+  }
+
+  func testIncomingSnapshotPublishesEveryNewShotInChronologicalOrder() async throws {
+    let duel = makeDuel()
+    defer { duel.reset() }
+    duel.receive(snapshot(phase: .running))
+    let events = [
+      incomingEvent(id: "third", shotID: "shot-c", at: 300),
+      incomingEvent(id: "first", shotID: "shot-a", at: 100),
+      incomingEvent(id: "second", shotID: "shot-b", at: 200, hit: true),
+    ]
+    duel.receive(snapshot(phase: .running, events: events))
+
+    XCTAssertEqual(duel.incomingShots.map(\.eventID), ["first", "second", "third"])
+    XCTAssertEqual(duel.incomingShots.map(\.hit), [false, true, false])
+    XCTAssertEqual(duel.incomingShot?.eventID, "third")
+    duel.receive(snapshot(phase: .running, events: events))
+    XCTAssertTrue(duel.incomingShots.isEmpty, "Repeated snapshots must not replay already consumed bullets")
+    XCTAssertEqual(duel.incomingShot?.eventID, "third")
+  }
+
+  func testUnrelatedAndLegacyMissesAreNotSuppressedByANearbyPeerShot() async throws {
+    let link = FakeDuelPeerLink()
+    let duel = makeDuel(link: link)
+    defer { duel.reset() }
+    duel.receive(snapshot(phase: .running))
+    link.receive(.shotTracer(try incomingTracer(id: "peer-shot")))
+    await settle()
+
+    duel.receive(snapshot(phase: .running, events: [
+      incomingEvent(id: "unrelated-miss", shotID: "another-shot", at: 100),
+      incomingEvent(id: "legacy-miss", shotID: nil, at: 101),
+    ]))
+    XCTAssertEqual(duel.incomingShots.map(\.eventID), ["unrelated-miss", "legacy-miss"])
+    XCTAssertTrue(duel.incomingShots.allSatisfy(\.renderTracer))
+  }
+
+  func testDuplicatePeerAndConvexDeliveriesDoNotRepublishAndHitStillPublishes() async throws {
+    let link = FakeDuelPeerLink()
+    let duel = makeDuel(link: link)
+    defer { duel.reset() }
+    duel.receive(snapshot(phase: .running))
+    var delivered: [IncomingShot] = []
+    let subscription = duel.$incomingShots.dropFirst().sink { delivered.append(contentsOf: $0) }
+    defer { subscription.cancel() }
+
+    let tracer = try incomingTracer(id: "same-shot")
+    link.receive(.shotTracer(tracer))
+    link.receive(.shotTracer(tracer))
+    await settle()
+    let hit = incomingEvent(id: "durable-hit", shotID: "same-shot", at: 100, hit: true)
+    duel.receive(snapshot(phase: .running, events: [hit]))
+    duel.receive(snapshot(phase: .running, events: [hit]))
+    link.receive(.shotTracer(tracer))
+    await settle()
+
+    XCTAssertEqual(delivered.map(\.eventID), ["peer:same-shot", "durable-hit"])
+    XCTAssertEqual(delivered.map(\.renderTracer), [true, false])
+    XCTAssertEqual(delivered.map(\.hit), [false, true])
+  }
+
+  func testTwoPeerShotsInOneUIFrameBothReachTheBatchPublisher() async throws {
+    let link = FakeDuelPeerLink()
+    let duel = makeDuel(link: link)
+    defer { duel.reset() }
+    duel.receive(snapshot(phase: .running))
+    var delivered: [String] = []
+    let subscription = duel.$incomingShots.dropFirst().sink { delivered.append(contentsOf: $0.map(\.eventID)) }
+    defer { subscription.cancel() }
+    link.receive(.shotTracer(try incomingTracer(id: "first")))
+    link.receive(.shotTracer(try incomingTracer(id: "second")))
+    await settle()
+
+    XCTAssertEqual(delivered, ["peer:first", "peer:second"])
+  }
+
+  func testConvexFirstDeliverySuppressesALatePeerDuplicateAndResetClearsDedup() async throws {
+    let link = FakeDuelPeerLink()
+    let duel = makeDuel(link: link)
+    defer { duel.reset() }
+    duel.receive(snapshot(phase: .running))
+    duel.receive(snapshot(phase: .running, events: [
+      incomingEvent(id: "durable-miss", shotID: "same-shot", at: 100)
+    ]))
+    var delivered: [String] = []
+    let subscription = duel.$incomingShots.dropFirst().sink { delivered.append(contentsOf: $0.map(\.eventID)) }
+    defer { subscription.cancel() }
+    let tracer = try incomingTracer(id: "same-shot")
+    link.receive(.shotTracer(tracer))
+    await settle()
+    XCTAssertTrue(delivered.isEmpty)
+
+    duel.reset()
+    duel.attach(session: makeSession())
+    duel.receive(snapshot(phase: .running))
+    link.receive(.shotTracer(tracer))
+    await settle()
+    XCTAssertEqual(delivered, ["peer:same-shot"])
   }
 
   func testIncomingShotDedupSetIsCapped() async throws {
@@ -252,12 +389,41 @@ final class DuelSessionTests: XCTestCase {
         actorPlayerId: "guest-1",
         targetPlayerId: "host-1",
         zone: "torso",
-        damage: nil
+        damage: nil,
+        clientShotId: "client-shot-\(index)"
       )
     }
     duel.receive(snapshot(phase: .running, events: events))
 
     XCTAssertEqual(duel.seenIncomingShotEventCount, DuelSession.incomingShotDedupCapacity)
+    XCTAssertEqual(duel.renderedIncomingTracerCount, DuelSession.incomingShotDedupCapacity)
+    XCTAssertEqual(duel.incomingShots.count, 300)
+  }
+
+  private func incomingEvent(id: String, shotID: String?, at offset: Double, hit: Bool = false) -> EventSnapshot {
+    EventSnapshot(
+      id: id,
+      type: hit ? .hit : .shot,
+      message: hit ? "Guest hit Host" : "Guest fired",
+      createdAt: 1_750_000_000_000 + offset,
+      actorPlayerId: "guest-1",
+      targetPlayerId: hit ? "host-1" : nil,
+      zone: hit ? "torso" : nil,
+      damage: hit ? 34 : nil,
+      clientShotId: shotID
+    )
+  }
+
+  private func incomingTracer(id: String) throws -> ArenaShotTracer {
+    ArenaShotTracer(
+      shotId: id,
+      shooterPlayerId: "guest-1",
+      ray: try ArenaShotRay(
+        origin: .zero,
+        direction: ArenaVector3(x: 0, y: 0, z: -1),
+        firedAtMs: 1
+      )
+    )
   }
 
   func testPeerLinkStoppedWhenPhaseLeavesRunningAndOnReset() async throws {
@@ -286,6 +452,173 @@ final class DuelSessionTests: XCTestCase {
     resetDuel.receive(snapshot(phase: .running))
     resetDuel.reset()
     XCTAssertEqual(resetLink.stopCount, 1)
+  }
+
+  func testNewHoldCanRecoverFromAPreviousCooldownRejection() async throws {
+    let clock = DuelTestClock()
+    let client = FakeGameSessionClient()
+    client.fireResult = fireResult(accepted: false, reason: .fireCooldown)
+    let duel = makeDuel(client: client, now: { clock.now() })
+    defer { duel.reset() }
+    duel.receive(snapshot(phase: .running))
+    duel.updateTargeting(aimedSnapshot())
+    await duel.performMarkerlessFire()
+    XCTAssertEqual(duel.markerlessShotState, .failed(reason: .fireCooldown))
+
+    clock.advance(0.2)
+    client.fireResult = fireResult()
+    duel.startRepeatingFire()
+    await waitFor { duel.markerlessShotState == .confirmed(outcome: .hit, zone: .torso, damage: 34) }
+    duel.stopRepeatingFire()
+    XCTAssertEqual(client.fireRequests.count, 2)
+  }
+
+  func testUncertainLastRoundReplaysDespiteEmptyAmmoDeathOrMatchCompletion() async throws {
+    for (phase, life) in [(MatchPhase.running, PlayerLifeState.alive), (.running, .dead), (.finished, .dead)] {
+      let client = FakeGameSessionClient()
+      let duel = makeDuel(client: client)
+      defer { duel.reset() }
+      duel.receive(snapshot(phase: .running, hostAmmo: 1))
+      duel.updateTargeting(aimedSnapshot())
+      // Simulate an accepted last round whose mutation response was lost.
+      await duel.performMarkerlessFire()
+      let originalRequest = try XCTUnwrap(client.fireRequests.first)
+      let originalVisual = duel.outgoingShot
+      duel.receive(snapshot(phase: phase, hostAmmo: 0, hostLifeState: life))
+      client.fireResult = fireResult(replayed: true, ammo: 0)
+
+      XCTAssertTrue(duel.canFireMarkerless, "Exact replay must not require another round or a living shooter")
+      await duel.performMarkerlessFire()
+      XCTAssertEqual(client.fireRequests, [originalRequest, originalRequest])
+      XCTAssertEqual(duel.outgoingShot, originalVisual, "Replay must not show a second muzzle flash")
+      XCTAssertEqual(duel.markerlessShotState, .confirmed(outcome: .hit, zone: .torso, damage: 34))
+      if phase == .running && life == .alive {
+        XCTAssertTrue(duel.canReload, "Settling the last shot must unlock reload")
+      }
+    }
+  }
+
+  func testNewHoldCanReplayAnUncertainMissWithoutChangingItsClaim() async throws {
+    let client = FakeGameSessionClient()
+    let duel = makeDuel(client: client)
+    defer { duel.reset() }
+    duel.receive(snapshot(phase: .running))
+    duel.updateTargeting(cameraOnlySnapshot())
+    await duel.performMarkerlessFire()
+    let original = try XCTUnwrap(client.fireRequests.first)
+    XCTAssertNil(original.zone)
+    XCTAssertNil(original.targetId)
+
+    client.fireResult = fireResult(outcome: .miss, replayed: true)
+    duel.updateTargeting(aimedSnapshot())
+    duel.startRepeatingFire()
+    await waitFor { duel.markerlessShotState == .confirmed(outcome: .miss, zone: nil, damage: 0) }
+    duel.stopRepeatingFire()
+    XCTAssertEqual(client.fireRequests, [original, original])
+  }
+
+  func testReleasingHoldDoesNotCancelAnAlreadyDispatchedShot() async throws {
+    let response = SuspendedDuelResponse<FireShotResult>()
+    let client = FakeGameSessionClient()
+    client.fireHandler = { _ in try await response.value() }
+    let duel = makeDuel(client: client)
+    defer { duel.reset() }
+    duel.receive(snapshot(phase: .running))
+    duel.updateTargeting(aimedSnapshot())
+    duel.startRepeatingFire()
+    await waitFor { await response.isWaiting }
+
+    duel.stopRepeatingFire()
+    XCTAssertFalse(duel.isTriggerHeld)
+    await response.resolve(.success(fireResult()))
+    await waitFor { duel.markerlessShotState == .confirmed(outcome: .hit, zone: .torso, damage: 34) }
+    XCTAssertEqual(client.fireRequests.count, 1)
+  }
+
+  func testCancelledHeartbeatCannotUnlockAnInactiveScene() async throws {
+    let response = SuspendedDuelResponse<Void>()
+    let client = FakeGameSessionClient()
+    client.heartbeatHandler = { try await response.value() }
+    let duel = makeDuel(client: client)
+    defer { duel.reset() }
+    duel.receive(snapshot(phase: .running))
+    duel.updateTargeting(aimedSnapshot())
+    await waitFor { await response.isWaiting }
+
+    duel.setSceneActive(false)
+    XCTAssertFalse(duel.presenceReady)
+    await response.resolve(.success(()))
+    await settle()
+    XCTAssertFalse(duel.presenceReady)
+    XCTAssertFalse(duel.canFireMarkerless)
+
+    duel.setSceneActive(true)
+    await waitFor { duel.presenceReady }
+    XCTAssertEqual(client.heartbeatCount, 2)
+  }
+
+  func testReloadAcknowledgementBridgesTheSnapshotGap() async throws {
+    let client = FakeGameSessionClient()
+    let endsAt = 1_750_000_001_250.0
+    client.reloadResult = ReloadResult(ammo: 3, reloadEndsAt: endsAt)
+    let duel = makeDuel(client: client)
+    defer { duel.reset() }
+    duel.receive(snapshot(phase: .running, hostAmmo: 3))
+    await duel.performReload()
+    XCTAssertTrue(duel.isReloading)
+    XCTAssertFalse(duel.canReload)
+
+    duel.receive(snapshot(phase: .running, hostAmmo: 3))
+    XCTAssertTrue(duel.isReloading, "An older pre-reload snapshot must not reopen fire")
+    duel.receive(snapshot(phase: .running, hostAmmo: 3, hostReloadEndsAt: endsAt))
+    XCTAssertTrue(duel.isReloading)
+    duel.receive(snapshot(phase: .running, hostAmmo: 8, serverNow: endsAt))
+    XCTAssertFalse(duel.isReloading)
+  }
+
+  func testLateReloadAcknowledgementCannotRestoreCompletedOrDeadReload() async throws {
+    for completed in [true, false] {
+      let response = SuspendedDuelResponse<ReloadResult>()
+      let client = FakeGameSessionClient()
+      client.reloadHandler = { try await response.value() }
+      let duel = makeDuel(client: client)
+      defer { duel.reset() }
+      duel.receive(snapshot(phase: .running, hostAmmo: 3))
+      let request = Task { await duel.performReload() }
+      await waitFor { await response.isWaiting }
+      let endsAt = 1_750_000_001_250.0
+      duel.receive(snapshot(
+        phase: .running,
+        hostAmmo: completed ? 8 : 3,
+        hostLifeState: completed ? .alive : .dead,
+        serverNow: completed ? endsAt : endsAt - 1_000
+      ))
+      await response.resolve(.success(ReloadResult(ammo: 3, reloadEndsAt: endsAt)))
+      await request.value
+      XCTAssertFalse(duel.isReloading)
+      XCTAssertNil(duel.reloadAcknowledgedUntil)
+    }
+  }
+
+  private func fireResult(
+    accepted: Bool = true,
+    outcome: FireShotOutcome = .hit,
+    replayed: Bool = false,
+    ammo: Int = 7,
+    reason: FireRejectReason? = nil
+  ) -> FireShotResult {
+    FireShotResult(
+      accepted: accepted,
+      outcome: accepted ? outcome : .rejected,
+      clientShotId: "shot-1",
+      replayed: replayed,
+      damage: accepted && outcome != .miss ? 34 : 0,
+      shooterAmmo: ammo,
+      targetHealth: nil,
+      targetLifeState: nil,
+      eventId: nil,
+      rejectReason: reason
+    )
   }
 
   private func makeDuel(
@@ -317,6 +650,8 @@ final class DuelSessionTests: XCTestCase {
   private func snapshot(
     phase: MatchPhase,
     hostAmmo: Int = 8,
+    hostLifeState: PlayerLifeState = .alive,
+    hostReloadEndsAt: Double? = nil,
     guestHealth: Int = 100,
     events: [EventSnapshot] = [],
     serverNow: Double = 1_750_000_000_000
@@ -340,7 +675,9 @@ final class DuelSessionTests: XCTestCase {
           ready: true,
           connected: true,
           health: 100,
-          ammo: hostAmmo
+          ammo: hostAmmo,
+          lifeState: hostLifeState,
+          reloadEndsAt: hostReloadEndsAt
         ),
         PlayerSnapshot(
           id: "guest-1",
@@ -383,6 +720,25 @@ final class DuelSessionTests: XCTestCase {
     )
   }
 
+  private func cameraOnlySnapshot() -> TargetingSnapshot {
+    let date = Date(timeIntervalSince1970: 1_750_000_000)
+    return TargetingSnapshot(
+      state: .searching,
+      bodyDetected: false,
+      torsoDetected: false,
+      confidence: 0,
+      observedAt: date,
+      poseObservedAt: nil,
+      bodyBounds: nil,
+      torsoBounds: nil,
+      headRegion: nil,
+      torsoRegion: nil,
+      aimClaim: nil,
+      cameraRay: aimedSnapshot().cameraRay,
+      poseStaleAfter: 0.5
+    )
+  }
+
   private func eliminatedEvent(
     actorPlayerID: String?,
     targetPlayerID: String?,
@@ -402,6 +758,18 @@ final class DuelSessionTests: XCTestCase {
 
   private func settle() async {
     for _ in 0..<10 { await Task.yield() }
+  }
+
+  private func waitFor(
+    file: StaticString = #filePath,
+    line: UInt = #line,
+    _ condition: @MainActor () async -> Bool
+  ) async {
+    for _ in 0..<1_000 {
+      if await condition() { return }
+      await Task.yield()
+    }
+    XCTFail("Expected asynchronous state transition", file: file, line: line)
   }
 }
 
@@ -432,7 +800,13 @@ private final class FakeGameSessionClient: GameSessionClient, @unchecked Sendabl
   let availability = GameSessionAvailability.available
   var fireResult: FireShotResult?
   var debugFireResult: DebugFireResult?
+  var debugShotIDs: [String] = []
   var fireRequests: [FireShotRequest] = []
+  var fireHandler: (@Sendable (FireShotRequest) async throws -> FireShotResult)?
+  var heartbeatHandler: (@Sendable () async throws -> Void)?
+  var heartbeatCount = 0
+  var reloadResult: ReloadResult?
+  var reloadHandler: (@Sendable () async throws -> ReloadResult)?
 
   func createDuel(_ request: CreateDuelRequest) async throws -> PlayerSession {
     throw GameSessionClientError.notConfigured
@@ -450,13 +824,26 @@ private final class FakeGameSessionClient: GameSessionClient, @unchecked Sendabl
     throw GameSessionClientError.notConfigured
   }
 
+  func heartbeat(session: PlayerSession) async throws {
+    heartbeatCount += 1
+    if let heartbeatHandler { try await heartbeatHandler() }
+  }
+
+  func startReload(session: PlayerSession) async throws -> ReloadResult {
+    if let reloadHandler { return try await reloadHandler() }
+    guard let reloadResult else { throw GameSessionClientError.notConfigured }
+    return reloadResult
+  }
+
   func fire(session: PlayerSession, request: FireShotRequest) async throws -> FireShotResult {
     fireRequests.append(request)
+    if let fireHandler { return try await fireHandler(request) }
     guard let fireResult else { throw GameSessionClientError.notConfigured }
     return fireResult
   }
 
   func debugFire(session: PlayerSession, clientShotId: String) async throws -> DebugFireResult {
+    debugShotIDs.append(clientShotId)
     guard let debugFireResult else { throw GameSessionClientError.notConfigured }
     return debugFireResult
   }
@@ -467,5 +854,39 @@ private final class FakeGameSessionClient: GameSessionClient, @unchecked Sendabl
 
   func connectionStates() -> AsyncStream<GameSessionConnectionState> {
     AsyncStream { _ in }
+  }
+}
+
+private final class DuelTestClock: @unchecked Sendable {
+  private let lock = NSLock()
+  private var date = Date(timeIntervalSince1970: 1_750_000_000)
+
+  func now() -> Date {
+    lock.lock()
+    defer { lock.unlock() }
+    return date
+  }
+
+  func advance(_ interval: TimeInterval) {
+    lock.lock()
+    date.addTimeInterval(interval)
+    lock.unlock()
+  }
+}
+
+private actor SuspendedDuelResponse<Value: Sendable> {
+  private var continuation: CheckedContinuation<Value, Error>?
+  private var result: Result<Value, Error>?
+  var isWaiting: Bool { continuation != nil }
+
+  func value() async throws -> Value {
+    if let result { return try result.get() }
+    return try await withCheckedThrowingContinuation { continuation = $0 }
+  }
+
+  func resolve(_ result: Result<Value, Error>) {
+    self.result = result
+    continuation?.resume(with: result)
+    continuation = nil
   }
 }
