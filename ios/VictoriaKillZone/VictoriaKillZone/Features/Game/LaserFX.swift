@@ -18,7 +18,7 @@
     private let skeletonReveal = HitSkeletonReveal()
     private let realtimeFX = RealtimeCombatFX()
     private let outgoingGeometry = LaserFXEngine.tracerGeometry(color: UIColor(red: 1, green: 0.82, blue: 0.32, alpha: 1))
-    private let incomingGeometry = LaserFXEngine.tracerGeometry(color: .systemOrange)
+    private let incomingGeometry = LaserFXEngine.tracerGeometry(color: .systemOrange, radius: 0.015)
     private let tracerPool = SceneEffectPool(capacity: CombatPresentationPolicy.tracerCapacity)
     private let impactPool = SceneEffectPool(capacity: CombatPresentationPolicy.impactCapacity)
     private let impactGeometry: SCNSphere = {
@@ -154,15 +154,14 @@
       }
     }
 
-    /// The interim incoming event has no aligned shot ray. A currently observed
-    /// origin permits a coarse incoming cue; an unknown origin gives haptics only.
-    func renderIncomingLaser(from origin: SIMD3<Float>?, hit: Bool) {
+    /// Classic duel uses a cosmetic incoming cue even without a tracked body.
+    /// A reconciled peer shot can still confirm damage without replaying its cue.
+    func renderIncomingLaser(from origin: SIMD3<Float>?, hit: Bool, renderTracer: Bool = true) {
       if hit {
         damageFeedback.impactOccurred(intensity: 0.9)
         damageFeedback.prepare()
       }
-      guard let sceneView, let frame = sceneView.session.currentFrame,
-        let origin, origin.x.isFinite, origin.y.isFinite, origin.z.isFinite
+      guard renderTracer, let sceneView, let frame = sceneView.session.currentFrame
       else { return }
       let transform = frame.camera.transform
       let cameraPosition = SIMD3<Float>(
@@ -176,15 +175,12 @@
       )), let up = normalized(SIMD3<Float>(
         transform.columns.1.x, transform.columns.1.y, transform.columns.1.z
       )) else { return }
-      // Preserve the travelling-laser presentation's off-centre endpoint so an
-      // incoming bolt has a visible path instead of collapsing into the lens.
-      // This remains a coarse cue from an observed origin, not an aligned shot.
-      let end = hit
-        ? cameraPosition + forward * 0.45 - up * 0.22 + right * 0.08
-        : cameraPosition + right * 0.9 - up * 0.5 - forward * 0.2
-      guard end.x.isFinite, end.y.isFinite, end.z.isFinite else { return }
-      renderTracer(from: origin, to: end, incoming: true)
-      if hit { renderImpact(at: end) }
+      guard let path = CombatPresentationPolicy.incomingTracerPath(
+        observedOrigin: origin, cameraPosition: cameraPosition, cameraRight: right,
+        cameraUp: up, cameraForward: forward, hit: hit, renderTracer: renderTracer
+      ) else { return }
+      self.renderTracer(from: path.start, to: path.end, incoming: true)
+      if hit { renderImpact(at: path.end) }
     }
 
     /// Tracking refreshes an existing flash but never reveals an unhit person.
@@ -210,7 +206,7 @@
       let delta = end - start
       let length = simd_length(delta)
       guard let direction = normalized(delta),
-        let duration = CombatPresentationPolicy.tracerDuration(distance: Double(length))
+        let duration = CombatPresentationPolicy.tracerDuration(distance: Double(length), incoming: incoming)
       else { return }
       let streakLength = min(Float(0.85), length * 0.4)
       let node = tracerPool.acquire()
@@ -250,8 +246,8 @@
       return material
     }
 
-    private static func tracerGeometry(color: UIColor) -> SCNCylinder {
-      let geometry = SCNCylinder(radius: 0.007, height: 1)
+    private static func tracerGeometry(color: UIColor, radius: CGFloat = 0.007) -> SCNCylinder {
+      let geometry = SCNCylinder(radius: radius, height: 1)
       geometry.radialSegmentCount = 6
       geometry.firstMaterial = material(color: color)
       return geometry
@@ -394,7 +390,7 @@
     func updateRealtime(snapshot: CombatWire.Snapshot, matchTimeMs: Double) {}
     func clearRealtime() {}
     func projectedTargetBounds(_ skeleton: TargetingSkeleton) -> NormalizedTargetingRect? {nil}
-    func renderIncomingLaser(from origin: SIMD3<Float>?, hit: Bool) {}
+    func renderIncomingLaser(from origin: SIMD3<Float>?, hit: Bool, renderTracer: Bool = true) {}
     func updateSkeleton(_ skeleton: TargetingSkeleton?, zone: TargetingHitZone?) {}
     func clearTransientEffects() {}
   }
