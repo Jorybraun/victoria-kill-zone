@@ -1,0 +1,5 @@
+# Versions used for the reproducible fit-prototype export are recorded alongside
+# the meshes in cad-environment.json. These packages have no Blender dependency.
+manifold3d==3.5.2
+trimesh==5.1.0
+numpy==2.5.3
