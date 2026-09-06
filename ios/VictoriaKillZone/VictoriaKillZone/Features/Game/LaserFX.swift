@@ -8,272 +8,310 @@
   @MainActor
   final class LaserFXEngine: ObservableObject {
     private weak var sceneView: ARSCNView?
+    private let effectsRoot = SCNNode()
     private let audioEngine = AVAudioEngine()
     private let audioState = LaserAudioState()
     private var audioSource: AVAudioSourceNode?
-    private var skeletonRoot: SCNNode?
-    private var skeletonJointNodes: [String: SCNNode] = [:]
-    private var skeletonBoneNodes: [String: SCNNode] = [:]
-    private let skeletonMaterial: SCNMaterial = {
-      let material = SCNMaterial()
-      material.lightingModel = .constant
-      material.transparency = 0.85
-      return material
+    private let shotFeedback = UIImpactFeedbackGenerator(style: .light)
+    private let damageFeedback = UIImpactFeedbackGenerator(style: .rigid)
+    private let hitFeedback = UINotificationFeedbackGenerator()
+    private let skeletonRoot = SCNNode()
+    private var skeletonJointNodes: [SCNNode] = []
+    private var skeletonBoneNodes: [SCNNode] = []
+    private var hitPresentation = HitSkeletonPresentation()
+    private var confirmedHitZone: TargetingHitZone?
+    private var lastSkeletonUpdate: TimeInterval = 0
+    private let skeletonMaterial = LaserFXEngine.material(color: .white)
+    private let outgoingGeometry = LaserFXEngine.tracerGeometry(color: UIColor(red: 1, green: 0.82, blue: 0.32, alpha: 1))
+    private let incomingGeometry = LaserFXEngine.tracerGeometry(color: .systemOrange)
+    private let tracerPool = SceneEffectPool(capacity: CombatPresentationPolicy.tracerCapacity)
+    private let impactPool = SceneEffectPool(capacity: CombatPresentationPolicy.impactCapacity)
+    private let impactGeometry: SCNSphere = {
+      let sphere = SCNSphere(radius: 0.045)
+      sphere.segmentCount = 8
+      sphere.firstMaterial = LaserFXEngine.material(color: .systemOrange)
+      return sphere
     }()
-    private var lastSkeletonUpdate = Date.distantPast
 
     init() {
+      effectsRoot.name = "combat-effects"
+      skeletonRoot.name = "confirmed-hit-skeleton"
+      skeletonRoot.isHidden = true
+      effectsRoot.addChildNode(skeletonRoot)
+      tracerPool.attach(to: effectsRoot)
+      impactPool.attach(to: effectsRoot)
       configureAudio()
+      shotFeedback.prepare()
+      hitFeedback.prepare()
+      damageFeedback.prepare()
     }
 
     func attach(to view: ARSCNView) {
+      guard sceneView !== view else { return }
+      clearTransientEffects()
+      effectsRoot.removeFromParentNode()
       sceneView = view
+      view.scene.rootNode.addChildNode(effectsRoot)
     }
 
-    /// Fires the local laser. `target` is the world-space point the shot lands
-    /// on when a tracked opponent is available; otherwise the bolt flies down
-    /// the camera axis.
-    func fireLaser(hit: Bool, target: SIMD3<Float>? = nil) {
-      let impact = UIImpactFeedbackGenerator(style: .heavy)
-      impact.prepare()
-      impact.impactOccurred()
-      if hit {
-        let notification = UINotificationFeedbackGenerator()
-        notification.prepare()
-        notification.notificationOccurred(.success)
-      }
+    /// Immediate local fire feedback. The streak is cosmetic hitscan presentation,
+    /// not a projectile collider. Predicted shots must pass `hit: false`.
+    func fireLaser(hit: Bool = false, ray: TargetingCameraRay? = nil) {
+      shotFeedback.impactOccurred(intensity: 0.7)
+      shotFeedback.prepare()
       playPew()
-
-      guard let sceneView, let frame = sceneView.session.currentFrame else { return }
-      let cameraTransform = frame.camera.transform
-      let forward = normalized(SIMD3<Float>(
-        -cameraTransform.columns.2.x,
-        -cameraTransform.columns.2.y,
-        -cameraTransform.columns.2.z
-      ))
-      let cameraPosition = SIMD3<Float>(
-        cameraTransform.columns.3.x,
-        cameraTransform.columns.3.y,
-        cameraTransform.columns.3.z
+      if hit { confirmHit(skeleton: nil, zone: nil) }
+      guard let sceneView else { return }
+      let origin: SIMD3<Float>
+      let direction: SIMD3<Float>
+      if let ray {
+        guard let position = vector(ray.origin), let rawDirection = vector(ray.direction),
+          let unitDirection = normalized(rawDirection)
+        else { return }
+        origin = position
+        direction = unitDirection
+      } else {
+        guard let frame = sceneView.session.currentFrame else { return }
+        let transform = frame.camera.transform
+        origin = SIMD3<Float>(transform.columns.3.x, transform.columns.3.y, transform.columns.3.z)
+        guard let forward = normalized(SIMD3<Float>(
+          -transform.columns.2.x, -transform.columns.2.y, -transform.columns.2.z
+        )) else { return }
+        direction = forward
+      }
+      let right: SIMD3<Float>
+      let up: SIMD3<Float>
+      let cameraForward: SIMD3<Float>
+      if let transform = sceneView.session.currentFrame?.camera.transform {
+        right = SIMD3<Float>(transform.columns.0.x, transform.columns.0.y, transform.columns.0.z)
+        up = SIMD3<Float>(transform.columns.1.x, transform.columns.1.y, transform.columns.1.z)
+        cameraForward = SIMD3<Float>(-transform.columns.2.x, -transform.columns.2.y, -transform.columns.2.z)
+      } else {
+        // A captured ray can still render before the next AR frame arrives.
+        let referenceUp: SIMD3<Float> = abs(direction.y) > 0.95
+          ? SIMD3<Float>(0, 0, 1) : SIMD3<Float>(0, 1, 0)
+        guard let fallbackRight = normalized(simd_cross(direction, referenceUp)) else { return }
+        right = fallbackRight
+        up = simd_cross(right, direction)
+        cameraForward = direction
+      }
+      // Offset the visual muzzle only. Convergence stays on the original shot
+      // endpoint, so neither the request ray nor authoritative hit geometry moves.
+      let muzzle = origin + CombatPresentationPolicy.cosmeticMuzzleOffset(
+        cameraRight: right, cameraUp: up, cameraForward: cameraForward
       )
-      // The muzzle sits low-right of the lens so the beam crosses the screen
-      // diagonally instead of being viewed end-on as a dot.
-      let muzzle = worldPoint(
-        cameraTransform,
-        SIMD3<Float>(0.16, -0.26, -0.2)
-      )
-      let beamEnd = target ?? cameraPosition + forward * (hit ? 6 : 25)
-
-      spawnBolt(
+      renderTracer(
         from: muzzle,
-        to: beamEnd,
-        color: UIColor(red: 1, green: 0.1, blue: 0.1, alpha: 1),
-        travelDuration: hit ? 0.18 : 0.32,
-        impact: hit
+        to: origin + direction * Float(CombatPresentationPolicy.maximumTracerDistance),
+        incoming: false
       )
     }
 
+    /// Only call after an accepted outgoing hit. With no fresh observed body, the
+    /// HUD and haptic confirm the verdict without inventing a world-space impact.
+    func confirmHit(skeleton: TargetingSkeleton?, zone: TargetingHitZone?) {
+      hitFeedback.notificationOccurred(.success)
+      hitFeedback.prepare()
+      guard sceneView != nil, let skeleton,
+        CombatPresentationPolicy.isPoseFresh(capturedAt: skeleton.capturedAt, now: Date())
+      else {
+        clearSkeleton()
+        return
+      }
+      let now = ProcessInfo.processInfo.systemUptime
+      hitPresentation.confirmHit(at: now)
+      confirmedHitZone = zone
+      lastSkeletonUpdate = now
+      skeletonRoot.removeAllActions()
+      skeletonRoot.opacity = 1
+      skeletonRoot.isHidden = false
+      renderSkeleton(skeleton, zone: confirmedHitZone)
+      skeletonRoot.runAction(.sequence([
+        .wait(duration: CombatPresentationPolicy.skeletonHoldDuration),
+        .fadeOut(duration: CombatPresentationPolicy.skeletonFadeDuration),
+        .hide(),
+      ]), forKey: "confirmed-hit")
+
+      // The joint is a body-local impact cue, not a new authoritative hit point.
+      let point = zone == .head
+        ? skeleton.position(of: "head")
+        : skeleton.position(of: "spine_7_joint") ?? skeleton.position(of: "root")
+      if let point, let position = vector(point) {
+        renderImpact(at: position)
+      }
+    }
+
+    /// The interim incoming event has no aligned shot ray. A currently observed
+    /// origin permits a coarse incoming cue; an unknown origin gives haptics only.
     func renderIncomingLaser(from origin: SIMD3<Float>?, hit: Bool) {
-      guard let sceneView, let frame = sceneView.session.currentFrame else { return }
+      if hit {
+        damageFeedback.impactOccurred(intensity: 0.9)
+        damageFeedback.prepare()
+      }
+      guard let sceneView, let frame = sceneView.session.currentFrame,
+        let origin, origin.x.isFinite, origin.y.isFinite, origin.z.isFinite
+      else { return }
       let transform = frame.camera.transform
       let cameraPosition = SIMD3<Float>(
         transform.columns.3.x, transform.columns.3.y, transform.columns.3.z
       )
-      let forward = normalized(SIMD3<Float>(
+      guard let forward = normalized(SIMD3<Float>(
         -transform.columns.2.x, -transform.columns.2.y, -transform.columns.2.z
-      ))
-      let right = normalized(SIMD3<Float>(
+      )) else { return }
+      guard let right = normalized(SIMD3<Float>(
         transform.columns.0.x, transform.columns.0.y, transform.columns.0.z
-      ))
-      let up = normalized(SIMD3<Float>(
+      )), let up = normalized(SIMD3<Float>(
         transform.columns.1.x, transform.columns.1.y, transform.columns.1.z
-      ))
-      // Without a tracked opponent the shot comes from ahead and slightly off
-      // axis; incoming bolts always finish off-centre so their path is visible
-      // instead of collapsing to a point at the lens.
-      let start = origin ?? cameraPosition + forward * 5 + up * 0.7 - right * 0.5
+      )) else { return }
+      // Preserve the travelling-laser presentation's off-centre endpoint so an
+      // incoming bolt has a visible path instead of collapsing into the lens.
+      // This remains a coarse cue from an observed origin, not an aligned shot.
       let end = hit
         ? cameraPosition + forward * 0.45 - up * 0.22 + right * 0.08
         : cameraPosition + right * 0.9 - up * 0.5 - forward * 0.2
-      spawnBolt(
-        from: start,
-        to: end,
-        color: UIColor(red: 1, green: 0.55, blue: 0.05, alpha: 1),
-        travelDuration: 0.28,
-        impact: hit
-      )
-      if hit {
-        let feedback = UIImpactFeedbackGenerator(style: .rigid)
-        feedback.prepare()
-        feedback.impactOccurred()
+      guard end.x.isFinite, end.y.isFinite, end.z.isFinite else { return }
+      renderTracer(from: origin, to: end, incoming: true)
+      if hit { renderImpact(at: end) }
+    }
+
+    /// Tracking refreshes an existing flash but never reveals an unhit person.
+    /// Expiry is also scheduled on the scene, including when observations stop.
+    func updateSkeleton(_ skeleton: TargetingSkeleton?, zone: TargetingHitZone?) {
+      let now = ProcessInfo.processInfo.systemUptime
+      guard hitPresentation.isVisible(at: now), let skeleton,
+        CombatPresentationPolicy.isPoseFresh(capturedAt: skeleton.capturedAt, now: Date())
+      else {
+        clearSkeleton()
+        return
+      }
+      guard now - lastSkeletonUpdate >= 0.05 else { return }
+      lastSkeletonUpdate = now
+      renderSkeleton(skeleton, zone: confirmedHitZone)
+    }
+
+    func clearTransientEffects() {
+      clearSkeleton()
+      tracerPool.clear()
+      impactPool.clear()
+      audioState.silence()
+      audioEngine.pause()
+    }
+
+    private func clearSkeleton() {
+      hitPresentation.clear()
+      confirmedHitZone = nil
+      skeletonRoot.removeAllActions()
+      skeletonRoot.isHidden = true
+      skeletonRoot.opacity = 0
+      lastSkeletonUpdate = 0
+    }
+
+    private func renderTracer(from start: SIMD3<Float>, to end: SIMD3<Float>, incoming: Bool) {
+      let delta = end - start
+      let length = simd_length(delta)
+      guard let direction = normalized(delta),
+        let duration = CombatPresentationPolicy.tracerDuration(distance: Double(length))
+      else { return }
+      let streakLength = min(Float(0.85), length * 0.4)
+      let node = tracerPool.acquire()
+      node.geometry = incoming ? incomingGeometry : outgoingGeometry
+      node.simdScale = SIMD3<Float>(1, streakLength, 1)
+      node.simdOrientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: direction)
+      node.simdPosition = start + direction * (streakLength / 2)
+      let finish = end - direction * (streakLength / 2)
+      let move = SCNAction.move(to: SCNVector3(finish.x, finish.y, finish.z), duration: duration)
+      move.timingMode = .linear
+      node.runAction(.sequence([
+        .group([
+          move,
+          .sequence([.wait(duration: duration * 0.6), .fadeOut(duration: duration * 0.4)]),
+        ]),
+        .hide(),
+      ]))
+    }
+
+    private func renderImpact(at position: SIMD3<Float>) {
+      let node = impactPool.acquire()
+      node.geometry = impactGeometry
+      node.simdPosition = position
+      node.simdScale = SIMD3<Float>(repeating: 0.4)
+      node.runAction(.sequence([
+        .group([.scale(to: 1.7, duration: 0.12), .fadeOut(duration: 0.16)]),
+        .hide(),
+      ]))
+    }
+
+    private func renderSkeleton(_ skeleton: TargetingSkeleton, zone: TargetingHitZone?) {
+      let color: UIColor = zone == .head ? .systemRed : .white
+      skeletonMaterial.diffuse.contents = color
+      skeletonMaterial.emission.contents = color
+      var positions: [String: SIMD3<Float>] = [:]
+      for joint in skeleton.joints.prefix(CombatPresentationPolicy.maximumSkeletonJoints) {
+        if positions[joint.name] == nil, let position = vector(joint.position) {
+          positions[joint.name] = position
+        }
+      }
+      for node in skeletonJointNodes { node.isHidden = true }
+      for (index, joint) in positions.sorted(by: { $0.key < $1.key }).enumerated() {
+        if index == skeletonJointNodes.count {
+          let sphere = SCNSphere(radius: 0.016)
+          sphere.segmentCount = 8
+          sphere.firstMaterial = skeletonMaterial
+          let node = SCNNode(geometry: sphere)
+          skeletonJointNodes.append(node)
+          skeletonRoot.addChildNode(node)
+        }
+        let node = skeletonJointNodes[index]
+        node.simdPosition = joint.value
+        node.isHidden = false
+      }
+      for node in skeletonBoneNodes { node.isHidden = true }
+      for (index, bone) in skeleton.bones.prefix(CombatPresentationPolicy.maximumSkeletonBones).enumerated() {
+        guard let start = positions[bone.from], let end = positions[bone.to],
+          let direction = normalized(end - start)
+        else { continue }
+        while skeletonBoneNodes.count <= index {
+          let cylinder = SCNCylinder(radius: 0.006, height: 1)
+          cylinder.radialSegmentCount = 6
+          cylinder.firstMaterial = skeletonMaterial
+          let node = SCNNode(geometry: cylinder)
+          skeletonBoneNodes.append(node)
+          skeletonRoot.addChildNode(node)
+        }
+        let node = skeletonBoneNodes[index]
+        node.simdScale = SIMD3<Float>(1, simd_length(end - start), 1)
+        node.simdPosition = (start + end) / 2
+        node.simdOrientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: direction)
+        node.isHidden = false
       }
     }
 
-    /// A tracer line that lights up along its full length plus a bright bolt
-    /// that travels the path, leaving a fading glow trail.
-    private func spawnBolt(
-      from start: SIMD3<Float>,
-      to end: SIMD3<Float>,
-      color: UIColor,
-      travelDuration: TimeInterval,
-      impact: Bool
-    ) {
-      guard let sceneView else { return }
-      let root = sceneView.scene.rootNode
-      let direction = normalized(end - start)
-      let length = simd_length(end - start)
-      guard length > 0.05 else { return }
-      let orientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: direction)
-
-      let core = SCNCylinder(radius: 0.012, height: CGFloat(length))
-      core.firstMaterial = emissiveMaterial(color, transparency: 0.95)
-      let coreNode = SCNNode(geometry: core)
-      coreNode.position = midpoint(start, end)
-      coreNode.simdOrientation = orientation
-      coreNode.renderingOrder = 10
-      root.addChildNode(coreNode)
-      coreNode.runAction(.sequence([
-        .wait(duration: travelDuration * 0.5),
-        .fadeOut(duration: 0.45),
-        .removeFromParentNode(),
-      ]))
-
-      let glow = SCNCylinder(radius: 0.045, height: CGFloat(length))
-      glow.firstMaterial = emissiveMaterial(color, transparency: 0.28)
-      let glowNode = SCNNode(geometry: glow)
-      glowNode.position = coreNode.position
-      glowNode.simdOrientation = orientation
-      glowNode.renderingOrder = 9
-      root.addChildNode(glowNode)
-      glowNode.runAction(.sequence([
-        .wait(duration: travelDuration * 0.5),
-        .fadeOut(duration: 0.3),
-        .removeFromParentNode(),
-      ]))
-
-      let boltLength = min(length * 0.35, 1.2)
-      let bolt = SCNCapsule(capRadius: 0.035, height: CGFloat(boltLength))
-      bolt.firstMaterial = emissiveMaterial(.white, transparency: 1)
-      let boltNode = SCNNode(geometry: bolt)
-      let boltStart = start + direction * (boltLength / 2)
-      let boltEnd = end - direction * (boltLength / 2)
-      boltNode.position = SCNVector3(boltStart.x, boltStart.y, boltStart.z)
-      boltNode.simdOrientation = orientation
-      boltNode.renderingOrder = 11
-      let boltLight = SCNLight()
-      boltLight.type = .omni
-      boltLight.color = color
-      boltLight.intensity = 600
-      boltLight.attenuationEndDistance = 1.5
-      boltNode.light = boltLight
-      root.addChildNode(boltNode)
-      var boltActions: [SCNAction] = [
-        .move(to: SCNVector3(boltEnd.x, boltEnd.y, boltEnd.z), duration: travelDuration)
-      ]
-      if impact {
-        boltActions.append(.run { [weak self] _ in
-          Task { @MainActor in self?.spawnImpact(at: end, color: color) }
-        })
-      }
-      boltActions.append(.removeFromParentNode())
-      boltNode.runAction(.sequence(boltActions))
-    }
-
-    private func spawnImpact(at point: SIMD3<Float>, color: UIColor) {
-      guard let sceneView else { return }
-      let spark = SCNSphere(radius: 0.09)
-      spark.firstMaterial = emissiveMaterial(color, transparency: 0.9)
-      let sparkNode = SCNNode(geometry: spark)
-      sparkNode.position = SCNVector3(point.x, point.y, point.z)
-      sparkNode.scale = SCNVector3(0.35, 0.35, 0.35)
-      let light = SCNLight()
-      light.type = .omni
-      light.color = color
-      light.intensity = 900
-      light.attenuationEndDistance = 2
-      sparkNode.light = light
-      sceneView.scene.rootNode.addChildNode(sparkNode)
-      sparkNode.runAction(.sequence([
-        .group([.scale(to: 2.2, duration: 0.14), .fadeOut(duration: 0.22)]),
-        .removeFromParentNode(),
-      ]))
-    }
-
-    private func emissiveMaterial(_ color: UIColor, transparency: CGFloat) -> SCNMaterial {
+    private static func material(color: UIColor) -> SCNMaterial {
       let material = SCNMaterial()
+      material.lightingModel = .constant
       material.diffuse.contents = color
       material.emission.contents = color
-      material.lightingModel = .constant
-      material.transparency = transparency
-      material.blendMode = .add
       material.writesToDepthBuffer = false
-      material.readsFromDepthBuffer = false
       return material
     }
 
-    func updateSkeleton(_ skeleton: TargetingSkeleton?, zone: TargetingHitZone?) {
-      guard let sceneView else { return }
-      if skeleton == nil {
-        skeletonRoot?.removeFromParentNode()
-        return
-      }
-      guard Date().timeIntervalSince(lastSkeletonUpdate) >= 0.05 else { return }
-      lastSkeletonUpdate = Date()
-      let root = skeletonRoot ?? SCNNode()
-      if root.parent == nil {
-        sceneView.scene.rootNode.addChildNode(root)
-        skeletonRoot = root
-      }
-      guard let skeleton else { return }
-      let color: UIColor = zone == .head ? .systemRed : .systemGreen
-      skeletonMaterial.diffuse.contents = color
-      skeletonMaterial.emission.contents = color
-      let byName = Dictionary(uniqueKeysWithValues: skeleton.joints.map { ($0.name, $0.position) })
-      let jointNames = Set(skeleton.joints.map(\.name))
-      for name in Array(skeletonJointNodes.keys) where !jointNames.contains(name) {
-        skeletonJointNodes.removeValue(forKey: name)?.removeFromParentNode()
-      }
-      for joint in skeleton.joints {
-        let node: SCNNode
-        if let existing = skeletonJointNodes[joint.name] {
-          node = existing
-        } else {
-          let sphere = SCNSphere(radius: 0.03)
-          sphere.firstMaterial = skeletonMaterial
-          node = SCNNode(geometry: sphere)
-          skeletonJointNodes[joint.name] = node
-          root.addChildNode(node)
-        }
-        node.position = SCNVector3(
-          joint.position.x, joint.position.y, joint.position.z
-        )
-      }
-      let boneNames = Set(skeleton.bones.map { "\($0.from)>\($0.to)" })
-      for name in Array(skeletonBoneNodes.keys) where !boneNames.contains(name) {
-        skeletonBoneNodes.removeValue(forKey: name)?.removeFromParentNode()
-      }
-      for bone in skeleton.bones {
-        guard let from = byName[bone.from], let to = byName[bone.to] else { continue }
-        let name = "\(bone.from)>\(bone.to)"
-        let start = SIMD3<Float>(Float(from.x), Float(from.y), Float(from.z))
-        let end = SIMD3<Float>(Float(to.x), Float(to.y), Float(to.z))
-        let node: SCNNode
-        if let existing = skeletonBoneNodes[name] {
-          node = existing
-        } else {
-          let cylinder = SCNCylinder(radius: 0.012, height: 0)
-          cylinder.firstMaterial = skeletonMaterial
-          node = SCNNode(geometry: cylinder)
-          skeletonBoneNodes[name] = node
-          root.addChildNode(node)
-        }
-        guard let cylinder = node.geometry as? SCNCylinder else { continue }
-        cylinder.height = CGFloat(simd_length(end - start))
-        node.position = midpoint(start, end)
-        node.simdOrientation = simd_quatf(
-          from: SIMD3<Float>(0, 1, 0), to: normalized(end - start)
-        )
-      }
+    private static func tracerGeometry(color: UIColor) -> SCNCylinder {
+      let geometry = SCNCylinder(radius: 0.007, height: 1)
+      geometry.radialSegmentCount = 6
+      geometry.firstMaterial = material(color: color)
+      return geometry
+    }
+
+    private func vector(_ point: TargetingVector3) -> SIMD3<Float>? {
+      let result = SIMD3<Float>(Float(point.x), Float(point.y), Float(point.z))
+      guard result.x.isFinite, result.y.isFinite, result.z.isFinite else { return nil }
+      return result
+    }
+
+    private func normalized(_ vector: SIMD3<Float>) -> SIMD3<Float>? {
+      let length = simd_length(vector)
+      guard length.isFinite, length > 0.0001 else { return nil }
+      return vector / length
     }
 
     private func configureAudio() {
@@ -300,31 +338,42 @@
       }
     }
 
-    private func worldPoint(
-      _ transform: simd_float4x4,
-      _ cameraSpacePoint: SIMD3<Float>
-    ) -> SIMD3<Float> {
-      let point = transform * SIMD4<Float>(
-        cameraSpacePoint.x,
-        cameraSpacePoint.y,
-        cameraSpacePoint.z,
-        1
-      )
-      return SIMD3<Float>(point.x, point.y, point.z)
+  }
+
+  @MainActor
+  private final class SceneEffectPool {
+    private let nodes: [SCNNode]
+    private var cursor: CombatEffectPoolCursor
+
+    init(capacity: Int) {
+      cursor = CombatEffectPoolCursor(capacity: capacity)
+      nodes = (0..<cursor.capacity).map { _ in
+        let node = SCNNode()
+        node.isHidden = true
+        return node
+      }
     }
 
-    private func normalized(_ vector: SIMD3<Float>) -> SIMD3<Float> {
-      let length = simd_length(vector)
-      guard length > 0 else { return SIMD3<Float>(0, 0, -1) }
-      return vector / length
+    func attach(to root: SCNNode) {
+      for node in nodes { root.addChildNode(node) }
     }
 
-    private func midpoint(_ first: SIMD3<Float>, _ second: SIMD3<Float>) -> SCNVector3 {
-      SCNVector3(
-        (first.x + second.x) / 2,
-        (first.y + second.y) / 2,
-        (first.z + second.z) / 2
-      )
+    func acquire() -> SCNNode {
+      let node = nodes[cursor.acquire()]
+      node.removeAllActions()
+      node.opacity = 1
+      node.simdScale = SIMD3<Float>(repeating: 1)
+      node.isHidden = false
+      return node
+    }
+
+    func clear() {
+      for node in nodes {
+        node.removeAllActions()
+        node.isHidden = true
+        node.opacity = 0
+      }
+      cursor.reset()
     }
   }
 
@@ -342,14 +391,25 @@
       lock.unlock()
     }
 
+    func silence() {
+      lock.lock()
+      sampleIndex = Int.max
+      lock.unlock()
+    }
+
     func fill(
       _ audioBufferList: UnsafeMutablePointer<AudioBufferList>,
       frameCount: AVAudioFrameCount
     ) -> OSStatus {
-      lock.lock()
-      defer { lock.unlock() }
-
       let buffers = UnsafeMutableAudioBufferListPointer(audioBufferList)
+      guard lock.try() else {
+        for buffer in buffers {
+          guard let data = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
+          data.update(repeating: 0, count: Int(frameCount))
+        }
+        return noErr
+      }
+      defer { lock.unlock() }
       for buffer in buffers {
         guard let data = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
         for frame in 0..<Int(frameCount) {
@@ -373,8 +433,10 @@
 
   @MainActor
   final class LaserFXEngine: ObservableObject {
-    func fireLaser(hit: Bool, target: SIMD3<Float>? = nil) {}
+    func fireLaser(hit: Bool = false, ray: TargetingCameraRay? = nil) {}
+    func confirmHit(skeleton: TargetingSkeleton?, zone: TargetingHitZone?) {}
     func renderIncomingLaser(from origin: SIMD3<Float>?, hit: Bool) {}
     func updateSkeleton(_ skeleton: TargetingSkeleton?, zone: TargetingHitZone?) {}
+    func clearTransientEffects() {}
   }
 #endif

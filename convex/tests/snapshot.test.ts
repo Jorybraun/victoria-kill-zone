@@ -91,6 +91,17 @@ describe("contract snapshots", () => {
     });
   });
 
+  it("projects an active reload deadline on both views and omits it after completion", () => {
+    const reloadEndsAt = T0 + GAMEPLAY.reloadDurationMs;
+    const players = [player("host", { ammo: 3, reloadEndsAt }), player("guest")];
+    const phone = buildMatchSnapshot(snapshotMatch(), "host", players, [], T0);
+    const spectator = buildSpectatorSnapshot(snapshotMatch(), players, [], T0);
+    for (const snapshot of [phone, spectator]) {
+      expect(snapshot.players[0]).toMatchObject({ ammo: 3, reloadEndsAt });
+      expect(snapshot.players[1]).not.toHaveProperty("reloadEndsAt");
+    }
+  });
+
   it("projects verdict target confirmation and omits absent or null values", () => {
     const confirmed = buildSpectatorSnapshot(
       snapshotMatch(),
@@ -107,6 +118,18 @@ describe("contract snapshots", () => {
       T0 + 1_000,
     );
     expect(absent.events[0]).not.toHaveProperty("targetConfirmed");
+  });
+
+  it("preserves shot identity while leaving legacy event rows compatible", () => {
+    const withIdentity = events.map((event) => ({ ...event, clientShotId: "shot-confirmed" }));
+    const players = [player("host"), player("guest")];
+    const phone = buildMatchSnapshot(snapshotMatch(), "host", players, withIdentity, T0 + 1_000);
+    const spectator = buildSpectatorSnapshot(snapshotMatch(), players, withIdentity, T0 + 1_000);
+    for (const snapshot of [phone, spectator]) {
+      expect(snapshot.events[0]).toHaveProperty("clientShotId", "shot-confirmed");
+    }
+    const legacy = buildMatchSnapshot(snapshotMatch(), "host", players, events, T0 + 1_000);
+    expect(legacy.events[0]).not.toHaveProperty("clientShotId");
   });
 
   it("sanitizes phone and spectator projections field by field", () => {

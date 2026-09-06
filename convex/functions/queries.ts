@@ -90,6 +90,7 @@ async function recentEvents(ctx: QueryCtx, matchId: Doc<"matches">["_id"]): Prom
   return events.map((event) => ({
     id: event._id,
     type: event.type,
+    ...(event.clientShotId === undefined ? {} : { clientShotId: event.clientShotId }),
     actorPlayerId: event.actorPlayerId,
     targetPlayerId: event.targetPlayerId,
     zone: event.zone,

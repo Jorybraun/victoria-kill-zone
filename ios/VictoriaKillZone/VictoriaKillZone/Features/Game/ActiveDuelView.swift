@@ -10,6 +10,7 @@ struct ActiveDuelView: View {
   @ObservedObject var store: LobbyStore
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.openURL) private var openURL
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @StateObject private var fx = LaserFXEngine()
   @StateObject private var voiceFire = VoiceFireController()
   @State private var muzzleFlash = false
@@ -18,22 +19,17 @@ struct ActiveDuelView: View {
   @State private var toastEventID: String?
   @State private var toastVisible = false
   @State private var toastTask: Task<Void, Never>?
+  @State private var hitTask: Task<Void, Never>?
+  @State private var damageTask: Task<Void, Never>?
+  @State private var muzzleTask: Task<Void, Never>?
   @State private var shotNotice: String?
   @State private var shotNoticeTask: Task<Void, Never>?
 
   var body: some View {
-    TimelineView(.periodic(from: .now, by: 0.2)) { context in
+    TimelineView(.periodic(from: .now, by: 0.05)) { context in
       ZStack {
         cameraSurface
           .ignoresSafeArea()
-
-        if let pose = store.targetingSnapshot.pose2D,
-          store.targetingSnapshot.isPoseFresh(at: context.date)
-        {
-          SkeletonOverlay(pose: pose, color: reticleColor)
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
-        }
 
         LinearGradient(
           colors: [.black.opacity(0.55), .clear, .black.opacity(0.7)],
@@ -55,13 +51,13 @@ struct ActiveDuelView: View {
 
         if muzzleFlash {
           Rectangle()
-            .fill(.white.opacity(0.22))
+            .fill(.white.opacity(0.07))
             .ignoresSafeArea()
             .allowsHitTesting(false)
           Circle()
             .fill(
               RadialGradient(
-                colors: [.white, .red.opacity(0.85), .clear],
+                colors: [.white.opacity(0.25), VKZPalette.pending.opacity(0.15), .clear],
                 center: .center,
                 startRadius: 2,
                 endRadius: 190
@@ -77,6 +73,11 @@ struct ActiveDuelView: View {
             .zIndex(2)
         }
 
+        reticleArea
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .ignoresSafeArea()
+          .allowsHitTesting(false)
+
         VStack(spacing: 10) {
           topTelemetry(at: context.date)
           opponentStrip
@@ -84,8 +85,6 @@ struct ActiveDuelView: View {
           if let blocker = store.targetingBlocker {
             targetingBlockerPanel(blocker)
           }
-          Spacer(minLength: 12)
-          reticleArea
           Spacer(minLength: 12)
           if duel.phase == .running {
             bottomStack
@@ -103,6 +102,7 @@ struct ActiveDuelView: View {
       }
     }
     .onAppear {
+      combat.setSceneActive(scenePhase == .active)
       voiceFire.setViewVisible(true)
       voiceFire.setSceneActive(scenePhase == .active)
     }
@@ -113,27 +113,33 @@ struct ActiveDuelView: View {
       voiceFire.setViewVisible(false)
       voiceFire.setSceneActive(false)
       toastTask?.cancel()
-      shotNoticeTask?.cancel()
+      hitTask?.cancel()
+      damageTask?.cancel()
+      muzzleTask?.cancel()
+      combat.setSceneActive(false)
+      clearFeedback()
       Task { await store.stopTargeting() }
     }
-    .onChange(of: store.errorMessage) { message in
+    .onChange(of: store.errorMessage) { _, message in
       guard let message, duel.phase == .running else { return }
       showShotNotice(message)
       store.dismissError()
     }
-    .onChange(of: scenePhase) { phase in
+    .onChange(of: scenePhase) { _, phase in
       voiceFire.setSceneActive(phase == .active)
+      combat.setSceneActive(phase == .active)
+      if phase != .active { clearFeedback() }
     }
-    .onChange(of: voiceFire.fireRequestSequence) { _ in
+    .onChange(of: voiceFire.fireRequestSequence) { _, _ in
       fireShot()
     }
-    .onChange(of: combat.killBanner) { banner in
+    .onChange(of: combat.killBanner) { _, banner in
       guard banner?.isLocalKill == true else { return }
       #if os(iOS)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
       #endif
     }
-    .onChange(of: duel.events.first?.id) { eventID in
+    .onChange(of: duel.events.first?.id) { _, eventID in
       guard let eventID else { return }
       toastEventID = eventID
       toastTask?.cancel()
@@ -148,45 +154,65 @@ struct ActiveDuelView: View {
         }
       }
     }
-    .onChange(of: combat.incomingShot) { shot in
-      guard let shot else { return }
-      withAnimation(.easeOut(duration: 0.08)) {
-        incomingFlash = true
+    .onChange(of: combat.outgoingShot) { _, shot in
+      guard scenePhase == .active, duel.phase == .running, let shot else { return }
+      fx.fireLaser(hit: false, ray: shot.ray)
+      guard !reduceMotion else { return }
+      muzzleTask?.cancel()
+      muzzleFlash = true
+      muzzleTask = Task { @MainActor in
+        try? await Task.sleep(for: .milliseconds(45))
+        guard !Task.isCancelled else { return }
+        muzzleFlash = false
       }
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-        withAnimation(.easeOut(duration: 0.08)) {
+    }
+    .onChange(of: combat.markerlessShotState) { _, state in
+      guard scenePhase == .active, duel.phase == .running,
+        case .confirmed(let outcome, let zone, let damage) = state,
+        (outcome == .hit || outcome == .kill), damage > 0
+      else { return }
+      hitTask?.cancel()
+      hitMarker = true
+      let snapshot = store.targetingSnapshot
+      fx.confirmHit(
+        skeleton: snapshot.isPoseFresh(at: Date()) ? snapshot.skeleton : nil,
+        zone: zone.flatMap { TargetingHitZone(rawValue: $0.rawValue) }
+      )
+      hitTask = Task { @MainActor in
+        try? await Task.sleep(for: .milliseconds(280))
+        guard !Task.isCancelled else { return }
+        hitMarker = false
+      }
+    }
+    .onReceive(combat.$incomingShots) { shots in
+      guard scenePhase == .active, duel.phase == .running else { return }
+      for shot in shots {
+      if shot.hit {
+        damageTask?.cancel()
+        incomingFlash = true
+        damageTask = Task { @MainActor in
+          try? await Task.sleep(for: .milliseconds(250))
+          guard !Task.isCancelled else { return }
           incomingFlash = false
         }
       }
-      if shot.hit {
-        withAnimation(.easeOut(duration: 0.15)) {
-          hitMarker = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-          withAnimation(.easeOut(duration: 0.15)) {
-            hitMarker = false
-          }
-        }
+      #if os(iOS)
+        let position = store.targetingSnapshot.isPoseFresh(at: Date())
+          ? store.targetingSnapshot.skeleton?.position(of: "head") : nil
+        let origin = shot.renderTracer ? position.map { SIMD3<Float>(Float($0.x), Float($0.y), Float($0.z)) } : nil
+        fx.renderIncomingLaser(from: origin, hit: shot.hit)
+      #endif
       }
-      #if os(iOS)
-        let opponentOrigin: SIMD3<Float>?
-        if store.targetingSnapshot.isPoseFresh(at: Date()),
-          let position = store.targetingSnapshot.skeleton?.position(of: "head")
-        {
-          opponentOrigin = SIMD3<Float>(Float(position.x), Float(position.y), Float(position.z))
-        } else {
-          opponentOrigin = nil
-        }
-        fx.renderIncomingLaser(from: opponentOrigin, hit: shot.hit)
-      #endif
     }
-    .onChange(of: store.targetingSnapshot) { snapshot in
-      #if os(iOS)
-        let skeleton = snapshot.isLocked && snapshot.isPoseFresh(at: Date())
-          ? snapshot.skeleton
-          : nil
-        fx.updateSkeleton(skeleton, zone: snapshot.hitZone)
-      #endif
+    .onChange(of: store.targetingSnapshot) { _, snapshot in
+      guard scenePhase == .active, duel.phase == .running else { return }
+      fx.updateSkeleton(
+        snapshot.isPoseFresh(at: Date()) ? snapshot.skeleton : nil,
+        zone: snapshot.hitZone
+      )
+    }
+    .onChange(of: duel.phase) { _, phase in
+      if phase != .running { clearFeedback() }
     }
   }
 
@@ -235,38 +261,49 @@ struct ActiveDuelView: View {
   }
 
   private func topTelemetry(at date: Date) -> some View {
-    HStack(alignment: .top) {
-      telemetryBlock(
-        label: "HEALTH",
-        value: String(duel.localPlayer?.health ?? 0),
-        color: localHealthColor
-      )
-      Spacer()
-      VStack(spacing: 3) {
-        Text(phaseTitle)
-          .font(.caption.weight(.bold).monospaced())
-          .foregroundStyle(VKZPalette.telemetry)
-        if duel.phase == .countdown {
-          Text(String(countdownValue(at: date)))
-            .font(.system(size: 38, weight: .black, design: .monospaced))
-            .accessibilityLabel("Duel starts in \(countdownValue(at: date))")
-        } else {
-          Text("\(duel.localPlayer?.kills ?? 0)–\(duel.localPlayer?.deaths ?? 0)")
-            .font(.title3.bold().monospacedDigit())
-        }
+    HStack(alignment: .center, spacing: 16) {
+      VStack(alignment: .leading, spacing: 6) {
+        Label("VITALS", systemImage: "heart.fill")
+          .font(.system(size: 9, weight: .bold, design: .monospaced))
+          .foregroundStyle(VKZPalette.textMuted)
+        Text(String(duel.localPlayer?.health ?? 0))
+          .font(.system(size: 30, weight: .black, design: .rounded).monospacedDigit())
+          .foregroundStyle(localHealthColor)
       }
       Spacer()
-      telemetryBlock(
-        label: "AMMO",
-        value: "\(duel.localPlayer?.ammo ?? 0) / 8",
-        color: .white
-      )
+      VStack(spacing: 4) {
+        Text(phaseTitle)
+          .font(.system(size: 9, weight: .bold, design: .monospaced))
+          .tracking(2)
+          .foregroundStyle(VKZPalette.textMuted)
+        Text(duel.phase == .countdown ? String(countdownValue(at: date)) : roundTime(at: date))
+          .font(.system(size: 30, weight: .bold, design: .monospaced))
+      }
+      Spacer()
+      VStack(alignment: .trailing, spacing: 6) {
+        Text("K / D")
+          .font(.system(size: 9, weight: .bold, design: .monospaced))
+          .foregroundStyle(VKZPalette.textMuted)
+        Text("\(duel.localPlayer?.kills ?? 0) / \(duel.localPlayer?.deaths ?? 0)")
+          .font(.system(size: 23, weight: .bold, design: .rounded).monospacedDigit())
+      }
     }
+    .padding(16)
+    .background(.black.opacity(0.74), in: RoundedRectangle(cornerRadius: 18))
+    .overlay(alignment: .top) {
+      Capsule().fill(VKZPalette.pending).frame(width: 40, height: 3)
+    }
+    .accessibilityElement(children: .combine)
+  }
+
+  private func roundTime(at date: Date) -> String {
+    let remaining = max(0, Int(ceil(((duel.endsAt ?? estimatedServerNow(at: date)) - estimatedServerNow(at: date)) / 1000)))
+    return String(format: "%02d:%02d", remaining / 60, remaining % 60)
   }
 
   @ViewBuilder
   private var connectionBanner: some View {
-    if store.isMatchInputLocked {
+    if store.isMatchInputLocked || !combat.presenceReady {
       Text("RECONNECTING — INPUT LOCKED")
         .font(.caption.bold().monospaced())
         .foregroundStyle(VKZPalette.pending)
@@ -309,23 +346,20 @@ struct ActiveDuelView: View {
   }
 
   private var reticleArea: some View {
-    VStack(spacing: 12) {
-      ZStack {
-        reticle
-        hitMarkerView
-      }
-      HStack(spacing: 8) {
-        VKZStatusPill(label: store.targetingStatus, color: reticleColor)
-        if let zone = combat.markerlessAimZone {
-          VKZStatusPill(label: zone.rawValue.uppercased(), color: reticleColor)
-        }
-        if store.targetingSnapshot.isLocked,
-          store.targetingSnapshot.isPoseFresh(at: Date()),
-          store.targetingSnapshot.skeleton != nil
-        {
-          VKZStatusPill(label: "SKELETON", color: VKZPalette.ready)
-        }
-      }
+    ZStack {
+      reticle
+      hitMarkerView
+    }
+    .frame(width: 80, height: 80)
+    .overlay(alignment: .bottom) {
+      Text(hitMarker ? "HIT CONFIRMED" : (combat.markerlessAimZone == nil ? "" : "ON TARGET"))
+        .font(.system(size: 10, weight: .bold, design: .monospaced))
+        .tracking(1.5)
+        .foregroundStyle(hitMarker ? VKZPalette.pending : VKZPalette.ready)
+        .fixedSize()
+        .padding(6)
+        .background(.black.opacity(0.55), in: Capsule())
+        .offset(y: 30)
     }
   }
 
@@ -390,53 +424,95 @@ struct ActiveDuelView: View {
 
   private func hitMarkerArm(rotation: Double) -> some View {
     Rectangle()
-      .fill(VKZPalette.danger)
-      .frame(width: 14, height: 2)
+      .fill(VKZPalette.pending)
+      .frame(width: 14, height: 3)
       .rotationEffect(.degrees(rotation))
   }
 
-  @ViewBuilder
   private var bottomStack: some View {
-    VStack(spacing: 8) {
+    VStack(spacing: 12) {
       latestEvent
       shotNoticeView
-      DuelCooldownBar(combat: combat)
-      HStack(spacing: 12) {
-        voiceToggle
-        Button {
-          fireShot()
-        } label: {
-          Text(combat.fireCooldownRemaining(at: Date()) > 0 ? "RECHARGING" : shotButtonLabel)
+      HStack(alignment: .bottom) {
+        VStack(alignment: .leading, spacing: 5) {
+          Text("STANDARD SIDEARM")
+            .font(.system(size: 10, weight: .bold, design: .monospaced))
+            .tracking(1.5)
+            .foregroundStyle(VKZPalette.textMuted)
+          Text(combat.isReloading ? "RELOADING" : "\(duel.localPlayer?.ammo ?? 0) / 8")
+            .font(.system(size: 26, weight: .black, design: .monospaced))
+            .foregroundStyle(combat.isReloading ? VKZPalette.pending : .white)
         }
-        .buttonStyle(VKZPrimaryButtonStyle())
-        .disabled(combat.fireCooldownRemaining(at: Date()) > 0)
-        .accessibilityLabel("Fire markerless shot")
-        #if VKZ_DEBUG_FIRE
-          if duel.localRole == .host {
-            Button {
-              combat.debugFire()
-            } label: {
-              Image(systemName: "wrench.and.screwdriver")
-                .font(.title3)
-                .foregroundStyle(VKZPalette.textMuted)
-                .frame(width: 56, height: 56)
-                .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 12))
-            }
-            .disabled(!combat.canDebugFire)
-            .accessibilityLabel("Debug torso fallback fire")
+        Spacer()
+        Text(shotButtonLabel)
+          .font(.caption2.bold().monospaced())
+          .foregroundStyle(VKZPalette.pending)
+          .multilineTextAlignment(.trailing)
+          .lineLimit(2)
+      }
+      HStack(spacing: 14) {
+        Button { combat.reload() } label: {
+          VStack(spacing: 6) {
+            Image(systemName: "arrow.clockwise").font(.title3.bold())
+            Text("RELOAD").font(.system(size: 9, weight: .bold, design: .monospaced))
           }
-        #endif
-      }
-      Text(voiceStatusCaption)
-        .font(.caption2.monospaced())
-        .foregroundStyle(VKZPalette.textMuted)
+          .frame(width: 68, height: 70)
+          .foregroundStyle(combat.canReload ? .white : VKZPalette.textMuted)
+          .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+        .disabled(!combat.canReload)
+        .accessibilityLabel("Reload sidearm")
+
+        VStack(spacing: 5) {
+          Image(systemName: "scope").font(.system(size: 26, weight: .medium))
+          Text(combat.isTriggerHeld ? "FIRING" : "HOLD TO FIRE")
+            .font(.system(size: 10, weight: .black, design: .monospaced))
+            .tracking(1)
+        }
         .frame(maxWidth: .infinity)
-      Button("LEAVE DUEL", role: .destructive) {
-        store.leave()
+        .frame(height: 84)
+        .foregroundStyle(VKZPalette.background)
+        .background(combat.isTriggerHeld ? .white : VKZPalette.pending, in: RoundedRectangle(cornerRadius: 20))
+        .contentShape(RoundedRectangle(cornerRadius: 20))
+        .gesture(
+          DragGesture(minimumDistance: 0)
+            .onChanged { value in
+              if abs(value.translation.width) > 80 || abs(value.translation.height) > 80 {
+                combat.stopRepeatingFire()
+              } else if combat.isTriggerHeld || combat.canFireMarkerless {
+                combat.startRepeatingFire()
+              } else {
+                showShotNotice(blockedShotNotice)
+              }
+            }
+            .onEnded { _ in combat.stopRepeatingFire() }
+        )
+        .accessibilityLabel("Fire sidearm")
+        .accessibilityHint("Double tap to fire one shot. Hold with direct touch for repeat fire.")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { fireShot() }
+        voiceToggle
       }
-      .font(.caption.bold().monospaced())
-      .accessibilityLabel("Leave duel")
+      HStack {
+        Text(voiceFire.isEnabled ? voiceStatusCaption : "AIM · FIRE · RELOAD")
+          .font(.system(size: 9, weight: .semibold, design: .monospaced))
+          .foregroundStyle(VKZPalette.textMuted)
+        Spacer()
+        Button("LEAVE", role: .destructive) { store.leave() }
+          .font(.caption2.bold().monospaced())
+          .frame(minWidth: 44, minHeight: 44)
+      }
+      #if VKZ_DEBUG_FIRE
+        if duel.localRole == .host {
+          Button("DEBUG TORSO FALLBACK") { combat.debugFire() }
+            .font(.caption2.monospaced())
+            .disabled(!combat.canDebugFire)
+        }
+      #endif
     }
+    .padding(16)
+    .background(.black.opacity(0.82), in: RoundedRectangle(cornerRadius: 24))
   }
 
   private var voiceToggle: some View {
@@ -512,58 +588,40 @@ struct ActiveDuelView: View {
     .accessibilityElement(children: .contain)
   }
 
+  private func clearFeedback() {
+    shotNoticeTask?.cancel()
+    shotNotice = nil
+    hitTask?.cancel()
+    damageTask?.cancel()
+    muzzleTask?.cancel()
+    hitMarker = false
+    incomingFlash = false
+    muzzleFlash = false
+    fx.clearTransientEffects()
+  }
+
   private func fireShot() {
     guard combat.fireCooldownRemaining(at: Date()) == 0 else { return }
-    let canFireMarkerless = combat.canFireMarkerless
-    let canFireDebug = combat.canDebugFire
-    guard canFireMarkerless || canFireDebug else {
+    guard combat.canFireMarkerless else {
       showShotNotice(blockedShotNotice)
-      #if os(iOS)
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-      #endif
       return
     }
-    #if os(iOS)
-      let target: SIMD3<Float>?
-      if canFireMarkerless, store.targetingSnapshot.isPoseFresh(at: Date()),
-        let skeleton = store.targetingSnapshot.skeleton,
-        let point = skeleton.position(of: combat.markerlessAimZone == .head ? "head" : "root")
-          ?? skeleton.position(of: "root")
-      {
-        target = SIMD3<Float>(Float(point.x), Float(point.y), Float(point.z))
-      } else {
-        target = nil
-      }
-      fx.fireLaser(hit: canFireMarkerless, target: target)
-    #else
-      fx.fireLaser(hit: canFireMarkerless)
-    #endif
-    if canFireMarkerless {
-      combat.fireMarkerless()
-    } else {
-      combat.debugFire()
-    }
-    withAnimation(.easeOut(duration: 0.12)) {
-      muzzleFlash = true
-    }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-      withAnimation(.easeOut(duration: 0.12)) {
-        muzzleFlash = false
-      }
-    }
+    combat.fireMarkerless()
   }
 
   private var blockedShotNotice: String {
     if isLocalRespawning { return "RESPAWNING" }
+    if combat.isReloading { return "RELOADING" }
     if duel.opponent?.lifeState != .alive { return "OPPONENT IS RESPAWNING" }
     if (duel.localPlayer?.ammo ?? 0) <= 0 { return "OUT OF AMMO" }
-    if store.isMatchInputLocked { return "RECONNECTING" }
+    if !combat.presenceReady || store.isMatchInputLocked { return "RECONNECTING" }
     return store.targetingSnapshot.bodyDetected
       ? "AIM AT THE BODY"
       : "NO TARGET — FIND YOUR OPPONENT"
   }
 
   private func showShotNotice(_ message: String) {
+    guard shotNotice != message else { return }
     shotNoticeTask?.cancel()
     withAnimation(.easeOut(duration: 0.15)) {
       shotNotice = message
@@ -642,17 +700,18 @@ struct ActiveDuelView: View {
   }
 
   private var shotButtonLabel: String {
-    if isLocalRespawning { return "RESPAWNING…" }
-    if duel.opponent?.lifeState == .respawning || duel.opponent?.health == 0 {
-      return "OPPONENT RESPAWNING"
-    }
+    if isLocalRespawning { return "RESPAWNING" }
+    if combat.isReloading { return "RELOADING" }
+    if duel.localPlayer?.ammo == 0 { return "RELOAD TO CONTINUE" }
+    if !combat.presenceReady || store.isMatchInputLocked { return "RECONNECTING" }
     switch combat.markerlessShotState {
-    case .idle: return combat.markerlessAimZone == nil ? "ACQUIRE TARGET" : "FIRE"
-    case .pending(let zone): return "\(zone.rawValue.uppercased()) SHOT…"
-    case .confirmed(.kill, _, _): return "ELIMINATION CONFIRMED"
+    case .idle: return combat.canFireMarkerless ? "READY" : store.targetingStatus
+    case .pending: return "VERIFYING SHOT"
+    case .confirmed(.kill, _, _): return "ELIMINATION"
+    case .confirmed(.miss, _, _): return "MISS"
     case .confirmed(_, let zone, let damage):
-      return "\(zone.rawValue.uppercased()) HIT • \(damage)"
-    case .failed: return "RETRY SHOT"
+      return "\(zone?.rawValue.uppercased() ?? "") +\(damage)"
+    case .failed: return "TAP TO RETRY"
     }
   }
 
@@ -720,46 +779,6 @@ struct ActiveDuelView: View {
         .foregroundStyle(color)
     }
     .accessibilityElement(children: .combine)
-  }
-}
-
-/// Draws the 2D Vision pose over the aspect-filled camera preview.
-private struct SkeletonOverlay: View {
-  let pose: TargetingPose2D
-  let color: Color
-
-  var body: some View {
-    Canvas { context, size in
-      let imageWidth = size.height * pose.imageAspect
-      let xOffset = (size.width - imageWidth) / 2
-      func map(_ point: NormalizedTargetingPoint) -> CGPoint {
-        CGPoint(x: xOffset + point.x * imageWidth, y: (1 - point.y) * size.height)
-      }
-      var bones = Path()
-      for bone in pose.bones {
-        guard let from = pose.joints[bone.from], let to = pose.joints[bone.to] else { continue }
-        bones.move(to: map(from))
-        bones.addLine(to: map(to))
-      }
-      context.stroke(bones, with: .color(color.opacity(0.35)), lineWidth: 9)
-      context.stroke(bones, with: .color(color.opacity(0.95)), lineWidth: 3)
-      for joint in pose.joints.values {
-        let center = map(joint)
-        let radius: CGFloat = 6
-        let dot = Path(ellipseIn: CGRect(
-          x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2
-        ))
-        context.fill(dot, with: .color(color))
-      }
-      if let nose = pose.joints["nose"], let neck = pose.joints["neck"] {
-        let head = map(nose)
-        let radius = max(14, abs(map(neck).y - head.y) * 0.9)
-        let ring = Path(ellipseIn: CGRect(
-          x: head.x - radius, y: head.y - radius, width: radius * 2, height: radius * 2
-        ))
-        context.stroke(ring, with: .color(color.opacity(0.9)), lineWidth: 3)
-      }
-    }
   }
 }
 

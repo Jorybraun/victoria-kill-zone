@@ -9,8 +9,8 @@ enum DebugShotState: Equatable, Sendable {
 
 enum MarkerlessShotState: Equatable, Sendable {
   case idle
-  case pending(zone: HitZone)
-  case confirmed(outcome: FireShotOutcome, zone: HitZone, damage: Int)
+  case pending(zone: HitZone?)
+  case confirmed(outcome: FireShotOutcome, zone: HitZone?, damage: Int)
   case failed(reason: FireRejectReason?)
 }
 
@@ -27,11 +27,34 @@ struct IncomingShot: Equatable, Sendable {
   let zone: String?
   let timestamp: Double
   let source: Source
+  /// An authoritative hit still presents damage when its peer tracer was shown.
+  let renderTracer: Bool
+
+  init(
+    eventID: String,
+    hit: Bool,
+    zone: String?,
+    timestamp: Double,
+    source: Source,
+    renderTracer: Bool = true
+  ) {
+    self.eventID = eventID
+    self.hit = hit
+    self.zone = zone
+    self.timestamp = timestamp
+    self.source = source
+    self.renderTracer = renderTracer
+  }
 
   enum Source: Equatable, Sendable {
     case convex
     case peer
   }
+}
+
+struct OutgoingShot: Equatable, Sendable {
+  let id: String
+  let ray: TargetingCameraRay?
 }
 
 @MainActor
@@ -42,17 +65,22 @@ final class DuelSession: ObservableObject {
     var isBusy: @MainActor () -> Bool = { false }
   }
 
-  // Mirrors FIRE_COOLDOWN_MS = 350 in Convex.
-  static let fireCooldown: TimeInterval = 0.35
+  // Combat tuning in design/slices/004; enforced independently by the authority.
+  static let fireCooldown: TimeInterval = 0.15
   static let pendingShotConfirmationBudget: TimeInterval = 2.5
   static let incomingShotDedupCapacity = 256
-  static let peerTracerSuppressionWindow: TimeInterval = 2
 
   @Published private(set) var debugShotState = DebugShotState.idle
   @Published private(set) var markerlessShotState = MarkerlessShotState.idle
   @Published private(set) var lastAcceptedShotAt: Date?
   @Published private(set) var killBanner: KillBanner?
   @Published private(set) var incomingShot: IncomingShot?
+  @Published private(set) var incomingShots: [IncomingShot] = []
+  @Published private(set) var outgoingShot: OutgoingShot?
+  @Published private(set) var isTriggerHeld = false
+  @Published private(set) var isReloadRequestPending = false
+  @Published private(set) var reloadAcknowledgedUntil: Double?
+  @Published private(set) var presenceReady = true
 
   var gates = Gates()
   var onErrorMessage: ((String?) -> Void)?
@@ -71,7 +99,12 @@ final class DuelSession: ObservableObject {
   private var seenKillEventIDs = Set<String>()
   private var seenIncomingShotEventIDs = Set<String>()
   private var seenIncomingShotEventOrder: [String] = []
-  private var lastPeerShotAt: Date?
+  private struct TracerIdentity: Hashable {
+    let shooterID: String
+    let shotID: String
+  }
+  private var renderedTracerIDs = Set<TracerIdentity>()
+  private var renderedTracerOrder: [TracerIdentity] = []
   private var snapshotSubscriptionStartedAt: Double?
   private var duelPeerLink: (any DuelPeerLink)?
   private let now: @Sendable () -> Date
@@ -79,9 +112,17 @@ final class DuelSession: ObservableObject {
   private let gameSessionClient: any GameSessionClient
   private let makePeerLink: (@MainActor (_ serviceName: String) -> (any DuelPeerLink)?)?
   private var fireTask: Task<Void, Never>?
+  private var repeatFireTask: Task<Void, Never>?
+  private var reloadTask: Task<Void, Never>?
+  private var heartbeatTask: Task<Void, Never>?
+  private var lastDispatchedAt: Date?
 
   var seenIncomingShotEventCount: Int {
     seenIncomingShotEventIDs.count
+  }
+
+  var renderedIncomingTracerCount: Int {
+    renderedTracerIDs.count
   }
 
   init(
@@ -103,6 +144,16 @@ final class DuelSession: ObservableObject {
   }
 
   func attach(session: PlayerSession) {
+    fireTask?.cancel()
+    stopRepeatingFire()
+    reloadTask?.cancel()
+    heartbeatTask?.cancel()
+    heartbeatTask = nil
+    isReloadRequestPending = false
+    reloadAcknowledgedUntil = nil
+    outgoingShot = nil
+    lastDispatchedAt = nil
+    presenceReady = true
     killBannerTask?.cancel()
     pendingShotReplayTask?.cancel()
     pendingShotReplayTask = nil
@@ -121,10 +172,13 @@ final class DuelSession: ObservableObject {
     seenKillEventIDs.removeAll()
     seenIncomingShotEventIDs.removeAll()
     seenIncomingShotEventOrder.removeAll()
-    lastPeerShotAt = nil
+    renderedTracerIDs.removeAll()
+    renderedTracerOrder.removeAll()
     incomingShot = nil
+    incomingShots = []
     killBanner = nil
     snapshotSubscriptionStartedAt = nil
+    startHeartbeat()
   }
 
   func receive(_ snapshot: MatchSnapshot) {
@@ -133,6 +187,15 @@ final class DuelSession: ObservableObject {
       snapshotSubscriptionStartedAt = snapshot.serverNow
     }
     latestSnapshot = snapshot
+    if let local = snapshot.players.first(where: { $0.id == snapshot.localPlayerId }),
+      local.reloadEndsAt != nil || local.ammo == 8 || local.lifeState != .alive
+        || snapshot.serverNow >= (reloadAcknowledgedUntil ?? .greatestFiniteMagnitude)
+    {
+      reloadAcknowledgedUntil = nil
+    }
+    if snapshot.match.phase != .running || localPlayer?.lifeState != .alive {
+      stopRepeatingFire()
+    }
     updateKillBanner(from: snapshot)
     updateIncomingShot(from: snapshot)
     updateDuelPeerLink(for: snapshot, previous: previousSnapshot)
@@ -144,6 +207,14 @@ final class DuelSession: ObservableObject {
   }
 
   func reset() {
+    stopRepeatingFire()
+    reloadTask?.cancel()
+    heartbeatTask?.cancel()
+    heartbeatTask = nil
+    isReloadRequestPending = false
+    reloadAcknowledgedUntil = nil
+    outgoingShot = nil
+    lastDispatchedAt = nil
     fireTask?.cancel()
     fireTask = nil
     killBannerTask?.cancel()
@@ -163,12 +234,14 @@ final class DuelSession: ObservableObject {
     seenKillEventIDs.removeAll()
     seenIncomingShotEventIDs.removeAll()
     seenIncomingShotEventOrder.removeAll()
-    lastPeerShotAt = nil
+    renderedTracerIDs.removeAll()
+    renderedTracerOrder.removeAll()
     snapshotSubscriptionStartedAt = nil
     setDebugShotState(.idle)
     setMarkerlessShotState(.idle)
     killBanner = nil
     incomingShot = nil
+    incomingShots = []
     targetingSnapshot = .unavailable()
   }
 
@@ -178,7 +251,10 @@ final class DuelSession: ObservableObject {
       snapshot.match.phase == .running,
       snapshot.localPlayerId == session.playerId,
       let localPlayer = snapshot.players.first(where: { $0.id == session.playerId }),
-      localPlayer.role == .host, localPlayer.ammo > 0
+      localPlayer.role == .host,
+      // A lost reply to the final round retains its exact ID. Retrying that
+      // unresolved request does not spend another round; rejected IDs are cleared.
+      localPlayer.ammo > 0 || (debugShotState == .failed && pendingShotId != nil)
     else {
       return false
     }
@@ -189,38 +265,40 @@ final class DuelSession: ObservableObject {
   }
 
   var canFireMarkerless: Bool {
-    guard gates.isLiveNetworking(), !gates.isInputLocked(), !gates.isBusy(),
+    guard gates.isLiveNetworking(), presenceReady, !gates.isInputLocked(), !gates.isBusy(),
       let session, let snapshot = latestSnapshot,
-      snapshot.match.phase == .running,
       snapshot.localPlayerId == session.playerId,
-      let localPlayer = snapshot.players.first(where: { $0.id == session.playerId }),
-      let opponent = snapshot.players.first(where: { $0.id != session.playerId }),
-      localPlayer.lifeState == .alive, localPlayer.ammo > 0,
-      opponent.lifeState == .alive
+      let localPlayer = snapshot.players.first(where: { $0.id == session.playerId })
     else {
       return false
     }
 
     if case .pending = markerlessShotState { return false }
-    if case .failed(reason: nil) = markerlessShotState,
-      pendingMarkerlessRequest != nil
-    {
-      return true
+    if hasPendingMarkerlessReplay {
+      // The last round may already have committed, or the shooter may have died
+      // before its reply arrived. Replaying that exact ID cannot fire a new round.
+      return [.running, .finished, .cancelled].contains(snapshot.match.phase)
     }
+    guard snapshot.match.phase == .running, localPlayer.lifeState == .alive,
+      localPlayer.ammo > 0, !isReloading
+    else { return false }
 
-    guard let targetZone = targetingSnapshot.hitZone,
-      targetingSnapshot.isPoseFresh(at: now())
-    else {
-      return false
+    // A fresh camera without a candidate can still fire an authoritative miss.
+    guard let ray = targetingSnapshot.cameraRay else { return false }
+    let age = now().timeIntervalSince(ray.capturedAt)
+    return age >= 0 && age <= targetingSnapshot.poseStaleAfter
+  }
+
+  private var hasPendingMarkerlessReplay: Bool {
+    if case .failed(reason: nil) = markerlessShotState {
+      return pendingMarkerlessRequest != nil
     }
-    let minimumConfidence = targetZone == .head ? 0.60 : 0.45
-    guard targetingSnapshot.hitConfidence >= minimumConfidence else { return false }
-    return true
+    return false
   }
 
   func fireCooldownRemaining(at date: Date) -> TimeInterval {
-    guard let lastAcceptedShotAt else { return 0 }
-    return max(0, Self.fireCooldown - date.timeIntervalSince(lastAcceptedShotAt))
+    guard let lastShotAt = lastDispatchedAt ?? lastAcceptedShotAt else { return 0 }
+    return max(0, Self.fireCooldown - date.timeIntervalSince(lastShotAt))
   }
 
   func fireCooldownProgress(at date: Date) -> Double {
@@ -243,6 +321,115 @@ final class DuelSession: ObservableObject {
 
   func fireMarkerless() {
     fireTask = Task { [weak self] in await self?.performMarkerlessFire() }
+  }
+
+  var localPlayer: PlayerSnapshot? {
+    latestSnapshot?.players.first { $0.id == session?.playerId }
+  }
+
+  var isReloading: Bool {
+    isReloadRequestPending || localPlayer?.reloadEndsAt != nil || reloadAcknowledgedUntil != nil
+  }
+
+  var canReload: Bool {
+    guard presenceReady, !gates.isInputLocked(), !gates.isBusy(),
+      latestSnapshot?.match.phase == .running, let localPlayer,
+      localPlayer.lifeState == .alive, localPlayer.ammo < 8, !isReloading,
+      pendingMarkerlessRequest == nil
+    else { return false }
+    return true
+  }
+
+  func reload() {
+    stopRepeatingFire()
+    reloadTask = Task { [weak self] in await self?.performReload() }
+  }
+
+  func performReload() async {
+    guard canReload, let session else { return }
+    isReloadRequestPending = true
+    defer { if self.session == session { isReloadRequestPending = false } }
+    do {
+      let result = try await gameSessionClient.startReload(session: session)
+      guard !Task.isCancelled, self.session == session else { return }
+      if latestSnapshot?.match.phase == .running, localPlayer?.lifeState == .alive,
+        localPlayer?.reloadEndsAt == nil, localPlayer?.ammo != 8,
+        (latestSnapshot?.serverNow ?? 0) < result.reloadEndsAt
+      {
+        reloadAcknowledgedUntil = result.reloadEndsAt
+      }
+      onErrorMessage?(nil)
+    } catch {
+      guard !Task.isCancelled, self.session == session else { return }
+      present(error)
+    }
+  }
+
+  func startRepeatingFire() {
+    guard repeatFireTask == nil, canFireMarkerless else { return }
+    isTriggerHeld = true
+    repeatFireTask = Task { [weak self] in
+      var attemptedShot = false
+      while !Task.isCancelled {
+        guard let self, self.isTriggerHeld, self.presenceReady,
+          !self.gates.isInputLocked(), self.latestSnapshot?.match.phase == .running,
+          (self.localPlayer?.lifeState == .alive || self.hasPendingMarkerlessReplay),
+          (!self.isReloading || self.hasPendingMarkerlessReplay)
+        else { break }
+        if case .pending = self.markerlessShotState {
+          // Releasing the trigger must not cancel an already dispatched mutation.
+        } else if self.canFireMarkerless {
+          // A new press can recover a previous failure. A failure during this
+          // press stops repetition, preventing an unattended retry loop.
+          if case .failed = self.markerlessShotState, attemptedShot { break }
+          if self.hasPendingMarkerlessReplay || self.fireCooldownRemaining(at: self.now()) == 0 {
+            attemptedShot = true
+            self.fireMarkerless()
+          }
+        } else {
+          break
+        }
+        try? await Task.sleep(for: .milliseconds(16))
+      }
+      guard !Task.isCancelled else { return }
+      self?.isTriggerHeld = false
+      self?.repeatFireTask = nil
+    }
+  }
+
+  func stopRepeatingFire() {
+    isTriggerHeld = false
+    repeatFireTask?.cancel()
+    repeatFireTask = nil
+  }
+
+  func setSceneActive(_ active: Bool) {
+    if active { startHeartbeat() }
+    else {
+      stopRepeatingFire()
+      presenceReady = false
+      heartbeatTask?.cancel()
+      heartbeatTask = nil
+    }
+  }
+
+  private func startHeartbeat() {
+    guard heartbeatTask == nil, let expectedSession = session else { return }
+    let client = gameSessionClient
+    heartbeatTask = Task { [weak self] in
+      while !Task.isCancelled, self?.session == expectedSession {
+        do {
+          try await client.heartbeat(session: expectedSession)
+          guard !Task.isCancelled, let self, self.session == expectedSession else { return }
+          self.presenceReady = true
+        } catch {
+          guard !Task.isCancelled, let self, self.session == expectedSession else { return }
+          self.presenceReady = false
+          self.stopRepeatingFire()
+        }
+        try? await Task.sleep(for: .seconds(5))
+      }
+    }
   }
 
   func performDebugFire() async {
@@ -308,30 +495,31 @@ final class DuelSession: ObservableObject {
       onErrorMessage?("SHOT LOCKED WHILE RECONNECTING")
       return
     }
-    guard snapshot.match.phase == .running,
-      let opponent = snapshot.players.first(where: { $0.id != session.playerId }),
-      opponent.lifeState == .alive
+    guard snapshot.match.phase == .running || hasPendingMarkerlessReplay
     else {
       onErrorMessage?("PUT THE CROSSHAIR ON YOUR OPPONENT")
       return
     }
     guard canFireMarkerless else { return }
+    guard hasPendingMarkerlessReplay || fireCooldownRemaining(at: now()) == 0 else { return }
 
     let request: FireShotRequest
-    let zone: HitZone
+    let zone: HitZone?
+    let dispatchedAt = now()
     if let retryRequest = pendingMarkerlessRequest,
-      case .failed(reason: nil) = markerlessShotState,
-      let retryZone = retryRequest.zone
+      case .failed(reason: nil) = markerlessShotState
     {
       request = retryRequest
-      zone = retryZone
+      zone = retryRequest.zone
     } else {
-      guard let freshZone = markerlessAimZone else { return }
-      zone = freshZone
+      let opponent = snapshot.players.first(where: { $0.id != session.playerId && $0.lifeState == .alive })
+      let aimedZone = markerlessAimZone
+      let minimumConfidence = aimedZone == .head ? 0.60 : 0.45
+      zone = opponent != nil && targetingSnapshot.hitConfidence >= minimumConfidence ? aimedZone : nil
       let ray = targetingSnapshot.cameraRay
       request = FireShotRequest(
         clientShotId: makeShotId(),
-        targetId: opponent.id,
+        targetId: zone == nil ? nil : opponent?.id,
         zone: zone,
         poseConfidence: targetingSnapshot.hitConfidence,
         origin: ray.map { [$0.origin.x, $0.origin.y, $0.origin.z] },
@@ -342,12 +530,16 @@ final class DuelSession: ObservableObject {
       pendingMarkerlessRequest = request
     }
     setMarkerlessShotState(.pending(zone: zone))
+    lastDispatchedAt = dispatchedAt
     onErrorMessage?(nil)
-    sendPeerTracer(for: request)
+    if outgoingShot?.id != request.clientShotId {
+      outgoingShot = OutgoingShot(id: request.clientShotId, ray: targetingSnapshot.cameraRay)
+      sendPeerTracer(for: request)
+    }
 
     do {
       let result = try await gameSessionClient.fire(session: session, request: request)
-      guard !Task.isCancelled else { return }
+      guard !Task.isCancelled, self.session == session else { return }
       guard result.clientShotId == request.clientShotId else {
         throw GameSessionClientError.invalidSnapshot
       }
@@ -355,9 +547,7 @@ final class DuelSession: ObservableObject {
         pendingMarkerlessRequest = nil
         setMarkerlessShotState(.failed(reason: result.rejectReason))
         if result.rejectReason == .fireCooldown {
-          if lastAcceptedShotAt == nil {
-            lastAcceptedShotAt = now()
-          }
+          lastDispatchedAt = now()
         } else {
           onErrorMessage?(Self.message(for: result.rejectReason))
         }
@@ -370,9 +560,9 @@ final class DuelSession: ObservableObject {
         zone: zone,
         damage: result.damage
       ))
-      lastAcceptedShotAt = now()
+      lastAcceptedShotAt = dispatchedAt
     } catch {
-      guard !Task.isCancelled else { return }
+      guard !Task.isCancelled, self.session == session else { return }
       setMarkerlessShotState(.failed(reason: nil))
       present(error)
     }
@@ -414,42 +604,66 @@ final class DuelSession: ObservableObject {
   }
 
   private func updateIncomingShot(from snapshot: MatchSnapshot) {
-    let opponentID = snapshot.players.first(where: { $0.id != snapshot.localPlayerId })?.id
-    let newEvents = snapshot.events.filter { event in
+    guard let opponentID = snapshot.players.first(where: { $0.id != snapshot.localPlayerId })?.id,
+      let startedAt = snapshotSubscriptionStartedAt
+    else {
+      publishIncomingShots([])
+      return
+    }
+    var batch: [IncomingShot] = []
+    for event in snapshot.events.sorted(by: {
+      ($0.createdAt, $0.id) < ($1.createdAt, $1.id)
+    }) {
       guard [.shot, .hit, .eliminated].contains(event.type),
         event.actorPlayerId == opponentID,
         !seenIncomingShotEventIDs.contains(event.id)
-      else { return false }
+      else { continue }
       seenIncomingShotEventIDs.insert(event.id)
       seenIncomingShotEventOrder.append(event.id)
       if seenIncomingShotEventOrder.count > Self.incomingShotDedupCapacity {
         let evicted = seenIncomingShotEventOrder.removeFirst()
         seenIncomingShotEventIDs.remove(evicted)
       }
-      return true
+      guard event.createdAt >= startedAt else { continue }
+      let renderTracer = rememberIncomingTracer(shooterID: opponentID, shotID: event.clientShotId)
+      let hit = event.type != .shot
+      // A matching peer frame replaces only the cosmetic tracer. Health and
+      // damage feedback always come from the distinct authoritative event.
+      guard renderTracer || hit else { continue }
+      batch.append(IncomingShot(
+        eventID: event.id,
+        hit: hit,
+        zone: event.zone,
+        timestamp: event.createdAt,
+        source: .convex,
+        renderTracer: renderTracer
+      ))
     }
-    guard let startedAt = snapshotSubscriptionStartedAt,
-      let event = newEvents
-        .filter({ $0.createdAt >= startedAt })
-        .max(by: { $0.createdAt < $1.createdAt })
-    else { return }
-    let peerAlreadyRendered =
-      lastPeerShotAt.map { now().timeIntervalSince($0) < Self.peerTracerSuppressionWindow } == true
-    if peerAlreadyRendered && event.type == .shot { return }
-    incomingShot = IncomingShot(
-      eventID: event.id,
-      hit: event.type != .shot,
-      zone: event.zone,
-      timestamp: event.createdAt,
-      source: .convex
-    )
+    publishIncomingShots(batch)
+  }
+
+  /// Legacy events without a shot ID cannot safely match an earlier peer frame.
+  private func rememberIncomingTracer(shooterID: String, shotID: String?) -> Bool {
+    guard let shotID, !shotID.isEmpty else { return true }
+    let identity = TracerIdentity(shooterID: shooterID, shotID: shotID)
+    guard renderedTracerIDs.insert(identity).inserted else { return false }
+    renderedTracerOrder.append(identity)
+    if renderedTracerOrder.count > Self.incomingShotDedupCapacity {
+      renderedTracerIDs.remove(renderedTracerOrder.removeFirst())
+    }
+    return true
+  }
+
+  private func publishIncomingShots(_ batch: [IncomingShot]) {
+    if let last = batch.last { incomingShot = last }
+    incomingShots = batch
   }
 
   private func impactPoint(
-    for zone: HitZone,
+    for zone: HitZone?,
     ray: TargetingCameraRay?
   ) -> [Double]? {
-    if let skeleton = targetingSnapshot.skeleton {
+    if let zone, let skeleton = targetingSnapshot.skeleton {
       let jointName = zone == .head ? "head" : "root"
       if let point = skeleton.position(of: jointName) {
         return [point.x, point.y, point.z]
@@ -482,23 +696,27 @@ final class DuelSession: ObservableObject {
       let role = snapshot.players.first(where: { $0.id == snapshot.localPlayerId })?.role,
       let link = makePeerLink(for: snapshot)
     {
+      let expectedMatchID = snapshot.match.id
       link.onMessage = { [weak self] message, _ in
         guard case .shotTracer(let tracer) = message else { return }
         Task { @MainActor [weak self] in
           guard let self,
             let latestSnapshot = self.latestSnapshot,
+            latestSnapshot.match.id == expectedMatchID,
+            latestSnapshot.match.phase == .running,
             let opponentID = latestSnapshot.players
               .first(where: { $0.id != latestSnapshot.localPlayerId })?.id,
-            tracer.shooterPlayerId == opponentID
+            tracer.shooterPlayerId == opponentID,
+            !tracer.shotId.isEmpty,
+            self.rememberIncomingTracer(shooterID: opponentID, shotID: tracer.shotId)
           else { return }
-          self.lastPeerShotAt = self.now()
-          self.incomingShot = IncomingShot(
+          self.publishIncomingShots([IncomingShot(
             eventID: "peer:" + tracer.shotId,
             hit: false,
             zone: nil,
             timestamp: self.now().timeIntervalSince1970 * 1_000,
             source: .peer
-          )
+          )])
         }
       }
       duelPeerLink = link

@@ -97,6 +97,7 @@ export default defineSchema({
     shotsHit: v.number(),
     headshots: v.number(),
     lastShotAt: nullableNumber,
+    reloadEndsAt: v.optional(nullableNumber),
     respawnAt: nullableNumber,
     lastSeenAt: v.number(),
     joinedAt: v.number(),
@@ -146,6 +147,9 @@ export default defineSchema({
 
   events: defineTable({
     matchId: v.id("matches"),
+    // Optional for existing rows and lifecycle events; paired with the actor
+    // for exact deduplication of predicted and durably confirmed shots.
+    clientShotId: v.optional(v.string()),
     type: v.union(
       v.literal("joined"),
       v.literal("ready"),

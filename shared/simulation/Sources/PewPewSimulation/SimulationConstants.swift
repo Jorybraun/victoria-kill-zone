@@ -21,7 +21,7 @@ public enum SimulationConstants {
 /// authority and the durable ledger never disagree on a number.
 public enum SidearmRules {
   public static let magazineSize = 8
-  public static let fireCooldownMilliseconds: Int64 = 350
+  public static let fireCooldownMilliseconds: Int64 = 150
   public static let reloadDurationMilliseconds: Int64 = 1250
   public static let respawnDelayMilliseconds: Int64 = 5000
   public static let spawnProtectionMilliseconds: Int64 = 2000

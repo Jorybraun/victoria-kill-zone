@@ -8,6 +8,8 @@ enum ConvexGameSessionContract {
   static let join = "matches:join"
   static let setReady = "matches:setReady"
   static let start = "matches:start"
+  static let heartbeat = "players:heartbeat"
+  static let startReload = "players:startReload"
   static let fire = "shots:fire"
   static let debugFire = "shots:debugFire"
   static let matchSnapshot = "queries:matchSnapshot"
@@ -143,6 +145,26 @@ final class ConvexGameSessionClient: GameSessionClient, @unchecked Sendable {
     } catch {
       throw Self.mapped(error)
     }
+  }
+
+  func heartbeat(session: PlayerSession) async throws {
+    do {
+      try await client.mutation(
+        ConvexGameSessionContract.heartbeat,
+        with: ConvexGameSessionArguments.authenticated(session)
+      )
+    } catch { throw Self.mapped(error) }
+  }
+
+  func startReload(session: PlayerSession) async throws -> ReloadResult {
+    do {
+      let result: ReloadResultWire = try await client.mutation(
+        ConvexGameSessionContract.startReload,
+        with: ConvexGameSessionArguments.authenticated(session)
+      )
+      guard result.reloadEndsAt.isFinite else { throw GameSessionClientError.invalidSnapshot }
+      return ReloadResult(ammo: try exactInteger(result.ammo), reloadEndsAt: result.reloadEndsAt)
+    } catch { throw Self.mapped(error) }
   }
 
   func debugFire(session: PlayerSession, clientShotId: String) async throws -> DebugFireResult {
@@ -305,6 +327,7 @@ struct PlayerSnapshotWire: Decodable {
   @OptionalConvexFloat var deaths: Double?
   let lifeState: PlayerLifeState?
   @OptionalConvexFloat var respawnAt: Double?
+  @OptionalConvexFloat var reloadEndsAt: Double?
 
   func domainValue() throws -> PlayerSnapshot {
     PlayerSnapshot(
@@ -318,7 +341,8 @@ struct PlayerSnapshotWire: Decodable {
       kills: try kills.map(exactInteger) ?? 0,
       deaths: try deaths.map(exactInteger) ?? 0,
       lifeState: lifeState ?? (connected ? .alive : .disconnected),
-      respawnAt: respawnAt
+      respawnAt: respawnAt,
+      reloadEndsAt: reloadEndsAt
     )
   }
 }
@@ -332,6 +356,7 @@ struct EventSnapshotWire: Decodable {
   let targetPlayerId: String?
   let zone: String?
   @OptionalConvexFloat var damage: Double?
+  let clientShotId: String?
 
   func domainValue() throws -> EventSnapshot {
     return EventSnapshot(
@@ -342,7 +367,8 @@ struct EventSnapshotWire: Decodable {
       actorPlayerId: actorPlayerId,
       targetPlayerId: targetPlayerId,
       zone: zone.flatMap { HitZone(rawValue: $0)?.rawValue },
-      damage: try damage.map(exactInteger)
+      damage: try damage.map(exactInteger),
+      clientShotId: clientShotId
     )
   }
 }
@@ -399,6 +425,11 @@ private struct FireShotResultWire: Decodable {
       rejectReason: rejectReason
     )
   }
+}
+
+private struct ReloadResultWire: Decodable {
+  @ConvexFloat var ammo: Double
+  @ConvexFloat var reloadEndsAt: Double
 }
 
 private func exactInteger(_ value: Double) throws -> Int {

@@ -15,7 +15,7 @@ One registry drives every gun: server-owned numbers decide combat outcomes, clie
 
 ## 1. Registry schema
 
-Extends the technical spec's `WeaponDefinition` sketch (spec §5.4). One deliberate deviation: `roundsPerMinute: Double` becomes `fireCooldownMs: Int`, because the wire rules require exact-integer durations and the live constant is already `FIRE_COOLDOWN_MS = 350`.
+Extends the technical spec's `WeaponDefinition` sketch (spec §5.4). One deliberate deviation: `roundsPerMinute: Double` becomes `fireCooldownMs: Int`, because the wire rules require exact-integer durations and the live constant is already `FIRE_COOLDOWN_MS = 150`.
 
 | Field | Type | Rules |
 |---|---|---|
@@ -45,11 +45,11 @@ All pacing is against `INITIAL_HEALTH = 100`.
 
 | # | id | displayName | bulletType | head / torso / limbs | fireCooldownMs | magazineSize | reloadDurationMs | projectile speed |
 |---|---|---|---|---|---|---|---|---|
-| 1 | `sidearm-mk1` | Standard Sidearm | hitscan | 75 / 34 / 20 | 350 | 8 | 1250 | — |
+| 1 | `sidearm-mk1` | Standard Sidearm | hitscan | 75 / 34 / 20 | 150 | 8 | 1250 | — |
 | 2 | `bolt-caster` | Bolt Caster | projectile | 100 / 60 / 40 | 900 | 3 | 2000 | 12 m/s, lifetime 2000 ms |
 | 3 | `repeater` | Repeater | hitscan | 30 / 18 / 12 | 150 | 24 | 2000 | — |
 
-`sidearm-mk1` is exactly the current implicit weapon: `HEAD_DAMAGE = 75`, `TORSO_DAMAGE = 34`, `LIMB_DAMAGE = 20`, `MAGAZINE_SIZE = 8`, `FIRE_COOLDOWN_MS = 350`, `RELOAD_DURATION_MS = 1250`. The current build is registry-conformant on the day this lands.
+`sidearm-mk1` is exactly the current implicit weapon: `HEAD_DAMAGE = 75`, `TORSO_DAMAGE = 34`, `LIMB_DAMAGE = 20`, `MAGAZINE_SIZE = 8`, `FIRE_COOLDOWN_MS = 150`, `RELOAD_DURATION_MS = 1250`. The current build is registry-conformant on the day this lands.
 
 ### Shots to kill (STK = ⌈100 / damage⌉)
 
@@ -63,7 +63,7 @@ All pacing is against `INITIAL_HEALTH = 100`.
 
 | Weapon | Head | Torso | Limbs |
 |---|---|---|---|
-| Standard Sidearm | 350 ms | 700 ms | 1400 ms |
+| Standard Sidearm | 150 ms | 300 ms | 600 ms |
 | Bolt Caster | 0 ms + travel | 900 ms + travel | 1800 ms + travel |
 | Repeater | 450 ms | 750 ms | 1200 ms |
 
@@ -73,7 +73,7 @@ Bolt Caster travel time over the 3–15 m play lane (slice 002) at 12 m/s: 250�
 
 | Weapon | Cycle | Head DPS | Torso DPS | Limbs DPS |
 |---|---|---|---|---|
-| Standard Sidearm | 8×350 + 1250 = 4050 ms | 148.1 | 67.2 | 39.5 |
+| Standard Sidearm | 8×150 + 1250 = 2450 ms | 244.9 | 111.0 | 65.3 |
 | Bolt Caster | 3×900 + 2000 = 4700 ms | 63.8 | 38.3 | 25.5 |
 | Repeater | 24×150 + 2000 = 5600 ms | 128.6 | 77.1 | 51.4 |
 
@@ -185,3 +185,5 @@ Design does not edit `contracts/**` or `docs/interface-contracts.md`. The follow
 3. May players in one match choose different weapons at launch, or does weapons v1 ship with a single host-selected match-wide weapon first?
 4. Repeater at 150 ms cooldown likely exceeds the voice-trigger cadence — is trigger-button-only acceptable for it, or must every weapon be voice-fireable?
 5. Should the eventual bullet-time round consume magazine ammo or be entitlement-only? (Feeds ADR 0005; no registry impact until then.)
+
+ADR 0007 updates Standard Sidearm cadence to 150 ms from the original 350 ms registry freeze. Other weapon entries remain proposed content; their comparative balance requires fresh playtesting.
