@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { TickCadence } from "../src/cadence.js";
 
 describe("authoritative tick cadence", () => {
+  it("assigns handler arrivals to wall intervals without using client timestamps", () => {
+    const cadence = new TickCadence(1000);
+    expect([990, 1000, 1001, 1050, 1051, 1100, 1101, 1249].map(at => cadence.inputTick(20, at)))
+      .toEqual([21, 21, 21, 21, 22, 22, 23, 25]);
+    cadence.committedTick();
+    // Earlier queued arrivals cannot be retroactively applied to a committed tick.
+    expect(cadence.inputTick(21, 1001)).toBe(22);
+    expect(cadence.inputTick(21, 1101)).toBe(23);
+  });
+
   it("does not accumulate logical clock drift under repeated late callbacks", () => {
     const cadence = new TickCadence(0);
     let now = 0, matchTimeMs = 0;

@@ -1,0 +1,200 @@
+{
+  "generatedAt": "2026-09-06T22:50:51.115Z",
+  "sourceHead": "b52aa5a4b814be11cbe6dce278da40023d701ec1",
+  "sourceFilesSha256": {
+    "ios/VictoriaKillZone/VictoriaKillZone/Services/Realtime/CombatClock.swift": "522cc405384d024725de69cafc4ab5c74b9955a6dfcebb8a3640a5cdd9d4e09b",
+    "ios/VictoriaKillZone/VictoriaKillZone/Services/Realtime/RealtimeCombatSession.swift": "974addb70b26ea9f456c0ed70e44519aea1dbd0ecf9a6cb7bfde959829cd9409",
+    "packages/combat-protocol/src/index.ts": "d1e67cb11af7d20cc85994f97a374eff038d64bc8a30cc47a476722c0665b411",
+    "packages/combat-protocol/src/validation.ts": "3a943920a3694d06c22db434d98992654b4e3d7a5cc9f4f9c0c3ddfa75d795cb",
+    "packages/combat-simulation/src/flight.ts": "2d97514ed588fc46d23b96f5bf63a9224f7f36b5be28914d172cf36e1b5f409f",
+    "packages/combat-simulation/src/geometry.ts": "7027327ddd8c43cecbac076a80fa4ccc497c2dec2a55be3fde6a4a68c87e89a8",
+    "packages/combat-simulation/src/history.ts": "16f8db78cc956c3c72ffea1c283fc6147b5f0d7d365608b1fa021a137dd279d6",
+    "packages/combat-simulation/src/index.ts": "96d9dce63f8605a7a79f220468dff515aad7826fc6e6fb7154500a04fc00db9e",
+    "packages/combat-simulation/src/state.ts": "f14603cb89cc8668d6ed8fc603017945e723ef2b3deb2cf1265b62dc84c782b9",
+    "pnpm-lock.yaml": "07c06355e925ac2fadb85bfd18cd3be4896ccac3709176ce77bd72f986bb1147",
+    "services/combat-worker/benchmarks/catch-up-reporter.ts": "2b79a7f4baf8e06540fcb58014162cd3d2ca4f0694433302f4fa29b39a61cac5",
+    "services/combat-worker/benchmarks/four-player.load.ts": "5b5a34dcee4e21271c8c4fb16f23b31c0c3fdc9403f6830b08b33c0f3b90e227",
+    "services/combat-worker/benchmarks/four-player.node-load.ts": "59339d638865c34918c31f35e96ee3dde355ebfbb30d78fba4f0b3ee245e2cf6",
+    "services/combat-worker/benchmarks/load-client.ts": "044c2fe2798e1b85b86da86a604b357e0c10c6cf2cfba5c2b3c465f6cf6693a1",
+    "services/combat-worker/benchmarks/load-reporter.ts": "4f8b1fb17c8dbf7bcee7f00735a534fc3bd4ff51d1dca0e02507dfd48fdad645",
+    "services/combat-worker/benchmarks/load-runtime.ts": "70b38d6898b4e8ea62a84342dfaf350edd7e100cc8732d10737e9051ee1c5509",
+    "services/combat-worker/benchmarks/load-scenario.ts": "3bb8337843d46c8c0c8804ef3e4e6ab16e7cc77a829aed4ae59dc017c58a54f0",
+    "services/combat-worker/benchmarks/native-clock.ts": "3c6c528c89c0a419a0558c48bc0fe9296e1935e9d30f979151417a53ff028c7f",
+    "services/combat-worker/benchmarks/node-runtime.ts": "4892bd12877ce842bfeee2bf42330159cd17f9bbf55fbcda727f798ee10b44e2",
+    "services/combat-worker/benchmarks/runtime-profile.ts": "10bfa126c606fd5399091024af6648263b472e8c1f6bc405ae21da030640e23b",
+    "services/combat-worker/package.json": "992e5a27954fe84f5ed27ba2f84517ae0363691b5a6972a89ccdcc91fd3e674a",
+    "services/combat-worker/src/auth.ts": "56e5865f3b4b41bbcbed93dee4fb2764f965dfc4e49d7f175e2e58e598089312",
+    "services/combat-worker/src/bullet-ledger.ts": "659c6c891559bb2bbd0b64242bb1b48e272750abfa52d0a614992fd888355c25",
+    "services/combat-worker/src/cadence.ts": "c937076005802502537d47757bf5ddd8cf93cbd84c679ef3112bcec6a619f858",
+    "services/combat-worker/src/canonical.ts": "a4e1085c0915238ae1a21058a81ff02aeb2d28b462cb5e6ccdc347eaf20f8635",
+    "services/combat-worker/src/command-fingerprint.ts": "cd91d5ace7535abd45f303aefa2d70b36f198494499b4ee1ed4fccc8a1b13b31",
+    "services/combat-worker/src/connection.ts": "7ad776977296d18e9b24ad2b53862c1c606f97eb6a14c8d3c37ade09cbb5ddd7",
+    "services/combat-worker/src/index.ts": "70351c95695eb9202167a2f93f2e4bcb4bd9f3187455283f6d3af327265b312d",
+    "services/combat-worker/src/maps.ts": "b79e738fad0865c7c692f313e52e289c3232d135eb8a1b1829264043ca301b7e",
+    "services/combat-worker/src/projection-delivery.ts": "345cda479c5100635e1bddd683a3768e2ee48d4b95d411abc7f661071ae9c68d",
+    "services/combat-worker/src/projection-store.ts": "75bfb0a3115331992d4e233681d6381947c00b3df34c3935ceec363a2ecb3a0a",
+    "services/combat-worker/src/room.ts": "a525a2fc00355487bfa252cd0ef1c54df3c1bead726861fb03c3aa92d625895a",
+    "services/combat-worker/src/routes.ts": "8b2def872e15f36cb907cae24c9ba5111659818ff7722e27399afc3460e12b85",
+    "services/combat-worker/src/serial-queue.ts": "f024fe3f2280293302653e695255466e73485b3aa22e5fcb28166ec48b37f88c",
+    "services/combat-worker/src/store.ts": "8c286a0d2657b7abce1a7a2371bd0ecb904d03860d5eb85907b08ab669a8632f",
+    "services/combat-worker/tests/catch-up-input.test.ts": "185e038806256711e3e1f270d74b7b0fca5c40c306f9e587358257de6490d35a",
+    "services/combat-worker/tests/helpers.ts": "afd8d6c8f2890364c9a2c73846f40f52696aa4227df40b5143dc7ab270209990",
+    "services/combat-worker/tsconfig.json": "3d629d3db06804501a2b28c824d4a6453d45b32ef7c14751ed10e01799c2ba14",
+    "services/combat-worker/vitest.config.ts": "6c9ac99c6fcc0a90cd30c9b36b50cc3f5bfd7ec1abfce3f6b1b9e0492f66b316",
+    "services/combat-worker/vitest.load.config.ts": "c52a98661c3dca10c91f2bfcb29c7fa51612353fbb8bcd9e55e1516cf72cad69",
+    "services/combat-worker/vitest.node-load.config.ts": "027c671711a86e89b22700216343c5eb1d4285157759b4e25da7e5326ddbd1d6",
+    "services/combat-worker/wrangler.jsonc": "fc6e1da75bba2074cc8c1fc6df07652e572ef4b8759f6ebef3fc2b82e8d7dcd0"
+  },
+  "environment": "local-workerd-authenticated-handler-diagnostic",
+  "node": "v26.7.0",
+  "results": [
+    {
+      "name": "assigns queued poses to their arrival intervals during bounded catch-up",
+      "state": "passed",
+      "failures": [],
+      "result": {
+        "clock": "local monotonic milliseconds; controlled queue hold and authenticated handler injection; network leg excluded",
+        "before": {
+          "tick": 2,
+          "cadenceLagMs": 140,
+          "pending": 12
+        },
+        "outcomes": [
+          {
+            "sequence": 3,
+            "capturedAtMs": 120,
+            "receivedAtMs": 121,
+            "admittedAtMs": 231,
+            "queueResidenceMs": 110,
+            "processedAtMs": 150,
+            "reason": null
+          },
+          {
+            "sequence": 3,
+            "capturedAtMs": 120,
+            "receivedAtMs": 121,
+            "admittedAtMs": 232,
+            "queueResidenceMs": 111,
+            "processedAtMs": 150,
+            "reason": null
+          },
+          {
+            "sequence": 3,
+            "capturedAtMs": 120,
+            "receivedAtMs": 121,
+            "admittedAtMs": 232,
+            "queueResidenceMs": 111,
+            "processedAtMs": 150,
+            "reason": null
+          },
+          {
+            "sequence": 3,
+            "capturedAtMs": 120,
+            "receivedAtMs": 121,
+            "admittedAtMs": 232,
+            "queueResidenceMs": 111,
+            "processedAtMs": 150,
+            "reason": null
+          },
+          {
+            "sequence": 4,
+            "capturedAtMs": 170,
+            "receivedAtMs": 171,
+            "admittedAtMs": 232,
+            "queueResidenceMs": 61,
+            "processedAtMs": 200,
+            "reason": null
+          },
+          {
+            "sequence": 4,
+            "capturedAtMs": 170,
+            "receivedAtMs": 171,
+            "admittedAtMs": 232,
+            "queueResidenceMs": 61,
+            "processedAtMs": 200,
+            "reason": null
+          },
+          {
+            "sequence": 4,
+            "capturedAtMs": 170,
+            "receivedAtMs": 171,
+            "admittedAtMs": 232,
+            "queueResidenceMs": 61,
+            "processedAtMs": 200,
+            "reason": null
+          },
+          {
+            "sequence": 4,
+            "capturedAtMs": 170,
+            "receivedAtMs": 171,
+            "admittedAtMs": 232,
+            "queueResidenceMs": 61,
+            "processedAtMs": 200,
+            "reason": null
+          },
+          {
+            "sequence": 5,
+            "capturedAtMs": 220,
+            "receivedAtMs": 221,
+            "admittedAtMs": 232,
+            "queueResidenceMs": 11,
+            "processedAtMs": 250,
+            "reason": null
+          },
+          {
+            "sequence": 5,
+            "capturedAtMs": 220,
+            "receivedAtMs": 221,
+            "admittedAtMs": 232,
+            "queueResidenceMs": 11,
+            "processedAtMs": 250,
+            "reason": null
+          },
+          {
+            "sequence": 5,
+            "capturedAtMs": 220,
+            "receivedAtMs": 221,
+            "admittedAtMs": 232,
+            "queueResidenceMs": 11,
+            "processedAtMs": 250,
+            "reason": null
+          },
+          {
+            "sequence": 5,
+            "capturedAtMs": 220,
+            "receivedAtMs": 221,
+            "admittedAtMs": 232,
+            "queueResidenceMs": 11,
+            "processedAtMs": 250,
+            "reason": null
+          }
+        ],
+        "ticks": [
+          {
+            "atMs": 243,
+            "matchTimeMs": 150,
+            "phase": "running",
+            "projectiles": 1,
+            "pending": 8
+          },
+          {
+            "atMs": 246,
+            "matchTimeMs": 200,
+            "phase": "running",
+            "projectiles": 1,
+            "pending": 4
+          },
+          {
+            "atMs": 252,
+            "matchTimeMs": 250,
+            "phase": "running",
+            "projectiles": 1,
+            "pending": 0
+          }
+        ],
+        "durableCommands": 12,
+        "terminalReasons": []
+      }
+    }
+  ]
+}

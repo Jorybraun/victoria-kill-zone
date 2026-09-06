@@ -21,7 +21,7 @@ const IDLE_RETENTION_MS = 24 * 60 * 60 * 1000;
 const ALARM_CHECK_MS = 30_000;
 const EVENTS_PER_MESSAGE = 16;
 const encoder = new TextEncoder();
-type PendingCommand = { command: AuthenticatedCommand; fingerprint: string };
+type PendingCommand = { command: AuthenticatedCommand; fingerprint: string; tick: number };
 
 /** One authoritative room. Convex owns admission; it never receives combat writes here. */
 export class CombatRoom extends DurableObject<Env> {
@@ -131,7 +131,9 @@ export class CombatRoom extends DurableObject<Env> {
         const events = existing === undefined ? [] : candidate.setConnected(claims.playerId, false);
         events.push(...candidate.setConnected(claims.playerId, true));
         const committed = await this.commitCandidate(candidate, events, []);
-        if (this.connections.size === 0) this.cadence.reset(performance.now());
+        // Deferred input still owns the active cadence across a brief disconnect.
+        // Resetting here could put a reconnect's later sequence ahead of it.
+        if (this.connections.size === 0 && this.pending.length === 0) this.cadence.reset(performance.now());
         if (existing !== undefined) {
           this.pending = this.pending.filter((item) => item.command.playerId !== claims.playerId);
           this.connections.delete(existing.socket);
@@ -154,6 +156,7 @@ export class CombatRoom extends DurableObject<Env> {
   }
 
   override async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    const receivedAtMs = performance.now();
     try {
       await this.queue.run(() => {
         const connection = this.connections.get(socket);
@@ -178,7 +181,7 @@ export class CombatRoom extends DurableObject<Env> {
         switch (parsed.type) {
           case "command":
             if (!connection.admitCommand(Date.now())) { this.error(connection, "rateLimited"); connection.close(4008, "command-rate-exceeded"); break; }
-            this.admitCommand(connection, parsed.envelope); break;
+            this.admitCommand(connection, parsed.envelope, receivedAtMs); break;
           case "received":
             if (!connection.acknowledge(parsed.eventSequence)) connection.close(1008, "invalid-receipt");
             break;
@@ -238,7 +241,7 @@ export class CombatRoom extends DurableObject<Env> {
     });
   }
 
-  private admitCommand(connection: Connection, envelope: CommandEnvelope): void {
+  private admitCommand(connection: Connection, envelope: CommandEnvelope, receivedAtMs: number): void {
     if (this.simulation === null) return;
     const snapshot = this.simulation.snapshot();
     const canonical = canonicalJson(envelope);
@@ -278,7 +281,8 @@ export class CombatRoom extends DurableObject<Env> {
       connection.close(4008, "command-queue-full");
       return;
     }
-    this.pending.push({ command: { ...envelope, playerId: connection.playerId }, fingerprint });
+    this.pending.push({ command: { ...envelope, playerId: connection.playerId }, fingerprint,
+      tick: this.cadence.inputTick(snapshot.tick, receivedAtMs) });
     this.scheduleTick();
   }
 
@@ -305,11 +309,15 @@ export class CombatRoom extends DurableObject<Env> {
       this.scheduleTick();
       return;
     }
-    const pending = this.pending;
+    // Inputs belong to their server-observed arrival interval. A delayed callback
+    // must not drain later arrivals into the oldest catch-up tick. Client capture
+    // timestamps still face the unchanged future/stale checks when consumed.
+    const nextTick = this.simulation.snapshot().tick + 1;
+    const pending = this.pending.filter(item => item.tick <= nextTick);
     const candidate = this.simulation.fork();
     const events = candidate.advance(pending.map((item) => item.command));
     const committed = await this.commitCandidate(candidate, events, pending);
-    this.pending = [];
+    this.pending = this.pending.filter(item => item.tick > nextTick);
     // Preserve the ideal cadence. Small scheduler delays are caught up with
     // bounded single steps; a large stall takes the explicit recovery path.
     this.cadence.committedTick();
