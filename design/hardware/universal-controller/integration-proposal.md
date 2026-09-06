@@ -10,7 +10,7 @@ The player docks a phone vertically in an adjustable, brightly coloured arcade g
 
 A normally-open momentary switch is read by a small Bluetooth Low Energy board. Firmware debounces the switch and reports button state plus a monotonic sequence counter. The app acts as the BLE central through Apple's [Core Bluetooth](https://developer.apple.com/documentation/corebluetooth) APIs. A [Seeed XIAO nRF52840](https://wiki.seeedstudio.com/XIAO_BLE/) is one board candidate: the manufacturer lists a 21 × 17.8 mm board and BLE support. Board choice, circuit, supply, wiring clearance, antenna location, service UUIDs and message layout remain to be confirmed on a bench.
 
-Prototype the link with USB power from an external power bank. This kit has no battery cradle, battery selection, charging design, firmware, or demonstrated radio connection. The small access opening is for loose wire routing; remove the cover for board programming and power until a connector-specific panel is designed.
+Prototype the link with USB power from an external power bank. This kit has no battery cradle, battery selection, charging design, firmware, or demonstrated radio connection. The enclosure has no connector-specific power opening; remove the cover for board programming and power until a connector panel is designed.
 
 This is a custom BLE peripheral proposal, not a claim that an arbitrary Bluetooth camera shutter remote will work. Camera remotes often present another kind of input; prove compatibility with the app before choosing one. A supported game controller is a possible later alternative via Apple's [Game Controller](https://developer.apple.com/documentation/gamecontroller) framework.
 

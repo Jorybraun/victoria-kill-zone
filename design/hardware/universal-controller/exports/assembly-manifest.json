@@ -1,5 +1,6 @@
 {
   "format_version": 1,
+  "design_revision": "arcade-blaster-v1",
   "units": "mm",
   "status": "UNTESTED_BENCH_FIT_PROTOTYPE",
   "axes": {
@@ -30,7 +31,11 @@
     "cover_pilot": 2.1,
     "cover_clearance": 2.8,
     "button_bore": 16.4,
-    "button_panel_thickness": 4.0
+    "button_panel_thickness": 4.0,
+    "grip_sweep_start_z": -45.0,
+    "lower_grip_sweep": 0.35,
+    "closed_nose_end_y": 90.0,
+    "trigger_guard_width": 12.0
   },
   "parts": [
     {
@@ -51,7 +56,7 @@
               0.0,
               6.123233995736766e-17,
               1.0,
-              -8.939921633775678e-15
+              -22.049999237060558
             ],
             [
               -0.0,
@@ -81,7 +86,7 @@
       ],
       "spare_only": false,
       "print_orientation": "STL is already oriented with minimum XYZ at zero; verify supports in slicer.",
-      "supports": "Supports required under raised backplate and its slot recesses; inspect cavity roof bridging in slicer.",
+      "supports": "Supports required under raised backplate, swept upper grip, closed nose and guard; inspect cavity roof bridging and switch bore in slicer.",
       "bounds_mm": [
         [
           0.0,
@@ -91,25 +96,25 @@
         [
           120.0,
           146.0,
-          46.0
+          112.05000305175781
         ]
       ],
       "assembled_source_bounds_mm": [
         [
           -60.0,
-          0.0,
+          -22.049999237060547,
           -108.0
         ],
         [
           60.0,
-          46.0,
+          90.0,
           38.0
         ]
       ],
-      "volume_mm3": 134815.1936728008,
-      "surface_area_mm2": 46584.62387803984,
-      "vertices": 2401,
-      "triangles": 4830,
+      "volume_mm3": 203550.29961050802,
+      "surface_area_mm2": 58520.26905967378,
+      "vertices": 2835,
+      "triangles": 5702,
       "watertight": true,
       "winding_consistent": true,
       "connected_components": 1
@@ -294,13 +299,13 @@
               0.0,
               6.123233995736766e-17,
               1.0,
-              -3.0000000000000067
+              -25.049999237060554
             ],
             [
               -0.0,
               -1.0,
               6.123233995736766e-17,
-              -2.0
+              -2.0000000000000013
             ],
             [
               0.0,
@@ -324,7 +329,7 @@
       ],
       "spare_only": false,
       "print_orientation": "STL is already oriented with minimum XYZ at zero; verify supports in slicer.",
-      "supports": "Flat part; inspect slicer preview before printing.",
+      "supports": "Bent cover: support upper section in supplied orientation, or choose an orientation in slicer after checking strength and surface quality.",
       "bounds_mm": [
         [
           0.0,
@@ -334,13 +339,13 @@
         [
           38.0,
           106.0,
-          3.0
+          25.049999237060547
         ]
       ],
       "assembled_source_bounds_mm": [
         [
           -19.0,
-          -3.0,
+          -25.049999237060547,
           -108.0
         ],
         [
@@ -349,10 +354,10 @@
           -2.0
         ]
       ],
-      "volume_mm3": 11871.43287974697,
-      "surface_area_mm2": 8894.30799861907,
-      "vertices": 776,
-      "triangles": 1568,
+      "volume_mm3": 11873.503754663629,
+      "surface_area_mm2": 9172.48627226648,
+      "vertices": 780,
+      "triangles": 1576,
       "watertight": true,
       "winding_consistent": true,
       "connected_components": 1
@@ -887,7 +892,7 @@
       {
         "a": "grip_cradle",
         "b": "grip_cover",
-        "intersection_mm3": 0.0
+        "intersection_mm3": 9.430506078323947e-13
       },
       {
         "a": "jaw_right",
@@ -937,6 +942,321 @@
         "body_intersection_mm3": 0.0
       }
     ],
+    "phone_and_switch_exclusions": [
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 65.0,
+        "phone_thickness_mm": 7.0,
+        "part": "grip_cradle",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 65.0,
+        "phone_thickness_mm": 7.0,
+        "part": "jaw_right",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 65.0,
+        "phone_thickness_mm": 7.0,
+        "part": "jaw_left",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 65.0,
+        "phone_thickness_mm": 7.0,
+        "part": "grip_cover",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 65.0,
+        "phone_thickness_mm": 11,
+        "part": "grip_cradle",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 65.0,
+        "phone_thickness_mm": 11,
+        "part": "jaw_right",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 65.0,
+        "phone_thickness_mm": 11,
+        "part": "jaw_left",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 65.0,
+        "phone_thickness_mm": 11,
+        "part": "grip_cover",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 65.0,
+        "phone_thickness_mm": 17.0,
+        "part": "grip_cradle",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 65.0,
+        "phone_thickness_mm": 17.0,
+        "part": "jaw_right",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 65.0,
+        "phone_thickness_mm": 17.0,
+        "part": "jaw_left",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 65.0,
+        "phone_thickness_mm": 17.0,
+        "part": "grip_cover",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 77,
+        "phone_thickness_mm": 7.0,
+        "part": "grip_cradle",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 77,
+        "phone_thickness_mm": 7.0,
+        "part": "jaw_right",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 77,
+        "phone_thickness_mm": 7.0,
+        "part": "jaw_left",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 77,
+        "phone_thickness_mm": 7.0,
+        "part": "grip_cover",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 77,
+        "phone_thickness_mm": 11,
+        "part": "grip_cradle",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 77,
+        "phone_thickness_mm": 11,
+        "part": "jaw_right",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 77,
+        "phone_thickness_mm": 11,
+        "part": "jaw_left",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 77,
+        "phone_thickness_mm": 11,
+        "part": "grip_cover",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 77,
+        "phone_thickness_mm": 17.0,
+        "part": "grip_cradle",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 77,
+        "phone_thickness_mm": 17.0,
+        "part": "jaw_right",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 77,
+        "phone_thickness_mm": 17.0,
+        "part": "jaw_left",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 77,
+        "phone_thickness_mm": 17.0,
+        "part": "grip_cover",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 90.0,
+        "phone_thickness_mm": 7.0,
+        "part": "grip_cradle",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 90.0,
+        "phone_thickness_mm": 7.0,
+        "part": "jaw_right",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 90.0,
+        "phone_thickness_mm": 7.0,
+        "part": "jaw_left",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 90.0,
+        "phone_thickness_mm": 7.0,
+        "part": "grip_cover",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 90.0,
+        "phone_thickness_mm": 11,
+        "part": "grip_cradle",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 90.0,
+        "phone_thickness_mm": 11,
+        "part": "jaw_right",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 90.0,
+        "phone_thickness_mm": 11,
+        "part": "jaw_left",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 90.0,
+        "phone_thickness_mm": 11,
+        "part": "grip_cover",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 90.0,
+        "phone_thickness_mm": 17.0,
+        "part": "grip_cradle",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 90.0,
+        "phone_thickness_mm": 17.0,
+        "part": "jaw_right",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 90.0,
+        "phone_thickness_mm": 17.0,
+        "part": "jaw_left",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "phone",
+        "phone_width_mm": 90.0,
+        "phone_thickness_mm": 17.0,
+        "part": "grip_cover",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "switch_body",
+        "part": "grip_cradle",
+        "intersection_mm3": -6.772360450213455e-14
+      },
+      {
+        "exclusion": "switch_body",
+        "part": "jaw_right",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "switch_body",
+        "part": "jaw_left",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "switch_body",
+        "part": "grip_cover",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "switch_shaft",
+        "part": "grip_cradle",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "switch_shaft",
+        "part": "jaw_right",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "switch_shaft",
+        "part": "jaw_left",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "switch_shaft",
+        "part": "grip_cover",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "switch_button",
+        "part": "grip_cradle",
+        "intersection_mm3": 4.052314039881821e-15
+      },
+      {
+        "exclusion": "switch_button",
+        "part": "jaw_right",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "switch_button",
+        "part": "jaw_left",
+        "intersection_mm3": 0.0
+      },
+      {
+        "exclusion": "switch_button",
+        "part": "grip_cover",
+        "intersection_mm3": 0.0
+      }
+    ],
+    "all_printed_part_dimensions_below_180mm": true,
     "physical_testing": "NONE; geometry checks do not establish strength, retention, printer fit or switch fit."
   },
   "assembly_relationships": [
@@ -954,8 +1274,8 @@
       "children": [
         "grip_cover"
       ],
-      "constraint": "Rear cover mating plane Y=0; pilots X\u00b110/Z-103 and-7.",
-      "fasteners": "4\u00d7M2.5\u00d712 self-tapping plastic screws, not machine screws;2.1mm pilots."
+      "constraint": "Cover mates atY0 aboveZ-45 and atY=0.35*(Z+45) below. Upper screws enter atX\u00b110/Y-3/Z-7 along+Y. Lower screws enter atX\u00b110/Y-22.95/Z-102 along normalized(0,1,-0.35), perpendicular to bent cover. Upper switch region stays fixed.",
+      "fasteners": "4\u00d7M2.5\u00d712 self-tapping plastic screws, not machine screws;2.1mm pilots. Lower screws follow tilted panel normal; do not drive them along globalY."
     },
     {
       "parent": "grip_cradle",
@@ -996,6 +1316,10 @@
     "Cover uses four M2.5 self-tapping plastic screws, nominal 12mm under-head length; pilot fit requires a test print.",
     "16.4mm switch bore and 4mm panel require confirmation against the purchased switch nut, thread, leads and button travel.",
     "Housing cavity excludes screw regions and supports no particular BLE board or battery; no battery restraint is designed.",
+    "Closed chunky nose and integral finger guard create an arcade blaster silhouette. Nose has no bore or emitter mount.",
+    "Lower grip sweeps rearward 0.35mm per vertical mm below Z-45 (about19.3degrees); switch mounting panel and upper grip stay flat and fixed.",
+    "Nominal guard opening is45mm long by41mm high before subtracting the grip/button intrusion; button face to front inner wall is29mm. Finger clearance and pinch behavior need physical checking.",
+    "Bent cover and swept body need support planning; every printable part fits within a180mm cube in the provided orientations, excluding slicer brims/supports.",
     "No physical laser, projectile path, firearm interface, electronics, firmware or game trigger integration is included.",
     "No physical print, load, impact, phone-retention, heat, wiring or ergonomic tests have been completed."
   ]

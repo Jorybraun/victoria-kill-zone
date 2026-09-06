@@ -1,8 +1,8 @@
-# PEW PEW — Universal phone controller / v0
+# PEW PEW — Universal arcade blaster / v1
 
 **Status: printable CAD fit prototype, not a validated game accessory.**
 
-An adjustable portrait phone mount on a bright arcade grip, with an index-finger momentary trigger button and space to explore a Bluetooth input board. The phone supplies the camera aim, virtual laser, audio and haptics. There is no physical laser or projectile mechanism.
+An adjustable portrait phone mount on a bright arcade blaster with a chunky closed nose, angled grip, and finger guard around a momentary trigger button. The body has space to explore a Bluetooth input board. The phone supplies the camera aim, virtual laser, audio and haptics. There is no physical laser or projectile mechanism.
 
 This packet answers the request to start making tangible 3D-print assets. It remains design exploration under technical-spec §23.4; it does not freeze an app slice or change game contracts. Owner: Design. Exclusive write set: `design/hardware/universal-controller/**`. Integration/iOS handoff is in [integration-proposal.md](integration-proposal.md).
 
@@ -24,6 +24,7 @@ This packet answers the request to start making tangible 3D-print assets. It rem
 ## Files
 
 - [Printable STL parts](exports/) — separate meshes, millimetres. Import at 100% scale; STL itself does not encode units.
+- [3D viewing model](previews/blaster-assembly.glb) and [body without phone](previews/blaster-body.glb) — GLB assemblies for a 3D viewer or Blender import; these use metres and are not print layouts.
 - [CAD source](cad/) — editable Python parameters and constructive geometry. Blender is not required to regenerate the parts.
 - [Assembly manifest](exports/assembly-manifest.json) — placement, material colours, dimensions and prototype assumptions.
 - [Input proposal](integration-proposal.md) — the proposed button-to-game connection and owner handoff.
@@ -35,7 +36,7 @@ Print orientations, exact part sizes and validation results are recorded alongsi
 
 ## Trigger and electronics
 
-For v0, a purchased **16 mm normally-open momentary pushbutton** is the trigger. Its internal mechanism provides travel and spring return. The shell provides the mounting bore; this kit does not yet contain a pivoting trigger paddle. The replaceable button lets us validate finger reach and button force before designing a more elaborate trigger.
+For v1, a purchased **16 mm normally-open momentary pushbutton** is the trigger. Its internal mechanism provides travel and spring return. The shell provides the mounting bore; this kit does not yet contain a pivoting trigger paddle. The replaceable button lets us validate finger reach and button force before designing a more elaborate trigger. The nose is closed decorative geometry; the only firing signal would come from the electronic button. The angled grip and finger guard need a new comfort/clearance test.
 
 The reference is [Adafruit product 1505](https://www.adafruit.com/product/1505), whose published overall envelope is about 18 × 18 × 29.4 mm. The CAD uses a 16.4 mm trial bore. Confirm the actual switch, nut, panel thickness and wiring bends before printing the complete grip. This source supports dimensions and switch type; it does not prove fit or comfort in this design.
 
@@ -61,17 +62,17 @@ Hardware is a prototype BOM, not a validated shopping list. Thread style, fasten
 
 1. Inspect the source/manifest, measure the phone in its case, and compare the switch drawing. Start with a jaw and spacer sample to check your printer's hole and gap tolerances.
 2. Use a bright colour. A reasonable FDM starting point is a 0.4 mm nozzle, 0.2 mm layers, four walls and 30–40% infill; this is a starting recipe, not a strength rating. PLA can be used for an indoor fit check; PETG is a candidate for a later handling prototype after orientation/creep tests.
-3. Import each part at millimetre scale and inspect the slicer preview. Follow the orientations in the manifest. The main grip/cradle requires supports under the raised rear plate; inspect its cavity roof bridging and the jaw returns/flanges as well. The largest exported part occupies 120 × 146 × 46 mm in its suggested print orientation, before brim or support clearance. No G-code, printer profile, or sliced toolpath is included.
+3. Import each part at millimetre scale and inspect the slicer preview. Follow the orientations in the manifest. The swept main grip/cradle and bent cover require support planning; inspect the raised rear plate, nose, guard, cavity roof and jaw returns/flanges in the slicer. The largest exported part occupies 120 × 146 × 112.05 mm in its suggested print orientation, before brim or support clearance. No G-code, printer profile, or sliced toolpath is included.
 4. Fit the purchased momentary button in the grip's front bore and secure its own nut from the open back. Check it moves freely and that its terminals have room. Leave the electronic experiment unpowered while fitting it.
 5. Attach the two jaws loosely with M4 hardware. Use rigid shims behind soft lining to bring the phone forward toward the jaw lips. Rigid printed shims alone are not phone protection.
-6. Rest the phone on the lower shelf, set jaw width and tighten evenly by hand. Route one 15 mm strap through both wing slots and across the lower screen, as described in the manifest. Confirm they do not press side buttons, cover lenses or prevent touch fire and exit controls.
+6. Rest the phone on the lower shelf, set jaw width and tighten evenly by hand. Route one 15 mm strap through both wing slots and across the lower screen, as described in the manifest. Confirm the strap and jaws do not press side buttons, cover lenses or prevent touch fire and exit controls.
 7. Close the grip only after checking wire clearance. First test with a phone-sized dummy over a padded bench, then the actual phone with an independent case tether. This assembly has no established retention or drop rating.
 
 ## Evidence and next iteration
 
-Digital verification passed for all eight STL meshes: closed surfaces, consistent winding, one connected solid and positive volume. The four main printed components have no nominal overlap, and jaw/body checks passed at 65, 77 and 90 mm widths. Separate 65 × 140 × 7 mm and 90 × 170 × 17 mm nominal phone configurations also regenerated successfully. The default exports are restored to 77 × 155 × 11 mm. The repository check `pnpm verify` passed on the isolated main-based asset worktree.
+Digital verification passed for all eight STL meshes: closed surfaces, consistent winding, one connected solid and positive volume. The four main printed components have no nominal overlap, and jaw/body checks passed at 65, 77 and 90 mm widths. Separate 65 × 140 × 7 mm and 90 × 170 × 17 mm nominal phone configurations also regenerated successfully. The default exports are restored to 77 × 155 × 11 mm. The GLB assemblies were exported and reloaded, with geometry counts and bounds checked. The repository check `pnpm verify` passed on the isolated main-based asset worktree.
 
-Digital checks can show closed meshes and plausible dimensions; they cannot show that the print fits, retains a phone, feels comfortable or fires the game. This v0 needs:
+Digital checks can show closed meshes and plausible dimensions; they cannot show that the print fits, retains a phone, feels comfortable or fires the game. This v1 needs:
 
 - Slicer inspection on the chosen printer and a printed tolerance check.
 - Assembly and retention tests at narrow/thick and wide/thin extremes, then each actual phone/case pair.
@@ -80,10 +81,14 @@ Digital checks can show closed meshes and plausible dimensions; they cannot show
 - A measured BLE press/hold/release prototype, including release on disconnect/background and no firing on reconnect while held.
 - Named physical-phone gameplay evidence through the existing authoritative fire path.
 
-A later design revision can add a pivoting trigger, refined grip contours, a board-specific insert and a connector panel once those parts are selected. A haptic motor remains a future concept, not included hardware.
+A later design revision can add a pivoting trigger, further grip refinement, a board-specific insert and a connector panel once those parts are selected. A haptic motor remains a future concept, not included hardware.
 
 ## Earlier research
 
-The prior Codex task **“Research China 3D-printed laser tag”** (2026-09-03) produced `phone-blaster-research.pdf`. Its shortlist included DA LAB AR Shoot, a Nerf Laser Ops Pro phone holder, an AlphaPoint adapter, a SOLIDMaker3D trigger grip, an HJWWalters ESP32-CAM toy enclosure, and the iPega PG-9257 OEM lead. That research did not establish validated complete CAD or compatibility with this app. This kit uses original geometry; no third-party model has been copied into it.
+The prior Codex task **“Research China 3D-printed laser tag”** produced `phone-blaster-research.pdf` (dated September 2, 2026). It recommended DA LAB AR Shoot as the closest existing complete blaster and a compact original adjustable cradle for a Kill Zone-specific product.
+
+On September 6, the [official DA LAB site](https://dalab.com.au/) still links its [digital print-file listing](https://www.etsy.com/listing/4471248244/ar-shoot-toy-gun-phone-mount-3d). Browser inspection now shows two ZIP files at CA$2.60 sale price (before any applicable tax). This resolves the report's inaccessible-listing price gap; the actual contents, editable source format and reuse terms remain uninspected. Nothing was purchased or downloaded. This is a current listing observation, not an offer or a compatibility claim.
+
+AR Shoot advertises landscape phone use. The mainline Kill Zone app declares portrait orientation in `ios/VictoriaKillZone/VictoriaKillZone/Info.plist`, so this original v1 retains the portrait dock. The existing AR Shoot files need inspection before assuming they can fit the current app and camera direction. No AR Shoot mesh is part of this kit. Its shortlist included DA LAB AR Shoot, a Nerf Laser Ops Pro phone holder, an AlphaPoint adapter, a SOLIDMaker3D trigger grip, an HJWWalters ESP32-CAM toy enclosure, and the iPega PG-9257 OEM lead. That research did not establish validated complete CAD or compatibility with this app. This kit uses original geometry; no third-party model has been copied into it.
 
 Product authority: [technical specification, physical-shell concept](../../../victoria-kill-zone-technical-spec.md) and [ADR 0003](../../../docs/decisions/0003-multiplayer-first-refounding.md). The game remains a markerless phone-camera experience.

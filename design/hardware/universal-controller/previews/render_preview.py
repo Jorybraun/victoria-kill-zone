@@ -16,7 +16,7 @@ INK = '#203236'
 MUTED = '#586864'
 
 
-def scene(exploded):
+def scene(exploded, show_phone=True):
     meshes=[]
     for part in manifest['parts']:
         base=trimesh.load_mesh(ROOT/'exports'/part['file'])
@@ -27,7 +27,7 @@ def scene(exploded):
             meshes.append((mesh,np.array(inst['color'][:3])))
     for ref in manifest['references']:
         # The phone and purchased switch are dimensional reference envelopes.
-        if 'switch_body' in ref['id']:
+        if 'switch_body' in ref['id'] or ('phone' in ref['id'] and not show_phone):
             continue
         bounds=np.array(ref['bounds_mm'])
         mesh=trimesh.creation.box(extents=bounds[1]-bounds[0])
@@ -40,9 +40,9 @@ def scene(exploded):
     return meshes
 
 
-def render(exploded=False, camera=False):
-    meshes=scene(exploded)
-    az=np.deg2rad(48 if camera else -57); el=np.deg2rad(17)
+def render(exploded=False, camera=False, show_phone=True, azimuth=None):
+    meshes=scene(exploded, show_phone)
+    az=np.deg2rad(azimuth if azimuth is not None else (48 if camera else -57)); el=np.deg2rad(12)
     toward=np.array([np.cos(el)*np.cos(az),np.cos(el)*np.sin(az),np.sin(el)])
     right=np.array([-np.sin(az),np.cos(az),0])
     up=np.cross(toward,right)
@@ -81,11 +81,11 @@ def render(exploded=False, camera=False):
 
 fig=plt.figure(figsize=(16,10),facecolor=BG)
 fig.text(.055,.94,'PEW PEW  /  HARDWARE LAB',fontsize=12,fontweight='bold',color=MUTED)
-fig.text(.055,.885,'One grip. Adjustable fit.',fontsize=32,fontweight='bold',color=INK)
-fig.text(.055,.845,'Universal phone controller  ·  v0 mechanical fit prototype',fontsize=13,color=MUTED)
-for rect,exploded,camera in [([.025,.205,.30,.61],False,False),([.35,.205,.30,.61],False,True),([.675,.205,.30,.61],True,True)]:
-    ax=fig.add_axes(rect);ax.imshow(render(exploded,camera));ax.axis('off')
-for x,num,title,detail in [(.075,'01','Player side','Portrait phone • sliding side jaws'),(.385,'02','Camera side','Open upper camera area • button trigger'),(.705,'03','Assembly study','Separate prints • removable grip cover')]:
+fig.text(.055,.885,'Arcade blaster. Universal dock.',fontsize=32,fontweight='bold',color=INK)
+fig.text(.055,.845,'v1 shape study  ·  actual printable geometry  ·  made without Blender',fontsize=13,color=MUTED)
+for rect,exploded,camera,phone,az in [([.025,.205,.30,.61],False,True,False,8),([.35,.205,.30,.61],False,True,True,35),([.675,.205,.30,.61],True,True,False,35)]:
+    ax=fig.add_axes(rect);ax.imshow(render(exploded,camera,phone,az));ax.axis('off')
+for x,num,title,detail in [(.075,'01','Arcade silhouette','Button trigger • angled grip • closed nose'),(.385,'02','Phone docked','Adjustable clamp • open camera area'),(.705,'03','Assembly study','Separate prints • removable grip cover')]:
     fig.text(x,.18,num,fontsize=11,fontweight='bold',color='#bd541e')
     fig.text(x,.15,title,fontsize=17,fontweight='bold',color=INK)
     fig.text(x,.12,detail,fontsize=10,color=MUTED)
@@ -94,3 +94,19 @@ fig.text(.055,.032,'Rendered from exported CAD meshes. Phone/button blocks show 
 fig.savefig(ROOT/'previews'/'controller-preview.png',dpi=170,facecolor=BG)
 plt.close(fig)
 print(ROOT/'previews'/'controller-preview.png')
+
+# glTF uses metres; STL exports remain millimetres. These files are viewing
+# assemblies with optional phone/button reference envelopes, not print layouts.
+for name,show_phone in [('blaster-assembly',True),('blaster-body',False)]:
+    view=trimesh.Scene()
+    for i,(mesh,color) in enumerate(scene(False,show_phone)):
+        mesh=mesh.copy(); mesh.apply_scale(.001)
+        mesh.visual.vertex_colors=np.tile(np.r_[color*255,255].astype(np.uint8),(len(mesh.vertices),1))
+        mesh.metadata['units']='m'
+        view.add_geometry(mesh,node_name=f'component_{i}',geom_name=f'component_{i}')
+    target=ROOT/'previews'/f'{name}.glb'
+    target.write_bytes(view.export(file_type='glb'))
+    loaded=trimesh.load(target,force='scene')
+    assert len(loaded.geometry)==len(view.geometry)
+    assert np.allclose(loaded.bounds,view.bounds,atol=1e-6)
+    print(target)
