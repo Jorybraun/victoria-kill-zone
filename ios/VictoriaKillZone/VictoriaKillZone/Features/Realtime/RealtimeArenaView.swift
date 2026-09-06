@@ -18,11 +18,12 @@ struct RealtimeArenaView: View {
   @State private var damageUntil = Date.distantPast
   @State private var confirmedTargetID: String?
   @State private var confirmedZone: TargetingHitZone?
+  @State private var menuPresented = false
 
   var body: some View {
     ZStack {
       camera.ignoresSafeArea()
-      LinearGradient(colors: [.black.opacity(0.75), .clear, .black.opacity(0.8)], startPoint: .top, endPoint: .bottom)
+      LinearGradient(colors: [.black.opacity(0.3), .clear, .black.opacity(0.35)], startPoint: .top, endPoint: .bottom)
         .ignoresSafeArea().allowsHitTesting(false)
       targetCue
       if controller.now < damageUntil {
@@ -30,11 +31,18 @@ struct RealtimeArenaView: View {
           .ignoresSafeArea().allowsHitTesting(false)
       }
       reticle.allowsHitTesting(false)
-      if dynamicTypeSize.isAccessibilitySize {ScrollView {hud}}
-      else {hud}
+      hud.disabled(menuPresented)
     }
     .foregroundStyle(VKZPalette.text)
     .background(VKZPalette.background)
+    .sheet(isPresented: $menuPresented) {
+      matchMenu
+        #if os(iOS)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        #endif
+    }
+    .onChange(of: menuPresented) {_, _ in controller.setTriggerHeld(false)}
     .task {controller.setSceneActive(scenePhase == .active); await controller.start()}
     .onChange(of: scenePhase) {_, phase in
       controller.setSceneActive(phase == .active)
@@ -71,7 +79,7 @@ struct RealtimeArenaView: View {
       for hit in hits {
         if hit.incoming {
           damageUntil = Date().addingTimeInterval(0.25)
-          fx.renderIncomingLaser(from: nil, hit: true)
+          fx.renderIncomingLaser(from: nil, hit: true, renderTracer: false)
         } else {
           hitUntil = Date().addingTimeInterval(0.28)
           confirmedTargetID = hit.targetPlayerID; confirmedZone = hit.zone
@@ -86,24 +94,35 @@ struct RealtimeArenaView: View {
   }
 
   private var hud: some View {
-    VStack(spacing: 10) {
+    VStack(spacing: 8) {
       telemetry
-      RealtimeRosterStrip(players: controller.snapshot?.players ?? [], localPlayerID: controller.session.playerId)
-      if !dynamicTypeSize.isAccessibilitySize {Spacer(minLength: 12)}
-      if let feedback = controller.actionFeedback {
-        Label(feedback, systemImage: "info.circle.fill")
-          .font(.subheadline.weight(.semibold))
-          .foregroundStyle(VKZPalette.pending)
-          .fixedSize(horizontal: false, vertical: true)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(12).background(.black.opacity(0.84), in: RoundedRectangle(cornerRadius: 14))
-          .accessibilityElement(children: .combine)
+      Spacer(minLength: 12)
+      if controller.stage == .running {
+        actionFeedback
+        combatControls
+      } else {
+        ScrollView {
+          VStack(spacing: 8) {
+            actionFeedback
+            if controller.stage == .finished {finishedPanel}
+            else {preparationPanel}
+          }
+        }
+        .frame(maxHeight: dynamicTypeSize.isAccessibilitySize ? .infinity : 420)
       }
-      if controller.stage == .running {combatControls}
-      else if controller.stage == .finished {finishedPanel}
-      else {preparationPanel}
     }
-    .padding(.horizontal, 16).padding(.vertical, 12)
+    .padding(12)
+  }
+
+  @ViewBuilder private var actionFeedback: some View {
+    if let feedback = controller.actionFeedback {
+      Label(feedback, systemImage: "info.circle.fill")
+        .font(.caption.weight(.semibold)).foregroundStyle(VKZPalette.pending)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(.black.opacity(0.84), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
+    }
   }
 
   @ViewBuilder private var camera: some View {
@@ -116,22 +135,27 @@ struct RealtimeArenaView: View {
   }
 
   private var telemetry: some View {
-    HStack(alignment: .center, spacing: 12) {
-      VStack(alignment: .leading, spacing: 2) {
-        Label("HEALTH", systemImage: "heart.fill").font(.caption2.bold().monospaced())
-        Text("\(controller.localPlayer?.health ?? 100)").font(.system(.title, design: .rounded, weight: .black).monospacedDigit())
-          .foregroundStyle((controller.localPlayer?.health ?? 100) <= 34 ? VKZPalette.danger : VKZPalette.ready)
+    HStack(spacing: 10) {
+      Label("\(controller.localPlayer?.health ?? 100)", systemImage: "heart.fill")
+        .font(.title3.bold().monospacedDigit())
+        .foregroundStyle((controller.localPlayer?.health ?? 100) <= 34 ? VKZPalette.danger : VKZPalette.ready)
+        .padding(.horizontal, 12).frame(minHeight: 44)
+        .background(.black.opacity(0.72), in: Capsule())
+        .accessibilityLabel("Health").accessibilityValue("\(controller.localPlayer?.health ?? 100)")
+      Spacer(minLength: 0)
+      Text(roundTime).font(.title3.bold().monospacedDigit())
+        .padding(.horizontal, 12).frame(minHeight: 44)
+        .background(.black.opacity(0.72), in: Capsule())
+        .accessibilityLabel("Round time remaining")
+      Spacer(minLength: 0)
+      Button(action: openMenu) {
+        Image(systemName: "ellipsis").font(.headline).frame(width: 44, height: 44)
+          .background(.black.opacity(0.72), in: Circle())
       }
-      Spacer(minLength: 4)
-      VStack(spacing: 3) {
-        Text(stageTitle.uppercased()).font(.caption2.bold().monospaced()).lineLimit(2).multilineTextAlignment(.center)
-        Text(roundTime).font(.system(.title2, design: .monospaced, weight: .bold).monospacedDigit())
-      }
-      Spacer(minLength: 4)
-      Button(action: leave) {Image(systemName: "xmark").font(.headline).frame(width: 44, height: 44).background(.white.opacity(0.08), in: Circle())}
-        .buttonStyle(.plain).accessibilityLabel("Leave match")
+      .buttonStyle(.plain).accessibilityLabel("Match menu")
+      .accessibilityHint("Players, status, help and leave match")
     }
-    .padding(14).background(.black.opacity(0.64), in: RoundedRectangle(cornerRadius: 18))
+    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
   }
 
   @ViewBuilder private var targetCue: some View {
@@ -173,16 +197,11 @@ struct RealtimeArenaView: View {
     let fieldStatus = RealtimeArenaPresentation.slowFieldStatus(fields: controller.snapshot?.slowFields ?? [],
       localPlayerID: controller.session.playerId, readyAt: player?.slowFieldReadyAtMs ?? 0, now: time)
     let protection = RealtimeArenaPresentation.protectionDetail(until: player?.protectedUntilMs, now: time)
-    return VStack(spacing: 12) {
-      HStack(alignment: .lastTextBaseline) {
-        VStack(alignment: .leading, spacing: 3) {
-          Text(RealtimeArenaPresentation.weaponName(controller.snapshot?.rules.weapon.id).uppercased()).font(.caption2.bold().monospaced()).foregroundStyle(VKZPalette.textMuted)
-          Text("\(controller.displayAmmo) / \(controller.snapshot?.rules.weapon.magazine ?? 0)")
-            .font(.system(.title, design: .monospaced, weight: .black).monospacedDigit())
-        }
-        Spacer()
-        Text(protection ?? (controller.triggerHeld && eligibility.reason == "Recharging" ? "Automatic fire" : eligibility.reason))
-          .font(.caption.bold()).foregroundStyle(VKZPalette.pending).multilineTextAlignment(.trailing)
+    return VStack(spacing: 8) {
+      if let protection {
+        Text(protection).font(.caption.bold()).foregroundStyle(VKZPalette.pending)
+          .padding(.horizontal, 12).padding(.vertical, 6)
+          .background(.black.opacity(0.78), in: Capsule())
       }
       HStack(spacing: 10) {
         abilityButton(title: (player?.shield.activeUntilMs ?? 0) > time ? "Lower shield" : "Shield", icon: "shield.lefthalf.filled",
@@ -190,53 +209,105 @@ struct RealtimeArenaView: View {
         abilityButton(title: "Slow field", icon: "clock.arrow.2.circlepath", detail: fieldStatus.detail,
           enabled: eligibility.slowField, action: controller.activateSlowField)
       }
-      HStack(spacing: 12) {
-        Button(action: controller.reload) {
-          VStack(spacing: 5) {Image(systemName: "arrow.clockwise").font(.title3); Text("Reload").font(.caption.bold())}
-            .frame(minWidth: 64, minHeight: 72)
+      HStack(alignment: .bottom, spacing: 12) {
+        HStack(spacing: 8) {
+          Text("\(controller.displayAmmo) / \(controller.snapshot?.rules.weapon.magazine ?? 0)")
+            .font(.title3.bold().monospacedDigit()).lineLimit(1).minimumScaleFactor(0.75)
+            .accessibilityLabel("Ammunition")
+            .accessibilityValue("\(controller.displayAmmo) of \(controller.snapshot?.rules.weapon.magazine ?? 0)")
+          Button(action: controller.reload) {
+            VStack(spacing: 2) {
+              Image(systemName: "arrow.clockwise").font(.headline)
+              Text((player?.reloadEndsAtMs ?? 0) > time ? "Loading" : "Reload").font(.caption2.bold())
+            }
+            .frame(minWidth: 44, minHeight: 48)
+          }
+          .buttonStyle(.plain).foregroundStyle(eligibility.reload ? .white : VKZPalette.textMuted)
+          .disabled(!eligibility.reload || menuPresented).accessibilityLabel("Reload weapon")
         }
-        .buttonStyle(.plain).foregroundStyle(eligibility.reload ? .white : VKZPalette.textMuted)
-        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 16)).disabled(!eligibility.reload)
-        .accessibilityLabel("Reload weapon")
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 16))
+        Spacer(minLength: 0)
         Button {} label: {
-          VStack(spacing: 5) {Image(systemName: "scope").font(.title2); Text(controller.triggerHeld ? "Firing" : "Hold to fire").font(.headline)}
-            .frame(maxWidth: .infinity, minHeight: 78)
+          VStack(spacing: 3) {
+            Image(systemName: "scope").font(.title2)
+            Text(controller.triggerHeld ? "Firing" : "Hold to fire").font(.caption.bold())
+          }
+          .frame(minWidth: 104, minHeight: 64).padding(.horizontal, 12)
         }
-        .buttonStyle(RealtimeHoldFireStyle(enabled: eligibility.fire || controller.triggerHeld, onPressChanged: controller.setTriggerHeld))
-        .disabled(!eligibility.fire && !controller.triggerHeld)
+        .buttonStyle(RealtimeHoldFireStyle(enabled: eligibility.fire || controller.triggerHeld, onPressChanged: {held in
+          controller.setTriggerHeld(held && !menuPresented)
+        }))
+        .disabled(menuPresented || (!eligibility.fire && !controller.triggerHeld))
         .accessibilityLabel("Fire weapon").accessibilityHint("Double tap to fire once. Hold with direct touch for rapid fire.")
-        .accessibilityAction {controller.fireOnce()}
+        .accessibilityAction {if !menuPresented {controller.fireOnce()}}
       }
       if let reloadEnd = player?.reloadEndsAtMs, reloadEnd > time {
-        VStack(spacing: 5) {
-          HStack {
-            Text("Reloading").font(.caption.bold())
-            Spacer()
-            Text(String(format: "%.1fs", max(0, reloadEnd - time) / 1000)).font(.caption.monospacedDigit())
-          }
-          ProgressView(value: RealtimeArenaPresentation.reloadProgress(until: reloadEnd,
-            duration: controller.snapshot?.rules.weapon.reloadMs ?? 1, now: time))
-            .tint(VKZPalette.pending)
-        }
-        .accessibilityElement(children: .ignore).accessibilityLabel("Reloading")
-        .accessibilityValue("\(RealtimeArenaPresentation.secondsRemaining(until: reloadEnd, at: time)) seconds remaining")
+        ProgressView(value: RealtimeArenaPresentation.reloadProgress(until: reloadEnd,
+          duration: controller.snapshot?.rules.weapon.reloadMs ?? 1, now: time))
+          .tint(VKZPalette.pending)
+          .accessibilityLabel("Reloading")
+          .accessibilityValue("\(RealtimeArenaPresentation.secondsRemaining(until: reloadEnd, at: time)) seconds remaining")
       }
     }
-    .padding(16).background(.black.opacity(0.84), in: RoundedRectangle(cornerRadius: 24))
+    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
   }
 
   private func abilityButton(title: String, icon: String, detail: String, enabled: Bool, action: @escaping () -> Void) -> some View {
     Button(action: action) {
-      HStack(spacing: 8) {
-        Image(systemName: icon).font(.title3)
-        VStack(alignment: .leading, spacing: 2) {Text(title).font(.subheadline.bold()); Text(detail).font(.caption2.monospacedDigit())}
-        Spacer(minLength: 0)
-      }
-      .frame(maxWidth: .infinity, minHeight: 44).padding(.horizontal, 12).padding(.vertical, 6)
-      .foregroundStyle(enabled ? VKZPalette.telemetry : VKZPalette.textMuted)
-      .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 14))
+      Label(title, systemImage: icon).font(.caption.bold())
+        .frame(maxWidth: .infinity, minHeight: 44).padding(.horizontal, 10)
+        .foregroundStyle(enabled ? VKZPalette.telemetry : VKZPalette.textMuted)
+        .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 12))
     }
-    .buttonStyle(.plain).disabled(!enabled).accessibilityLabel(title).accessibilityValue(detail)
+    .buttonStyle(.plain).disabled(!enabled || menuPresented).accessibilityLabel(title).accessibilityValue(detail)
+  }
+
+  private func openMenu() {controller.setTriggerHeld(false); menuPresented = true}
+
+  private var matchMenu: some View {
+    let player = controller.localPlayer
+    let time = controller.matchTimeMs ?? controller.snapshot?.matchTimeMs ?? 0
+    let fieldStatus = RealtimeArenaPresentation.slowFieldStatus(fields: controller.snapshot?.slowFields ?? [],
+      localPlayerID: controller.session.playerId, readyAt: player?.slowFieldReadyAtMs ?? 0, now: time)
+    return VStack(spacing: 0) {
+      HStack {
+        Text("Match menu").font(.title2.bold())
+        Spacer()
+        Button {menuPresented = false} label: {
+          Image(systemName: "xmark").font(.headline).frame(width: 44, height: 44)
+        }
+        .buttonStyle(.plain).accessibilityLabel("Close match menu")
+      }
+      .padding(.horizontal, 20).padding(.top, 16)
+      ScrollView {
+        VStack(alignment: .leading, spacing: 18) {
+          Text("The match continues while this menu is open.")
+            .font(.subheadline).foregroundStyle(VKZPalette.textMuted)
+          Text(stageTitle).font(.headline)
+          RealtimeRosterStrip(players: controller.snapshot?.players ?? [], localPlayerID: controller.session.playerId)
+          VStack(alignment: .leading, spacing: 6) {
+            Text(RealtimeArenaPresentation.weaponName(controller.snapshot?.rules.weapon.id)).font(.headline)
+            Text(controller.eligibility.reason).font(.subheadline).foregroundStyle(VKZPalette.pending)
+            Text("Hold to fire. Reload to refill your magazine.")
+              .font(.subheadline).foregroundStyle(VKZPalette.textMuted)
+          }
+          VStack(alignment: .leading, spacing: 6) {
+            Label("Shield · \(shieldDetail(at: time))", systemImage: "shield.lefthalf.filled")
+            Label("Slow field · \(fieldStatus.detail)", systemImage: "clock.arrow.2.circlepath")
+          }
+          .font(.subheadline).foregroundStyle(VKZPalette.telemetry)
+          if controller.stage != .running {Text(guidance).font(.subheadline).foregroundStyle(VKZPalette.textMuted)}
+          Button(role: .destructive, action: leave) {
+            Text(controller.stage == .finished ? "Return home" : "Leave match")
+              .frame(maxWidth: .infinity, minHeight: 44)
+          }
+          .buttonStyle(.plain)
+        }
+        .padding(20)
+      }
+    }
+    .foregroundStyle(VKZPalette.text).background(VKZPalette.background)
   }
 
   private var preparationPanel: some View {
@@ -364,16 +435,17 @@ private struct RealtimeHoldFireStyle: ButtonStyle {
 }
 
 private struct RealtimeRosterStrip: View {
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   let players: [CombatWire.Player]
   let localPlayerID: String
   var body: some View {
-    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 7) {
+    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: dynamicTypeSize.isAccessibilitySize ? 1 : 2), spacing: 7) {
       ForEach(players) {player in
         VStack(alignment: .leading, spacing: 5) {
           HStack(spacing: 5) {
             Image(systemName: player.connected && player.frameReady ? "checkmark.circle.fill" : "circle.dashed")
               .foregroundStyle(player.frameReady ? VKZPalette.ready : VKZPalette.pending)
-            Text(player.displayName + (player.id == localPlayerID ? " · YOU" : "")).font(.caption.bold()).lineLimit(1)
+            Text(player.displayName + (player.id == localPlayerID ? " · YOU" : "")).font(.caption.bold()).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Text("\(player.kills)/\(player.deaths)").font(.caption2.monospacedDigit())
           }

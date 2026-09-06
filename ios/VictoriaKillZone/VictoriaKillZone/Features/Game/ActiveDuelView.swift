@@ -24,6 +24,7 @@ struct ActiveDuelView: View {
   @State private var muzzleTask: Task<Void, Never>?
   @State private var shotNotice: String?
   @State private var shotNoticeTask: Task<Void, Never>?
+  @State private var menuPresented = false
 
   var body: some View {
     TimelineView(.periodic(from: .now, by: 0.05)) { context in
@@ -32,7 +33,7 @@ struct ActiveDuelView: View {
           .ignoresSafeArea()
 
         LinearGradient(
-          colors: [.black.opacity(0.55), .clear, .black.opacity(0.7)],
+          colors: [.black.opacity(0.3), .clear, .black.opacity(0.35)],
           startPoint: .top,
           endPoint: .bottom
         )
@@ -78,12 +79,18 @@ struct ActiveDuelView: View {
           .ignoresSafeArea()
           .allowsHitTesting(false)
 
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
           topTelemetry(at: context.date)
-          opponentStrip
-          connectionBanner
+          if store.isMatchInputLocked || !combat.presenceReady { connectionBanner }
           if let blocker = store.targetingBlocker {
-            targetingBlockerPanel(blocker)
+            Button(action: openMenu) {
+              Label(blocker.title, systemImage: "exclamationmark.circle")
+                .font(.caption.bold()).multilineTextAlignment(.leading)
+                .frame(minHeight: 44).padding(.horizontal, 12)
+                .foregroundStyle(VKZPalette.pending)
+                .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain).accessibilityHint("Opens the explanation and available recovery actions")
           }
           Spacer(minLength: 12)
           if duel.phase == .running {
@@ -92,18 +99,30 @@ struct ActiveDuelView: View {
             phaseControl
           }
         }
-        .padding(18)
+        .padding(12)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .opacity(store.isMatchInputLocked ? 0.58 : 1)
+        .disabled(menuPresented)
 
         if isLocalRespawning {
           deathOverlay(at: context.date)
         }
       }
     }
+    .sheet(isPresented: $menuPresented) {
+      matchMenu
+        #if os(iOS)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        #endif
+    }
+    .onChange(of: menuPresented) { _, presented in
+      combat.stopRepeatingFire()
+      voiceFire.setViewVisible(!presented)
+    }
     .onAppear {
       combat.setSceneActive(scenePhase == .active)
-      voiceFire.setViewVisible(true)
+      voiceFire.setViewVisible(!menuPresented)
       voiceFire.setSceneActive(scenePhase == .active)
     }
     .task {
@@ -200,7 +219,7 @@ struct ActiveDuelView: View {
         let position = store.targetingSnapshot.isPoseFresh(at: Date())
           ? store.targetingSnapshot.skeleton?.position(of: "head") : nil
         let origin = shot.renderTracer ? position.map { SIMD3<Float>(Float($0.x), Float($0.y), Float($0.z)) } : nil
-        fx.renderIncomingLaser(from: origin, hit: shot.hit)
+        fx.renderIncomingLaser(from: origin, hit: shot.hit, renderTracer: shot.renderTracer)
       #endif
       }
     }
@@ -261,39 +280,27 @@ struct ActiveDuelView: View {
   }
 
   private func topTelemetry(at date: Date) -> some View {
-    HStack(alignment: .center, spacing: 16) {
-      VStack(alignment: .leading, spacing: 6) {
-        Label("VITALS", systemImage: "heart.fill")
-          .font(.system(size: 9, weight: .bold, design: .monospaced))
-          .foregroundStyle(VKZPalette.textMuted)
-        Text(String(duel.localPlayer?.health ?? 0))
-          .font(.system(size: 30, weight: .black, design: .rounded).monospacedDigit())
-          .foregroundStyle(localHealthColor)
+    HStack(spacing: 10) {
+      Label(String(duel.localPlayer?.health ?? 0), systemImage: "heart.fill")
+        .font(.title3.bold().monospacedDigit()).foregroundStyle(localHealthColor)
+        .padding(.horizontal, 12).frame(minHeight: 44)
+        .background(.black.opacity(0.72), in: Capsule())
+        .accessibilityLabel("Health").accessibilityValue("\(duel.localPlayer?.health ?? 0)")
+      Spacer(minLength: 0)
+      Text(duel.phase == .countdown ? String(countdownValue(at: date)) : roundTime(at: date))
+        .font(.title3.bold().monospacedDigit()).foregroundStyle(.white)
+        .padding(.horizontal, 12).frame(minHeight: 44)
+        .background(.black.opacity(0.72), in: Capsule())
+        .accessibilityLabel(duel.phase == .countdown ? "Match starts in" : "Round time remaining")
+      Spacer(minLength: 0)
+      Button(action: openMenu) {
+        Image(systemName: "ellipsis").font(.headline)
+          .frame(width: 44, height: 44)
+          .foregroundStyle(.white).background(.black.opacity(0.72), in: Circle())
       }
-      Spacer()
-      VStack(spacing: 4) {
-        Text(phaseTitle)
-          .font(.system(size: 9, weight: .bold, design: .monospaced))
-          .tracking(2)
-          .foregroundStyle(VKZPalette.textMuted)
-        Text(duel.phase == .countdown ? String(countdownValue(at: date)) : roundTime(at: date))
-          .font(.system(size: 30, weight: .bold, design: .monospaced))
-      }
-      Spacer()
-      VStack(alignment: .trailing, spacing: 6) {
-        Text("K / D")
-          .font(.system(size: 9, weight: .bold, design: .monospaced))
-          .foregroundStyle(VKZPalette.textMuted)
-        Text("\(duel.localPlayer?.kills ?? 0) / \(duel.localPlayer?.deaths ?? 0)")
-          .font(.system(size: 23, weight: .bold, design: .rounded).monospacedDigit())
-      }
+      .buttonStyle(.plain).accessibilityLabel("Match menu")
+      .accessibilityHint("Scores, voice fire, help and leave match")
     }
-    .padding(16)
-    .background(.black.opacity(0.74), in: RoundedRectangle(cornerRadius: 18))
-    .overlay(alignment: .top) {
-      Capsule().fill(VKZPalette.pending).frame(width: 40, height: 3)
-    }
-    .accessibilityElement(children: .combine)
   }
 
   private func roundTime(at date: Date) -> String {
@@ -352,14 +359,15 @@ struct ActiveDuelView: View {
     }
     .frame(width: 80, height: 80)
     .overlay(alignment: .bottom) {
-      Text(hitMarker ? "HIT CONFIRMED" : (combat.markerlessAimZone == nil ? "" : "ON TARGET"))
-        .font(.system(size: 10, weight: .bold, design: .monospaced))
-        .tracking(1.5)
-        .foregroundStyle(hitMarker ? VKZPalette.pending : VKZPalette.ready)
-        .fixedSize()
-        .padding(6)
-        .background(.black.opacity(0.55), in: Capsule())
-        .offset(y: 30)
+      if hitMarker || combat.markerlessAimZone != nil {
+        Text(hitMarker ? "HIT CONFIRMED" : "ON TARGET")
+          .font(.system(size: 10, weight: .bold, design: .monospaced))
+          .tracking(1.5)
+          .foregroundStyle(hitMarker ? VKZPalette.pending : VKZPalette.ready)
+          .fixedSize().padding(6)
+          .background(.black.opacity(0.55), in: Capsule())
+          .offset(y: 30)
+      }
     }
   }
 
@@ -430,54 +438,43 @@ struct ActiveDuelView: View {
   }
 
   private var bottomStack: some View {
-    VStack(spacing: 12) {
+    VStack(spacing: 8) {
       latestEvent
       shotNoticeView
-      HStack(alignment: .bottom) {
-        VStack(alignment: .leading, spacing: 5) {
-          Text("STANDARD SIDEARM")
-            .font(.system(size: 10, weight: .bold, design: .monospaced))
-            .tracking(1.5)
-            .foregroundStyle(VKZPalette.textMuted)
-          Text(combat.isReloading ? "RELOADING" : "\(duel.localPlayer?.ammo ?? 0) / 8")
-            .font(.system(size: 26, weight: .black, design: .monospaced))
+      HStack(alignment: .bottom, spacing: 12) {
+        HStack(spacing: 8) {
+          Text("\(duel.localPlayer?.ammo ?? 0) / 8")
+            .font(.title3.bold().monospacedDigit()).lineLimit(1).minimumScaleFactor(0.75)
             .foregroundStyle(combat.isReloading ? VKZPalette.pending : .white)
-        }
-        Spacer()
-        Text(shotButtonLabel)
-          .font(.caption2.bold().monospaced())
-          .foregroundStyle(VKZPalette.pending)
-          .multilineTextAlignment(.trailing)
-          .lineLimit(2)
-      }
-      HStack(spacing: 14) {
-        Button { combat.reload() } label: {
-          VStack(spacing: 6) {
-            Image(systemName: "arrow.clockwise").font(.title3.bold())
-            Text("RELOAD").font(.system(size: 9, weight: .bold, design: .monospaced))
+            .accessibilityLabel("Ammunition").accessibilityValue("\(duel.localPlayer?.ammo ?? 0) of 8")
+          Button { combat.reload() } label: {
+            VStack(spacing: 2) {
+              Image(systemName: "arrow.clockwise").font(.headline)
+              Text(combat.isReloading ? "Loading" : "Reload").font(.caption2.bold())
+            }
+            .frame(minWidth: 44, minHeight: 48)
+            .foregroundStyle(combat.canReload ? .white : VKZPalette.textMuted)
           }
-          .frame(width: 68, height: 70)
-          .foregroundStyle(combat.canReload ? .white : VKZPalette.textMuted)
-          .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+          .buttonStyle(.plain).disabled(!combat.canReload || menuPresented)
+          .accessibilityLabel("Reload sidearm")
+          .accessibilityValue(combat.isReloading ? "Reloading" : "")
         }
-        .buttonStyle(.plain)
-        .disabled(!combat.canReload)
-        .accessibilityLabel("Reload sidearm")
-
-        VStack(spacing: 5) {
-          Image(systemName: "scope").font(.system(size: 26, weight: .medium))
-          Text(combat.isTriggerHeld ? "FIRING" : "HOLD TO FIRE")
-            .font(.system(size: 10, weight: .black, design: .monospaced))
-            .tracking(1)
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 16))
+        Spacer(minLength: 0)
+        VStack(spacing: 3) {
+          Image(systemName: "scope").font(.title2)
+          Text(combat.isTriggerHeld ? "Firing" : "Hold to fire").font(.caption.bold())
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 84)
+        .frame(minWidth: 104, minHeight: 64)
+        .padding(.horizontal, 12)
         .foregroundStyle(VKZPalette.background)
-        .background(combat.isTriggerHeld ? .white : VKZPalette.pending, in: RoundedRectangle(cornerRadius: 20))
-        .contentShape(RoundedRectangle(cornerRadius: 20))
+        .background(combat.isTriggerHeld ? .white : VKZPalette.pending, in: RoundedRectangle(cornerRadius: 18))
+        .contentShape(RoundedRectangle(cornerRadius: 18))
         .gesture(
           DragGesture(minimumDistance: 0)
             .onChanged { value in
+              guard !menuPresented else { combat.stopRepeatingFire(); return }
               if abs(value.translation.width) > 80 || abs(value.translation.height) > 80 {
                 combat.stopRepeatingFire()
               } else if combat.isTriggerHeld || combat.canFireMarkerless {
@@ -492,27 +489,65 @@ struct ActiveDuelView: View {
         .accessibilityHint("Double tap to fire one shot. Hold with direct touch for repeat fire.")
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { fireShot() }
-        voiceToggle
       }
-      HStack {
-        Text(voiceFire.isEnabled ? voiceStatusCaption : "AIM · FIRE · RELOAD")
-          .font(.system(size: 9, weight: .semibold, design: .monospaced))
-          .foregroundStyle(VKZPalette.textMuted)
-        Spacer()
-        Button("LEAVE", role: .destructive) { store.leave() }
-          .font(.caption2.bold().monospaced())
-          .frame(minWidth: 44, minHeight: 44)
-      }
-      #if VKZ_DEBUG_FIRE
-        if duel.localRole == .host {
-          Button("DEBUG TORSO FALLBACK") { combat.debugFire() }
-            .font(.caption2.monospaced())
-            .disabled(!combat.canDebugFire)
-        }
-      #endif
     }
-    .padding(16)
-    .background(.black.opacity(0.82), in: RoundedRectangle(cornerRadius: 24))
+  }
+
+  private func openMenu() {
+    combat.stopRepeatingFire()
+    voiceFire.setViewVisible(false)
+    menuPresented = true
+  }
+
+  private var matchMenu: some View {
+    VStack(spacing: 0) {
+      HStack {
+        Text("Match menu").font(.title2.bold())
+        Spacer()
+        Button { menuPresented = false } label: {
+          Image(systemName: "xmark").font(.headline).frame(width: 44, height: 44)
+        }
+        .buttonStyle(.plain).accessibilityLabel("Close match menu")
+      }
+      .padding(.horizontal, 20).padding(.top, 16)
+      ScrollView {
+        VStack(alignment: .leading, spacing: 18) {
+          Text("The match continues while this menu is open.")
+            .font(.subheadline).foregroundStyle(VKZPalette.textMuted)
+          HStack {
+            Text(phaseTitle).font(.headline)
+            Spacer()
+            Text("\(duel.localPlayer?.kills ?? 0) kills · \(duel.localPlayer?.deaths ?? 0) deaths")
+              .font(.subheadline.monospacedDigit())
+          }
+          opponentStrip
+          connectionBanner
+          if let blocker = store.targetingBlocker { targetingBlockerPanel(blocker) }
+          VStack(alignment: .leading, spacing: 6) {
+            Text("Standard sidearm").font(.headline)
+            Text(shotButtonLabel).font(.subheadline).foregroundStyle(VKZPalette.pending)
+            Text("Aim at your opponent, hold to fire, and reload when your magazine is empty.")
+              .font(.subheadline).foregroundStyle(VKZPalette.textMuted)
+          }
+          HStack(spacing: 12) {
+            voiceToggle
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Voice fire").font(.headline)
+              Text(voiceFire.status.displayText).font(.subheadline).foregroundStyle(voiceStatusColor)
+              Text("Say “pew pew” during play to fire.").font(.caption).foregroundStyle(VKZPalette.textMuted)
+            }
+          }
+          Button(role: .destructive) {
+            combat.stopRepeatingFire(); voiceFire.setViewVisible(false); store.leave()
+          } label: {
+            Text("Leave match").frame(maxWidth: .infinity, minHeight: 44)
+          }
+          .buttonStyle(.plain)
+        }
+        .padding(20)
+      }
+    }
+    .foregroundStyle(VKZPalette.text).background(VKZPalette.background)
   }
 
   private var voiceToggle: some View {
@@ -530,6 +565,7 @@ struct ActiveDuelView: View {
         .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 12))
     }
     .accessibilityLabel("Voice Fire")
+    .accessibilityValue(voiceFire.status.accessibilityText)
   }
 
   private var voiceStatusCaption: String {
@@ -601,7 +637,7 @@ struct ActiveDuelView: View {
   }
 
   private func fireShot() {
-    guard combat.fireCooldownRemaining(at: Date()) == 0 else { return }
+    guard !menuPresented, combat.fireCooldownRemaining(at: Date()) == 0 else { return }
     guard combat.canFireMarkerless else {
       showShotNotice(blockedShotNotice)
       return
@@ -637,20 +673,16 @@ struct ActiveDuelView: View {
 
   @ViewBuilder
   private var shotNoticeView: some View {
-    ZStack {
-      if let shotNotice {
-        Text(shotNotice)
-          .font(.caption.bold().monospaced())
-          .foregroundStyle(VKZPalette.danger)
-          .padding(.horizontal, 12)
-          .padding(.vertical, 6)
-          .background(.black.opacity(0.7), in: Capsule())
-          .transition(.scale(scale: 0.9).combined(with: .opacity))
-          .accessibilityAddTraits(.updatesFrequently)
-      }
+    if let shotNotice {
+      Text(shotNotice)
+        .font(.caption.bold().monospaced())
+        .foregroundStyle(VKZPalette.danger)
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, 12).padding(.vertical, 6)
+        .background(.black.opacity(0.8), in: Capsule())
+        .transition(.opacity)
+        .accessibilityAddTraits(.updatesFrequently)
     }
-    .frame(maxWidth: .infinity)
-    .frame(height: 30)
   }
 
   private var voiceStatusColor: Color {
@@ -665,21 +697,16 @@ struct ActiveDuelView: View {
 
   @ViewBuilder
   private var latestEvent: some View {
-    ZStack {
-      if let event = duel.events.first, event.id == toastEventID, toastVisible {
-        Text(event.message)
-          .font(.caption.monospaced())
-          .foregroundStyle(VKZPalette.text)
-          .multilineTextAlignment(.center)
-          .padding(.horizontal, 10)
-          .padding(.vertical, 6)
-          .background(.black.opacity(0.55), in: Capsule())
-          .accessibilityAddTraits(.updatesFrequently)
-          .transition(.move(edge: .bottom).combined(with: .opacity))
-      }
+    if let event = duel.events.first, event.id == toastEventID, toastVisible {
+      Text(event.message)
+        .font(.caption.monospaced())
+        .foregroundStyle(VKZPalette.text)
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .background(.black.opacity(0.75), in: Capsule())
+        .accessibilityAddTraits(.updatesFrequently)
+        .transition(.opacity)
     }
-    .frame(maxWidth: .infinity)
-    .frame(height: 30)
   }
 
   private func deathOverlay(at date: Date) -> some View {

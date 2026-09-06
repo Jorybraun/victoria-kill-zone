@@ -17,9 +17,44 @@ enum CombatPresentationPolicy {
     skeletonHoldDuration + skeletonFadeDuration
   }
 
-  static func tracerDuration(distance: Double) -> TimeInterval? {
+  static func tracerDuration(distance: Double, incoming: Bool = false) -> TimeInterval? {
     guard distance.isFinite, distance > 0, distance <= maximumTracerDistance else { return nil }
+    // Classic duel verdicts are already resolved. Keep their incoming cosmetic
+    // streak readable across several frames without delaying damage or implying
+    // that the animation can be physically dodged.
+    if incoming { return min(0.30, max(0.18, distance / 60)) }
     return max(0.045, distance / tracerSpeed)
+  }
+
+  /// Classic duel events do not carry an aligned opponent ray. Use the fresh
+  /// observed body when available; otherwise show a camera-relative incoming
+  /// cue. The fallback is presentation only, never an opponent position or a
+  /// projectile trajectory consumed by targeting or authoritative combat.
+  static func incomingTracerPath(
+    observedOrigin: SIMD3<Float>?,
+    cameraPosition: SIMD3<Float>, cameraRight: SIMD3<Float>,
+    cameraUp: SIMD3<Float>, cameraForward: SIMD3<Float>,
+    hit: Bool, renderTracer: Bool
+  ) -> (start: SIMD3<Float>, end: SIMD3<Float>)? {
+    func finite(_ value: SIMD3<Float>) -> Bool {
+      value.x.isFinite && value.y.isFinite && value.z.isFinite
+    }
+    guard renderTracer,
+      [cameraPosition, cameraRight, cameraUp, cameraForward].allSatisfy(finite)
+    else { return nil }
+    let end = hit
+      ? cameraPosition + cameraForward * 0.45 - cameraUp * 0.22 + cameraRight * 0.08
+      : cameraPosition + cameraRight * 0.9 - cameraUp * 0.5 - cameraForward * 0.2
+    let fallback = cameraPosition + cameraForward * 6 + cameraRight * 0.8 + cameraUp * 0.45
+    let start: SIMD3<Float>
+    if let observedOrigin, finite(observedOrigin),
+      tracerDuration(distance: Double(((end - observedOrigin) * (end - observedOrigin)).sum().squareRoot()), incoming: true) != nil {
+      start = observedOrigin
+    } else {
+      start = fallback
+    }
+    guard finite(start), finite(end) else { return nil }
+    return (start, end)
   }
 
   /// A camera-relative visual muzzle gives a first-person streak parallax. The

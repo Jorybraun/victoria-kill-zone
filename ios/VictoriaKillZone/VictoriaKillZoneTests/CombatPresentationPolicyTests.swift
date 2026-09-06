@@ -71,6 +71,49 @@ final class CombatPresentationPolicyTests: XCTestCase {
     }
   }
 
+  func testIncomingFireRemainsVisibleWithoutAFreshOpponentHead() throws {
+    for heading: Float in [-1, 1] {
+      let camera = SIMD3<Float>(3, 1.6, 4)
+      let right = SIMD3<Float>(-heading, 0, 0)
+      let up = SIMD3<Float>(0, 1, 0)
+      let forward = SIMD3<Float>(0, 0, heading)
+      for hit in [false, true] {
+        let path = try XCTUnwrap(CombatPresentationPolicy.incomingTracerPath(
+          observedOrigin: nil, cameraPosition: camera, cameraRight: right,
+          cameraUp: up, cameraForward: forward, hit: hit, renderTracer: true
+        ))
+        XCTAssertGreaterThan(((path.start - camera) * forward).sum(), 0)
+        XCTAssertNotEqual(path.start, path.end)
+        let delta = path.end - path.start
+        let duration = try XCTUnwrap(CombatPresentationPolicy.tracerDuration(
+          distance: Double((delta * delta).sum().squareRoot()), incoming: true
+        ))
+        XCTAssertGreaterThanOrEqual(duration, 0.18)
+        XCTAssertLessThanOrEqual(duration, 0.30)
+      }
+    }
+  }
+
+  func testIncomingCueUsesObservedOriginAndHonorsPeerReconciliation() throws {
+    let observed = SIMD3<Float>(1, 1.7, -8)
+    func path(_ origin: SIMD3<Float>?, render: Bool = true) -> (start: SIMD3<Float>, end: SIMD3<Float>)? {
+      CombatPresentationPolicy.incomingTracerPath(
+        observedOrigin: origin, cameraPosition: .zero, cameraRight: [1, 0, 0],
+        cameraUp: [0, 1, 0], cameraForward: [0, 0, -1], hit: true, renderTracer: render
+      )
+    }
+    XCTAssertEqual(try XCTUnwrap(path(observed)).start, observed)
+    XCTAssertNil(path(nil, render: false), "A later confirmed hit must not replay a peer tracer")
+    XCTAssertNil(path(observed, render: false))
+    let fallback = try XCTUnwrap(path(nil)).start
+    XCTAssertEqual(try XCTUnwrap(path([.nan, 0, 0])).start, fallback)
+    XCTAssertEqual(try XCTUnwrap(path([0, 0, -100])).start, fallback)
+    XCTAssertNil(CombatPresentationPolicy.incomingTracerPath(
+      observedOrigin: nil, cameraPosition: [.infinity, 0, 0], cameraRight: [1, 0, 0],
+      cameraUp: [0, 1, 0], cameraForward: [0, 0, -1], hit: true, renderTracer: true
+    ))
+  }
+
   func testThousandsOfShotsReuseFixedSlotsAndResetCleanly() {
     var pool = CombatEffectPoolCursor(capacity: CombatPresentationPolicy.tracerCapacity)
     var visited = Set<Int>()

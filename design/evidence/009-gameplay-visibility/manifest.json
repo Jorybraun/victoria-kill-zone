@@ -1,0 +1,36 @@
+{
+  "kind": "Actual SwiftUI components in synthetic macOS phone-sized viewports",
+  "sourceSHA256": {
+    "ios/VictoriaKillZone/VictoriaKillZone/Features/Game/ActiveDuelView.swift": "ae26503f9bb91c99c5ca5706448dfe0da7eef22c1412d19528990eff6eecdafe"
+  },
+  "supportingModuleSHA256": "366d6157de528a984e153c8933725565c3d2576df618a4a72ded1a72cfe98f2f",
+  "sourcePreparation": "Unmodified current component sources with @testable import prepended, linked against existing production dependencies",
+  "fixtures": "Classic duel, health 100, opponent health 60, ammo 8, K/D 3/3, 42 seconds; synthetic searching tracker, no networking",
+  "viewportPoints": [
+    [
+      375,
+      667
+    ],
+    [
+      393,
+      852
+    ]
+  ],
+  "renderer": "Offscreen NSHostingView cacheDisplay including native ScrollView and TextField",
+  "dynamicTypeCases": [
+    "large",
+    "xxxLarge (macOS font metrics differ from iOS)"
+  ],
+  "limitations": [
+    "Not an iPhone screenshot",
+    "macOS SwiftUI platform rendering; UIKit-only QR and clipboard controls excluded",
+    "No touch, keyboard, VoiceOver, networking, permissions, or camera acceptance",
+    "Bottom views use programmatic native scrolling, not a touch gesture"
+  ],
+  "PNGs": {
+    "classic-375-large-text.png": "aac078b11c8f57d4b204cf525f3da6fa229ead26878bbcbc37938ab85894edf5",
+    "classic-375-standard.png": "0fcef79f11eef481e4485de5d9fd39a3d52a992d1f2f022ba6dcbb5877c4526d",
+    "classic-393-large-text.png": "df89849a24d8086c32a7b1a33c00e7bb5812494cc13bb9336e3ee7eff68cbf74",
+    "classic-393-standard.png": "48da23b7bfc04d02435b5dc2f6b0c3ce2fb1d9a88a3212985439d7acde1cb32b"
+  }
+}
