@@ -16,7 +16,7 @@ import {
   readPrivateKey,
   resolveAppId,
 } from "./asc-client.mjs";
-import { fetchCurrentMainSha } from "./github-api.mjs";
+import { revalidatePromotion } from "./promotion-gate.mjs";
 import { postStatus } from "./slack-notify.mjs";
 import { sanitizeText } from "./redact.mjs";
 
@@ -235,7 +235,7 @@ export async function runPromotion({ config, deps }) {
       currentMainSha = await revalidate();
     } catch (error) {
       return finish("failed", {
-        detail: `current main could not be confirmed: ${sanitizeText(error.message)}`,
+        detail: `promotion prerequisites could not be confirmed: ${sanitizeText(error.message)}`,
       });
     }
     if (String(currentMainSha).toLowerCase() !== sha) {
@@ -339,9 +339,9 @@ async function main() {
         });
         return { ...run, buildFacts: () => readBuildFacts(buildFactsPath) };
       },
-      // Re-read main from the remote on the Mac itself: the hosted gate's
-      // answer is only as fresh as the moment this job was queued.
-      revalidate: () => fetchCurrentMainSha({ repository, token: githubToken }),
+      // Recheck current main and successful deployment evidence after waiting
+      // for the Mac; manual dispatch and retries cannot bypass this gate.
+      revalidate: () => revalidatePromotion({ repository, sha, token: githubToken }),
       poll: async ({ uploadedAfter, version: archivedVersion, buildNumber: uploadedBuildNumber }) => {
         // Polling can outlive one 15-minute App Store Connect token.
         const tokenProvider = createTokenProvider({

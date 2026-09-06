@@ -13,7 +13,7 @@ const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 export const CI_WORKFLOW_FILE = "ci.yml";
 export const CI_WORKFLOW_PATH = `.github/workflows/${CI_WORKFLOW_FILE}`;
 
-async function request({ fetchImpl, token, path }) {
+export async function requestGitHub({ fetchImpl, token, path }) {
   if (!REPOSITORY_PATTERN.test(String(path.repository))) {
     throw new Error("Invalid repository");
   }
@@ -35,7 +35,7 @@ export async function fetchCurrentMainSha({
   repository,
   token,
 }) {
-  const payload = await request({
+  const payload = await requestGitHub({
     fetchImpl,
     token,
     path: { repository, suffix: `/repos/${repository}/commits/main` },
@@ -74,7 +74,7 @@ export async function hasSuccessfulCiPushRun({
 
   // Scoped to the workflow file, so a look-alike workflow named "CI" cannot
   // vouch for a revision.
-  const payload = await request({
+  const payload = await requestGitHub({
     fetchImpl,
     token,
     path: {
@@ -94,4 +94,36 @@ export async function hasSuccessfulCiPushRun({
       String(run?.head_sha ?? "").toLowerCase() === candidate &&
       run?.repository?.full_name === repository,
   );
+}
+
+// The first canonical push run anchors this commit's deployment history. CI
+// has a direct head_sha identity; reruns retain the original creation time.
+// Include unsuccessful CI attempts so a later successful rerun cannot move
+// the boundary past an earlier deployment attempt for the same commit.
+export async function fetchCiPushHistoryStart({ fetchImpl = globalThis.fetch, repository, sha, token }) {
+  const candidate = String(sha ?? "").toLowerCase();
+  if (!SHA_PATTERN.test(candidate)) throw new Error("Invalid CI history candidate SHA");
+  const dates = [];
+  let expectedTotal;
+  const seen = new Set();
+  for (let page = 1; page <= 10; page += 1) {
+    const query = new URLSearchParams({ head_sha: candidate, event: "push", branch: "main", per_page: "100", page: String(page) });
+    const payload = await requestGitHub({ fetchImpl, token, path: { repository,
+      suffix: `/repos/${repository}/actions/workflows/${CI_WORKFLOW_FILE}/runs?${query.toString()}` } });
+    if (!Array.isArray(payload?.workflow_runs) || !Number.isInteger(payload.total_count) ||
+        payload.total_count < 0 || payload.total_count > 1000) throw new Error("Candidate CI history is incomplete");
+    expectedTotal ??= payload.total_count;
+    if (expectedTotal !== payload.total_count) throw new Error("Candidate CI history changed during verification");
+    for (const run of payload.workflow_runs) {
+      if (seen.has(run?.id) || !Number.isSafeInteger(run?.id) || run.id <= 0 ||
+          run.path !== CI_WORKFLOW_PATH || run.event !== "push" || run.head_branch !== "main" ||
+          run.head_sha !== candidate || run.repository?.full_name !== repository ||
+          !Number.isFinite(Date.parse(run.created_at))) throw new Error("Invalid candidate CI history");
+      seen.add(run.id);
+      dates.push(Date.parse(run.created_at));
+    }
+    if (dates.length === expectedTotal) return dates.length ? new Date(Math.min(...dates)).toISOString() : null;
+    if (dates.length > expectedTotal || payload.workflow_runs.length === 0) break;
+  }
+  throw new Error("Candidate CI history is incomplete");
 }

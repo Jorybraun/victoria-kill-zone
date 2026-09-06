@@ -3,7 +3,7 @@ name: TestFlight
 on:
   workflow_run:
     workflows:
-      - CI
+      - Deploy
     branches:
       - main
     types:
@@ -12,8 +12,7 @@ on:
 
 permissions:
   contents: read
-  # Listing the CI workflow's runs, which the gate uses to prove this exact
-  # revision passed CI.
+  # Read canonical CI/deployment runs, jobs and sanitized evidence metadata.
   actions: read
 
 # One promotion at a time. Queued runs are not cancelled, because the gate
@@ -38,9 +37,9 @@ jobs:
         (
           (
             github.event_name == 'workflow_run' &&
-            github.event.workflow_run.name == 'CI' &&
+            github.event.workflow_run.name == 'Deploy' &&
             github.event.workflow_run.conclusion == 'success' &&
-            github.event.workflow_run.event == 'push' &&
+            (github.event.workflow_run.event == 'workflow_run' || github.event.workflow_run.event == 'workflow_dispatch') &&
             github.event.workflow_run.head_branch == 'main' &&
             github.event.workflow_run.head_repository.full_name == github.repository
           ) ||
@@ -53,10 +52,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Check out the candidate revision
+      - name: Check out the promotion gate revision
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          # Run the current workflow's gate, never gate code from an older Deploy checkout.
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Set up Node.js
@@ -64,21 +64,22 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      # The gate resolves current main and the candidate's CI history from the
-      # API itself, so a manual dispatch cannot promote a revision that never
-      # passed CI.
+      # The gate reads current main, canonical CI and completed deployment
+      # evidence from the API. Manual dispatch has the same prerequisites.
       - name: Decide whether the candidate may be promoted
         id: gate
         env:
           VKZ_GITHUB_TOKEN: ${{ github.token }}
           VKZ_TESTFLIGHT_ENABLED: ${{ vars.VKZ_TESTFLIGHT_ENABLED }}
           VKZ_EVENT_NAME: ${{ github.event_name }}
-          VKZ_CI_WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
-          VKZ_CI_EVENT: ${{ github.event.workflow_run.event }}
-          VKZ_CI_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
-          VKZ_CI_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          VKZ_CI_HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+          VKZ_DEPLOY_WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          VKZ_DEPLOY_EVENT: ${{ github.event.workflow_run.event }}
+          VKZ_DEPLOY_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          VKZ_DEPLOY_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          VKZ_DEPLOY_HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
           VKZ_REPOSITORY: ${{ github.repository }}
+          VKZ_DEPLOY_RUN_ID: ${{ github.event.workflow_run.id }}
+          VKZ_DEPLOY_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
           VKZ_CANDIDATE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
         run: node scripts/release/promotion-gate.mjs
 
@@ -113,8 +114,8 @@ jobs:
         env:
           VKZ_TESTFLIGHT_ENABLED: ${{ vars.VKZ_TESTFLIGHT_ENABLED }}
           VKZ_REPOSITORY: ${{ github.repository }}
-          # Used only to re-read authoritative current main from this runner
-          # immediately before archiving.
+          # Re-read current main, CI and deployment evidence immediately
+          # before archiving on the Outpost.
           VKZ_GITHUB_TOKEN: ${{ github.token }}
           VKZ_RELEASE_SHA: ${{ needs.gate.outputs.sha }}
           VKZ_MARKETING_VERSION: ${{ vars.VKZ_MARKETING_VERSION }}
