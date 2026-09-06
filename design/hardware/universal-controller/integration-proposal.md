@@ -10,15 +10,15 @@ The player docks a phone vertically in an adjustable, brightly coloured arcade g
 
 A normally-open momentary switch is read by a small Bluetooth Low Energy board. Firmware debounces the switch and reports button state plus a monotonic sequence counter. The app acts as the BLE central through Apple's [Core Bluetooth](https://developer.apple.com/documentation/corebluetooth) APIs. A [Seeed XIAO nRF52840](https://wiki.seeedstudio.com/XIAO_BLE/) is one board candidate: the manufacturer lists a 21 × 17.8 mm board and BLE support. Board choice, circuit, supply, wiring clearance, antenna location, service UUIDs and message layout remain to be confirmed on a bench.
 
-Prototype the link with USB power from an external power bank. This kit has no battery cradle, battery selection, charging design, firmware, or demonstrated radio connection. The enclosure has no connector-specific power opening; remove the cover for board programming and power until a connector panel is designed.
+Prototype the link with USB power from an external power bank. This kit has no battery cradle, battery selection, charging design, firmware, or demonstrated radio connection. The enclosure has no connector-specific power opening; bench-test the board outside the housing until a connector panel and board restraint are designed.
 
 This is a custom BLE peripheral proposal, not a claim that an arbitrary Bluetooth camera shutter remote will work. Camera remotes often present another kind of input; prove compatibility with the app before choosing one. A supported game controller is a possible later alternative via Apple's [Game Controller](https://developer.apple.com/documentation/gamecontroller) framework.
 
 ## Integration seam to preserve
 
-The active development checkout has `RealtimeArenaController.setTriggerHeld(_:)` in `ios/VictoriaKillZone/VictoriaKillZone/Features/Realtime/RealtimeArenaController.swift`. Dispatch accessory input into the existing input path on the main actor. Do not create a second shot loop or invoke backend damage from hardware. This source is on the combat development branch, not the main baseline of this asset branch.
+The native arena has `RealtimeArenaController.setTriggerHeld(_:)` in `ios/VictoriaKillZone/VictoriaKillZone/Features/Realtime/RealtimeArenaController.swift`. Dispatch accessory input into the existing input path on the main actor. Do not create a second shot loop or invoke backend damage from hardware. The native arena source is included in the current main baseline.
 
-The mainline duel has `startRepeatingFire()` / `stopRepeatingFire()` hold/release entry points in `Features/Game/DuelSession.swift`. The iOS owner should adapt the currently shipped game surface, and retain touch and voice input. A hardware press must not depend on having a target lock. All existing ammunition, cooldown, tracking, presence, life-state and authoritative verdict rules remain owned by the game.
+The existing duel surface also has `startRepeatingFire()` / `stopRepeatingFire()` hold/release entry points in `Features/Game/DuelSession.swift`. The iOS owner should adapt the currently shipped game surface, and retain touch and voice input. A hardware press must not depend on having a target lock. All existing ammunition, cooldown, tracking, presence, life-state and authoritative verdict rules remain owned by the game.
 
 For multiple input sources, track each source's state. Releasing a touch must not incorrectly release a still-held accessory trigger, or vice versa. A lifecycle clear cancels every input source.
 

@@ -1,0 +1,13 @@
+Drawing ID,Part,STL file,Quantity,Width mm,Depth mm,Height mm,Print face,Support note
+1,Left housing and grip,housing_left.stl,1,108.5,108.593,20.5,Exterior left faceX−19; cavity up,"No broad roof; inspect nut channels, locating lips and horizontal bores for local support."
+2,Right housing and grip,housing_right.stl,1,108.5,108.593,19.0,Exterior right faceX19; cavity up,No broad roof; inspect nut channels and bores; clear hex pockets before assembly.
+3,Universal phone dock,phone_dock.stl,1,120.0,28.0,42.0,Shelf bottomZ−4,Rear plate prints upright; inspect horizontal slots/recesses and locating sockets for short bridges.
+4,Closed arcade nose cap,nose_cap.stl,1,45.0,18.0,32.0,Closed frontY90; cavity up,No cavity roof; cross-bolt/nut openings may need local support.
+5,Button trigger plate,button_plate.stl,1,30.0,41.0,4.0,Flat rearY42,Flat4 mm plate; no designed overhang.
+6,Left sliding jaw,jaw_left.stl,1,41.4,37.4,29.0,Exterior side wall,"Inspect flange, bores and captive-nut pockets for local support."
+7,Right sliding jaw,jaw_right.stl,1,41.4,37.4,29.0,Exterior side wall,"Inspect flange, bores and captive-nut pockets for local support."
+8,Rigid shim 1 mm,shim_1mm.stl,2,12.0,24.0,1.0,Broad flat face,Flat shim; no designed overhang.
+9,Rigid shim 2 mm,shim_2mm.stl,2,12.0,24.0,2.0,Broad flat face,Flat shim; no designed overhang.
+10,Rigid shim 4 mm,shim_4mm.stl,2,12.0,24.0,4.0,Broad flat face,Flat shim; no designed overhang.
+11,Rigid shim 8 mm,shim_8mm.stl,2,12.0,24.0,8.0,Broad flat face,Flat shim; no designed overhang.
+12,Joint and hardware fit coupon,fit_coupon.stl,1,64.0,37.0,6.0,Flat baseZ0,Print without scaling; cut only thin joining neck for male/female fit trial.
