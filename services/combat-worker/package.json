@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:load": "vitest run --config vitest.load.config.ts",
     "types": "wrangler types worker-configuration.d.ts --strict-vars false"
   },
   "dependencies": {
@@ -18,6 +19,7 @@
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.1.4",
     "@eslint/js": "10.0.1",
+    "@types/node": "26.4.1",
     "@vitest/runner": "4.1.10",
     "@vitest/snapshot": "4.1.10",
     "eslint": "10.8.1",

@@ -12,6 +12,7 @@ export class ProjectionStore {
       CREATE TABLE IF NOT EXISTS projection_outbox (
         from_sequence INTEGER PRIMARY KEY, through_sequence INTEGER NOT NULL, payload TEXT NOT NULL, sealed INTEGER NOT NULL
       );
+      CREATE INDEX IF NOT EXISTS projection_outbox_open ON projection_outbox(from_sequence DESC) WHERE sealed = 0;
       CREATE TABLE IF NOT EXISTS projection_progress (
         singleton INTEGER PRIMARY KEY CHECK(singleton = 1), queued_sequence INTEGER NOT NULL, delivered_sequence INTEGER NOT NULL
       );
