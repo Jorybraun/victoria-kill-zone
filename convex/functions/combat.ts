@@ -3,8 +3,8 @@ import { DEFAULT_RULES, LIMITS, validateCombatRules, type CombatTicketClaims } f
 import { v } from "convex/values";
 import { mutation } from "./lib/server.js";
 import { authenticatePlayer, fail, listPlayers } from "./lib/state.js";
-import { signCombatTicket } from "./lib/combat-ticket.js";
-import { verifyCombatProjection } from "./lib/combat-projection.js";
+import { signCombatTicket } from "./lib/combat_ticket.js";
+import { verifyCombatProjection } from "./lib/combat_projection.js";
 import { hashSecret } from "../domain/session.js";
 import { resolveWinner } from "../domain/lifecycle.js";
 import { appendEvent, toPlayerState } from "./lib/state.js";
