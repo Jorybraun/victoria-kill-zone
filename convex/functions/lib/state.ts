@@ -80,6 +80,8 @@ export const locationSampleValidator = v.object({
 });
 
 export type BackendErrorCode =
+  | "COMBAT_UNAVAILABLE"
+  | "COMBAT_AUTHORITY_REQUIRED"
   | "INVALID_DISPLAY_NAME"
   | "INVALID_CODE"
   | "MATCH_NOT_FOUND"

@@ -12,7 +12,7 @@ import {
 import {
   isValidMatchCode,
   normalizeMatchCode,
-  viewKindForPhase,
+  viewKindForMatch,
   type SpectatorDataSource,
   type SpectatorSnapshot,
   type SpectatorViewState,
@@ -80,7 +80,7 @@ function toSnapshotViewState(
   code: string,
   source: SpectatorDataSource,
 ): SpectatorViewState {
-  const kind = viewKindForPhase(snapshot.match.phase);
+  const kind = viewKindForMatch(snapshot.match);
   return { kind, code, source, snapshot };
 }
 
@@ -128,7 +128,7 @@ function toViewState(
       return hasExpectedCode(resource.snapshot, code)
         ? {
             kind: "recovery",
-            currentKind: viewKindForPhase(resource.snapshot.match.phase),
+            currentKind: viewKindForMatch(resource.snapshot.match),
             code,
             source,
             snapshot: resource.snapshot,
@@ -160,13 +160,8 @@ export function App() {
     }
   }, [runtime]);
 
-  useEffect(
-    () => () => {
-      adapter.dispose();
-    },
-    [adapter],
-  );
-
+  // Subscription cleanup releases the socket. Permanently disposing this
+  // memoized factory here would break StrictMode's setup-cleanup-setup cycle.
   const resource = useSpectatorSnapshot(adapter, route.code, retryToken);
   const state: SpectatorViewState =
     route.code === null

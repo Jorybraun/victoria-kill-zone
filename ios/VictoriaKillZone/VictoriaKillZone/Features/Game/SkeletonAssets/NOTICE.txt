@@ -1,0 +1,11 @@
+BodyParts3D, © The Database Center for Life Science licensed under CC Attribution 4.0 International.
+
+Anatomical source: BodyParts3D compatibility version 4.0, FMA 3.0 part_of representation, official LSDB Archive distribution.
+Source: https://dbarchive.biosciencedbc.jp/data/bodyparts3d/LATEST/partof_BP3D_4.0_obj_99.zip
+Current license: https://dbarchive.biosciencedbc.jp/en/bodyparts3d/lic.html (updated 2025-02-27; saved 2026-09-05).
+License terms: https://creativecommons.org/licenses/by/4.0/
+
+This adult-male anatomical template is adapted for cosmetic game presentation. It is not a reconstruction of a player's anatomy, tracking evidence, or collision geometry.
+Modifications: verified bone selection; mesh simplification; geometry-derived ambient shading; coordinate conversion; grouping and retargeting into nineteen tracked anatomical parts; binary packaging. Source-derived geometry remains credited to DBCLS. No endorsement is implied.
+
+The source archive retains historical CC BY-SA 2.1 Japan comments. The official publisher's current license page, updated 2025-02-27, expressly licenses this database under CC BY 4.0 and permits redistribution and derivative works. That exact current page is preserved beside this notice; the original archive is identified by SHA-256 in manifest.json.

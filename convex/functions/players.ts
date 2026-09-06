@@ -39,6 +39,7 @@ export const startReload = mutation({
     if (match === null) {
       fail("MATCH_NOT_FOUND");
     }
+    if (match.combatMode !== undefined) fail("COMBAT_AUTHORITY_REQUIRED");
     const now = Date.now();
     const state = toPlayerState(player);
     const plan = planStartReload(
@@ -68,7 +69,7 @@ export const completeReload = internalMutation({
       return null;
     }
     const match = await ctx.db.get(player.matchId);
-    if (match === null) {
+    if (match === null || match.combatMode !== undefined) {
       return null;
     }
     const patch = planCompleteReload(
@@ -102,13 +103,13 @@ export const heartbeat = mutation({
   handler: async (ctx, args) => {
     const player = await authenticatePlayer(ctx, args.matchId, args.playerId, args.sessionSecret);
     const now = Date.now();
+    const match = await ctx.db.get(args.matchId);
 
     let locationPatch: Partial<Doc<"players">> = {};
     if (args.location !== undefined) {
       if (!isWellFormedLocationSample(args.location)) {
         fail("INVALID_LOCATION");
       }
-      const match = await ctx.db.get(args.matchId);
       const next = applyLocationSample(
         match === null ? null : arenaGeometryOf(match),
         locationStateFrom(toPlayerState(player)),
@@ -119,9 +120,11 @@ export const heartbeat = mutation({
     }
 
     await ctx.db.patch(player._id, {
-      connected: true,
       lastSeenAt: now,
-      ...(player.lifeState === "disconnected" && player.health > 0 ? { lifeState: "alive" as const } : {}),
+      ...(match?.combatMode === undefined ? {
+        connected: true,
+        ...(player.lifeState === "disconnected" && player.health > 0 ? { lifeState: "alive" as const } : {}),
+      } : {}),
       ...locationPatch,
     });
     return null;
@@ -153,7 +156,7 @@ export const respawn = internalMutation({
       return null;
     }
     const match = await ctx.db.get(player.matchId);
-    if (match === null) {
+    if (match === null || match.combatMode !== undefined) {
       return null;
     }
 
