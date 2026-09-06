@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { generateKeyPairSync } from "node:crypto";
 
 import { pollProcessingState, createAscToken, createTokenProvider } from "./asc-client.mjs";
@@ -9,7 +10,8 @@ import {
   hasSuccessfulCiPushRun,
 } from "./github-api.mjs";
 import { createEvidence, runCommand, runPromotion } from "./promote-testflight.mjs";
-import { decidePromotion, decideWithRemoteFacts } from "./promotion-gate.mjs";
+import { decidePromotion, decideWithRemoteFacts, revalidatePromotion } from "./promotion-gate.mjs";
+import { hasSuccessfulDeployment, DEPLOY_WORKFLOW_PATH } from "./deployment-gate.mjs";
 import { sanitizeText } from "./redact.mjs";
 import { buildStatusMessage, postStatus } from "./slack-notify.mjs";
 
@@ -20,10 +22,11 @@ const REPOSITORY = "example/victoria-kill-zone";
 const greenRun = {
   enabled: true,
   eventName: "workflow_run",
-  ciWorkflowName: "CI",
-  ciEvent: "push",
-  ciConclusion: "success",
+  deployWorkflowName: "Deploy",
+  deployEvent: "workflow_run",
+  deployConclusion: "success",
   ciVerifiedForSha: true,
+  deployVerifiedForSha: true,
   headBranch: "main",
   headRepository: REPOSITORY,
   repository: REPOSITORY,
@@ -35,7 +38,7 @@ const greenRun = {
 assert.deepEqual(decidePromotion(greenRun), {
   promote: true,
   reasonKey: "promote",
-  reason: "the exact current main revision is green",
+  reason: "the exact current main revision passed CI, deployment and smoke checks",
   sha: CURRENT_SHA,
 });
 
@@ -50,11 +53,11 @@ assert.equal(decidePromotion({ ...greenRun, enabled: false }).reasonKey, "disabl
 assert.equal(decidePromotion({ ...greenRun, enabled: "true" }).reasonKey, "disabled");
 
 // Gate: only green CI on this repository's own main may promote.
-assert.equal(decidePromotion({ ...greenRun, ciConclusion: "failure" }).reasonKey, "ciNotSuccessful");
+assert.equal(decidePromotion({ ...greenRun, deployConclusion: "failure" }).reasonKey, "deployNotSuccessful");
 assert.equal(decidePromotion({ ...greenRun, headBranch: "feature" }).reasonKey, "notMain");
 // A green pull-request CI run must never queue the signing runner.
-assert.equal(decidePromotion({ ...greenRun, ciEvent: "pull_request" }).reasonKey, "notMergeEvent");
-assert.equal(decidePromotion({ ...greenRun, ciWorkflowName: "Deploy" }).reasonKey, "notCiWorkflow");
+assert.equal(decidePromotion({ ...greenRun, deployEvent: "pull_request" }).reasonKey, "notDeployEvent");
+assert.equal(decidePromotion({ ...greenRun, deployWorkflowName: "CI" }).reasonKey, "notDeployWorkflow");
 assert.equal(
   decidePromotion({ ...greenRun, headRepository: "fork/victoria-kill-zone" }).reasonKey,
   "forkedRepository",
@@ -74,12 +77,16 @@ const manualDispatch = {
 };
 assert.equal(decidePromotion(manualDispatch).reasonKey, "ciNotVerifiedForSha");
 assert.equal(
-  decidePromotion({ ...manualDispatch, ciVerifiedForSha: true }).reasonKey,
+  decidePromotion({ ...manualDispatch, ciVerifiedForSha: true, deployVerifiedForSha: true }).reasonKey,
   "promote",
 );
 assert.equal(decidePromotion({ ...greenRun, ciVerifiedForSha: false }).reasonKey, "ciNotVerifiedForSha");
 
-// Gate: currency and CI success come from the remote, not from the payload.
+assert.equal(decidePromotion({ ...greenRun, deployVerifiedForSha: false }).reasonKey, "deployNotVerifiedForSha");
+assert.equal(decidePromotion({ ...manualDispatch, ciVerifiedForSha: true }).reasonKey, "deployNotVerifiedForSha");
+const verifiedPrerequisites = { verifyDeployment: async () => true };
+
+// Gate: currency, CI and deployment success come from the remote, not the payload.
 const remoteEnvironment = {
   VKZ_TESTFLIGHT_ENABLED: "true",
   VKZ_EVENT_NAME: "workflow_dispatch",
@@ -89,6 +96,7 @@ const remoteEnvironment = {
 assert.equal(
   (
     await decideWithRemoteFacts(remoteEnvironment, {
+      ...verifiedPrerequisites,
       fetchCurrentMain: async () => CURRENT_SHA,
       verifyCi: async () => true,
     })
@@ -98,6 +106,7 @@ assert.equal(
 assert.equal(
   (
     await decideWithRemoteFacts(remoteEnvironment, {
+      ...verifiedPrerequisites,
       fetchCurrentMain: async () => CURRENT_SHA,
       verifyCi: async () => false,
     })
@@ -107,6 +116,7 @@ assert.equal(
 assert.equal(
   (
     await decideWithRemoteFacts(remoteEnvironment, {
+      ...verifiedPrerequisites,
       fetchCurrentMain: async () => STALE_SHA,
       verifyCi: async () => true,
     })
@@ -117,6 +127,7 @@ assert.equal(
 assert.equal(
   (
     await decideWithRemoteFacts(remoteEnvironment, {
+      ...verifiedPrerequisites,
       fetchCurrentMain: async () => {
         throw new Error("GitHub request failed with status 502");
       },
@@ -127,6 +138,7 @@ assert.equal(
 );
 assert.equal(
   (await decideWithRemoteFacts({ ...remoteEnvironment, VKZ_TESTFLIGHT_ENABLED: "false" }, {
+    ...verifiedPrerequisites,
     fetchCurrentMain: async () => {
       throw new Error("the disabled lane must not reach the network");
     },
@@ -216,6 +228,7 @@ await assert.rejects(
 assert.equal(
   (
     await decideWithRemoteFacts(remoteEnvironment, {
+      ...verifiedPrerequisites,
       fetchCurrentMain: async () => CURRENT_SHA,
       verifyCi: async () => {
         const error = new Error("GitHub request failed with status 403");
@@ -244,6 +257,197 @@ assert.equal(
   }),
   false,
 );
+
+// Deployment evidence comes from the canonical workflow's current execution,
+// not its context head_sha or an artifact left behind by a previous attempt.
+function deploymentFixture() {
+  const run = {
+    id: 101, run_attempt: 1, path: DEPLOY_WORKFLOW_PATH, event: "workflow_run",
+    display_title: `Deploy ${CURRENT_SHA}`,
+    status: "completed", conclusion: "success", head_branch: "main",
+    head_sha: STALE_SHA, repository: { full_name: REPOSITORY },
+    head_repository: { full_name: REPOSITORY },
+    created_at: "2026-09-06T12:00:00Z", run_started_at: "2026-09-06T12:01:00Z",
+    updated_at: "2026-09-06T12:30:00Z",
+  };
+  const stepsByJob = [
+    ["Revalidate fast gate", ["Verify workspace"]],
+    ["Revalidate iOS gate", ["Verify iOS"]],
+    ["Build production release", ["Deploy Convex and build spectator", "Smoke the sanitized production spectator query", "Upload spectator artifact"]],
+    ["Deploy spectator to Pages", ["Deploy GitHub Pages artifact", "Smoke the deployed spectator page", "Create sanitized release evidence", "Upload sanitized release evidence"]],
+  ];
+  const jobs = stepsByJob.map(([name, steps]) => ({
+    name, status: "completed", conclusion: "success", run_attempt: 1,
+    steps: steps.map(name => ({ name, status: "completed", conclusion: "success",
+      started_at: "2026-09-06T12:28:00Z", completed_at: "2026-09-06T12:29:00Z" })),
+  }));
+  const ciRuns = [{ id: 10, path: CI_WORKFLOW_PATH, event: "push", head_branch: "main",
+    head_sha: CURRENT_SHA, repository: { full_name: REPOSITORY },
+    created_at: "2026-09-05T00:00:00Z", conclusion: "failure" },
+  { id: 11, path: CI_WORKFLOW_PATH, event: "push", head_branch: "main",
+    head_sha: CURRENT_SHA, repository: { full_name: REPOSITORY },
+    created_at: "2026-09-06T11:59:00Z", conclusion: "success" }];
+  return { runs: [run], ciRuns, jobs, artifacts: [{
+    name: `release-evidence-${CURRENT_SHA}`, expired: false, size_in_bytes: 500,
+    created_at: "2026-09-06T12:28:30Z",
+  }] };
+}
+
+function deploymentApi(fixture, requests = []) {
+  return async (url) => {
+    requests.push(String(url));
+    const parsed = new URL(url);
+    let body;
+    if (parsed.pathname.endsWith("/workflows/ci.yml/runs")) {
+      assert.equal(parsed.searchParams.get("head_sha"), CURRENT_SHA);
+      assert.equal(parsed.searchParams.has("status"), false);
+      body = { total_count: fixture.ciRuns.length, workflow_runs: fixture.ciRuns };
+    } else if (parsed.pathname.endsWith("/workflows/deploy.yml/runs")) {
+      assert.equal(parsed.searchParams.has("head_sha"), false);
+      assert.equal(parsed.searchParams.has("status"), false);
+      assert.equal(parsed.searchParams.get("created"), ">=2026-09-05T00:00:00.000Z");
+      body = { total_count: fixture.runs.length, workflow_runs: fixture.runs };
+    } else if (parsed.pathname.endsWith("/jobs")) {
+      assert.match(parsed.pathname, /\/attempts\/1\/jobs$/u);
+      body = { total_count: fixture.jobs.length, jobs: fixture.jobs };
+    } else if (parsed.pathname.endsWith("/artifacts")) {
+      body = { total_count: fixture.artifacts.length, artifacts: fixture.artifacts };
+    } else {
+      const id = Number(parsed.pathname.split("/").at(-1));
+      body = fixture.runs.find(run => run.id === id);
+      fixture.detailReads = (fixture.detailReads ?? 0) + 1;
+      if (fixture.changeAttemptAfterRead && fixture.detailReads > 1) body = { ...body, run_attempt: 2 };
+    }
+    return { ok: true, status: 200, json: async () => body };
+  };
+}
+const deploymentRequest = { repository: REPOSITORY, sha: CURRENT_SHA, token: "t" };
+const deploymentRequests = [];
+assert.equal(await hasSuccessfulDeployment({ ...deploymentRequest,
+  fetchImpl: deploymentApi(deploymentFixture(), deploymentRequests), triggerRunId: "101", triggerRunAttempt: "1" }), true);
+assert.ok(deploymentRequests.some(url => url.endsWith("/attempts/1/jobs?per_page=100")));
+
+// Each regression denies promotion, even with green CI and another successful
+// deployment or old evidence in the repository.
+for (const mutate of [
+  fixture => { fixture.runs = []; },
+  fixture => { fixture.runs[0].path = ".github/workflows/lookalike-deploy.yml"; },
+  fixture => { fixture.runs[0].repository.full_name = "fork/example"; },
+  fixture => { fixture.runs[0].head_repository.full_name = "fork/example"; },
+  fixture => { fixture.runs[0].conclusion = "failure"; },
+  fixture => { fixture.runs[0].status = "in_progress"; },
+  fixture => { fixture.runs[0].event = "pull_request"; },
+  fixture => { fixture.runs[0].display_title = `Deploy ${STALE_SHA}`; },
+  fixture => { fixture.jobs = []; },
+  fixture => { fixture.jobs[2].conclusion = "skipped"; },
+  fixture => { fixture.jobs[2].steps[0].conclusion = "skipped"; },
+  fixture => { fixture.jobs[2].steps[1].conclusion = "failure"; },
+  fixture => { fixture.jobs[3].steps[1].conclusion = "skipped"; },
+  fixture => { fixture.jobs[3].run_attempt = 0; },
+  fixture => { fixture.jobs[3].steps.pop(); },
+  fixture => { fixture.artifacts = []; },
+  fixture => { fixture.artifacts[0].name = `release-evidence-${STALE_SHA}`; },
+  fixture => { fixture.artifacts[0].expired = true; },
+  fixture => { fixture.artifacts[0].size_in_bytes = 0; },
+  fixture => { fixture.artifacts[0].created_at = "2026-09-05T12:28:30Z"; },
+  fixture => { fixture.artifacts.push({ ...fixture.artifacts[0] }); },
+  fixture => { fixture.changeAttemptAfterRead = true; },
+  fixture => { fixture.runs.push({ ...fixture.runs[0], id: 102, conclusion: "failure",
+    created_at: "2026-09-06T13:00:00Z", updated_at: "2026-09-06T13:30:00Z" }); },
+  // A newer cancelled candidate blocks even if the older success finishes later.
+  fixture => { fixture.runs[0].updated_at = "2026-09-06T14:00:00Z";
+    fixture.runs.push({ ...fixture.runs[0], id: 102, conclusion: "cancelled",
+      created_at: "2026-09-06T13:00:00Z", updated_at: "2026-09-06T13:30:00Z" }); },
+  // Old run IDs can be rerun after newer IDs completed successfully.
+  fixture => { fixture.runs.push({ ...fixture.runs[0], id: 99, run_attempt: 2, conclusion: "failure",
+    created_at: "2026-09-05T12:00:00Z", updated_at: "2026-09-06T14:00:00Z" }); },
+  fixture => { fixture.runs.push({ ...fixture.runs[0], id: 99, run_attempt: 2, status: "queued",
+    created_at: "2026-09-05T12:00:00Z", updated_at: "2026-09-05T12:30:00Z" }); },
+]) {
+  const fixture = deploymentFixture();
+  mutate(fixture);
+  assert.equal(await hasSuccessfulDeployment({ ...deploymentRequest, fetchImpl: deploymentApi(fixture) }), false);
+}
+for (const trigger of [{ triggerRunId: "102", triggerRunAttempt: "1" }, { triggerRunId: "101", triggerRunAttempt: "2" }]) {
+  assert.equal(await hasSuccessfulDeployment({ ...deploymentRequest, ...trigger,
+    fetchImpl: deploymentApi(deploymentFixture()) }), false);
+}
+await assert.rejects(hasSuccessfulDeployment({ ...deploymentRequest,
+  fetchImpl: async () => ({ ok: false, status: 403 }) }), /status 403/u);
+const validDeploymentApi = deploymentApi(deploymentFixture());
+await assert.rejects(hasSuccessfulDeployment({ ...deploymentRequest,
+  fetchImpl: async (url) => String(url).includes("/workflows/deploy.yml/")
+    ? { ok: true, json: async () => ({ total_count: 1001, workflow_runs: [] }) }
+    : validDeploymentApi(url) }), /completely/u);
+// Failed/pending attempts from another SHA never block a deployed candidate.
+for (const status of ["queued", "completed"]) {
+  const fixture = deploymentFixture();
+  fixture.runs.push({ ...fixture.runs[0], id: 102, display_title: `Deploy ${STALE_SHA}`,
+    status, conclusion: "failure", updated_at: "2026-09-07T12:00:00Z" });
+  assert.equal(await hasSuccessfulDeployment({ ...deploymentRequest, fetchImpl: deploymentApi(fixture) }), true);
+}
+// An old-ID rerun on a later history page cannot hide behind page one's success.
+const pagedFixture = deploymentFixture();
+pagedFixture.runs = Array.from({ length: 100 }, (_, index) => ({ ...pagedFixture.runs[0], id: 200 + index }));
+const failedOldRerun = { ...pagedFixture.runs[0], id: 1, run_attempt: 2, conclusion: "failure",
+  updated_at: "2026-09-07T12:00:00Z" };
+const pagedApi = deploymentApi({ ...pagedFixture, runs: [...pagedFixture.runs, failedOldRerun] });
+const pagesRead = [];
+assert.equal(await hasSuccessfulDeployment({ ...deploymentRequest, fetchImpl: async (url) => {
+  const parsed = new URL(url);
+  if (parsed.pathname.endsWith("/workflows/deploy.yml/runs")) {
+    const page = parsed.searchParams.get("page");
+    pagesRead.push(page);
+    return { ok: true, json: async () => ({ total_count: 101,
+      workflow_runs: page === "1" ? pagedFixture.runs : [failedOldRerun] }) };
+  }
+  return pagedApi(url);
+} }), false);
+assert.deepEqual(pagesRead, ["1", "2"]);
+await assert.rejects(hasSuccessfulDeployment({ ...deploymentRequest, fetchImpl: async (url) =>
+  String(url).includes("/workflows/deploy.yml/") ? {
+    ok: true, json: async () => ({ total_count: 2, workflow_runs: [deploymentFixture().runs[0]] }),
+  } : validDeploymentApi(url),
+}), /changed during verification/u);
+
+// Manual and automatic promotion both need deployment proof. The automatic
+// path binds the actual release SHA to the triggering Deploy attempt, even
+// when the workflow context contains a different head_sha.
+assert.equal((await decideWithRemoteFacts(remoteEnvironment, {
+  fetchCurrentMain: async () => CURRENT_SHA, verifyCi: async () => true,
+  verifyDeployment: async () => false,
+})).reasonKey, "deployNotVerifiedForSha");
+assert.equal((await decideWithRemoteFacts(remoteEnvironment, {
+  fetchCurrentMain: async () => CURRENT_SHA, verifyCi: async () => true,
+  verifyDeployment: async () => { throw new Error("unavailable"); },
+})).reasonKey, "remoteUnavailable");
+const automaticEnvironment = { ...remoteEnvironment, VKZ_EVENT_NAME: "workflow_run",
+  VKZ_DEPLOY_WORKFLOW_NAME: "Deploy", VKZ_DEPLOY_EVENT: "workflow_run",
+  VKZ_DEPLOY_CONCLUSION: "success", VKZ_DEPLOY_HEAD_BRANCH: "main",
+  VKZ_DEPLOY_HEAD_REPOSITORY: REPOSITORY, VKZ_DEPLOY_RUN_ID: "101", VKZ_DEPLOY_RUN_ATTEMPT: "1",
+  VKZ_CANDIDATE_SHA: STALE_SHA,
+};
+const automatic = await decideWithRemoteFacts(automaticEnvironment, {
+  fetchCurrentMain: async () => CURRENT_SHA,
+  verifyCi: async ({ sha }) => { assert.equal(sha, CURRENT_SHA); return true; },
+  verifyDeployment: async ({ sha, triggerRunId, triggerRunAttempt }) => {
+    assert.equal(sha, CURRENT_SHA); assert.equal(triggerRunId, "101"); assert.equal(triggerRunAttempt, "1"); return true;
+  },
+});
+assert.equal(automatic.promote, true);
+assert.equal(automatic.sha, CURRENT_SHA);
+assert.equal((await decideWithRemoteFacts({ ...automaticEnvironment, VKZ_DEPLOY_WORKFLOW_NAME: "CI" }, {
+  fetchCurrentMain: async () => CURRENT_SHA, verifyCi: async () => true, verifyDeployment: async () => true,
+})).reasonKey, "notDeployWorkflow");
+
+// The checked-in lane actually wakes after Deploy and runs its own current
+// gate code; an older deployed checkout cannot restore the old CI-only gate.
+const workflow = await readFile(new URL("../../.github/workflows/testflight.yml", import.meta.url), "utf8");
+assert.match(workflow, /workflows:\s*\n\s*- Deploy\n/u);
+assert.doesNotMatch(workflow, /workflows:\s*\n\s*- CI\n/u);
+assert.match(workflow, /ref: \$\{\{ github\.sha \}\}/u);
+const deployWorkflow = await readFile(new URL("../../.github/workflows/deploy.yml", import.meta.url), "utf8");
+assert.match(deployWorkflow, /run-name: Deploy \$\{\{ github\.event_name == 'workflow_run' && github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}/u);
 
 // Redaction: nothing sensitive survives sanitization. The credential-shaped
 // fixtures are assembled at runtime so this file never stores a literal that
@@ -787,6 +991,38 @@ const revalidatedGood = await runPromotion({
   },
 });
 assert.equal(revalidatedGood.succeeded, true);
+
+// The production prearchive callback repeats CI and deployment verification;
+// losing either prerequisite after hosted approval never reaches the archive.
+for (const prerequisites of [
+  { verifyCi: async () => true, verifyDeployment: async () => false },
+  { verifyCi: async () => false, verifyDeployment: async () => true },
+  { verifyCi: async () => true, verifyDeployment: async () => { throw new Error("GitHub unavailable"); } },
+]) {
+  const outpostRecorder = recorder();
+  const result = await runPromotion({
+    config: { sha: CURRENT_SHA, version: "0.1.0" },
+    deps: {
+      revalidate: () => revalidatePromotion(deploymentRequest, {
+        fetchCurrentMain: async () => CURRENT_SHA, ...prerequisites,
+      }),
+      archiveAndUpload: async () => { throw new Error("ineligible release reached archive"); },
+      poll: async () => { throw new Error("ineligible release reached polling"); },
+      notify: outpostRecorder.notify,
+    },
+  });
+  assert.equal(result.state, "failed");
+  assert.deepEqual(outpostRecorder.posted.map(status => status.state), ["queued", "failed"]);
+}
+assert.equal(await revalidatePromotion(deploymentRequest, {
+  fetchCurrentMain: async () => CURRENT_SHA,
+  verifyCi: async () => true, verifyDeployment: async () => true,
+}), CURRENT_SHA);
+assert.equal(await revalidatePromotion(deploymentRequest, {
+  fetchCurrentMain: async () => STALE_SHA,
+  verifyCi: async () => { throw new Error("superseded candidate checked CI"); },
+  verifyDeployment: async () => { throw new Error("superseded candidate checked deployment"); },
+}), STALE_SHA);
 
 // Orchestration: an unrecorded promotion is not a success, and evidence
 // failure never rewrites the promotion's own state.
