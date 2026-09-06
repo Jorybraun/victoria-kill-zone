@@ -33,6 +33,7 @@ if ! git check-ignore -q "archive /"; then
 fi
 
 git diff --check
+python3 scripts/ci/check-convex-modules.py
 
 secret_pattern='cog_[A-Za-z0-9]{32,}|gh[pousr]_[A-Za-z0-9]{36,}|-----BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY-----'
 secret_files="$(git ls-files -co --exclude-standard -z \
