@@ -44,10 +44,13 @@ interfaces, and three independent lanes: scanner, automatic shared positioning,
 and projectile/combat proof. Integration follows measured positioning and body
 tracking evidence. Preserve #69 → #70 → #71; stack dependent work within each
 lane without making optional scanner work a dependency of the positioning engine.
-Implementation has resumed with KIL-47's bounded CI repair on
-`codex/receiver-backpressure-test`, independently based on main `2929fd69`.
-Scanner, positioning and combat lanes remain queued until their source and
-contracts are ready. No merge or TestFlight release is implied.
+The CI repair in PR #73 and frozen foundation in PR #74 passed exact-head GitHub
+CI. Three agents have implemented the scanner, shared-origin experiment and
+projectile replay against the frozen contract. Integration is verifying and
+publishing the focused drafts. Scan & Save now has an independent offline entry;
+main Create Arena bypasses the saved-map picker. Production calibration and all
+physical gameplay gates remain until the replacement is proven. No merge or
+TestFlight release is implied.
 
 The full [production combat review](research/production-combat-review.md) remains
 the scope under accepted [ADR 0008](decisions/0008-realtime-combat-implementation.md).
