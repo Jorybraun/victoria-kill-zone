@@ -11,10 +11,12 @@ export class LoadReporter implements Reporter {
   constructor(private readonly filename = "last-load.json", private readonly environment = "local-workerd-synthetic") {}
   onTestCaseResult(test: TestCase): void {
     const annotation = test.annotations().find(item => item.type === "vkz-load");
+    const trace = test.annotations().find(item => item.type === "vkz-runtime-trace");
     const outcome = test.result();
     this.results.push({name: test.name, state: outcome.state,
       failures: (outcome.errors ?? []).slice(0, 8).map(error => ({name: error.name, message: error.message.slice(0, 2000)})),
-      result: annotation ? JSON.parse(annotation.message) as unknown : null});
+      result: annotation ? JSON.parse(annotation.message) as unknown : null,
+      ...(trace ? {diagnostics: JSON.parse(trace.message) as unknown} : {})});
     mkdirSync("reports", {recursive: true});
     writeFileSync(join("reports", this.filename), JSON.stringify({
       generatedAt: new Date().toISOString(), ...this.source,

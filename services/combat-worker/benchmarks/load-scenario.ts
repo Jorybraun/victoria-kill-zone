@@ -124,6 +124,7 @@ export async function runLoadScenario(scenario: typeof loadScenarios[number], LO
     await barrier(() => clients.every(client => client.phase === "running"));
     await wait(500); // Warmup is excluded from the measurement window.
     await guard(profile?.begin() ?? Promise.resolve());
+    await guard(runtime.beginDiagnostics?.(ticket.matchId) ?? Promise.resolve());
     const beganAt = performance.now(), beganMatchMs = clients[0]!.matchTimeMs;
     measurementStartedAt = beganAt;
     const beganAuthorityTick = clients[0]!.latestAuthorityTick;

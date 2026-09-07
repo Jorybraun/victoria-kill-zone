@@ -4,6 +4,8 @@ import type { CombatTicketClaims } from "@vkz/combat-protocol";
 import { parseCheckpoint } from "@vkz/combat-simulation";
 import type { LoadSocket } from "./load-client.js";
 import type { DurableLoadState, LoadRuntime } from "./load-runtime.js";
+import {collectTraceLogs, type TraceDiagnostics} from "./first-pause-trace.js";
+import type {CombatRoom as TraceRoom} from "./trace-worker.js";
 
 type DurableRow = {
   checkpoint: string;
@@ -47,13 +49,14 @@ function decodeLedger(encoded: string): DurableLoadState["ledger"] {
 }
 
 /** Node drives real authenticated WebSockets into a separate local workerd process. */
-export async function createNodeRuntime(signal?: AbortSignal): Promise<{ runtime: LoadRuntime; close(): Promise<void> }> {
+export async function createNodeRuntime(signal?: AbortSignal): Promise<{ runtime: LoadRuntime; close(): Promise<void>; diagnostics(): TraceDiagnostics | null }> {
   if (signal?.aborted) throw new Error("Load cancelled");
   // Per-run signing material lives only in memory. Override both declared secrets
   // and the projection URL so no developer credentials or remote projection are used.
   const ticketKey = randomBytes(32).toString("hex");
+  const tracing = process.env.VKZ_TRACE === "1";
   const server = createTestHarness({ workers: [{
-    configPath: new URL("../wrangler.jsonc", import.meta.url),
+    configPath: new URL(tracing ? "./wrangler.trace.jsonc" : "../wrangler.jsonc", import.meta.url),
     vars: { CONVEX_URL: "" },
     secrets: { COMBAT_TICKET_SECRET: ticketKey, COMBAT_PROJECTION_SECRET: randomBytes(32).toString("hex") },
   }] });
@@ -134,5 +137,10 @@ export async function createNodeRuntime(signal?: AbortSignal): Promise<{ runtime
       };
     },
   };
-  return { runtime, close };
+  if (tracing) runtime.beginDiagnostics = async matchId => {
+    // These are local benchmark-only bindings; no HTTP debug endpoint is added.
+    const binding = (await server.getWorker<{COMBAT_ROOMS: DurableObjectNamespace<TraceRoom>}>("vkz-combat").getEnv()).COMBAT_ROOMS;
+    await binding.getByName(matchId).beginTrace();
+  };
+  return { runtime, close, diagnostics: () => tracing ? collectTraceLogs(server.getLogs()) : null };
 }
