@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "evidenceScope": "production-synthetic-connectivity",
+  "candidateSha": "17e4a50771dd7caa59b915aa9acc6c0ccbac5280",
+  "recordedAtUtc": "2026-09-07T03:08:47.459Z",
+  "success": true,
+  "elapsedMs": 4688,
+  "httpRequests": 13,
+  "passedStages": [
+    {
+      "stage": "local-preflight",
+      "elapsedMs": 65
+    },
+    {
+      "stage": "synthetic-lobby-create-and-join",
+      "elapsedMs": 1038
+    },
+    {
+      "stage": "combat-prepare",
+      "elapsedMs": 1149
+    },
+    {
+      "stage": "host-authenticated-websocket-and-roster",
+      "elapsedMs": 1863
+    },
+    {
+      "stage": "projection-guest-disconnected-before-connect",
+      "elapsedMs": 2678
+    },
+    {
+      "stage": "guest-authenticated-websocket-and-roster",
+      "elapsedMs": 2996
+    },
+    {
+      "stage": "projection-guest-connected",
+      "elapsedMs": 3818
+    },
+    {
+      "stage": "projection-guest-disconnected-after-close",
+      "elapsedMs": 4642
+    }
+  ],
+  "transport": {
+    "socketsOpened": 2,
+    "socketsClosed": true,
+    "acknowledgedOnlyReceivedSequences": true
+  },
+  "syntheticData": {
+    "matchesCreated": 1,
+    "playersCreated": 2,
+    "retained": true,
+    "cleanup": "No public match deletion/end/leave API. Sockets closed; synthetic rows remain."
+  },
+  "limitations": [
+    "No shots or calibration commands sent.",
+    "No physical-device evidence.",
+    "Presence transitions prove observed Worker-to-Convex projection; exact outbox receipt cursor is not publicly exposed."
+  ]
+}

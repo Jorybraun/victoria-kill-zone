@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "evidenceScope": "combat-worker-bootstrap-health-recovery",
+  "release": {
+    "sha": "17e4a50771dd7caa59b915aa9acc6c0ccbac5280",
+    "recordedAtUtc": "2026-09-07T03:07:24.659Z"
+  },
+  "worker": {
+    "name": "vkz-combat",
+    "versionId": "28d4691e-ad85-4b43-8ab6-90f725f8c3bf",
+    "trafficPercent": 100
+  },
+  "bootstrap": {
+    "guardedDeploymentInvoked": true,
+    "structuredPublishReceiptValidated": true,
+    "initialExitCode": 1,
+    "initialFailure": "health-http-failed",
+    "redeployedDuringRecovery": false
+  },
+  "health": {
+    "status": 200,
+    "service": "vkz-combat",
+    "protocol": 1,
+    "projectionConfigured": true
+  },
+  "convexConfiguration": {
+    "savedThrough": "user-authorized-official-cli",
+    "exactPreparedValuesReadBack": true
+  },
+  "acceptance": {
+    "authenticatedWebSocket": "pending-separate-evidence",
+    "projectionDelivery": "pending-separate-evidence",
+    "physicalDevice": "not-claimed"
+  }
+}

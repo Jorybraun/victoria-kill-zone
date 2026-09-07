@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "evidenceScope": "combat-worker-deployment-and-config-shape",
+  "release": {
+    "sha": "2929fd69e6768192f91fbf206cbed62cb202626e",
+    "recordedAtUtc": "2026-09-07T03:52:03.465Z"
+  },
+  "worker": {
+    "name": "vkz-combat",
+    "versionId": "0eca600a-c9ae-4262-b4c2-eb0f5d2bf0b6"
+  },
+  "prerequisites": {
+    "sameShaCiAndConvexSpectatorDeployment": "passed",
+    "canonicalCheckout": "passed",
+    "convexConfiguration": "operator-confirmed-not-probed"
+  },
+  "health": {
+    "service": "vkz-combat",
+    "protocol": 1,
+    "projectionConfigured": true
+  },
+  "acceptance": {
+    "ticketKeyParity": "not-tested",
+    "authenticatedWebSocket": "not-tested",
+    "projectionReceipt": "not-tested",
+    "physicalCalibration": "not-tested"
+  }
+}
