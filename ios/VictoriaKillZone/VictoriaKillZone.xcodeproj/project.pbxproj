@@ -136,6 +136,12 @@
 		F2A149FB45394542369DA27D /* MapLabSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C94F3DECD56780248B0392B /* MapLabSessionTests.swift */; };
 		6C4FEA2F570F577476524B16 /* MapLabStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE9C901CF69096992710F5E0 /* MapLabStoreTests.swift */; };
 		02264BA8F956A6BD41F04D1F /* MapLabCaptureRequestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FBFD52337138AD71542E269 /* MapLabCaptureRequestTests.swift */; };
+		B6B5ADB20560B46711D5F3E0 /* SharedOriginCredentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C1B0690C993E66A1452B1C6 /* SharedOriginCredentials.swift */; };
+		C304641446990957151211CB /* SharedOriginMeasurementLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08D7C6A818E2E9A8CA7096B7 /* SharedOriginMeasurementLog.swift */; };
+		39B9C7FCEAF08AEBCD9F60D7 /* SharedOriginPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B25BDF7966080B2100D8B53 /* SharedOriginPolicy.swift */; };
+		F189CDAC5539E249D935AEBC /* SharedOriginWireMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A37B40F1A27B24B497830328 /* SharedOriginWireMessage.swift */; };
+		029755FBF9B996493595A9FF /* SharedOriginExperimentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00F27B7461ADB133F2B09D32 /* SharedOriginExperimentTests.swift */; };
+		7432E1957B219ECD5C1FB460 /* SharedOriginLinkContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 258A7609550DC30E01AC3CBD /* SharedOriginLinkContractTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -277,6 +283,12 @@
 		8C94F3DECD56780248B0392B /* MapLabSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/MapLabSessionTests.swift"; sourceTree = SOURCE_ROOT; };
 		AE9C901CF69096992710F5E0 /* MapLabStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/MapLabStoreTests.swift"; sourceTree = SOURCE_ROOT; };
 		2FBFD52337138AD71542E269 /* MapLabCaptureRequestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/MapLabCaptureRequestTests.swift"; sourceTree = SOURCE_ROOT; };
+		3C1B0690C993E66A1452B1C6 /* SharedOriginCredentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Targeting/QuickPlay/SharedOriginCredentials.swift"; sourceTree = SOURCE_ROOT; };
+		08D7C6A818E2E9A8CA7096B7 /* SharedOriginMeasurementLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Targeting/QuickPlay/SharedOriginMeasurementLog.swift"; sourceTree = SOURCE_ROOT; };
+		5B25BDF7966080B2100D8B53 /* SharedOriginPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Targeting/QuickPlay/SharedOriginPolicy.swift"; sourceTree = SOURCE_ROOT; };
+		A37B40F1A27B24B497830328 /* SharedOriginWireMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Targeting/QuickPlay/SharedOriginWireMessage.swift"; sourceTree = SOURCE_ROOT; };
+		00F27B7461ADB133F2B09D32 /* SharedOriginExperimentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/SharedOriginExperimentTests.swift"; sourceTree = SOURCE_ROOT; };
+		258A7609550DC30E01AC3CBD /* SharedOriginLinkContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/SharedOriginLinkContractTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -384,6 +396,10 @@
 			children = (
 				9E206588F828F167E838980F /* MapLabFramePolicy.swift */,
 				2CE83EFA16E69D8409F28364 /* MapLabARDriver.swift */,
+				A37B40F1A27B24B497830328 /* SharedOriginWireMessage.swift */,
+				5B25BDF7966080B2100D8B53 /* SharedOriginPolicy.swift */,
+				08D7C6A818E2E9A8CA7096B7 /* SharedOriginMeasurementLog.swift */,
+				3C1B0690C993E66A1452B1C6 /* SharedOriginCredentials.swift */,
 				F00100000000000000000006 /* TargetingSession.swift */,
 				F00100000000000000000019 /* BodyTargetingGeometry.swift */,
 				G00200000000000000000001 /* SharedArena */,
@@ -488,6 +504,8 @@
 				8C94F3DECD56780248B0392B /* MapLabSessionTests.swift */,
 				5E7550BCF9B5F922AD8CEFCE /* MapLabLibraryTests.swift */,
 				825E9916A1D2F3F98E666B1F /* MapLabFramePolicyTests.swift */,
+				258A7609550DC30E01AC3CBD /* SharedOriginLinkContractTests.swift */,
+				00F27B7461ADB133F2B09D32 /* SharedOriginExperimentTests.swift */,
 				7F89FFE5AB0052EF627FED14 /* SavedArenaLibraryTests.swift */,
 				ECD1963DD0CA6DC023769434 /* SavedArenaMatchTests.swift */,
 				1C61701949C67614C297F723 /* ArenaSetupTests.swift */,
@@ -675,6 +693,10 @@
 				215FF72C17EAFE1553511799 /* MapLabSessionController.swift in Sources */,
 				991568AFE25B81869B92ED1D /* MapLabLibraryView.swift in Sources */,
 				B6A656C62CB51EB042D069F8 /* MapLabLibrary.swift in Sources */,
+				F189CDAC5539E249D935AEBC /* SharedOriginWireMessage.swift in Sources */,
+				39B9C7FCEAF08AEBCD9F60D7 /* SharedOriginPolicy.swift in Sources */,
+				C304641446990957151211CB /* SharedOriginMeasurementLog.swift in Sources */,
+				B6B5ADB20560B46711D5F3E0 /* SharedOriginCredentials.swift in Sources */,
 				142FD9EF4B73CA5A6FA7E8DC /* MapLabModels.swift in Sources */,
 				1902D232B2C0F07075114A90 /* RealtimeReferencePanel.swift in Sources */,
 				C580C11A7C59BAE21A4EC5B7 /* DuelFrameReferenceCapture.swift in Sources */,
@@ -759,6 +781,8 @@
 				F2A149FB45394542369DA27D /* MapLabSessionTests.swift in Sources */,
 				2C21EF6434643904292F7DEF /* MapLabLibraryTests.swift in Sources */,
 				4C27A4A0D6306C49F2E7F247 /* MapLabFramePolicyTests.swift in Sources */,
+				7432E1957B219ECD5C1FB460 /* SharedOriginLinkContractTests.swift in Sources */,
+				029755FBF9B996493595A9FF /* SharedOriginExperimentTests.swift in Sources */,
 				167D331E02D4F1E83F205377 /* DuelFrameReferenceTests.swift in Sources */,
 				B36270717FE62236842484C6 /* SavedArenaLibraryTests.swift in Sources */,
 				0C7BE8F2ECA75ECDF07B90E3 /* SavedArenaMatchTests.swift in Sources */,
