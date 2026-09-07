@@ -87,8 +87,10 @@ export async function runCombatDeploy({ config, secrets, deploy = false }, deps)
   await deps.checkOutput(config);
   await deps.bundle(config, secrets);
   if (!deploy) return { status: "preflight-passed", externalWrites: false };
-  await gate();
   validateIdentity(await deps.getIdentity(config), config.accountId);
+  // Identity discovery may be slow. Revalidate release freshness after it,
+  // immediately before the first remote write.
+  await gate();
   const result = deploymentResult(await deps.deployWorker(config, secrets), config.workerUrl);
   validateHealth(await deps.health(config));
   const evidence = {
@@ -168,9 +170,10 @@ export async function main(args = process.argv.slice(2), env = process.env) {
         // PR64 is the prerequisite; no duplicated or weaker fallback gate.
         const { hasSuccessfulDeployment } = await import("./deployment-gate.mjs");
         const facts = { repository: config.repository, sha: config.sha, token: config.token };
-        if (await fetchCurrentMainSha(facts) !== config.sha) return false;
         const [ci, deployed] = await Promise.all([hasSuccessfulCiPushRun(facts), hasSuccessfulDeployment(facts)]);
-        return ci === true && deployed === true;
+        if (ci !== true || deployed !== true) return false;
+        // Read main last so evidence lookup cannot hide a newer release.
+        return await fetchCurrentMainSha(facts) === config.sha;
       },
       getIdentity: async () => JSON.parse(await run("pnpm", [...wrangler, "whoami", "--json"])),
       checkOutput: async () => {

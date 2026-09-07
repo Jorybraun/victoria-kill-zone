@@ -128,6 +128,23 @@ await assert.rejects(run(changedAuth), /cloudflare-auth-not-verified/u);
 assert.equal(identityCalls, 2);
 assert.equal(changedAuth.calls.includes("deployWorker"), false);
 
+// Main can advance while the final identity lookup is awaiting its response.
+let releaseFresh = true, freshnessIdentityCalls = 0;
+const changedDuringIdentity = fixture({
+  verifyRelease: async () => releaseFresh,
+  getIdentity: async () => {
+    if (++freshnessIdentityCalls === 2) releaseFresh = false;
+    return identity();
+  },
+});
+const staleReleaseError = await run(changedDuringIdentity).catch(error => error);
+assert.equal(freshnessIdentityCalls, 2);
+assert.equal(changedDuringIdentity.calls.includes("deployWorker"), false,
+  "Main advancing during final identity lookup must prevent deployment");
+assert.equal(changedDuringIdentity.written.length, 0);
+assert.ok(staleReleaseError instanceof Error);
+assert.match(staleReleaseError.message, /release-not-verified/u);
+
 for (const invalid of ["invalid-json", receipt({ targets: ["https://vkz-combat.other.workers.dev"] })]) {
   const f = fixture({ deployWorker: async () => invalid });
   await assert.rejects(run(f));
@@ -150,7 +167,7 @@ const success = fixture();
 const result = await run(success);
 assert.equal(result.status, "deployed");
 assert.deepEqual(success.calls, ["checkCheckout", "verifyRelease", "getIdentity", "checkOutput", "bundle",
-  "checkCheckout", "verifyRelease", "getIdentity", "deployWorker", "health", "writeEvidence"]);
+  "getIdentity", "checkCheckout", "verifyRelease", "deployWorker", "health", "writeEvidence"]);
 assert.equal(success.written.length, 1);
 assert.equal(result.evidence.release.sha, config.sha);
 assert.equal(result.evidence.worker.versionId, versionId);
