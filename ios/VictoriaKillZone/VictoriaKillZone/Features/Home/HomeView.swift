@@ -2,6 +2,8 @@ import SwiftUI
 
 struct HomeView: View {
   @ObservedObject var store: LobbyStore
+  var onCreateArena: () -> Void
+  var onSavedArenas: () -> Void
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   var body: some View {
@@ -55,7 +57,7 @@ struct HomeView: View {
 
       VStack(spacing: 12) {
         Button {
-          store.createRealtimeArena()
+          onCreateArena()
         } label: {
           HStack(spacing: 10) {
             if store.operation == .creating {ProgressView().tint(VKZPalette.background)}
@@ -73,6 +75,13 @@ struct HomeView: View {
         .disabled(store.isBusy)
         .accessibilityLabel("Join arena")
         .accessibilityHint("Enter a friend’s arena or classic duel code.")
+
+        Button(action: onSavedArenas) {
+          Label("SAVED ARENAS", systemImage: "map")
+            .frame(minHeight: 44)
+        }
+        .disabled(store.isBusy)
+        .accessibilityHint("Scan a play area ahead of time and keep it for future games.")
       }
 
       #if VKZ_DEBUG_FIRE || DEBUG

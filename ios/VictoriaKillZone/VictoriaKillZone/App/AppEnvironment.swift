@@ -3,6 +3,17 @@ import Foundation
 struct AppEnvironment: Sendable {
   let gameSessionClient: any GameSessionClient
   let targetingSession: any TargetingSession
+  let savedArenas: any SavedArenaStoring
+
+  init(
+    gameSessionClient: any GameSessionClient,
+    targetingSession: any TargetingSession,
+    savedArenas: any SavedArenaStoring = LocalSavedArenaStore()
+  ) {
+    self.gameSessionClient = gameSessionClient
+    self.targetingSession = targetingSession
+    self.savedArenas = savedArenas
+  }
 
   static let phaseZeroShell = AppEnvironment(
     gameSessionClient: UnavailableGameSessionClient(),
