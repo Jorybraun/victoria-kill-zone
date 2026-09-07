@@ -750,3 +750,14 @@ The native opaque payload is now the versioned `DuelFrameCalibrationBundle`: sec
 Private `CombatProjection` batches carry ordered sequence ranges, phase, round clock, all player state and up to 64 terminal outcomes; they exclude map/camera/body observations. The DO posts to Convex `combat:publishProjection` using a separate `COMBAT_PROJECTION_SECRET`, HMAC-SHA256 of the exact UTF8 payload prefixed `vkz-projection-v1.`, and lowercase hexadecimal signature. Rows must seal across epoch changes. Convex verifies signature, roster, epoch, bounds and contiguous range; an exact retry changes nothing. It stores terminal outcomes independently in `combatShots` and updates existing spectator read models. This is a trusted authority projection, not a second adjudicator.
 
 Native composition and full release/device evidence remain tracked in [roadmap](roadmap.md); these contracts do not constitute deployment or physical-play acceptance.
+
+## Offline map lab v1 — 2026-09-07
+
+Accepted local-only contract: `Domain/MapLabModels.swift`; next-slice behavior and
+exclusive owners are frozen in `design/scan-play-foundation.md`. MapLabStoring
+owns a separate bounded private library of raw ARWorldMap archives. MapLabDriving
+owns one exclusive world-tracking camera session for capture or recognition;
+awaited stop invalidates in-flight work. Recognition is transient and never a
+combat admission result. Neither type converts to SavedArenaBundle/DuelFrameMap,
+contains credentials, nor writes live match state. Existing saves and combat
+readiness are unchanged. No backend or wire protocol is added by this contract.

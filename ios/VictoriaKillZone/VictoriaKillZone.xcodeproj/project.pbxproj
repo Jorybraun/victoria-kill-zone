@@ -117,6 +117,7 @@
 		0C7BE8F2ECA75ECDF07B90E3 /* SavedArenaMatchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECD1963DD0CA6DC023769434 /* SavedArenaMatchTests.swift */; };
 		B36270717FE62236842484C6 /* SavedArenaLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F89FFE5AB0052EF627FED14 /* SavedArenaLibraryTests.swift */; };
 		2ACB3CC9AE91331F37E6D3C2 /* ArenaScanPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DF6C3AC2366303589DAD0BA /* ArenaScanPresentation.swift */; };
+		142FD9EF4B73CA5A6FA7E8DC /* MapLabModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 708A954FAB9905479A061B24 /* MapLabModels.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -239,6 +240,7 @@
 		ECD1963DD0CA6DC023769434 /* SavedArenaMatchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/SavedArenaMatchTests.swift"; sourceTree = SOURCE_ROOT; };
 		7F89FFE5AB0052EF627FED14 /* SavedArenaLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/SavedArenaLibraryTests.swift"; sourceTree = SOURCE_ROOT; };
 		9DF6C3AC2366303589DAD0BA /* ArenaScanPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Arenas/ArenaScanPresentation.swift"; sourceTree = SOURCE_ROOT; };
+		708A954FAB9905479A061B24 /* MapLabModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Domain/MapLabModels.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -320,6 +322,7 @@
 		G00100000000000000000004 /* Domain */ = {
 			isa = PBXGroup;
 			children = (
+				708A954FAB9905479A061B24 /* MapLabModels.swift */,
 				77CA656B9A7B6685BC6F8C83 /* SavedArenaModels.swift */,
 				F00100000000000000000003 /* LobbyModels.swift */,
 				F00100000000000000000004 /* LobbyStateMachine.swift */,
@@ -606,6 +609,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				142FD9EF4B73CA5A6FA7E8DC /* MapLabModels.swift in Sources */,
 				1902D232B2C0F07075114A90 /* RealtimeReferencePanel.swift in Sources */,
 				C580C11A7C59BAE21A4EC5B7 /* DuelFrameReferenceCapture.swift in Sources */,
 				0B054679A22DEF50EA3ADF75 /* DuelFrameReference.swift in Sources */,
