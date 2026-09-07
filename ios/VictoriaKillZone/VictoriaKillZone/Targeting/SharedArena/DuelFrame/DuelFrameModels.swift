@@ -8,7 +8,7 @@ enum DuelFrameStage: String, Equatable, Sendable {
 
 enum DuelFrameFailure: String, Error, Equatable, Sendable {
   case unsupported, cameraUnavailable, invalidEpoch, staleEpoch, mapNotReady
-  case mapCaptureFailed, mapCaptureTimedOut, mapTooLarge, invalidMap, hashMismatch
+  case mappingTimedOut, mapCaptureFailed, mapCaptureTimedOut, mapTooLarge, invalidMap, hashMismatch
   case operationSuperseded, relocalizationTimedOut, trackingLost, sessionInterrupted
   case backgrounded, sessionStopped, stalePose, staleResidual, residualExceeded, invalidResidual
   case referenceUnavailable, referenceNotFound, referenceUnsuitable, referenceCaptureTimedOut
@@ -65,6 +65,7 @@ struct DuelFrameObservation: Equatable, Sendable {
   let frameID: String?
   let phase: DuelFrameSessionPhase
   let tracking: DuelFrameTracking
+  /// Map capture is usable; includes ARKit's extending and mapped states.
   let isMapped: Bool
   let pose: DuelFramePose?
   let observedAt: Date

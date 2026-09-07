@@ -2,6 +2,19 @@
   import ARKit
   import Foundation
 
+  /// Apple permits sharing an extending world map as well as a fully mapped one.
+  /// Capture availability never grants combat alignment or spatial fire permission.
+  enum DuelFrameMapCaptureEligibility {
+    static func permits(mapping: ARFrame.WorldMappingStatus, tracking: ARCamera.TrackingState) -> Bool {
+      guard case .normal = tracking else { return false }
+      switch mapping {
+      case .extending, .mapped: return true
+      case .notAvailable, .limited: return false
+      @unknown default: return false
+      }
+    }
+  }
+
   struct DuelFrameSessionConfiguration: Equatable, Sendable {
     let epoch: UInt16
     let frameID: String?

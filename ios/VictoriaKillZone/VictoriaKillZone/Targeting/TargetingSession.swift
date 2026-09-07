@@ -1410,8 +1410,8 @@ enum TargetingSessionFactory {
             duelFrameState.configuration?.phase == .mapping,
             arSession.configuration is ARWorldTrackingConfiguration,
             let currentFrame = arSession.currentFrame,
-            currentFrame.worldMappingStatus == .mapped,
-            case .normal = currentFrame.camera.trackingState,
+            DuelFrameMapCaptureEligibility.permits(mapping: currentFrame.worldMappingStatus,
+              tracking: currentFrame.camera.trackingState),
             duelFrameState.pendingCapture == nil
           else {
             continuation.resume(throwing: DuelFrameFailure.mapNotReady)
@@ -1507,8 +1507,9 @@ enum TargetingSessionFactory {
           sessionQueue.async { [self] in
             guard duelFrameState.generation == token, duelFrameState.pendingReference?.generation == token,
               duelFrameState.configuration?.epoch == epoch, runRequested, !isBackgrounded,
-              let frame = arSession.currentFrame, case .normal = frame.camera.trackingState,
-              frame.worldMappingStatus == .mapped,
+              let frame = arSession.currentFrame,
+              DuelFrameMapCaptureEligibility.permits(mapping: frame.worldMappingStatus,
+                tracking: frame.camera.trackingState),
               frame.timestamp == duelFrameState.lastFrameTimestamp,
               let capturedAt = duelFrameState.lastFrameCapturedAt,
               DuelFramePolicy.isFresh(capturedAt, at: Date()) else {
@@ -1720,7 +1721,8 @@ enum TargetingSessionFactory {
           DuelFramePose(columnMajor: $0.columnMajor, capturedAt: capturedAt, frameTimestamp: frame.timestamp)
         } : nil
       duelFrameState.hub.yield(DuelFrameObservation(epoch: configuration.epoch, frameID: configuration.frameID,
-        phase: configuration.phase, tracking: tracking, isMapped: frame.worldMappingStatus == .mapped,
+        phase: configuration.phase, tracking: tracking,
+        isMapped: DuelFrameMapCaptureEligibility.permits(mapping: frame.worldMappingStatus, tracking: frame.camera.trackingState),
         pose: pose, observedAt: now, failure: nil, referenceObservation: duelFrameState.latestReferenceObservation))
     }
 

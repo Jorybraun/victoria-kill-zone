@@ -348,7 +348,9 @@ struct RealtimeArenaView: View {
       if controller.connectionIssue != nil || controller.stage == .reconnecting {
         Button("Retry connection", action: controller.retryConnection).buttonStyle(VKZSecondaryButtonStyle())
       }
-      if controller.stage == .paused || controller.stage == .unavailable {
+      if controller.isHost && ([.mapping, .mapReady].contains(controller.stage) || scanTimedOut) {
+        Button("Restart scan", action: controller.retryAlignment).buttonStyle(VKZSecondaryButtonStyle())
+      } else if controller.stage == .paused || controller.stage == .unavailable {
         if controller.connectionIssue == nil {
           Button("Retry alignment", action: controller.retryAlignment).buttonStyle(VKZSecondaryButtonStyle())
         }
@@ -380,8 +382,12 @@ struct RealtimeArenaView: View {
     if let issue = controller.connectionIssue {return issue}
     if let message = controller.message {return message}
     if case .failed(let explanation) = controller.mapState {return explanation}
+    if scanTimedOut {
+      return "The camera couldn't find enough stable detail. Point at a well-lit floor, wall or fixed object, then restart the scan."
+    }
     switch controller.stage {
-    case .mapping, .mapReady: return "Move slowly and scan the floor, walls and fixed objects around the play area."
+    case .mapping: return "Move slowly around the play area, keeping the floor, walls and fixed objects in view. Avoid aiming only at a blank wall."
+    case .mapReady: return "The area is scanned. Hold still and capture a fixed object that every player can recognize."
     case .waitingForMap: return "The host is scanning the play area. Stay nearby; the shared scan will load automatically."
     case .transferringMap: return "Keep this screen open while the shared arena scan transfers."
     case .relocalizing: return "Point at the same fixed objects the host scanned. Move slowly until the camera recognizes the area."
@@ -400,8 +406,12 @@ struct RealtimeArenaView: View {
   }
   private var stageTitle: String {
     if controller.connectionIssue != nil {return "Connection needs attention"}
+    if scanTimedOut {return "Scan needs another try"}
     if controller.stage == .paused && !controller.combat.clockReady {return "Synchronizing match"}
     return controller.stage.title
+  }
+  private var scanTimedOut: Bool {
+    controller.connection == .connected && controller.frame.failure == .mappingTimedOut
   }
   private var roundTime: String {
     guard let ms = RealtimeActionEligibility.remainingRoundMs(snapshot: controller.snapshot, now: controller.matchTimeMs ?? controller.snapshot?.matchTimeMs) else {return "—:—"}

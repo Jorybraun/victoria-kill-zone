@@ -35,8 +35,8 @@ final class DuelFrameProvider: ObservableObject {
     watchdogTask?.cancel()
   }
 
-  func beginCalibration(epoch: UInt16) async throws {
-    try policy.beginCalibration(epoch: epoch)
+  func beginCalibration(epoch: UInt16, captureRequired: Bool = true) async throws {
+    try policy.beginCalibration(epoch: epoch, captureRequired: captureRequired, at: now())
     installedMap = nil
     capturedReference = nil
     referenceState = .unavailable

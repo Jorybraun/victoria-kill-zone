@@ -4,6 +4,7 @@ import Foundation
 /// a measured shared frame, and old epochs/callbacks cannot reopen its gate.
 struct DuelFramePolicy: Sendable {
   static let maximumSampleAge: TimeInterval = 0.100
+  static let mappingTimeout: TimeInterval = 30
   static let relocalizationTimeout: TimeInterval = 15
   static let requiredGoodResiduals = 3
 
@@ -11,6 +12,7 @@ struct DuelFramePolicy: Sendable {
   private var generation: UInt64 = 0
   private var latestEpoch: UInt16 = 0
   private var phaseDeadline: Date?
+  private var captureRequired = true
   private var sawRelocalizing = false
   private var lastObservationAt: Date?
   private var goodResiduals = 0
@@ -24,13 +26,15 @@ struct DuelFramePolicy: Sendable {
     operationToken == token && snapshot.stage != .unaligned && snapshot.stage != .lost
   }
 
-  mutating func beginCalibration(epoch: UInt16) throws {
+  mutating func beginCalibration(epoch: UInt16, captureRequired: Bool = true, at now: Date = Date()) throws {
     guard epoch > 0 else { throw DuelFrameFailure.invalidEpoch }
     guard epoch > latestEpoch else { throw DuelFrameFailure.staleEpoch }
     generation &+= 1
     latestEpoch = epoch
     snapshot = DuelFrameSnapshot(stage: .mapping, epoch: epoch)
     resetEvidence()
+    self.captureRequired = captureRequired
+    phaseDeadline = captureRequired ? now.addingTimeInterval(Self.mappingTimeout) : nil
   }
 
   mutating func beginInstall(_ map: DuelFrameMap, at now: Date) throws {
@@ -47,10 +51,7 @@ struct DuelFramePolicy: Sendable {
     guard observation.epoch == snapshot.epoch,
       snapshot.stage != .unaligned, snapshot.stage != .lost
     else { return false }
-    if let phaseDeadline, now >= phaseDeadline {
-      invalidate(reason: .relocalizationTimedOut)
-      return false
-    }
+    if expirePhase(at: now) { return false }
     if let frameID = snapshot.frameID, observation.frameID != frameID { return false }
     if let failure = observation.failure {
       invalidate(reason: failure)
@@ -63,7 +64,15 @@ struct DuelFramePolicy: Sendable {
     if snapshot.stage == .mapping || snapshot.stage == .mapReady {
       guard observation.phase == .mapping else { return false }
       lastObservationAt = observation.observedAt
-      snapshot.stage = observation.tracking == .normal && observation.isMapped ? .mapReady : .mapping
+      if observation.tracking == .normal && observation.isMapped {
+        snapshot.stage = .mapReady
+        phaseDeadline = nil
+      } else {
+        if snapshot.stage == .mapReady && captureRequired {
+          phaseDeadline = now.addingTimeInterval(Self.mappingTimeout)
+        }
+        snapshot.stage = .mapping
+      }
       return false
     }
     guard observation.frameID == snapshot.frameID else { return false }
@@ -126,10 +135,7 @@ struct DuelFramePolicy: Sendable {
   }
 
   mutating func tick(at now: Date) {
-    if let phaseDeadline, now >= phaseDeadline {
-      invalidate(reason: .relocalizationTimedOut)
-      return
-    }
+    if expirePhase(at: now) { return }
     guard [.aligned, .awaitingResidual, .degraded].contains(snapshot.stage) else { return }
     if let pose = snapshot.localPose, !Self.isFresh(pose.capturedAt, at: now) {
       snapshot.localPose = nil
@@ -171,6 +177,12 @@ struct DuelFramePolicy: Sendable {
     snapshot.failure = reason
     snapshot.residual = nil
     goodResiduals = 0
+  }
+
+  private mutating func expirePhase(at now: Date) -> Bool {
+    guard let phaseDeadline, now >= phaseDeadline else { return false }
+    invalidate(reason: snapshot.stage == .mapping ? .mappingTimedOut : .relocalizationTimedOut)
+    return true
   }
 
   private mutating func resetEvidence() {

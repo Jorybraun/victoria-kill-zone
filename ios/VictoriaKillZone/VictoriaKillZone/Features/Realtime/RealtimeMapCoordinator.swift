@@ -31,7 +31,7 @@ final class RealtimeMapCoordinator: ObservableObject {
         guard self.current(token) else {return}
         await self.frame.stop()
         guard self.current(token) else {return}
-        try await self.frame.beginCalibration(epoch: epoch)
+        try await self.frame.beginCalibration(epoch: epoch, captureRequired: isHost)
         guard self.current(token) else {return}
         if let map = self.installedMap, map.epoch == epoch {
           try await self.frame.installMap(map)
