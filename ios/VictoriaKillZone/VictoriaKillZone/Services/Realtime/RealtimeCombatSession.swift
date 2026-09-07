@@ -29,6 +29,7 @@ final class RealtimeCombatSession: ObservableObject {
   private var session: PlayerSession?
   private var replica: CombatReplica?
   private var clock = CombatClock()
+  private var calibrationClockDeadline: Double?
   private var pending: [Int:CombatWire.Envelope] = [:]
   private var outgoing: [CombatWire.Envelope] = []
   private var pings: [String:Double] = [:]
@@ -50,7 +51,10 @@ final class RealtimeCombatSession: ObservableObject {
   var localPlayer: CombatWire.Player? {snapshot?.players.first(where:{$0.playerId == session?.playerId})}
   var hasCommandCapacity: Bool {pending.count < 32}
   var pendingCommandIDs: Set<String> {Set(pending.values.map(\.commandId))}
-  var canSubmitSpatialInput: Bool {state == .connected && clockReady && receivedSnapshot && hasCommandCapacity}
+  var canSubmitSpatialInput: Bool {
+    state == .connected && clockReady && clock.isReady(at: localNow())
+      && receivedSnapshot && hasCommandCapacity && calibrationClockDeadline == nil
+  }
 
   func start(session: PlayerSession) {
     if self.session == session, runner != nil {return}
@@ -187,14 +191,37 @@ final class RealtimeCombatSession: ObservableObject {
     ticker?.cancel(); ticker=nil; writerGeneration += 1; writer?.cancel(); writer=nil
     transport?.close(); transport=nil
     outgoing.removeAll(); pings.removeAll(); receivedSnapshot=false
+    calibrationClockDeadline=nil
     clock.reset(); clockReady=false; clockUncertaintyMs = .infinity
+  }
+
+  /// Before arming, a brief scheduling delay needs new clock evidence, not a
+  /// new socket. No unresolved command may be able to arm or start the player.
+  private var canRecoverCalibrationClock: Bool {
+    receivedSnapshot && snapshot?.phase == .calibrating
+      && localPlayer?.connected == true && localPlayer?.frameReady == false
+      && pending.isEmpty && outgoing.isEmpty && writer == nil
+  }
+
+  private func beginCalibrationClockRecovery(at now: Double) -> Bool {
+    guard calibrationClockDeadline == nil, canRecoverCalibrationClock, now.isFinite else {return false}
+    calibrationClockDeadline=now + 5000
+    clock.reset(); pings.removeAll(); clockReady=false; clockUncertaintyMs = .infinity
+    return true
+  }
+
+  private func calibrationClockRecoveryIsValid(at now: Double) -> Bool {
+    guard let deadline = calibrationClockDeadline else {return true}
+    return now.isFinite && now < deadline && canRecoverCalibrationClock
   }
 
   private func receive(_ message: CombatWire.ServerMessage) async throws {
     guard var replica else {throw CombatReplicaError.invalidSnapshot}
+    guard calibrationClockRecoveryIsValid(at: localNow()) else {throw CombatTransportError.disconnected}
     switch message {
     case .snapshot(let next,let eventSequence,let clientSequence):
       let changedEpoch=try replica.replace(next,eventSequence:eventSequence,clientSequence:clientSequence)
+      if changedEpoch && calibrationClockDeadline != nil {throw CombatTransportError.disconnected}
       if changedEpoch {pending.removeAll(); outgoing.removeAll(); clock.reset(); clockReady=false}
       pending=pending.filter {$0.key > clientSequence && $0.value.authorityEpoch == next.authorityEpoch && $0.value.frameEpoch == next.frameEpoch}
       let replay=pending.values.sorted {$0.clientSequence < $1.clientSequence}
@@ -231,9 +258,11 @@ final class RealtimeCombatSession: ObservableObject {
       let wasReady = clockReady
       _ = clock.observe(localSentMs:localSent,serverReceivedMs:received,serverSentMs:serverSent,localReceivedMs:localNow())
       clockReady=clock.isReady(at:localNow()); clockUncertaintyMs=clock.uncertaintyMs
-      // A clock that became uncertain cannot safely timestamp even a readiness
-      // command. Closing clears authority-side readiness and forces resync.
-      if wasReady && !clockReady {throw CombatTransportError.disconnected}
+      if calibrationClockDeadline != nil && clockReady {calibrationClockDeadline=nil}
+      // Armed players still close immediately to revoke authority readiness.
+      if wasReady && !clockReady && !beginCalibrationClockRecovery(at: localNow()) {
+        throw CombatTransportError.disconnected
+      }
     case .error(let code,_):
       refusal=code
       if ["epochMismatch","replayExpired","sequenceConflict","idempotencyConflict"].contains(code) {
@@ -242,6 +271,7 @@ final class RealtimeCombatSession: ObservableObject {
       } else if code == "unauthorized" {throw CombatTransportError.admissionRejected}
       else if code == "unavailable" {throw CombatTransportError.disconnected}
     }
+    guard calibrationClockRecoveryIsValid(at: localNow()) else {throw CombatTransportError.disconnected}
   }
 
   private func startWriter() {
@@ -272,15 +302,19 @@ final class RealtimeCombatSession: ObservableObject {
       while !Task.isCancelled {
         guard let self, self.generation == current else {return}
         let now=self.localNow(), nonce=UUID().uuidString
+        guard self.calibrationClockRecoveryIsValid(at: now) else {activeTransport.close(); return}
         self.pings=self.pings.filter {now - $0.value <= 5000}
-        self.pings[nonce]=now
         let wasReady = self.clockReady
         self.clockReady=self.clock.isReady(at:now)
-        if wasReady && !self.clockReady {activeTransport.close(); return}
+        if wasReady && !self.clockReady && !self.beginCalibrationClockRecovery(at: now) {activeTransport.close(); return}
+        self.pings[nonce]=now
         do {
           try await activeTransport.send(.ping(nonce:nonce,clientSentAtMs:now))
           count += 1
-          try await Task.sleep(for:.milliseconds(count < 5 ? 100 : 1000))
+          // Two samples per second respect the server's existing ping budget,
+          // including recovery immediately after the initial five-ping burst.
+          let interval = self.calibrationClockDeadline != nil ? 500 : count < 5 ? 100 : 1000
+          try await Task.sleep(for:.milliseconds(interval))
         } catch {
           guard self.generation == current else {return}
           activeTransport.close(); return

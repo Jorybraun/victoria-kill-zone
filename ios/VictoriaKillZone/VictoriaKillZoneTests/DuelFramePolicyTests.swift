@@ -1,11 +1,114 @@
 import Foundation
 import XCTest
+#if os(iOS) && canImport(ARKit)
+import ARKit
+#endif
 
 @testable import VictoriaKillZone
 
 final class DuelFramePolicyTests: XCTestCase {
   private let base = Date(timeIntervalSince1970: 1_000)
   private let matrix: [Double] = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+
+  func testMappingWithoutAnyCameraObservationsTimesOutAndStopAllowsRetry() throws {
+    var policy = DuelFramePolicy()
+    try policy.beginCalibration(epoch: 1, at: base)
+    let token = try XCTUnwrap(policy.operationToken)
+    policy.tick(at: base.addingTimeInterval(29.999))
+    XCTAssertEqual(policy.snapshot.stage, .mapping)
+    policy.tick(at: base.addingTimeInterval(30))
+    XCTAssertEqual(policy.snapshot.stage, .lost)
+    XCTAssertEqual(policy.snapshot.failure, .mappingTimedOut)
+    XCTAssertFalse(policy.accepts(token))
+    XCTAssertFalse(policy.snapshot.permitsSpatialFire(at: base.addingTimeInterval(30)))
+    policy.stop()
+    try policy.beginCalibration(epoch: 1, at: base.addingTimeInterval(40))
+    policy.tick(at: base.addingTimeInterval(69.999))
+    XCTAssertEqual(policy.snapshot.stage, .mapping)
+    ingest(&policy, phase: .mapping, tracking: .normal, time: 69.999, mapped: true)
+    XCTAssertEqual(policy.snapshot.stage, .mapReady)
+    XCTAssertNil(policy.snapshot.failure)
+    XCTAssertFalse(policy.snapshot.permitsSpatialFire(at: base.addingTimeInterval(69.999)))
+  }
+
+  func testUnusableFramesCannotPostponeDeadlineOrUnlockAfterDelayedWatchdog() throws {
+    var policy = DuelFramePolicy()
+    try policy.beginCalibration(epoch: 1, at: base)
+    for second in 0..<30 {
+      ingest(&policy, phase: .mapping, tracking: .normal, time: Double(second), mapped: false)
+    }
+    ingest(&policy, phase: .mapping, tracking: .normal, time: 30, mapped: true)
+    XCTAssertEqual(policy.snapshot.stage, .lost)
+    XCTAssertEqual(policy.snapshot.failure, .mappingTimedOut)
+    XCTAssertFalse(policy.snapshot.permitsSpatialFire(at: base.addingTimeInterval(30)))
+  }
+
+  func testMapReadyClearsDeadlineButLosingMapStartsANewBoundedScan() throws {
+    var policy = DuelFramePolicy()
+    try policy.beginCalibration(epoch: 1, at: base)
+    ingest(&policy, phase: .mapping, tracking: .normal, time: 10, mapped: true)
+    policy.tick(at: base.addingTimeInterval(120))
+    XCTAssertEqual(policy.snapshot.stage, .mapReady, "Choosing a scene reference must not consume the initial scan timeout")
+    XCTAssertFalse(policy.snapshot.permitsSpatialFire(at: base.addingTimeInterval(120)))
+    ingest(&policy, phase: .mapping, tracking: .limited, time: 130, mapped: true)
+    policy.tick(at: base.addingTimeInterval(159.999))
+    XCTAssertEqual(policy.snapshot.stage, .mapping)
+    ingest(&policy, phase: .mapping, tracking: .normal, time: 159.999, mapped: false)
+    policy.tick(at: base.addingTimeInterval(160))
+    XCTAssertEqual(policy.snapshot.stage, .lost)
+    XCTAssertEqual(policy.snapshot.failure, .mappingTimedOut)
+  }
+
+  func testNewCalibrationEpochReplacesPreviousMappingDeadline() throws {
+    var policy = DuelFramePolicy()
+    try policy.beginCalibration(epoch: 1, at: base)
+    try policy.beginCalibration(epoch: 2, at: base.addingTimeInterval(20))
+    policy.tick(at: base.addingTimeInterval(30))
+    XCTAssertEqual(policy.snapshot.stage, .mapping)
+    policy.tick(at: base.addingTimeInterval(50))
+    XCTAssertEqual(policy.snapshot.stage, .lost)
+    XCTAssertEqual(policy.snapshot.failure, .mappingTimedOut)
+  }
+
+  func testGuestCanWaitForHostAcrossMappingChangesButInstallationStillTimesOut() throws {
+    var policy = DuelFramePolicy()
+    try policy.beginCalibration(epoch: 1, captureRequired: false, at: base)
+    policy.tick(at: base.addingTimeInterval(40))
+    XCTAssertEqual(policy.snapshot.stage, .mapping)
+    ingest(&policy, phase: .mapping, tracking: .normal, time: 45, mapped: true)
+    XCTAssertEqual(policy.snapshot.stage, .mapReady)
+    ingest(&policy, phase: .mapping, tracking: .normal, time: 60, mapped: false)
+    policy.tick(at: base.addingTimeInterval(90))
+    XCTAssertEqual(policy.snapshot.stage, .mapping)
+    XCTAssertNil(policy.snapshot.failure)
+    XCTAssertFalse(policy.snapshot.permitsSpatialFire(at: base.addingTimeInterval(90)))
+    let map = try DuelFrameMap(epoch: 1, bytes: Data([1]))
+    try policy.beginInstall(map, at: base.addingTimeInterval(90))
+    ingest(&policy, map: map, phase: .worldRelocalization, tracking: .relocalizing, time: 92)
+    ingest(&policy, map: map, phase: .worldRelocalization, tracking: .normal, time: 105)
+    XCTAssertEqual(policy.snapshot.stage, .lost)
+    XCTAssertEqual(policy.snapshot.failure, .relocalizationTimedOut)
+  }
+
+  #if os(iOS) && canImport(ARKit)
+  func testARMapCaptureAcceptsExtendingAndMappedOnlyWithNormalTracking() throws {
+    for status in [ARFrame.WorldMappingStatus.extending, .mapped] {
+      XCTAssertTrue(DuelFrameMapCaptureEligibility.permits(mapping: status, tracking: .normal))
+      var policy = DuelFramePolicy()
+      try policy.beginCalibration(epoch: 1, at: base)
+      ingest(&policy, phase: .mapping, tracking: .normal, time: 1,
+        mapped: DuelFrameMapCaptureEligibility.permits(mapping: status, tracking: .normal))
+      XCTAssertEqual(policy.snapshot.stage, .mapReady)
+      XCTAssertFalse(policy.snapshot.permitsSpatialFire(at: base.addingTimeInterval(1)))
+      XCTAssertFalse(DuelFrameMapCaptureEligibility.permits(mapping: status, tracking: .notAvailable))
+      XCTAssertFalse(DuelFrameMapCaptureEligibility.permits(mapping: status, tracking: .limited(.initializing)))
+      XCTAssertFalse(DuelFrameMapCaptureEligibility.permits(mapping: status, tracking: .limited(.relocalizing)))
+    }
+    for status in [ARFrame.WorldMappingStatus.notAvailable, .limited] {
+      XCTAssertFalse(DuelFrameMapCaptureEligibility.permits(mapping: status, tracking: .normal))
+    }
+  }
+  #endif
 
   func testMapMustBeMappedAndBothConfigurationRunsMustActuallyRelocalize() throws {
     var policy = DuelFramePolicy()
@@ -170,6 +273,30 @@ final class DuelFramePolicyTests: XCTestCase {
 
 @MainActor
 final class DuelFrameProviderTests: XCTestCase {
+  func testGuestProviderDoesNotExpireWhileWaitingForHostMap() async throws {
+    let driver = DelayedDuelFrameDriver(), clock = MappingTestClock()
+    let provider = DuelFrameProvider(targeting: driver, now: {clock.date})
+    try await provider.beginCalibration(epoch: 1, captureRequired: false)
+    clock.date = clock.date.addingTimeInterval(90)
+    try await Task.sleep(for: .milliseconds(100))
+    XCTAssertEqual(provider.snapshot.stage, .mapping)
+    XCTAssertNil(provider.snapshot.failure)
+    await provider.stop()
+  }
+
+  func testWatchdogUsesInjectedTimeAndTimesOutWithoutAnyDriverFrames() async throws {
+    let driver = DelayedDuelFrameDriver(), clock = MappingTestClock()
+    let provider = DuelFrameProvider(targeting: driver, now: {clock.date})
+    try await provider.beginCalibration(epoch: 1)
+    clock.date = clock.date.addingTimeInterval(30)
+    for _ in 0..<50 where provider.snapshot.stage != .lost {
+      try await Task.sleep(for: .milliseconds(5))
+    }
+    XCTAssertEqual(provider.snapshot.stage, .lost)
+    XCTAssertEqual(provider.snapshot.failure, .mappingTimedOut)
+    await provider.stop()
+  }
+
   func testLateCaptureCannotInstallIntoANewMatchWithTheSameEpoch() async throws {
     let driver = DelayedDuelFrameDriver()
     let provider = DuelFrameProvider(targeting: driver)
@@ -195,6 +322,11 @@ final class DuelFrameProviderTests: XCTestCase {
     XCTAssertNil(provider.snapshot.frameID)
     await provider.stop()
   }
+}
+
+@MainActor
+private final class MappingTestClock {
+  var date = Date(timeIntervalSince1970: 1_000)
 }
 
 private actor DelayedDuelFrameDriver: DuelFrameSessionDriving {
