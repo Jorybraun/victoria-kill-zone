@@ -1,0 +1,20 @@
+{
+  "assembly_steps": [
+    "Print the fit coupon and button plate first. Trial the actual M3 hardware and locating fits, then the purchased switch in the plate. Correct individual CAD clearances if needed; do not scale the whole model.",
+    "Print the remaining parts in the supplied orientations. Clean mating faces and slicer-identified supports. Keep all v2 parts together; earlier v0/v1 parts are incompatible.",
+    "With the housing open, seat and retain FOUR J2 dock nuts and TWO J4 plate nuts. Mount the purchased switch in the loose plate with its own nut; confirm lead clearance and free travel. Keep electronics unpowered.",
+    "Close the shells on their locators using four J1 M3 × 40 bolts. Then attach the button plate with two J4 M3 × 12 bolts, approaching from the front BEFORE fitting the nose. Tighten gently by hand.",
+    "Fit the closed nose with one J3 M3 × 45 bolt and nut. Seat the dock on its pins and fit four J2 M3 × 12 bolts into the preloaded nuts, with phone and bottom liner removed for tool access.",
+    "Fit the jaws using four J5 M3 × 12 bolts and rear captive nuts. Adjust with the phone removed. Add two equal shim stacks, protective lining and the 15 mm restraint strap; follow the liner dimensions in the guide.",
+    "Bench-check with a phone-sized dummy, then the phone in its case with an independent tether. Verify retention, bolt ends, button travel, side controls, screen and all camera views before handling."
+  ],
+  "hardware": [
+    "4 × M3 × 40 mm button-head bolts — shell closure",
+    "1 × M3 × 45 mm button-head bolt — nose",
+    "10 × M3 × 12 mm button-head bolts — dock, jaws and plate",
+    "15 × standard M3 hex nuts. Modeled heads: Ø5.7 × 1.65 mm max; nuts: 5.5 mm across flats × 2.4 mm. No washers.",
+    "1 × 16 mm momentary pushbutton with its mounting nut",
+    "Soft protective lining, thin shim restraint tape, one 15 mm hook-and-loop strap, and an independent phone/case tether"
+  ],
+  "fit_check": "This is an untested mechanical prototype. Digital geometry does not establish phone retention, impact resistance or comfort. Inspect supports and layer direction in your actual slicer. Bluetooth, firmware, a battery mount and a physical game-firing demonstration are not included."
+}

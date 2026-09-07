@@ -27,6 +27,7 @@ export function toPlayerState(player: Doc<"players">): PlayerState {
     shotsHit: player.shotsHit,
     headshots: player.headshots,
     lastShotAt: player.lastShotAt,
+    reloadEndsAt: player.reloadEndsAt ?? null,
     respawnAt: player.respawnAt,
     lastSeenAt: player.lastSeenAt,
     joinedAt: player.joinedAt,
@@ -79,6 +80,8 @@ export const locationSampleValidator = v.object({
 });
 
 export type BackendErrorCode =
+  | "COMBAT_UNAVAILABLE"
+  | "COMBAT_AUTHORITY_REQUIRED"
   | "INVALID_DISPLAY_NAME"
   | "INVALID_CODE"
   | "MATCH_NOT_FOUND"
@@ -96,6 +99,10 @@ export type BackendErrorCode =
   | "INVALID_ARENA"
   | "INVALID_LOCATION"
   | "OUT_OF_AMMO"
+  | "RELOADING"
+  | "MAGAZINE_FULL"
+  | "ALREADY_RELOADING"
+  | "PLAYER_NOT_ALIVE"
   | "FIRE_COOLDOWN"
   | "INVALID_TARGET"
   | "TARGET_NOT_ALIVE"
@@ -118,6 +125,10 @@ const ERROR_BY_REJECT_REASON: Record<RejectReason, BackendErrorCode> = {
   out_of_arena: "OUT_OF_ARENA",
   location_stale: "LOCATION_STALE",
   out_of_ammo: "OUT_OF_AMMO",
+  reloading: "RELOADING",
+  magazine_full: "MAGAZINE_FULL",
+  already_reloading: "ALREADY_RELOADING",
+  player_not_alive: "PLAYER_NOT_ALIVE",
   cooldown_active: "FIRE_COOLDOWN",
   invalid_target: "INVALID_TARGET",
   target_not_alive: "TARGET_NOT_ALIVE",

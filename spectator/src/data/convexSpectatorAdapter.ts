@@ -2,58 +2,70 @@ import { ConvexClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
 
 import type { SpectatorSnapshot } from "../domain/spectator";
-import type {
-  SpectatorSnapshotAdapter,
-  SpectatorSnapshotObserver,
-  SpectatorSnapshotRequest,
-} from "./spectatorAdapter";
+import type { SpectatorSnapshotAdapter, SpectatorSnapshotRequest } from "./spectatorAdapter";
 
 const spectatorSnapshotQuery = makeFunctionReference<
-  "query",
-  SpectatorSnapshotRequest,
-  SpectatorSnapshot | null
+  "query", SpectatorSnapshotRequest, SpectatorSnapshot | null
 >("queries:spectatorSnapshot");
 
-/**
- * Query-only boundary. The returned object intentionally exposes no mutation,
- * action, authentication, or raw Convex client methods.
- */
-export function createConvexSpectatorAdapter(
-  deploymentUrl: string,
-): SpectatorSnapshotAdapter {
-  const client = new ConvexClient(deploymentUrl);
+/** Query-only boundary. Socket recovery never invents a newer match timestamp. */
+export function createConvexSpectatorAdapter(deploymentUrl: string): SpectatorSnapshotAdapter {
+  // Creating the adapter is pure: React can discard a memoized render. The
+  // committed subscription effect acquires the socket and its cleanup releases it.
+  let client: ConvexClient | null = null;
   let disposed = false;
-
+  const subscriptions = new Set<() => void>();
   return {
     source: "convex",
-    subscribe(
-      request: SpectatorSnapshotRequest,
-      observer: SpectatorSnapshotObserver,
-    ) {
+    subscribe(request, observer) {
       if (disposed) {
         observer.error(new Error("The spectator connection has already closed."));
         return () => undefined;
       }
-
-      const unsubscribe = client.onUpdate(
-        spectatorSnapshotQuery,
-        request,
-        (snapshot) => observer.next(snapshot),
-        () =>
-          observer.error(
-            new Error(
-              "The live spectator feed is unavailable. Check the match code and connection.",
-            ),
-          ),
-      );
-
-      return () => unsubscribe();
+      const connection = client ??= new ConvexClient(deploymentUrl);
+      let active = true;
+      let connected = connection.connectionState().isWebSocketConnected;
+      let received: SpectatorSnapshot | null | undefined;
+      let queryFailed = false;
+      const disconnected = () => observer.error(new Error("The spectator connection was interrupted."));
+      const unsubscribeConnection = connection.subscribeToConnectionState(state => {
+        if (!active || connected === state.isWebSocketConnected) return;
+        connected = state.isWebSocketConnected;
+        if (!connected) disconnected();
+        // Queries need not change on reconnect. Retain their original timestamp,
+        // and announce only that the connection returned, not fresher authority.
+        else if (received !== undefined && !queryFailed) observer.next(received);
+      });
+      const unsubscribeQuery = connection.onUpdate(spectatorSnapshotQuery, request, snapshot => {
+        if (!active) return;
+        received = snapshot;
+        queryFailed = false;
+        observer.next(snapshot);
+        // Convex may deliver its cached query while the socket is reconnecting.
+        if (!connected) disconnected();
+      }, () => {
+        if (!active) return;
+        queryFailed = true;
+        observer.error(new Error("The spectator match update is unavailable."));
+      });
+      const unsubscribe = () => {
+        if (!active) return;
+        active = false;
+        unsubscribeConnection();
+        unsubscribeQuery();
+        subscriptions.delete(unsubscribe);
+        if (subscriptions.size === 0 && client === connection) {
+          client = null;
+          void connection.close();
+        }
+      };
+      subscriptions.add(unsubscribe);
+      return unsubscribe;
     },
     dispose() {
-      if (!disposed) {
-        disposed = true;
-        void client.close();
-      }
+      if (disposed) return;
+      disposed = true;
+      for (const unsubscribe of subscriptions) unsubscribe();
     },
   };
 }

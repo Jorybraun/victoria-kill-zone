@@ -16,6 +16,9 @@ import type {
 } from "./types.js";
 
 export interface MatchSummarySnapshot {
+  combatMode?: "durableObject";
+  combatPhase?: "calibrating" | "running" | "paused" | "finished";
+  maxPlayers?: number;
   id: string;
   code: string;
   phase: MatchPhase;
@@ -43,6 +46,7 @@ export interface PlayerSnapshot {
   arenaState: ArenaState;
   lastSeenAt: number;
   lastShotAt?: number;
+  reloadEndsAt?: number;
   respawnAt?: number;
   latitude?: number;
   longitude?: number;
@@ -68,6 +72,7 @@ export type SpectatorPlayerSnapshot = Omit<
 
 export interface EventSnapshot {
   id: string;
+  clientShotId?: string;
   type: string;
   message: string;
   createdAt: number;
@@ -96,6 +101,9 @@ export interface SpectatorSnapshot {
 }
 
 export interface SnapshotMatch extends MatchState {
+  combatMode?: "durableObject";
+  combatPhase?: "calibrating" | "running" | "paused" | "finished";
+  maxPlayers?: number;
   id: string;
   code: string;
   centerLatitude: number;
@@ -106,6 +114,7 @@ export interface SnapshotMatch extends MatchState {
 
 export interface SnapshotEvent {
   id: string;
+  clientShotId?: string;
   type: string;
   actorPlayerId: string | null;
   targetPlayerId: string | null;
@@ -155,12 +164,17 @@ export function buildSpectatorSnapshot(
 }
 
 function projectMatch(match: SnapshotMatch, now: number): MatchSummarySnapshot {
-  const phase = hasExpired(match, now) ? "finished" : match.phase;
+  // Realtime deadlines are wall-clock estimates from the last combat projection.
+  // Only that authority can finish its round; a stale estimate is not a verdict.
+  const phase = match.combatMode !== "durableObject" && hasExpired(match, now) ? "finished" : match.phase;
   return {
     id: match.id,
     code: match.code,
     phase,
     durationMs: match.durationMs,
+    ...(match.combatMode === undefined ? {} : {combatMode:match.combatMode}),
+    ...(match.combatPhase === undefined ? {} : {combatPhase:match.combatPhase}),
+    ...(match.maxPlayers === undefined ? {} : {maxPlayers:match.maxPlayers}),
     ...(match.startsAt === null ? {} : { startsAt: match.startsAt }),
     ...(match.endsAt === null ? {} : { endsAt: match.endsAt }),
     ...(match.winnerPlayerId === null ? {} : { winnerPlayerId: match.winnerPlayerId }),
@@ -198,6 +212,7 @@ function projectPlayer(player: PlayerState, match: SnapshotMatch, now: number): 
     arenaState: projectedArenaState(player, match, now),
     lastSeenAt: player.lastSeenAt,
     ...(player.lastShotAt === null ? {} : { lastShotAt: player.lastShotAt }),
+    ...(player.reloadEndsAt === null ? {} : { reloadEndsAt: player.reloadEndsAt }),
     ...(player.respawnAt === null ? {} : { respawnAt: player.respawnAt }),
     ...(player.latitude === null ? {} : { latitude: player.latitude }),
     ...(player.longitude === null ? {} : { longitude: player.longitude }),
@@ -233,6 +248,7 @@ function projectSpectatorPlayer(
     lifeState: player.lifeState,
     arenaState: projectedArenaState(player, match, now),
     ...(player.lastShotAt === null ? {} : { lastShotAt: player.lastShotAt }),
+    ...(player.reloadEndsAt === null ? {} : { reloadEndsAt: player.reloadEndsAt }),
     ...(player.respawnAt === null ? {} : { respawnAt: player.respawnAt }),
     ...(hasPosition && player.latitude !== null && player.longitude !== null
       ? {
@@ -250,6 +266,7 @@ function projectSpectatorPlayer(
 function projectEvent(event: SnapshotEvent): EventSnapshot {
   return {
     id: event.id,
+    ...(event.clientShotId === undefined ? {} : { clientShotId: event.clientShotId }),
     type: event.type,
     message: event.message,
     createdAt: event.createdAt,

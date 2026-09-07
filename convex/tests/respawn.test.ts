@@ -20,6 +20,7 @@ describe("guarded respawn", () => {
       lifeState: "alive",
       respawnAt: null,
       lastShotAt: null,
+      reloadEndsAt: null,
     });
   });
 

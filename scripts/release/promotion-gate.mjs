@@ -1,7 +1,7 @@
 // Decides whether a green `main` revision may be promoted to TestFlight.
 //
 // The gate is fail-closed: promotion happens only when it is explicitly
-// enabled, the triggering CI run succeeded on this repository's `main`, and
+// enabled, CI and deployment passed for this repository's `main`, and
 // the candidate revision is still the exact current `main` SHA. Stale
 // revisions are skipped rather than queued, so a burst of merges promotes
 // only the newest green revision.
@@ -10,23 +10,25 @@ import { appendFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 import { fetchCurrentMainSha, hasSuccessfulCiPushRun } from "./github-api.mjs";
+import { hasSuccessfulDeployment } from "./deployment-gate.mjs";
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/u;
 
 export const PROMOTION_DECISIONS = Object.freeze({
   disabled: "the TestFlight lane is disabled",
-  forkedRepository: "the CI run came from another repository",
-  notCiWorkflow: "the completed run was not the CI workflow",
-  notMergeEvent: "the CI run was not a push to main",
+  forkedRepository: "the deployment run came from another repository",
+  notDeployWorkflow: "the completed run was not the Deploy workflow",
+  notDeployEvent: "the deployment run was not an authorized deployment event",
   ciNotVerifiedForSha: "no successful CI push run is recorded for this revision",
+  deployNotVerifiedForSha: "the latest deployment attempt has no successful deployment and smoke evidence for this revision",
   invalidCandidate: "the candidate revision is not a full commit SHA",
   invalidCurrent: "the current main revision is not a full commit SHA",
-  notMain: "the CI run was not on main",
-  ciNotSuccessful: "the CI run did not succeed",
+  notMain: "the deployment run was not on main",
+  deployNotSuccessful: "the deployment run did not succeed",
   staleSha: "a newer main revision exists",
   unsupportedEvent: "the triggering event cannot promote",
-  remoteUnavailable: "the authoritative main revision could not be confirmed",
-  promote: "the exact current main revision is green",
+  remoteUnavailable: "the remote promotion prerequisites could not be confirmed",
+  promote: "the exact current main revision passed CI, deployment and smoke checks",
 });
 
 function normalizeSha(value) {
@@ -37,10 +39,11 @@ export function decidePromotion(input) {
   const {
     enabled,
     eventName,
-    ciWorkflowName,
-    ciEvent,
-    ciConclusion,
+    deployWorkflowName,
+    deployEvent,
+    deployConclusion,
     ciVerifiedForSha,
+    deployVerifiedForSha,
     headBranch,
     headRepository,
     repository,
@@ -71,16 +74,15 @@ export function decidePromotion(input) {
     return decide("invalidCurrent");
   }
   if (eventName === "workflow_run") {
-    if (ciWorkflowName !== "CI") {
-      return decide("notCiWorkflow");
+    if (deployWorkflowName !== "Deploy") {
+      return decide("notDeployWorkflow");
     }
-    if (ciConclusion !== "success") {
-      return decide("ciNotSuccessful");
+    if (deployConclusion !== "success") {
+      return decide("deployNotSuccessful");
     }
-    // Only a merge to main promotes. A pull-request CI run is green against a
-    // merge commit that does not exist on main.
-    if (ciEvent !== "push") {
-      return decide("notMergeEvent");
+    // Deploy follows CI or an explicit main dispatch; CI is verified separately.
+    if (!["workflow_run", "workflow_dispatch"].includes(deployEvent)) {
+      return decide("notDeployEvent");
     }
     if (headBranch !== "main") {
       return decide("notMain");
@@ -94,6 +96,9 @@ export function decidePromotion(input) {
   if (ciVerifiedForSha !== true) {
     return decide("ciNotVerifiedForSha");
   }
+  if (deployVerifiedForSha !== true) {
+    return decide("deployNotVerifiedForSha");
+  }
   if (candidate !== current) {
     return decide("staleSha");
   }
@@ -105,24 +110,26 @@ export function decideFromEnvironment(environment = process.env) {
   return decidePromotion({
     enabled: environment.VKZ_TESTFLIGHT_ENABLED === "true",
     eventName: environment.VKZ_EVENT_NAME,
-    ciWorkflowName: environment.VKZ_CI_WORKFLOW_NAME,
-    ciEvent: environment.VKZ_CI_EVENT,
-    ciConclusion: environment.VKZ_CI_CONCLUSION,
+    deployWorkflowName: environment.VKZ_DEPLOY_WORKFLOW_NAME,
+    deployEvent: environment.VKZ_DEPLOY_EVENT,
+    deployConclusion: environment.VKZ_DEPLOY_CONCLUSION,
     ciVerifiedForSha: environment.VKZ_CI_VERIFIED_FOR_SHA === "true",
-    headBranch: environment.VKZ_CI_HEAD_BRANCH,
-    headRepository: environment.VKZ_CI_HEAD_REPOSITORY,
+    deployVerifiedForSha: environment.VKZ_DEPLOY_VERIFIED_FOR_SHA === "true",
+    headBranch: environment.VKZ_DEPLOY_HEAD_BRANCH,
+    headRepository: environment.VKZ_DEPLOY_HEAD_REPOSITORY,
     repository: environment.VKZ_REPOSITORY,
     candidateSha: environment.VKZ_CANDIDATE_SHA,
     currentMainSha: environment.VKZ_CURRENT_MAIN_SHA,
   });
 }
 
-// The gate never trusts the workflow payload for currency or CI success: both
-// are re-read from the remote at decision time. Any lookup failure fails closed.
+// Current main, CI and deployment evidence come from the remote.
+// Any lookup failure fails closed, including on manual dispatch.
 export async function decideWithRemoteFacts(environment = process.env, deps = {}) {
   const {
     fetchCurrentMain = fetchCurrentMainSha,
     verifyCi = hasSuccessfulCiPushRun,
+    verifyDeployment = hasSuccessfulDeployment,
   } = deps;
 
   if (environment.VKZ_TESTFLIGHT_ENABLED !== "true") {
@@ -131,13 +138,26 @@ export async function decideWithRemoteFacts(environment = process.env, deps = {}
 
   const repository = environment.VKZ_REPOSITORY ?? "";
   const token = environment.VKZ_GITHUB_TOKEN ?? "";
-  const candidateSha = environment.VKZ_CANDIDATE_SHA ?? "";
+  let candidateSha = environment.VKZ_CANDIDATE_SHA ?? "";
 
   let currentMainSha;
   let ciVerifiedForSha;
+  let deployVerifiedForSha;
   try {
     currentMainSha = await fetchCurrentMain({ repository, token });
-    ciVerifiedForSha = await verifyCi({ repository, sha: candidateSha, token });
+    // A chained run's head_sha is context, not proof of its checked-out release.
+    // Automatic promotion targets current main only when this triggering Deploy
+    // attempt produced evidence for that exact SHA.
+    if (environment.VKZ_EVENT_NAME === "workflow_run") candidateSha = currentMainSha;
+    [ciVerifiedForSha, deployVerifiedForSha] = await Promise.all([
+      verifyCi({ repository, sha: candidateSha, token }),
+      verifyDeployment({ repository, sha: candidateSha, token,
+        ...(environment.VKZ_EVENT_NAME === "workflow_run" ? {
+          triggerRunId: environment.VKZ_DEPLOY_RUN_ID ?? "",
+          triggerRunAttempt: environment.VKZ_DEPLOY_RUN_ATTEMPT ?? "",
+        } : {}),
+      }),
+    ]);
   } catch {
     return {
       promote: false,
@@ -150,16 +170,33 @@ export async function decideWithRemoteFacts(environment = process.env, deps = {}
   return decidePromotion({
     enabled: true,
     eventName: environment.VKZ_EVENT_NAME,
-    ciWorkflowName: environment.VKZ_CI_WORKFLOW_NAME,
-    ciEvent: environment.VKZ_CI_EVENT,
-    ciConclusion: environment.VKZ_CI_CONCLUSION,
+    deployWorkflowName: environment.VKZ_DEPLOY_WORKFLOW_NAME,
+    deployEvent: environment.VKZ_DEPLOY_EVENT,
+    deployConclusion: environment.VKZ_DEPLOY_CONCLUSION,
     ciVerifiedForSha,
-    headBranch: environment.VKZ_CI_HEAD_BRANCH,
-    headRepository: environment.VKZ_CI_HEAD_REPOSITORY,
+    deployVerifiedForSha,
+    headBranch: environment.VKZ_DEPLOY_HEAD_BRANCH,
+    headRepository: environment.VKZ_DEPLOY_HEAD_REPOSITORY,
     repository,
     candidateSha,
     currentMainSha,
   });
+}
+
+// Recheck the same prerequisites on the Outpost immediately before archiving.
+// Return a changed SHA so the existing stale-candidate path can skip cleanly.
+export async function revalidatePromotion({ repository, sha, token }, deps = {}) {
+  const { fetchCurrentMain = fetchCurrentMainSha, verifyCi = hasSuccessfulCiPushRun,
+    verifyDeployment = hasSuccessfulDeployment } = deps;
+  const current = await fetchCurrentMain({ repository, token });
+  if (normalizeSha(current) !== normalizeSha(sha)) return current;
+  const [ci, deployed] = await Promise.all([
+    verifyCi({ repository, sha, token }), verifyDeployment({ repository, sha, token }),
+  ]);
+  if (ci !== true || deployed !== true) {
+    throw new Error("The candidate no longer has verified CI, deployment and smoke evidence");
+  }
+  return current;
 }
 
 function isMainModule() {

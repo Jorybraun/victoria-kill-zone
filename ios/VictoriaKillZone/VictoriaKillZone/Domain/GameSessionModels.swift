@@ -1,5 +1,7 @@
 import Foundation
 
+enum CombatMode: String, Codable, Equatable, Sendable {case durableObject}
+
 enum MatchPhase: String, Codable, Equatable, Sendable {
   case lobby
   case countdown
@@ -39,6 +41,9 @@ enum MatchEventType: String, Codable, Equatable, Sendable {
 }
 
 struct MatchSummary: Codable, Equatable, Sendable {
+  var combatMode: CombatMode? = nil
+  var combatPhase: CombatWire.Phase? = nil
+  var maxPlayers: Int? = nil
   let id: String
   let code: String
   let phase: MatchPhase
@@ -54,7 +59,10 @@ struct MatchSummary: Codable, Equatable, Sendable {
     durationMs: Int,
     startsAt: Double?,
     endsAt: Double?,
-    winnerPlayerId: String? = nil
+    winnerPlayerId: String? = nil,
+    combatMode: CombatMode? = nil,
+    combatPhase: CombatWire.Phase? = nil,
+    maxPlayers: Int? = nil
   ) {
     self.id = id
     self.code = code
@@ -63,6 +71,9 @@ struct MatchSummary: Codable, Equatable, Sendable {
     self.startsAt = startsAt
     self.endsAt = endsAt
     self.winnerPlayerId = winnerPlayerId
+    self.combatMode = combatMode
+    self.combatPhase = combatPhase
+    self.maxPlayers = maxPlayers
   }
 }
 
@@ -78,6 +89,7 @@ struct PlayerSnapshot: Codable, Identifiable, Equatable, Sendable {
   let deaths: Int
   let lifeState: PlayerLifeState
   let respawnAt: Double?
+  let reloadEndsAt: Double?
 
   init(
     id: String,
@@ -90,7 +102,8 @@ struct PlayerSnapshot: Codable, Identifiable, Equatable, Sendable {
     kills: Int = 0,
     deaths: Int = 0,
     lifeState: PlayerLifeState = .alive,
-    respawnAt: Double? = nil
+    respawnAt: Double? = nil,
+    reloadEndsAt: Double? = nil
   ) {
     self.id = id
     self.displayName = displayName
@@ -103,6 +116,7 @@ struct PlayerSnapshot: Codable, Identifiable, Equatable, Sendable {
     self.deaths = deaths
     self.lifeState = lifeState
     self.respawnAt = respawnAt
+    self.reloadEndsAt = reloadEndsAt
   }
 }
 
@@ -115,6 +129,7 @@ struct EventSnapshot: Codable, Identifiable, Equatable, Sendable {
   let targetPlayerId: String?
   let zone: String?
   let damage: Int?
+  var clientShotId: String? = nil
 }
 
 struct MatchSnapshot: Codable, Equatable, Sendable {
@@ -206,7 +221,14 @@ struct FireShotResult: Codable, Equatable, Sendable {
   let rejectReason: FireRejectReason?
 }
 
+struct ReloadResult: Equatable, Sendable {
+  let ammo: Int
+  let reloadEndsAt: Double
+}
+
 enum BackendErrorCode: String, Codable, Equatable, Sendable {
+  case combatUnavailable = "COMBAT_UNAVAILABLE"
+  case combatAuthorityRequired = "COMBAT_AUTHORITY_REQUIRED"
   case invalidDisplayName = "INVALID_DISPLAY_NAME"
   case invalidCode = "INVALID_CODE"
   case matchNotFound = "MATCH_NOT_FOUND"

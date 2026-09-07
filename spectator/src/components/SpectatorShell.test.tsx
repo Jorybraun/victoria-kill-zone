@@ -32,19 +32,19 @@ describe("SpectatorShell G2 contract", () => {
     });
 
     expect(
-      screen.getByRole("heading", { name: "NO DUEL SELECTED" }),
+      screen.getByRole("heading", { name: "NO MATCH SELECTED" }),
     ).toBeInTheDocument();
     expect(
       screen.getByText("ENTER A 6-CHARACTER CODE TO WATCH"),
     ).toBeInTheDocument();
 
     await user.tab();
-    expect(screen.getByRole("link", { name: "SKIP TO DUEL" })).toHaveFocus();
+    expect(screen.getByRole("link", { name: "SKIP TO MATCH" })).toHaveFocus();
     await user.tab();
-    expect(screen.getByLabelText("6-CHARACTER DUEL CODE")).toHaveFocus();
-    await user.type(screen.getByLabelText("6-CHARACTER DUEL CODE"), "ab c123");
+    expect(screen.getByLabelText("6-CHARACTER MATCH CODE")).toHaveFocus();
+    await user.type(screen.getByLabelText("6-CHARACTER MATCH CODE"), "ab c123");
     await user.tab();
-    expect(screen.getByRole("button", { name: "WATCH DUEL" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "WATCH MATCH" })).toHaveFocus();
     await user.keyboard("{Enter}");
 
     expect(onSelectMatch).toHaveBeenCalledWith("ABC123");
@@ -58,13 +58,13 @@ describe("SpectatorShell G2 contract", () => {
       isDemo: false,
     });
 
-    await user.type(screen.getByLabelText("6-CHARACTER DUEL CODE"), "ABC");
-    await user.click(screen.getByRole("button", { name: "WATCH DUEL" }));
+    await user.type(screen.getByLabelText("6-CHARACTER MATCH CODE"), "ABC");
+    await user.click(screen.getByRole("button", { name: "WATCH MATCH" }));
 
     const error = screen.getByRole("alert");
-    expect(error).toHaveTextContent("DUEL CODE NOT FOUND");
+    expect(error).toHaveTextContent("MATCH CODE NOT FOUND");
     expect(error).toHaveFocus();
-    expect(screen.getByLabelText("6-CHARACTER DUEL CODE")).toHaveAttribute(
+    expect(screen.getByLabelText("6-CHARACTER MATCH CODE")).toHaveAttribute(
       "aria-describedby",
       expect.stringContaining("duel-code-error"),
     );
@@ -75,7 +75,7 @@ describe("SpectatorShell G2 contract", () => {
     renderShell({ kind: "loading", code: "LOAD01", source: "convex" });
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "CONNECTING TO DUEL…",
+      "CONNECTING TO MATCH…",
     );
     expect(screen.getByRole("main")).toHaveAttribute("aria-busy", "true");
     expect(screen.getByText("LOAD01")).toBeInTheDocument();
@@ -193,7 +193,7 @@ describe("SpectatorShell G2 contract", () => {
     expect(screen.getByLabelText("VALE combat score")).toHaveTextContent(
       "KILLS1DEATHS3",
     );
-    expect(screen.getByLabelText("VALE life state, dead")).toHaveTextContent(
+    expect(screen.getByLabelText("VALE life state, ELIMINATED")).toHaveTextContent(
       "ELIMINATED",
     );
     expect(screen.getByTestId("player-card-player-vale")).toHaveClass(
@@ -241,7 +241,7 @@ describe("SpectatorShell G2 contract", () => {
     });
 
     expect(
-      screen.getByLabelText("VALE life state, respawning"),
+      screen.getByLabelText("VALE life state, RESPAWNING IN 5S"),
     ).toHaveTextContent("RESPAWNING IN 5S");
     expect(screen.getByTestId("player-card-player-vale")).toHaveClass(
       "player-card--respawning",
@@ -296,7 +296,7 @@ describe("SpectatorShell G2 contract", () => {
     ).toHaveValue(66);
     expect(screen.queryByText(/winner|wins|rematch/i)).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "WATCH ANOTHER DUEL" }));
+    await user.click(screen.getByRole("button", { name: "WATCH ANOTHER MATCH" }));
     expect(onSelectMatch).toHaveBeenCalledWith(null);
   });
 
@@ -324,14 +324,14 @@ describe("SpectatorShell G2 contract", () => {
     });
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "LIVE FEED INTERRUPTED",
+      "CONNECTION INTERRUPTED",
     );
-    expect(screen.getByRole("status")).toHaveTextContent("LAST SYNC");
+    expect(screen.getByRole("status")).toHaveTextContent("LAST UPDATE");
     expect(
       screen.getByRole("progressbar", { name: "VALE health, 66 of 100" }),
     ).toHaveValue(66);
     expect(screen.getByRole("main")).toHaveAccessibleName(
-      "Last verified duel snapshot",
+      "Last received duel snapshot",
     );
 
     await user.click(screen.getByRole("button", { name: "TRY AGAIN" }));
@@ -350,7 +350,7 @@ describe("SpectatorShell G2 contract", () => {
       snapshot: { ...snapshot, events: [hit, hit] },
     });
 
-    expect(screen.getByRole("status")).toHaveTextContent("LIVE FEED RESTORED");
+    expect(screen.getByRole("status")).toHaveTextContent("CONNECTION RESTORED");
     expect(screen.getAllByText("ROOK HIT VALE • TORSO −34")).toHaveLength(1);
   });
 
@@ -363,10 +363,10 @@ describe("SpectatorShell G2 contract", () => {
       reason: "network",
     });
 
-    const input = screen.getByLabelText("6-CHARACTER DUEL CODE");
+    const input = screen.getByLabelText("6-CHARACTER MATCH CODE");
     const error = screen.getByRole("alert");
     expect(input).toHaveValue("ERR001");
-    expect(error).toHaveTextContent("CAN’T REACH THE DUEL");
+    expect(error).toHaveTextContent("CAN’T REACH THE MATCH");
     expect(error).toHaveFocus();
 
     await user.click(screen.getByRole("button", { name: "TRY AGAIN" }));

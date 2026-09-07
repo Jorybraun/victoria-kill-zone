@@ -8,6 +8,10 @@ enum ConvexGameSessionContract {
   static let join = "matches:join"
   static let setReady = "matches:setReady"
   static let start = "matches:start"
+  static let prepareCombat = "combat:prepare"
+  static let combatTicket = "combat:ticket"
+  static let heartbeat = "players:heartbeat"
+  static let startReload = "players:startReload"
   static let fire = "shots:fire"
   static let debugFire = "shots:debugFire"
   static let matchSnapshot = "queries:matchSnapshot"
@@ -16,10 +20,13 @@ enum ConvexGameSessionContract {
 /// Typed builders keep the Convex argument keys in one testable place.
 enum ConvexGameSessionArguments {
   static func create(_ request: CreateDuelRequest) -> [String: ConvexEncodable?] {
-    [
+    var result: [String: ConvexEncodable?] = [
       "displayName": request.displayName,
       "arenaRadiusMeters": request.arenaRadiusMeters,
     ]
+    if let mode = request.combatMode {result["combatMode"] = mode.rawValue}
+    if let count = request.maxPlayers {result["maxPlayers"] = Double(count)}
+    return result
   }
 
   static func join(_ request: JoinDuelRequest) -> [String: ConvexEncodable?] {
@@ -133,6 +140,19 @@ final class ConvexGameSessionClient: GameSessionClient, @unchecked Sendable {
     }
   }
 
+  func prepareRealtimeCombat(session: PlayerSession) async throws {
+    do {
+      try await client.mutation(ConvexGameSessionContract.prepareCombat, with:ConvexGameSessionArguments.authenticated(session))
+    } catch {throw Self.mapped(error)}
+  }
+
+  func combatTicket(session: PlayerSession) async throws -> CombatAccessTicket {
+    do {
+      let wire: CombatAccessTicketWire = try await client.mutation(ConvexGameSessionContract.combatTicket, with:ConvexGameSessionArguments.authenticated(session))
+      return try wire.domainValue()
+    } catch {throw Self.mapped(error)}
+  }
+
   func fire(session: PlayerSession, request: FireShotRequest) async throws -> FireShotResult {
     do {
       let result: FireShotResultWire = try await client.mutation(
@@ -143,6 +163,26 @@ final class ConvexGameSessionClient: GameSessionClient, @unchecked Sendable {
     } catch {
       throw Self.mapped(error)
     }
+  }
+
+  func heartbeat(session: PlayerSession) async throws {
+    do {
+      try await client.mutation(
+        ConvexGameSessionContract.heartbeat,
+        with: ConvexGameSessionArguments.authenticated(session)
+      )
+    } catch { throw Self.mapped(error) }
+  }
+
+  func startReload(session: PlayerSession) async throws -> ReloadResult {
+    do {
+      let result: ReloadResultWire = try await client.mutation(
+        ConvexGameSessionContract.startReload,
+        with: ConvexGameSessionArguments.authenticated(session)
+      )
+      guard result.reloadEndsAt.isFinite else { throw GameSessionClientError.invalidSnapshot }
+      return ReloadResult(ammo: try exactInteger(result.ammo), reloadEndsAt: result.reloadEndsAt)
+    } catch { throw Self.mapped(error) }
   }
 
   func debugFire(session: PlayerSession, clientShotId: String) async throws -> DebugFireResult {
@@ -272,6 +312,9 @@ struct MatchSnapshotWire: Decodable {
 }
 
 struct MatchSummaryWire: Decodable {
+  let combatMode: CombatMode?
+  let combatPhase: CombatWire.Phase?
+  @OptionalConvexFloat var maxPlayers: Double?
   let id: String
   let code: String
   let phase: MatchPhase
@@ -288,8 +331,27 @@ struct MatchSummaryWire: Decodable {
       durationMs: try exactInteger(durationMs),
       startsAt: startsAt,
       endsAt: endsAt,
-      winnerPlayerId: winnerPlayerId
+      winnerPlayerId: winnerPlayerId,
+      combatMode: combatMode,
+      combatPhase: combatPhase,
+      maxPlayers: try maxPlayers.map(exactInteger)
     )
+  }
+}
+
+struct CombatAccessTicketWire: Decodable {
+  let endpoint: String
+  let ticket: String
+  @ConvexFloat var expiresAt: Double
+  @ConvexFloat var authorityEpoch: Double
+  @ConvexFloat var frameEpoch: Double
+
+  func domainValue() throws -> CombatAccessTicket {
+    guard let url = URL(string:endpoint), url.scheme == "https", url.host != nil,
+      url.user == nil, url.password == nil, url.query == nil, url.fragment == nil,
+      expiresAt.isFinite, authorityEpoch > 0, frameEpoch > 0, !ticket.isEmpty, ticket.utf8.count <= 8192 else {throw GameSessionClientError.invalidSnapshot}
+    return CombatAccessTicket(endpoint:url,token:ticket,expiresAt:Date(timeIntervalSince1970:expiresAt / 1000),
+      authorityEpoch:try exactInteger(authorityEpoch),frameEpoch:try exactInteger(frameEpoch))
   }
 }
 
@@ -305,6 +367,7 @@ struct PlayerSnapshotWire: Decodable {
   @OptionalConvexFloat var deaths: Double?
   let lifeState: PlayerLifeState?
   @OptionalConvexFloat var respawnAt: Double?
+  @OptionalConvexFloat var reloadEndsAt: Double?
 
   func domainValue() throws -> PlayerSnapshot {
     PlayerSnapshot(
@@ -318,7 +381,8 @@ struct PlayerSnapshotWire: Decodable {
       kills: try kills.map(exactInteger) ?? 0,
       deaths: try deaths.map(exactInteger) ?? 0,
       lifeState: lifeState ?? (connected ? .alive : .disconnected),
-      respawnAt: respawnAt
+      respawnAt: respawnAt,
+      reloadEndsAt: reloadEndsAt
     )
   }
 }
@@ -332,6 +396,7 @@ struct EventSnapshotWire: Decodable {
   let targetPlayerId: String?
   let zone: String?
   @OptionalConvexFloat var damage: Double?
+  let clientShotId: String?
 
   func domainValue() throws -> EventSnapshot {
     return EventSnapshot(
@@ -342,7 +407,8 @@ struct EventSnapshotWire: Decodable {
       actorPlayerId: actorPlayerId,
       targetPlayerId: targetPlayerId,
       zone: zone.flatMap { HitZone(rawValue: $0)?.rawValue },
-      damage: try damage.map(exactInteger)
+      damage: try damage.map(exactInteger),
+      clientShotId: clientShotId
     )
   }
 }
@@ -399,6 +465,11 @@ private struct FireShotResultWire: Decodable {
       rejectReason: rejectReason
     )
   }
+}
+
+private struct ReloadResultWire: Decodable {
+  @ConvexFloat var ammo: Double
+  @ConvexFloat var reloadEndsAt: Double
 }
 
 private func exactInteger(_ value: Double) throws -> Int {

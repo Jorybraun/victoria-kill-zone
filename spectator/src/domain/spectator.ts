@@ -37,6 +37,12 @@ export interface SpectatorMatchSnapshot {
   code: string;
   phase: MatchPhase;
   startsAt?: number;
+  combatMode?: "durableObject";
+  combatPhase?: "calibrating" | "running" | "paused" | "finished";
+  maxPlayers?: number;
+  durationMs?: number;
+  endsAt?: number;
+  winnerPlayerId?: string;
 }
 
 export interface SpectatorPlayerSnapshot {
@@ -149,4 +155,37 @@ export function snapshotWithDedupedEvents(
   return events.length === snapshot.events.length
     ? snapshot
     : { ...snapshot, events };
+}
+
+/** The arena authority owns combat phase; legacy wall-time phase cannot finish it. */
+export function displayPhase(match: SpectatorMatchSnapshot): MatchPhase | "calibrating" | "paused" | "unavailable" {
+  if (match.combatMode !== "durableObject") return match.phase;
+  if (match.combatPhase !== undefined) return match.combatPhase;
+  return match.phase === "lobby" || match.phase === "cancelled" ? match.phase : "unavailable";
+}
+
+export function viewKindForMatch(match: SpectatorMatchSnapshot): SnapshotViewKind {
+  const phase = displayPhase(match);
+  if (phase === "finished" || phase === "cancelled") return "ended";
+  return phase === "running" || phase === "paused" ? "active" : "waiting";
+}
+
+export const PLAYER_SLOTS = ["A", "B", "C", "D"] as const;
+export type PlayerSlot = typeof PLAYER_SLOTS[number];
+
+/** Preserve the server order instead of selecting a single opponent. */
+export function playerSlots(snapshot: SpectatorSnapshot): readonly (SpectatorPlayerSnapshot | undefined)[] {
+  const configured = snapshot.match.combatMode === "durableObject" ? snapshot.match.maxPlayers : PLAYER_CAPACITY;
+  const capacity = Number.isInteger(configured) ? configured ?? PLAYER_CAPACITY : PLAYER_CAPACITY;
+  const count = Math.min(PLAYER_SLOTS.length, Math.max(PLAYER_CAPACITY, capacity, snapshot.players.length));
+  return Array.from({length: count}, (_, index) => snapshot.players[index]);
+}
+
+export function resultLabel(snapshot: SpectatorSnapshot): string | null {
+  if (displayPhase(snapshot.match) !== "finished") return null;
+  if (snapshot.match.winnerPlayerId !== undefined) {
+    const winner = snapshot.players.find(player => player.id === snapshot.match.winnerPlayerId);
+    return winner === undefined ? "RESULT UNAVAILABLE" : `${winner.displayName} WINS`;
+  }
+  return snapshot.match.combatMode === "durableObject" && snapshot.match.combatPhase === "finished" ? "MATCH DRAW" : null;
 }

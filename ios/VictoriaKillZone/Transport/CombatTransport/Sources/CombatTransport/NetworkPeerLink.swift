@@ -20,6 +20,8 @@ public struct NetworkPeerLinkConfiguration: Sendable {
   }
 
   public let serviceToken: String
+  public let txtEntries: [String: String]
+  public let requiredTXTEntries: [String: String]
   public let credentials: TransportCredentials
   public let role: Role
   public let localSlot: UInt8
@@ -34,15 +36,29 @@ public struct NetworkPeerLinkConfiguration: Sendable {
     role: Role = .client,
     localSlot: UInt8 = 1,
     playerCount: Int = 2,
-    advertisesService: Bool = true
+    advertisesService: Bool = true,
+    txtEntries: [String: String] = [:],
+    requiredTXTEntries: [String: String] = [:]
   ) {
     self.serviceToken = serviceToken
+    self.txtEntries = txtEntries
+    self.requiredTXTEntries = requiredTXTEntries
     self.credentials = credentials
     self.role = role
     self.localSlot = localSlot
     self.playerCount = playerCount
     self.advertisesService = advertisesService
   }
+}
+
+public enum NetworkPeerLinkEvent: Equatable, Sendable {
+  case listening
+  case browsing
+  case connecting
+  case peerBound(slot: UInt8)
+  case peerDisconnected(slot: UInt8)
+  case rejected(slot: UInt8?)
+  case failed(String)
 }
 
 public typealias PeerLinkReceiveHandler =
@@ -75,6 +91,7 @@ import Security
 /// Network I/O and adapter tables are confined to `queue`; state-machine and
 /// handler access is confined to `stateLock`.
 public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
+  public static let serviceType = "_vkz-combat._udp"
   public let remoteSlot: UInt8
   public let evidenceTier: TransportEvidenceTier = .device
   public let deliversOrderedReliableFrames = true
@@ -97,6 +114,8 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
   private var receiveHandler: PeerLinkReceiveHandler?
   private var failureHandler: (() -> Void)?
   private var listenersReadyHandler: (@Sendable (UInt16, UInt16) -> Void)?
+  private let linkEventHandler: (@Sendable (NetworkPeerLinkEvent) -> Void)?
+  private var emittedBoundSlots: Set<UInt8> = []
 
   public init(
     remoteSlot: UInt8,
@@ -104,7 +123,8 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
     identity: TransportIdentityProvider? = nil,
     receiveHandler: PeerLinkReceiveHandler? = nil,
     failureHandler: (() -> Void)? = nil,
-    listenersReadyHandler: (@Sendable (UInt16, UInt16) -> Void)? = nil
+    listenersReadyHandler: (@Sendable (UInt16, UInt16) -> Void)? = nil,
+    linkEventHandler: (@Sendable (NetworkPeerLinkEvent) -> Void)? = nil
   ) throws {
     self.remoteSlot = remoteSlot
     self.configuration = configuration
@@ -112,6 +132,7 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
     self.receiveHandler = receiveHandler
     self.failureHandler = failureHandler
     self.listenersReadyHandler = listenersReadyHandler
+    self.linkEventHandler = linkEventHandler
     stateMachine = try PeerLinkStateMachine(
       role: configuration.role == .host ? .host : .client,
       localSlot: configuration.role == .host ? 0 : configuration.localSlot,
@@ -153,6 +174,7 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
       connections.removeAll()
       datagramConnections.removeAll()
       reliableBuffers.removeAll()
+      emittedBoundSlots.removeAll()
     }
   }
 
@@ -187,7 +209,7 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
         self.flushPendingOffers()
         self.announceListenersIfReady()
       case .failed:
-        self.failureHandler?()
+        self.fail("datagram listener failed")
       default:
         break
       }
@@ -200,13 +222,22 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
     let parameters = NWParameters(quic: makeQUICOptions(datagram: false))
     parameters.includePeerToPeer = true
     if configuration.advertisesService {
-      reliableListener = try? NWListener(
-        service: NWListener.Service(
+      let service: NWListener.Service
+      if configuration.txtEntries.isEmpty {
+        service = NWListener.Service(
           name: configuration.serviceToken,
-          type: "_vkz-combat._udp"
-        ),
-        using: parameters
-      )
+          type: Self.serviceType,
+          domain: nil
+        )
+      } else {
+        service = NWListener.Service(
+          name: configuration.serviceToken,
+          type: Self.serviceType,
+          domain: nil,
+          txtRecord: NWTXTRecord(configuration.txtEntries)
+        )
+      }
+      reliableListener = try? NWListener(service: service, using: parameters)
     } else {
       reliableListener = try? NWListener(using: parameters)
     }
@@ -216,7 +247,7 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
       case .ready:
         self.announceListenersIfReady()
       case .failed:
-        self.failureHandler?()
+        self.fail("reliable listener failed")
       default:
         break
       }
@@ -234,6 +265,7 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
           datagramPort != 0
     else { return }
     listenersReadyHandler?(reliablePort, datagramPort)
+    linkEventHandler?(.listening)
   }
 
   private func attachHostConnection(_ connection: NWConnection, datagram: Bool) {
@@ -282,7 +314,7 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
       return SecRandomCopyBytes(kSecRandomDefault, buffer.count, base) == errSecSuccess
     }
     guard generated else {
-      failureHandler?()
+      fail("pairing token generation failed")
       return
     }
     do {
@@ -295,7 +327,7 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
       }
       write([action])
     } catch {
-      failureHandler?()
+      fail("pairing offer failed")
     }
   }
 
@@ -311,18 +343,28 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
     let parameters = NWParameters(quic: makeQUICOptions(datagram: false))
     parameters.includePeerToPeer = true
     let browser = NWBrowser(
-      for: .bonjour(type: "_vkz-combat._udp", domain: nil),
+      for: configuration.requiredTXTEntries.isEmpty
+        ? .bonjour(type: Self.serviceType, domain: nil)
+        : .bonjourWithTXTRecord(type: Self.serviceType, domain: nil),
       using: parameters
     )
+    linkEventHandler?(.browsing)
     browser.stateUpdateHandler = { [weak self] state in
-      if case .failed = state {
-        self?.failureHandler?()
+      if case let .failed(error) = state {
+        self?.fail("browser:\(error.localizedDescription)")
       }
     }
     browser.browseResultsChangedHandler = { [weak self] results, _ in
       guard let self else { return }
       let matching = results.compactMap { result -> (String, NWEndpoint)? in
         guard case let .service(name, _, _, _) = result.endpoint else { return nil }
+        if !configuration.requiredTXTEntries.isEmpty {
+          guard case let .bonjour(txt) = result.metadata,
+                configuration.requiredTXTEntries.allSatisfy({
+                  txt.dictionary[$0.key] == $0.value
+                })
+          else { return nil }
+        }
         return (name, result.endpoint)
       }
       guard let selectedName = PeerLinkStateMachine.selectServiceName(
@@ -342,13 +384,14 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
   }
 
   private func formClientReliableFlow(to endpoint: NWEndpoint) {
+    linkEventHandler?(.connecting)
     let id = mintConnectionID()
     do {
       try withStateLock {
         try stateMachine.bindClientConnection(id, to: remoteSlot)
       }
     } catch {
-      failureHandler?()
+      fail("client binding failed")
       return
     }
     let parameters = NWParameters(quic: makeQUICOptions(datagram: false))
@@ -386,7 +429,7 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
     reliableConnection id: PeerLinkStateMachine.ConnectionID
   ) {
     guard let host = hostAddress(of: connections[id]) else {
-      failureHandler?()
+      fail("client datagram address unavailable")
       return
     }
     guard let port = NWEndpoint.Port(rawValue: offer.datagramPort) else { return }
@@ -396,7 +439,7 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
         try stateMachine.bindClientDatagramConnection(datagramID, to: remoteSlot)
       }
     } catch {
-      failureHandler?()
+      fail("client datagram binding failed")
       return
     }
     let connection = NWConnection(
@@ -446,7 +489,7 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
       }
       write([action])
     } catch {
-      failureHandler?()
+      fail("slot claim failed")
     }
   }
 
@@ -464,6 +507,9 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
         try stateMachine.setFlowReady(channel, for: target, connection: id)
       }
       write(actions)
+      if channel == .reliable && configuration.role == .client {
+        emitPeerBound(slot: target)
+      }
     } catch {
       failConnection(id)
     }
@@ -480,7 +526,7 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
 
   private func write(_ actions: [PeerLinkStateMachine.Action]) {
     guard let writes = try? encode(actions) else {
-      failureHandler?()
+      fail("frame encoding failed")
       return
     }
     writeEncoded(writes)
@@ -615,9 +661,15 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
     on connection: NWConnection,
     id: PeerLinkStateMachine.ConnectionID
   ) {
+    let previouslyBoundSlot = withStateLock { stateMachine.boundSlot(for: id) }
     do {
       let actions = try withStateLock { try stateMachine.receive(frame, on: id) }
-      handle(actions, on: connection, id: id)
+      handle(
+        actions,
+        on: connection,
+        id: id,
+        previouslyBoundSlot: previouslyBoundSlot
+      )
     } catch {
       failConnection(id)
     }
@@ -626,11 +678,13 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
   private func handle(
     _ actions: [PeerLinkStateMachine.Action],
     on connection: NWConnection,
-    id: PeerLinkStateMachine.ConnectionID
+    id: PeerLinkStateMachine.ConnectionID,
+    previouslyBoundSlot: UInt8?
   ) {
     for action in actions {
       switch action {
       case let .bound(_, slot):
+        emitPeerBound(slot: slot)
         markFlowReady(.reliable, for: id, slot: slot)
         offerPairing(to: slot)
       case let .datagramBound(_, slot):
@@ -638,10 +692,16 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
       case let .received(_, receivedFrame):
         deliver(receivedFrame, on: connection, id: id)
       case .rejected:
+        linkEventHandler?(.rejected(slot: previouslyBoundSlot))
         connection.cancel()
-        failConnection(id)
+        failConnection(id, reportFailure: false)
+        if let slot = previouslyBoundSlot {
+          emittedBoundSlots.remove(slot)
+          linkEventHandler?(.peerDisconnected(slot: slot))
+          fail("peer rejected")
+        }
       case .reliableGap:
-        failureHandler?()
+        fail("reliable gap")
       case .dropped, .write, .disconnected:
         break
       }
@@ -665,10 +725,10 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
         }
         write(outcome.actions)
         if outcome.issues.contains(where: { $0.failure != nil }) {
-          failureHandler?()
+          fail("relay send failed")
         }
       } catch {
-        failureHandler?()
+        fail("relay failed")
         connection.cancel()
         failConnection(id)
         return
@@ -679,7 +739,10 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
     handler?(frame, nowMs, nil)
   }
 
-  private func failConnection(_ id: PeerLinkStateMachine.ConnectionID) {
+  private func failConnection(
+    _ id: PeerLinkStateMachine.ConnectionID,
+    reportFailure: Bool = true
+  ) {
     let actions = withStateLock { stateMachine.disconnect(id) }
     connections[id]?.cancel()
     datagramConnections[id]?.cancel()
@@ -687,8 +750,26 @@ public final class NetworkPeerLink: PeerLink, @unchecked Sendable {
     datagramConnections[id] = nil
     reliableBuffers[id] = nil
     if !actions.isEmpty {
-      failureHandler?()
+      for action in actions {
+        if case let .disconnected(slot) = action {
+          emittedBoundSlots.remove(slot)
+          linkEventHandler?(.peerDisconnected(slot: slot))
+        }
+      }
+      if reportFailure {
+        fail("connection disconnected")
+      }
     }
+  }
+
+  private func emitPeerBound(slot: UInt8) {
+    guard emittedBoundSlots.insert(slot).inserted else { return }
+    linkEventHandler?(.peerBound(slot: slot))
+  }
+
+  private func fail(_ reason: String) {
+    linkEventHandler?(.failed(reason))
+    failureHandler?()
   }
 
   private func mintConnectionID() -> PeerLinkStateMachine.ConnectionID {

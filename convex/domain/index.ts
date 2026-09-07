@@ -4,6 +4,7 @@ export * from "./geofence.js";
 export * from "./lifecycle.js";
 export * from "./match.js";
 export * from "./respawn.js";
+export * from "./reload.js";
 export * from "./result.js";
 export * from "./session.js";
 export * from "./snapshot.js";

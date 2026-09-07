@@ -17,13 +17,19 @@ export type DemoSnapshotKind =
   | "countdown"
   | "active"
   | "ended"
-  | "cancelled";
+  | "cancelled"
+  | "arena"
+  | "arena-calibrating"
+  | "arena-paused"
+  | "arena-ended";
 
 export type DemoFixtureKind =
   | "loading"
   | DemoSnapshotKind
   | "degraded"
   | "recovery"
+  | "arena-degraded"
+  | "arena-recovery"
   | "error";
 
 const host: SpectatorPlayerSnapshot = {
@@ -82,6 +88,25 @@ export function createDemoSnapshot(
   kind: DemoSnapshotKind,
 ): SpectatorSnapshot {
   switch (kind) {
+    case "arena":
+    case "arena-calibrating":
+    case "arena-paused":
+    case "arena-ended": {
+      const combatPhase = kind === "arena-calibrating" ? "calibrating" : kind === "arena-paused" ? "paused" : kind === "arena-ended" ? "finished" : "running";
+      return {
+        serverNow: DEMO_NOW,
+        match: {...match(code, {phase: combatPhase === "finished" ? "finished" : "running"}),
+          combatMode: "durableObject", maxPlayers: 4, combatPhase,
+          ...(combatPhase === "finished" ? {winnerPlayerId: "player-ember"} : {})},
+        players: [
+          {...host, kills: 2, deaths: 1, lifeState: "alive"},
+          {...guest, kills: 1, deaths: 2, lifeState: "alive"},
+          {...guest, id: "player-ember", displayName: "EMBER", health: 100, kills: 4, deaths: 0, lifeState: "alive"},
+          {...guest, id: "player-north", displayName: "NORTH STAR OF THE MOUNTAIN", health: 0, kills: 0, deaths: 4, lifeState: "respawning", respawnAt: DEMO_NOW + 4200},
+        ],
+        events: [{...hitEvent, actorPlayerId: "player-ember", targetPlayerId: "player-north", message: "EMBER HIT NORTH STAR OF THE MOUNTAIN", damage: 34}],
+      };
+    }
     case "waiting":
       return {
         serverNow: DEMO_NOW,
@@ -140,15 +165,16 @@ export function createDemoSnapshot(
 function emitRecoverySequence(
   request: SpectatorSnapshotRequest,
   observer: SpectatorSnapshotObserver,
+  kind: "active" | "arena" = "active",
 ): () => void {
-  observer.next(createDemoSnapshot(request.code, "active"));
+  observer.next(createDemoSnapshot(request.code, kind));
 
   const interruption = window.setTimeout(
     () => observer.error(new Error("The deterministic feed was interrupted.")),
     40,
   );
   const recovery = window.setTimeout(() => {
-    const recovered = createDemoSnapshot(request.code, "active");
+    const recovered = createDemoSnapshot(request.code, kind);
     observer.next({
       ...recovered,
       serverNow: recovered.serverNow + 2_000,
@@ -178,8 +204,9 @@ export function createDemoSpectatorAdapter(
         case "error":
           observer.error(new Error("The deterministic feed is unavailable."));
           return () => undefined;
-        case "degraded": {
-          observer.next(createDemoSnapshot(request.code, "active"));
+        case "degraded":
+        case "arena-degraded": {
+          observer.next(createDemoSnapshot(request.code, fixture === "arena-degraded" ? "arena" : "active"));
           const timeout = window.setTimeout(
             () =>
               observer.error(new Error("The deterministic feed was interrupted.")),
@@ -188,12 +215,17 @@ export function createDemoSpectatorAdapter(
           return () => window.clearTimeout(timeout);
         }
         case "recovery":
-          return emitRecoverySequence(request, observer);
+        case "arena-recovery":
+          return emitRecoverySequence(request, observer, fixture === "arena-recovery" ? "arena" : "active");
         case "waiting":
         case "countdown":
         case "active":
         case "ended":
         case "cancelled":
+        case "arena":
+        case "arena-calibrating":
+        case "arena-paused":
+        case "arena-ended":
           observer.next(createDemoSnapshot(request.code, fixture));
           return () => undefined;
       }

@@ -29,6 +29,23 @@ function createControlledAdapter(): {
 }
 
 describe("useSpectatorSnapshot", () => {
+  it("keeps recovery bounded while fresh updates continue, retaining the newest snapshot", () => {
+    vi.useFakeTimers();
+    const {adapter,observers}=createControlledAdapter();
+    const snapshot=createDemoSnapshot("ARENA4","arena");
+    const {result,unmount}=renderHook(()=>useSpectatorSnapshot(adapter,"ARENA4",0));
+    act(()=>observers[0]!.next(snapshot));
+    act(()=>observers[0]!.error(new Error("interrupted")));
+    act(()=>observers[0]!.next(snapshot));
+    act(()=>{vi.advanceTimersByTime(500);});
+    const updated={...snapshot,serverNow:snapshot.serverNow+500};
+    act(()=>observers[0]!.next(updated));
+    expect(result.current).toMatchObject({kind:"recovery",snapshot:updated});
+    act(()=>{vi.advanceTimersByTime(1300);});
+    expect(result.current).toMatchObject({kind:"ready",snapshot:updated});
+    unmount();vi.useRealTimers();
+  });
+
   it("retains a stale snapshot, restores atomically, and de-duplicates recovery events", async () => {
     vi.useFakeTimers();
     const { adapter, observers } = createControlledAdapter();

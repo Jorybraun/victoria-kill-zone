@@ -11,6 +11,9 @@ node_modules/
 .pnpm-store/
 dist/
 coverage/
+.wrangler/
+.dev.vars
+.dev.vars.*
 *.tsbuildinfo
 
 # Local configuration and credentials

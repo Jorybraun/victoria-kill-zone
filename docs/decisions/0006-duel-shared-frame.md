@@ -1,5 +1,7 @@
 # ADR 0006: Duel shared frame — map-seeded body tracking over `CombatTransport`
 
+Implementation correction, 2026-09-05: this historical proposal's head/neck-to-phone offset and saved-anchor readback are **not independent alignment measurements**. Its assumption that the target's head is at their camera is also invalid. Do not implement those shortcuts or the degraded-state spatial-fire fallback below. [ADR 0008](0008-realtime-combat-implementation.md) owns the current authority/geometry implementation scope; [ADR 0009](0009-natural-scene-calibration-candidate.md) specifies the fresh natural-scene reference candidate and its visibility limitation. This proposal remains unaccepted pending physical evidence.
+
 | Field | Value |
 |---|---|
 | Status | **Proposed** (2026-09-04). Becomes Accepted only with the two-phone evidence in §7 recorded in `docs/build-log.md`. |

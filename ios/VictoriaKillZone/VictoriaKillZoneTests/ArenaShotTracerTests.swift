@@ -83,30 +83,34 @@ final class ArenaShotTracerTests: XCTestCase {
     XCTAssertEqual(ledger.active.map(\.shotId), ["t"])
   }
 
-  func testTracerCodecRoundTripsAndRejectsBadRays() throws {
+  func testFireBodyCodecRoundTripsAndRejectsBadRays() throws {
     let shot = try tracer(id: "host-1a2b#7", at: 1_700_000_000_000, direction: ArenaVector3(x: 3, y: 0, z: -4))
-    let encoded = try ArenaShotTracerCodec.encode(shot)
-    let decoded = try ArenaShotTracerCodec.decode(encoded)
-    XCTAssertEqual(decoded, shot)
-    XCTAssertEqual(decoded.ray.direction.length, 1, accuracy: 1e-12, "Direction is normalized on both ends")
+    let encoded = try ArenaLinkBodyCodec.encode(.shotTracer(shot))
+    let decoded = try ArenaLinkBodyCodec.decode(kind: encoded.kind, body: encoded.body)
+    assertShot(decoded, matches: shot)
 
-    XCTAssertThrowsError(try ArenaShotTracerCodec.decode(encoded.dropLast()))
-    XCTAssertThrowsError(try ArenaShotTracerCodec.decode(encoded + Data([1])))
-
-    var zeroDirection = encoded
-    let directionOffset = encoded.count - 3 * 8
-    zeroDirection.replaceSubrange(directionOffset..<encoded.count, with: Data(count: 24))
-    XCTAssertThrowsError(try ArenaShotTracerCodec.decode(zeroDirection)) { error in
-      XCTAssertEqual(error as? ArenaPeerSampleCodecError, .invalidTransform(.invalidDirection))
-    }
+    XCTAssertThrowsError(try ArenaLinkBodyCodec.decode(kind: encoded.kind, body: encoded.body.dropLast()))
+    XCTAssertThrowsError(try ArenaLinkBodyCodec.decode(kind: encoded.kind, body: encoded.body + Data([1])))
   }
 
-  func testLinkCodecCarriesShotTracers() throws {
-    let message = ArenaLinkMessage.shotTracer(try tracer(id: "guest-9f#3", at: 42))
-    var buffer = try ArenaLinkCodec.encode(message)
-    XCTAssertEqual(buffer[4], 6)
-    XCTAssertEqual(try ArenaLinkCodec.drainFrames(from: &buffer), [message])
-    XCTAssertTrue(buffer.isEmpty)
+  func testBodyCodecCarriesShotTracersAndRetractions() throws {
+    let shot = ArenaLinkMessage.shotTracer(try tracer(id: "guest-9f#3", at: 42))
+    let shotBody = try ArenaLinkBodyCodec.encode(shot)
+    XCTAssertEqual(shotBody.kind, 6)
+    assertShot(
+      try ArenaLinkBodyCodec.decode(kind: shotBody.kind, body: shotBody.body),
+      matches: try tracer(id: "guest-9f#3", at: 42)
+    )
+
+    let retraction = ArenaLinkMessage.shotRetracted(shotId: "guest-9f#3")
+    let retractionBody = try ArenaLinkBodyCodec.encode(retraction)
+    XCTAssertEqual(retractionBody.kind, 7)
+    XCTAssertEqual(
+      try ArenaLinkBodyCodec.decode(kind: retractionBody.kind, body: retractionBody.body),
+      retraction
+    )
+    XCTAssertThrowsError(try ArenaLinkBodyCodec.decode(kind: 6, body: retractionBody.body))
+    XCTAssertThrowsError(try ArenaLinkBodyCodec.decode(kind: 7, body: shotBody.body))
   }
 
   private func tracer(
@@ -119,5 +123,26 @@ final class ArenaShotTracerTests: XCTestCase {
       shooterPlayerId: String(id.split(separator: "#").first ?? "p"),
       ray: try ArenaShotRay(origin: ArenaVector3(x: 0.2, y: 1.4, z: 0.1), direction: direction, firedAtMs: firedAtMs)
     )
+  }
+
+  private func assertShot(
+    _ message: ArenaLinkMessage,
+    matches expected: ArenaShotTracer,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    guard case let .shotTracer(actual) = message else {
+      XCTFail("Expected shot tracer", file: file, line: line)
+      return
+    }
+    XCTAssertEqual(actual.shotId, expected.shotId, file: file, line: line)
+    XCTAssertEqual(actual.shooterPlayerId, expected.shooterPlayerId, file: file, line: line)
+    XCTAssertEqual(actual.firedAtMs, expected.firedAtMs, file: file, line: line)
+    XCTAssertEqual(actual.ray.origin.x, expected.ray.origin.x, accuracy: 1e-6, file: file, line: line)
+    XCTAssertEqual(actual.ray.origin.y, expected.ray.origin.y, accuracy: 1e-6, file: file, line: line)
+    XCTAssertEqual(actual.ray.origin.z, expected.ray.origin.z, accuracy: 1e-6, file: file, line: line)
+    XCTAssertEqual(actual.ray.direction.x, expected.ray.direction.x, accuracy: 1e-6, file: file, line: line)
+    XCTAssertEqual(actual.ray.direction.y, expected.ray.direction.y, accuracy: 1e-6, file: file, line: line)
+    XCTAssertEqual(actual.ray.direction.z, expected.ray.direction.z, accuracy: 1e-6, file: file, line: line)
   }
 }

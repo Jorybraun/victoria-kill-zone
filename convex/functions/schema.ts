@@ -60,6 +60,14 @@ export default defineSchema({
     arenaCenterAt: v.optional(nullableNumber),
     radiusMeters: v.number(),
     maxPlayers: v.number(),
+    combatMode: v.optional(v.literal("durableObject")),
+    combatFrameEpoch: v.optional(v.number()),
+    combatAuthorityEpoch: v.optional(v.number()),
+    combatPreparedAt: v.optional(v.number()),
+    combatRulesJson: v.optional(v.string()),
+    combatProjectionSequence: v.optional(v.number()),
+    combatProjectionDigest: v.optional(v.string()),
+    combatPhase: v.optional(v.union(v.literal("calibrating"), v.literal("running"), v.literal("paused"), v.literal("finished"))),
     durationMs: v.number(),
     startsAt: v.optional(nullableNumber),
     startedAt: nullableNumber,
@@ -97,8 +105,10 @@ export default defineSchema({
     shotsHit: v.number(),
     headshots: v.number(),
     lastShotAt: nullableNumber,
+    reloadEndsAt: v.optional(nullableNumber),
     respawnAt: nullableNumber,
     lastSeenAt: v.number(),
+    lastCombatTicketAt: v.optional(v.number()),
     joinedAt: v.number(),
     // Authoritative geofence state; locationAt is server receipt time of the
     // last trusted sample. Raw client timestamps are never stored.
@@ -111,6 +121,22 @@ export default defineSchema({
   })
     .index("by_match", ["matchId"])
     .index("by_match_and_device", ["matchId", "deviceIdHash"]),
+
+  combatShots: defineTable({
+    matchId: v.id("matches"),
+    projectileId: v.string(),
+    shotId: v.string(),
+    shooterId: v.id("players"),
+    targetId: v.union(v.id("players"),v.null()),
+    zone: v.union(hitZone,v.null()),
+    damage: v.number(),
+    reason: v.union(v.literal("bodyHit"),v.literal("shieldBlocked"),v.literal("missExpired"),v.literal("cancelled")),
+    matchTimeMs: v.number(),
+    authorityEpoch: v.number(),
+    eventSequence: v.number(),
+    createdAt: v.number(),
+  }).index("by_match_and_projectile",["matchId","projectileId"])
+    .index("by_match_and_sequence",["matchId","eventSequence"]),
 
   shots: defineTable({
     matchId: v.id("matches"),
@@ -146,6 +172,9 @@ export default defineSchema({
 
   events: defineTable({
     matchId: v.id("matches"),
+    // Optional for existing rows and lifecycle events; paired with the actor
+    // for exact deduplication of predicted and durably confirmed shots.
+    clientShotId: v.optional(v.string()),
     type: v.union(
       v.literal("joined"),
       v.literal("ready"),

@@ -77,6 +77,8 @@ function snapshotMatch(match: Doc<"matches">): SnapshotMatch {
     centerLatitude: match.centerLatitude,
     centerLongitude: match.centerLongitude,
     arenaCenterAt: match.arenaCenterAt ?? null,
+    ...(match.combatMode === undefined ? {} : {combatMode:match.combatMode,maxPlayers:match.maxPlayers}),
+    ...(match.combatPhase === undefined ? {} : {combatPhase:match.combatPhase}),
   };
 }
 
@@ -90,6 +92,7 @@ async function recentEvents(ctx: QueryCtx, matchId: Doc<"matches">["_id"]): Prom
   return events.map((event) => ({
     id: event._id,
     type: event.type,
+    ...(event.clientShotId === undefined ? {} : { clientShotId: event.clientShotId }),
     actorPlayerId: event.actorPlayerId,
     targetPlayerId: event.targetPlayerId,
     zone: event.zone,

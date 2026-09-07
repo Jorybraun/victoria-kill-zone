@@ -1,0 +1,37 @@
+{
+  "kind": "Actual SwiftUI components in synthetic macOS phone-sized viewports",
+  "sourceSHA256": {
+    "ios/VictoriaKillZone/VictoriaKillZone/Features/Home/HomeView.swift": "9af046dbfb08aa4672049c7204d12c44dfa369b60e7bbf9f9ccd5deb94d68be0",
+    "ios/VictoriaKillZone/VictoriaKillZone/Features/Lobby/WaitingRoomView.swift": "2b0c3fb2171d8324beff9d577d3868ef920bc7f9e3c5094cfab185df7c0206ca"
+  },
+  "supportingModuleSHA256": "e1f8ec47b67d0f536602dd629d31be44b5a0be62493627b9adbb1e84ef941c51",
+  "sourcePreparation": "Unmodified current component sources with @testable import prepended, linked against existing production dependencies",
+  "fixtures": "Synthetic callsign Alex; host Alex; guest Riley, guest Morgan, guest Alexandria North; defined ready/disconnected states",
+  "viewportPoints": [
+    375,
+    667
+  ],
+  "renderer": "Offscreen NSHostingView cacheDisplay including native ScrollView and TextField",
+  "dynamicTypeCases": [
+    "large",
+    "accessibility3 (layout branch; macOS font metrics differ from iOS)"
+  ],
+  "limitations": [
+    "Not an iPhone screenshot",
+    "macOS SwiftUI platform rendering; UIKit-only QR and clipboard controls excluded",
+    "No touch, keyboard, VoiceOver, networking, permissions, or camera acceptance",
+    "Bottom views use programmatic native scrolling, not a touch gesture"
+  ],
+  "PNGs": {
+    "home-accessibility-bottom.png": "17778c822f72d8d3ccb7d88db2827cd512aa3fa6a0054efc759020ecba9ce939",
+    "home-accessibility.png": "30a0d52dbc6add3ea8e784858a61001147943a785320b50d1af0d8cf35aaf4e1",
+    "home-standard-bottom.png": "d88e69dfe2c08a6524d92ad0f858413ffbe5a8094aaf5e1cd596b2d01ca9c4d3",
+    "home-standard.png": "57466e4d5e98629d6877a64a3cf0d2ed004a936188750c4051f292d69713d7be",
+    "lobby-four-players-accessibility-bottom.png": "2d1f95dd66257e1f479a145096e2ae6d315aacdddeeefc167746c294579a4892",
+    "lobby-four-players-accessibility.png": "031386afb805831c2f1231cb3d70ae0b6da8ddde5f7766eed91935380293138d",
+    "lobby-four-players-standard-bottom.png": "d3a42dd0cb4d0971f9a377b6c2288bb6502e1f2ea916b11a92813a8e5f9bfcd6",
+    "lobby-four-players-standard.png": "25a72596dea09cea98823f58577c48f2fab375f284c3b0a62716eef0078aea7d",
+    "lobby-one-player-accessibility.png": "a692fc6e940ff9398314c4c3890e3e53a6a314d6a2d49ef3f099e75701d46ff4",
+    "lobby-one-player-standard.png": "537636187cd6719d54e93d80162410d4d04fc3f9c0564c5f2581bb18f79e4f37"
+  }
+}

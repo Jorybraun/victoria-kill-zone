@@ -2,3 +2,4 @@ packages:
   - convex
   - spectator
   - packages/*
+  - services/*

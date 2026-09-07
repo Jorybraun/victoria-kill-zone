@@ -1,0 +1,8 @@
+{
+  "python": "3.14.5",
+  "packages": {
+    "manifold3d": "3.5.2",
+    "trimesh": "5.1.0",
+    "numpy": "2.5.3"
+  }
+}
