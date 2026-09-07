@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "evidenceScope": "actual-native-macos-combat-transport",
+  "recordedAtUtc": "2026-09-07T03:27:18.577Z",
+  "deploymentSha": "17e4a50771dd7caa59b915aa9acc6c0ccbac5280",
+  "sourceManifest": {
+    "sourceSha": "17e4a50771dd7caa59b915aa9acc6c0ccbac5280",
+    "sources": [
+      {
+        "file": "CombatWire.swift",
+        "sha256": "5bf1577d92f17965e91a05bde0f1823933e810c9f9769f85e7b540d11c4d9be3"
+      },
+      {
+        "file": "CombatReplica.swift",
+        "sha256": "15f7ee85a1119d46522992c54a695b3ca69239ab4649bee1206c609e41061026"
+      },
+      {
+        "file": "CombatSocketTransport.swift",
+        "sha256": "bc685491bd44239960e62558024fc6fa23d00f740952cb795fd3b2eb8461519f"
+      },
+      {
+        "file": "CombatClock.swift",
+        "sha256": "522cc405384d024725de69cafc4ab5c74b9955a6dfcebb8a3640a5cdd9d4e09b"
+      }
+    ]
+  },
+  "success": false,
+  "stage": "native-decoder-transport-clock",
+  "failure": "native-validation-or-clock-instability",
+  "elapsedMs": 1816,
+  "httpRequests": 7,
+  "clients": [
+    {
+      "label": "host",
+      "baselineAccepted": false,
+      "clockEverReady": false,
+      "unmatchedPongs": 0,
+      "snapshotsAccepted": 0,
+      "elapsedMs": 452.2930416762829,
+      "clock": [],
+      "failure": "invalidSnapshot",
+      "eventBatchesApplied": 0,
+      "firstKind": "events",
+      "holdCompleted": false,
+      "eventsApplied": 0,
+      "physicalDeviceEvidence": "not-claimed",
+      "nativeWouldDisconnect": false,
+      "clockReady": false,
+      "pingsSent": 1
+    },
+    {
+      "label": "guest",
+      "pingsSent": 1,
+      "baselineAccepted": false,
+      "clockReady": false,
+      "snapshotsAccepted": 0,
+      "unmatchedPongs": 0,
+      "clockEverReady": false,
+      "eventsApplied": 0,
+      "nativeWouldDisconnect": false,
+      "eventBatchesApplied": 0,
+      "holdCompleted": false,
+      "firstKind": "events",
+      "physicalDeviceEvidence": "not-claimed",
+      "elapsedMs": 197.8762499988079,
+      "failure": "invalidSnapshot",
+      "clock": []
+    }
+  ],
+  "syntheticData": {
+    "matchesCreated": 1,
+    "playersCreated": 2,
+    "retained": true,
+    "cleanup": "Sockets closed; no public deletion/end/leave API. Synthetic rows remain."
+  },
+  "limitations": [
+    "Actual active Swift decoder/replica/clock/URLSession transport compiled for macOS.",
+    "No physical iPhone, AR calibration, poses, or fire evidence.",
+    "Clock readiness is measured, not a prerequisite for transport pass; ready-to-unready transitions fail."
+  ]
+}
