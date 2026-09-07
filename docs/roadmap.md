@@ -6,31 +6,74 @@ Purpose: This is the re-founding document. It critiques the hackathon prototype 
 
 ## Active goal checkpoint — 2026-09-07
 
+**Unified execution goal:** complete every M0–M6 requirement in the production
+combat review while rebuilding the application around enjoyable, reliable
+two-to-four-player Quick Play across supported iPhones. Remove mandatory saved-map
+selection, manual room scanning and arena sizing from starting a match; offer
+independent offline Scan & Save with later recognition. Prove shared positioning,
+visible opponent bullets, correct hit-only skeletons, fast fire/reload, agreed
+combat state and reliable departures/reconnect first. Then complete shield and
+slow-projectile/dodge play, the Durable Objects/host comparison, spectator parity,
+performance, accessibility and signed release evidence. Replace failing flows and
+architectural assumptions through bounded, tested increments and dependent draft
+PRs; preserve every unfinished requirement until its acceptance evidence passes.
+
+The original saved app goal already includes all M0–M6 work and refers to the
+review. Its automatic continuation remains usage-limited; available goal tools
+cannot edit its objective or resume it. This roadmap, the linked review and Linear
+are the updated execution contract. User-directed work continues in this task;
+no reset, new goal, completion or background-resumption claim is made.
+
 The owner has not observed multiplayer, visible bullets, or the new engine working
 on their phones. The full M0–M6 goal remains open. The next accepted result is
-**a demonstrated two-phone match**, including the reported iPhone 14, with shared
+**a demonstrated mixed-model two-phone match**, with shared
 alignment, visible incoming/outgoing projectiles, agreed damage/ammo/reload and
 death/respawn, and correct departure updates. Saved maps and green builds alone
-do not complete this goal. See the executable [room-scanning plan](research/room-scanning.md)
+do not complete this goal. Full product acceptance covers two to four players
+across a representative supported-iPhone matrix: non-LiDAR baseline, standard
+and Pro models, supported iOS versions and swapped host/joiner roles. The reported
+iPhone 14 is one regression case. Integration must freeze the support floor and
+record untested combinations explicitly. See the executable [room-scanning plan](research/room-scanning.md)
 and [KIL-46](https://linear.app/kill-victoria/issue/KIL-46/resolve-creator-phone-room-scanning-on-iphone-14-before-multiplayer).
 
-Current order: repair and observe creator-phone scanning; prove two-phone spatial
-alignment; demonstrate the combat loop; validate shield/slowdown/dodging; finish
-remaining durability/performance/accessibility/release evidence. Continue the
-dependent PR chain #69 → #70 → the scoped scanning repair. No merge or TestFlight
-release is implied by this checkpoint.
+Updated product direction: Quick Play should need no saved-map selection, manual
+room scan, or arena sizing. Scan & Save is a separate one-phone experiment, with
+save/reopen/recognition independent of a match. The existing
+[execution plan](research/room-scanning.md) now defines a CI prerequisite, frozen
+interfaces, and three independent lanes: scanner, automatic shared positioning,
+and projectile/combat proof. Integration follows measured positioning and body
+tracking evidence. Preserve #69 → #70 → #71; stack dependent work within each
+lane without making optional scanner work a dependency of the positioning engine.
+Implementation has resumed with KIL-47's bounded CI repair on
+`codex/receiver-backpressure-test`, independently based on main `2929fd69`.
+Scanner, positioning and combat lanes remain queued until their source and
+contracts are ready. No merge or TestFlight release is implied.
 
-Outdoor play must separate a host-defined play boundary from the AR world map.
+The full [production combat review](research/production-combat-review.md) remains
+the scope under accepted [ADR 0008](decisions/0008-realtime-combat-implementation.md).
+Its original findings and proposed sequence describe the starting application;
+they are not a current completion report. Evaluate each existing flow against
+the owner's intended experience and replace interactions or architecture that
+prevent enjoyable, reliable play. The current concrete example is mandatory
+scanning/calibration before a match: separate Scan & Save, and adopt a measured
+shared-positioning approach that supports moving around. A polished setup screen
+alone cannot satisfy this product requirement. Keep useful implemented components,
+but do not preserve a failing flow merely because it already exists.
+
+Optional arena modes must separate a host-defined play boundary from the AR world map.
 The spec's 30 m default radius (20–60 m selectable) describes the coarse geofence,
-not proven camera coverage or bullet accuracy. Walls are not a mapping prerequisite.
+not proven camera coverage or bullet accuracy. Radius/perimeter controls are
+deferred from Quick Play's critical path. Walls are not a mapping prerequisite.
 ADR 0009's continuously visible reference is still a calibration candidate and
 does not establish freely moving outdoor play. A replacement or validated
 extension must prove spatial accuracy before removing that readiness gate.
 
 Current observed deployment evidence: the server snapshot-ordering repair at
 2929fd69 passed the recorded live native-transport and Node probes; the creator's
-phone scanning report remains unresolved. PR #69 is unmerged and #70 remains a
-draft. Earlier deployment/configuration checkpoints below are historical and
+phone scanning report remains unresolved. PR #69 is unmerged; #70/#71 are drafts.
+PR #71's GitHub iOS gate passed, but its Fast gate timed out in the unchanged
+Worker stalled-receiver test (run 34133648903); diagnosis/repair is the first gate.
+Earlier deployment/configuration checkpoints below are historical and
 must not be used as the current execution step.
 
 ## 1. Product thesis
