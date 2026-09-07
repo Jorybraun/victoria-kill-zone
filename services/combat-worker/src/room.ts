@@ -143,8 +143,10 @@ export class CombatRoom extends DurableObject<Env> {
         this.ctx.acceptWebSocket(pair[1], [claims.playerId]);
         const connection = new Connection(pair[1], claims.playerId, this.eventSequence, Date.now());
         this.connections.set(pair[1], connection);
-        this.broadcast(committed);
+        // Native replicas need a baseline before they can apply any event.
+        // The admission events are already covered by this durable snapshot.
         this.sendSnapshot(connection);
+        this.broadcast(committed);
         await this.ctx.storage.setAlarm(Date.now() + ALARM_CHECK_MS);
         this.scheduleTick();
         return new Response(null, { status: 101, webSocket: pair[0] });
@@ -304,8 +306,10 @@ export class CombatRoom extends DurableObject<Env> {
       const events = await this.commitCandidate(candidate, recoveryEvents, []);
       this.pending = [];
       this.cadence.reset(now);
+      // Establish the new epoch before events or a resume hint can reach a
+      // replica that still holds the old authority's baseline and cursor.
+      for (const connection of this.connections.values()) { this.sendSnapshot(connection); this.error(connection, "epochMismatch"); }
       this.broadcast(events);
-      for (const connection of this.connections.values()) { this.error(connection, "epochMismatch"); this.sendSnapshot(connection); }
       this.scheduleTick();
       return;
     }

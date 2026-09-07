@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "evidenceScope": "production-synthetic-transport-clock-stability",
+  "candidateSha": "17e4a50771dd7caa59b915aa9acc6c0ccbac5280",
+  "recordedAtUtc": "2026-09-07T03:22:54.971Z",
+  "success": false,
+  "elapsedMs": 1867,
+  "httpRequests": 6,
+  "passedStages": [
+    {
+      "stage": "local-preflight",
+      "elapsedMs": 71
+    },
+    {
+      "stage": "synthetic-lobby-create-and-join",
+      "elapsedMs": 760
+    },
+    {
+      "stage": "combat-prepare",
+      "elapsedMs": 870
+    }
+  ],
+  "failedStage": "host-authenticated-websocket-and-roster",
+  "failureCode": "first-message-not-snapshot",
+  "holdCompleted": false,
+  "holdTargetMs": 30000,
+  "nativeClockFormula": {
+    "minimumSamples": 3,
+    "maximumUncertaintyMs": 25,
+    "maximumFreshnessMs": 3000,
+    "sampleRetentionMs": 10000,
+    "sampleLimit": 16,
+    "pingSchedule": "0/100/200/300/400ms then every1000ms; relative timer after each send"
+  },
+  "clients": [
+    {
+      "label": "host",
+      "upgraded": true,
+      "firstMessageKind": "events",
+      "firstTwelveMessageKinds": [
+        "events",
+        "snapshot"
+      ],
+      "pingsSent": 1,
+      "snapshots": 1,
+      "clockSamples": [],
+      "readinessTransitions": [],
+      "nativeWouldDisconnect": [],
+      "pongAnomalies": 0,
+      "receiptAnomalies": 0,
+      "errors": [
+        {
+          "atMs": 2,
+          "code": "first-message-not-snapshot"
+        }
+      ],
+      "close": {
+        "code": 1000,
+        "reason": "closed",
+        "expected": true,
+        "atMs": 53
+      }
+    }
+  ],
+  "transport": {
+    "socketsOpened": 1,
+    "socketsClosed": true,
+    "acknowledgedOnlyReceivedSequences": true
+  },
+  "syntheticData": {
+    "matchesCreated": 1,
+    "playersCreated": 2,
+    "retained": true,
+    "cleanup": "No public match deletion/end/leave API. Sockets closed; synthetic rows remain."
+  },
+  "limitations": [
+    "No shots or calibration commands sent.",
+    "No physical-device evidence.",
+    "Presence transitions prove observed Worker-to-Convex projection; exact outbox receipt cursor is not publicly exposed."
+  ]
+}
