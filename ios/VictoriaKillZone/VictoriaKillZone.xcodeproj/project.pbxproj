@@ -118,6 +118,13 @@
 		B36270717FE62236842484C6 /* SavedArenaLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F89FFE5AB0052EF627FED14 /* SavedArenaLibraryTests.swift */; };
 		2ACB3CC9AE91331F37E6D3C2 /* ArenaScanPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DF6C3AC2366303589DAD0BA /* ArenaScanPresentation.swift */; };
 		142FD9EF4B73CA5A6FA7E8DC /* MapLabModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 708A954FAB9905479A061B24 /* MapLabModels.swift */; };
+		BB6222E253EA264BD350CD83 /* CombatReplayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6492E327AAE97B885A2721FA /* CombatReplayController.swift */; };
+		99C59155001AC4DEA17F40FB /* CombatReplayFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37DDD30CFFA16370F0C60FC8 /* CombatReplayFixture.swift */; };
+		1D5A9F2732E2733A12B614D4 /* CombatReplayScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = B97EB499B208625576AC5115 /* CombatReplayScene.swift */; };
+		6464BD69AE39B1E4873C9FAB /* CombatReplaySession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00EF5D6D705DA671F336388 /* CombatReplaySession.swift */; };
+		931CB1D516E546D8432B1663 /* CombatReplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC4393121CB3066397B136B2 /* CombatReplayView.swift */; };
+		31C247FE7C23E212B0206672 /* CombatReplayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 330BE936846FDD52B9C37D35 /* CombatReplayTests.swift */; };
+		6C44DFC39607D3C654901B7F /* Replay Fixtures in Resources */ = {isa = PBXBuildFile; fileRef = A41BC1537A32922FAAB2F1BC /* Replay Fixtures */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -241,6 +248,13 @@
 		7F89FFE5AB0052EF627FED14 /* SavedArenaLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/SavedArenaLibraryTests.swift"; sourceTree = SOURCE_ROOT; };
 		9DF6C3AC2366303589DAD0BA /* ArenaScanPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Arenas/ArenaScanPresentation.swift"; sourceTree = SOURCE_ROOT; };
 		708A954FAB9905479A061B24 /* MapLabModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Domain/MapLabModels.swift"; sourceTree = SOURCE_ROOT; };
+		6492E327AAE97B885A2721FA /* CombatReplayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Replay/CombatReplayController.swift"; sourceTree = SOURCE_ROOT; };
+		37DDD30CFFA16370F0C60FC8 /* CombatReplayFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Replay/CombatReplayFixture.swift"; sourceTree = SOURCE_ROOT; };
+		B97EB499B208625576AC5115 /* CombatReplayScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Replay/CombatReplayScene.swift"; sourceTree = SOURCE_ROOT; };
+		B00EF5D6D705DA671F336388 /* CombatReplaySession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Replay/CombatReplaySession.swift"; sourceTree = SOURCE_ROOT; };
+		CC4393121CB3066397B136B2 /* CombatReplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Replay/CombatReplayView.swift"; sourceTree = SOURCE_ROOT; };
+		330BE936846FDD52B9C37D35 /* CombatReplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/CombatReplayTests.swift"; sourceTree = SOURCE_ROOT; };
+		A41BC1537A32922FAAB2F1BC /* Replay Fixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "VictoriaKillZone/Features/Replay/Fixtures"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -355,6 +369,12 @@
 		G00100000000000000000007 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				A41BC1537A32922FAAB2F1BC /* Replay Fixtures */,
+				CC4393121CB3066397B136B2 /* CombatReplayView.swift */,
+				B00EF5D6D705DA671F336388 /* CombatReplaySession.swift */,
+				B97EB499B208625576AC5115 /* CombatReplayScene.swift */,
+				37DDD30CFFA16370F0C60FC8 /* CombatReplayFixture.swift */,
+				6492E327AAE97B885A2721FA /* CombatReplayController.swift */,
 				FCB005DFB4160E790E8F1E6E /* SavedArenaLibraryView.swift */,
 				35E89CF07BDB7BA4DADF3447 /* SavedArenaLibrary.swift */,
 				9DF6C3AC2366303589DAD0BA /* ArenaScanPresentation.swift */,
@@ -434,6 +454,7 @@
 		G0010000000000000000000C /* VictoriaKillZoneTests */ = {
 			isa = PBXGroup;
 			children = (
+				330BE936846FDD52B9C37D35 /* CombatReplayTests.swift */,
 				7F89FFE5AB0052EF627FED14 /* SavedArenaLibraryTests.swift */,
 				ECD1963DD0CA6DC023769434 /* SavedArenaMatchTests.swift */,
 				1C61701949C67614C297F723 /* ArenaSetupTests.swift */,
@@ -589,6 +610,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6C44DFC39607D3C654901B7F /* Replay Fixtures in Resources */,
 				A00600000000000000000002 /* SkeletonAssets in Resources */,
 				B00100000000000000000016 /* Assets.xcassets in Resources */,
 				B0010000000000000000001A /* PrivacyInfo.xcprivacy in Resources */,
@@ -609,6 +631,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				931CB1D516E546D8432B1663 /* CombatReplayView.swift in Sources */,
+				6464BD69AE39B1E4873C9FAB /* CombatReplaySession.swift in Sources */,
+				1D5A9F2732E2733A12B614D4 /* CombatReplayScene.swift in Sources */,
+				99C59155001AC4DEA17F40FB /* CombatReplayFixture.swift in Sources */,
+				BB6222E253EA264BD350CD83 /* CombatReplayController.swift in Sources */,
 				142FD9EF4B73CA5A6FA7E8DC /* MapLabModels.swift in Sources */,
 				1902D232B2C0F07075114A90 /* RealtimeReferencePanel.swift in Sources */,
 				C580C11A7C59BAE21A4EC5B7 /* DuelFrameReferenceCapture.swift in Sources */,
@@ -687,6 +714,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				31C247FE7C23E212B0206672 /* CombatReplayTests.swift in Sources */,
 				167D331E02D4F1E83F205377 /* DuelFrameReferenceTests.swift in Sources */,
 				B36270717FE62236842484C6 /* SavedArenaLibraryTests.swift in Sources */,
 				0C7BE8F2ECA75ECDF07B90E3 /* SavedArenaMatchTests.swift in Sources */,

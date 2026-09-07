@@ -112,6 +112,14 @@ struct HomeView: View {
       }
       .font(.caption.weight(.semibold).monospaced())
       .foregroundStyle(VKZPalette.telemetry)
+
+      #if os(iOS) && canImport(SceneKit)
+      NavigationLink("PROJECTILE REPLAY · SYNTHETIC") {
+        CombatReplayView()
+      }
+      .font(.caption.weight(.semibold).monospaced())
+      .foregroundStyle(VKZPalette.telemetry)
+      #endif
       #endif
 
       Text("Find a clear play area. Stay aware of the world around you.")
