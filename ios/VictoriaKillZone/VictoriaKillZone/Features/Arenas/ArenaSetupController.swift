@@ -29,7 +29,7 @@ final class ArenaSetupController: ObservableObject {
   init(targeting: any TargetingSession, store: any SavedArenaStoring) {
     self.targeting = targeting; self.store = store
     frameProvider = (targeting as? any DuelFrameSessionDriving).map {DuelFrameProvider(targeting: $0)}
-    frameProvider?.$snapshot.sink { [weak self] in self?.frame = $0 }.store(in: &subscriptions)
+    frameProvider?.$snapshot.sink { [weak self] in self?.receive($0) }.store(in: &subscriptions)
     frameProvider?.$referenceState.sink { [weak self] value in
       guard let self else {return}
       self.referenceState = value
@@ -38,6 +38,7 @@ final class ArenaSetupController: ObservableObject {
   }
 
   deinit {startTask?.cancel(); actionTask?.cancel()}
+  var scanPresentation: ArenaScanPresentation {ArenaScanPresentation(frame: frame)}
   var isBusy: Bool {[.starting, .capturing, .saving, .stopping].contains(phase)}
   var canCapture: Bool {sceneActive && phase == .scanning && frame.stage == .mapReady}
   var canSave: Bool {
@@ -153,6 +154,17 @@ final class ArenaSetupController: ObservableObject {
 
   private func current(_ token: Int) -> Bool {
     generation == token && sceneActive && !Task.isCancelled && completion == nil
+  }
+
+  private func receive(_ snapshot: DuelFrameSnapshot) {
+    frame = snapshot
+    guard snapshot.stage == .lost, [.starting, .scanning, .capturing, .saving].contains(phase) else {return}
+    // Revoke a pending action too: its late result must not replace this failure
+    // with scanning/saving success. Restart/cancel still await owned teardown.
+    generation += 1
+    startTask?.cancel(); actionTask?.cancel()
+    phase = .paused
+    message = ArenaScanPresentation(frame: snapshot).guidance
   }
 
   private func halt(then next: ArenaSetupPhase) async -> Bool {

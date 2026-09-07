@@ -1723,7 +1723,8 @@ enum TargetingSessionFactory {
       duelFrameState.hub.yield(DuelFrameObservation(epoch: configuration.epoch, frameID: configuration.frameID,
         phase: configuration.phase, tracking: tracking,
         isMapped: DuelFrameMapCaptureEligibility.permits(mapping: frame.worldMappingStatus, tracking: frame.camera.trackingState),
-        pose: pose, observedAt: now, failure: nil, referenceObservation: duelFrameState.latestReferenceObservation))
+        pose: pose, observedAt: now, failure: nil, referenceObservation: duelFrameState.latestReferenceObservation,
+        scanFeedback: DuelFrameMapCaptureEligibility.feedback(mapping: frame.worldMappingStatus, tracking: frame.camera.trackingState)))
     }
 
     private func recordDuelReferenceAnchors(_ anchors: [ARAnchor]) {

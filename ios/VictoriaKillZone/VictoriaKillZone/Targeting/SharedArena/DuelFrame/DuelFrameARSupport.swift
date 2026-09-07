@@ -13,6 +13,22 @@
       @unknown default: return false
       }
     }
+
+    static func feedback(mapping: ARFrame.WorldMappingStatus, tracking: ARCamera.TrackingState) -> DuelFrameScanFeedback {
+      switch tracking {
+      case .notAvailable: return .trackingUnavailable
+      case .normal: return permits(mapping: mapping, tracking: tracking) ? .ready : .mapping
+      case .limited(let reason):
+        switch reason {
+        case .initializing: return .initializing
+        case .excessiveMotion: return .movingTooFast
+        case .insufficientFeatures: return .insufficientDetail
+        case .relocalizing: return .relocalizing
+        @unknown default: return .trackingLimited
+        }
+      @unknown default: return .trackingUnavailable
+      }
+    }
   }
 
   struct DuelFrameSessionConfiguration: Equatable, Sendable {

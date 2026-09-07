@@ -2,6 +2,45 @@
 
 Date: 2026-09-04. Owner: Integration. Status: review and proposed next-slice contracts; this document does not select a new backend or accept an ADR.
 
+## Current reading guide — 2026-09-07
+
+**The full application review/rebuild remains the goal, and it is not complete.**
+Accepted [ADR 0008](../decisions/0008-realtime-combat-implementation.md) authorizes
+all M0–M6 implementation, including the Durable Object candidate. The original
+findings, proposed contracts and next-task wording below describe the September 4
+starting point. Read them alongside accepted decisions and the
+[active roadmap](../roadmap.md#active-goal-checkpoint--2026-09-07), rather than
+treating this historical inventory as either current source state or completed work.
+
+| Requirement | Current implementation and remaining gap |
+|---|---|
+| M0 — responsive combat/UI | Rebuilt controls, anatomical hit-only mesh, target feedback, 150 ms cadence and bounded fire/reload reconciliation exist. Sustained firing, correct-person feedback, haptics and usable HUD behavior still need physical acceptance. |
+| M1 — shared positioning | Map/reference calibration code exists; moving multiplayer accuracy is unproven. [ADR 0009](../decisions/0009-natural-scene-calibration-candidate.md) requires a continuously visible reference. Automatic Quick Play positioning and compatible body coverage remain work to resolve, not just a pending test of a finished feature. |
+| M2 — one authority | Native WebSocket/clock/replica code connects to the DO room with ordered Convex projections. Recorded connectivity probes do not establish actual two-to-four-phone combat, identity association or departure behavior. |
+| M3 — projectiles | The TypeScript engine implements swept moving-body collision and projectile lifecycle, with native worldline rendering. Incoming bullets and anatomical dodge/control trials remain unproven in real play; missing body coverage currently pauses combat. |
+| M4 — shield/slowdown | Rules, engine tests, controls and rendering exist. Physical blocking, slowdown and phone-only movement controls remain unverified. |
+| M5 — backend comparison | The DO runtime, durable recovery/projection machinery and local load harness exist. Equivalent host finite-projectile behavior and the host/DO comparison remain incomplete: the Swift ProjectileWorldline still lacks collision/damage/expiry. Sustained-load failures and actual-network/cost measurements remain open. |
+| M6 — production delivery | Build/test, guarded deployment and TestFlight plumbing exist. Supported-device gameplay, sustained frame-time/thermal/battery/accessibility evidence and final acceptance remain open. The active roadmap records outstanding PR/CI gates. |
+
+The owner's product direction is to replace flows and architectural choices that
+prevent enjoyable, reliable play. Mandatory scanning before a match is the current
+example: Quick Play should work without saved-map selection, manual room scanning
+or arena sizing; Scan & Save becomes an independent optional workflow. This requires
+a measured positioning/targeting solution, not simply bypassing readiness checks.
+See the bounded [execution plan](room-scanning.md) and its scanner, spatial and
+combat lanes. Scope covers supported iPhones across representative device classes
+and mixed two-, three- and four-player groups; the reported iPhone 14 is one regression.
+
+The original milestones below remain acceptance obligations. Planning updates,
+implemented modules and successful server probes do not close the overall goal.
+The owner has now combined this full scope with the Quick Play/Scan & Save plan
+and authorized continued implementation. The [unified roadmap goal](../roadmap.md#active-goal-checkpoint--2026-09-07)
+and [milestone-to-work mapping](room-scanning.md#full-report-traceability) define
+the current order. KIL-47 is the first dispatched repair; no remaining milestone
+has been dropped or declared complete by this planning integration.
+
+## Original review — 2026-09-04
+
 The product owner's current direction is faster shooting, a skeleton visible only on a hit, a clear target indicator, shared visible bullets, possible phone shields and dodgeable slow projectiles. This review covers the active native iOS, simulation, transport, Convex and spectator architecture. Nothing under `archive /` was used. Integration handed off exclusive ownership of this report; implementation changes belong to their named owners.
 
 **Recommendation: finish one shared-frame, authoritative combat path before attempting a backend replacement.** Keep the current game playable while improving input, hit feedback and reconciliation. The next substantial slice should prove that two phones see the same line in the same physical space, then connect that frame to the existing simulation and transport. A Durable Object per match is a credible cloud authority candidate for a measured comparison, not an established performance improvement for this game.
