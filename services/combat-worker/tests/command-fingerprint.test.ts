@@ -3,7 +3,7 @@ import { abortAllDurableObjects, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, it } from "vitest";
 import { canonicalJson } from "../src/canonical.js";
 import { commandFingerprint, matchesFingerprint } from "../src/command-fingerprint.js";
-import { claims, command, connect } from "./helpers.js";
+import { claims, command, connect, manuallyScheduledRoom } from "./helpers.js";
 
 afterEach(async () => {await abortAllDurableObjects();});
 
@@ -18,11 +18,14 @@ it("keeps content identity independent of property order and bounded for large i
 });
 
 it("persists compact identity and preserves exact retries of legacy canonical rows", async () => {
-  const ticket = claims(), socket = await connect(ticket);
+  const ticket = claims();
+  const room = await manuallyScheduledRoom(ticket.matchId);
+  const socket = await connect(ticket);
   try {
     const initial = await socket.next("snapshot");
     const input = command(initial, 1, {kind: "frameReady", ready: true, residualMeters: 0.01, residualDegrees: 0.1, clockUncertaintyMs: 1});
     socket.send(input);
+    await room.tick([socket], [input]);
     await socket.next("ack", ack => ack.commandId === input.commandId);
     const canonical = canonicalJson(input);
     const stored = await runInDurableObject(env.COMBAT_ROOMS.getByName(ticket.matchId), (_instance, state) => {
