@@ -2,6 +2,7 @@ import { env, exports as workerExports } from "cloudflare:workers";
 import { abortAllDurableObjects, evictDurableObject, runInDurableObject, runDurableObjectAlarm } from "cloudflare:test";
 import { afterEach, describe, expect, it } from "vitest";
 import { LIMITS, type CommandEnvelope, type ServerMessage } from "@vkz/combat-protocol";
+import { MAX_UNACKNOWLEDGED_EVENTS } from "../src/connection.js";
 import { claims, command, connect, manuallyScheduledRoom, phoneInput, requestUpgrade, token, SocketInbox } from "./helpers.js";
 
 afterEach(async () => { await abortAllDurableObjects(); });
@@ -289,15 +290,62 @@ describe("bounded transport and idle lifecycle", () => {
   });
 
   it("disconnects a non-acknowledging receiver before its outbound queue grows without bound", async () => {
-    const socket = await connect(claims(), false);
-    const initial = await socket.next("snapshot");
-    const closed = new Promise<string>((resolve) => socket.socket.addEventListener("close", (event) => resolve(event.reason)));
-    let sequence = 0;
-    for (let batch = 0; batch < 14 && socket.socket.readyState === WebSocket.OPEN; batch += 1) {
-      for (let index = 0; index < 20; index += 1) socket.send(command(initial, ++sequence, { kind: "reload" }));
-      await new Promise((resolve) => setTimeout(resolve, 350));
-    }
-    expect(await closed).toBe("resume-required");
+    const payload = claims({ roster: [
+      { playerId: "host", displayName: "Receiver", role: "host" },
+      ...[1, 2, 3].map((id) => ({ playerId: `sender-${id}`, displayName: `Sender ${id}`, role: "player" as const })),
+    ] });
+    // Wall-clock bursts can trigger authority recovery on busy CI, after which
+    // old-epoch commands no longer generate the events this assertion requires.
+    const room = await manuallyScheduledRoom(payload.matchId);
+    const sockets: SocketInbox[] = [];
+    try {
+      const producers = [];
+      for (const member of payload.roster.slice(1)) {
+        const socket = await connect({ ...payload, playerId: member.playerId });
+        sockets.push(socket);
+        const initial = await socket.next("snapshot");
+        producers.push({ socket, input: phoneInput(socket, initial, [0, 0, 0], () => room.matchTimeMs) });
+      }
+      // Admit the passive receiver last so later joins do not consume its window.
+      const receiver = await connect(payload, false);
+      sockets.push(receiver);
+      const closed = new Promise<{ code: number; reason: string }>((resolve) => {
+        receiver.socket.addEventListener("close", (event) => resolve({ code: event.code, reason: event.reason }));
+      });
+      const initial = await receiver.next("snapshot");
+      const unready = { kind: "frameReady" as const, ready: false, residualMeters: 0, residualDegrees: 0, clockUncertaintyMs: 1 };
+      const produce = async (inputs: { socket: SocketInbox; envelope: CommandEnvelope }[]) => {
+        await room.tick([...new Set(inputs.map((input) => input.socket))], inputs.map((input) => input.envelope));
+        await Promise.all(inputs.map(async ({ socket, envelope }) => {
+          expect((await socket.result(envelope)).event).toMatchObject({ accepted: true, reason: null });
+        }));
+      };
+      // Each accepted readiness update emits playerChanged + commandResult.
+      // Three producers stay below their initial command/receipt/ping budgets;
+      // every 42-command tick also stays below the room's 64-command limit.
+      for (let tick = 0; tick < 3; tick += 1) {
+        await produce(producers.flatMap(({ socket, input }) =>
+          Array.from({ length: 14 }, () => ({ socket, envelope: input.send(unready) }))));
+      }
+      const producer = producers[0]!;
+      await produce(Array.from({ length: 2 }, () => ({ socket: producer.socket, envelope: producer.input.send(unready) })));
+      const boundary = initial.eventSequence + MAX_UNACKNOWLEDGED_EVENTS;
+      const allowed = await receiver.next("events", (message) => message.events.at(-1)?.eventSequence === boundary);
+      expect(allowed.events.at(-1)?.eventSequence).toBe(boundary);
+      expect(receiver.socket.readyState).toBe(WebSocket.OPEN);
+
+      // One more durable result crosses the window. A healthy peer still sees
+      // that committed event, while the passive receiver must never receive it.
+      const overflow = producer.input.send({ kind: "reload" });
+      await room.tick([producer.socket], [overflow]);
+      const result = await producer.socket.result(overflow);
+      expect(result.eventSequence).toBe(boundary + 1);
+      expect(result.event).toMatchObject({ accepted: false, reason: "notRunning" });
+      expect(await closed).toEqual({ code: 4008, reason: "resume-required" });
+      expect(receiver.messages.flatMap((message) => message.type === "events" ? message.events : [])
+        .every((event) => event.eventSequence <= boundary)).toBe(true);
+      expect(producers.every(({ socket }) => socket.socket.readyState === WebSocket.OPEN)).toBe(true);
+    } finally { for (const socket of sockets) socket.close(); }
   });
 
   it("uses the alarm for idle retention cleanup without advancing combat", async () => {
