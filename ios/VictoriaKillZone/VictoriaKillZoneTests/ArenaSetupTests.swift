@@ -4,6 +4,65 @@ import XCTest
 
 @MainActor
 final class ArenaSetupTests: XCTestCase {
+  func testInterruptedReferenceCaptureCannotRestoreScanningFromItsLateResult() async throws {
+    let gate = ArenaSetupGate(), camera = ArenaSetupCamera()
+    await camera.setReferenceGate(gate)
+    let store = ArenaSetupStore(), setup = ArenaSetupController(targeting: camera, store: store)
+    try await prepare(setup, camera: camera)
+    let capturing = Task {await setup.captureReference()}
+    try await until {await gate.entered}
+    camera.emitFailure(.sessionInterrupted)
+    try await until {setup.phase == .paused}
+    await gate.release()
+    await capturing.value
+    XCTAssertEqual(setup.phase, .paused)
+    XCTAssertEqual(setup.scanPresentation.title, "Camera interrupted")
+    XCTAssertFalse(setup.canSave)
+    let writes = await store.saveCalls
+    XCTAssertEqual(writes, 0)
+    await setup.cancel()
+  }
+
+  func testScanPresentationPrioritizesFailureOverOldReadyFeedback() {
+    let interrupted = DuelFrameSnapshot(stage: .lost, epoch: 1, failure: .sessionInterrupted, scanFeedback: .ready)
+    XCTAssertEqual(ArenaScanPresentation(frame: interrupted).title, "Camera interrupted")
+    XCTAssertTrue(ArenaScanPresentation(frame: interrupted).guidance.contains("restart"))
+    let timedOut = DuelFrameSnapshot(stage: .lost, epoch: 1, failure: .mappingTimedOut, scanFeedback: .insufficientDetail)
+    XCTAssertEqual(ArenaScanPresentation(frame: timedOut).title, "Scan needs another try")
+    let ready = DuelFrameSnapshot(stage: .mapReady, epoch: 1, scanFeedback: .ready)
+    XCTAssertTrue(ArenaScanPresentation(frame: ready).guidance.contains("hasn't aligned"))
+    XCTAssertFalse(ready.permitsSpatialFire())
+  }
+
+  func testMotionAndFeatureShortageOfferDifferentScanRecovery() {
+    let fast = DuelFrameSnapshot(stage: .mapping, epoch: 1, scanFeedback: .movingTooFast)
+    let featureless = DuelFrameSnapshot(stage: .mapping, epoch: 1, scanFeedback: .insufficientDetail)
+    XCTAssertEqual(ArenaScanPresentation(frame: fast).title, "Move more slowly")
+    XCTAssertEqual(ArenaScanPresentation(frame: featureless).title, "Find more detail")
+    XCTAssertNotEqual(ArenaScanPresentation(frame: fast).guidance, ArenaScanPresentation(frame: featureless).guidance)
+  }
+
+  func testInterruptedRoomScanPausesAndCanRestartBeforeSaving() async throws {
+    let camera = ArenaSetupCamera(), setup = ArenaSetupController(targeting: camera, store: ArenaSetupStore())
+    try await prepare(setup, camera: camera)
+    await setup.captureReference()
+    setup.name = "Living room"
+    camera.emitFailure(.sessionInterrupted)
+    try await until {setup.frame.stage == .lost}
+    XCTAssertEqual(setup.phase, .paused, "A failed camera must not keep asking the player to scan")
+    XCTAssertTrue(setup.message?.contains("interrupted") == true)
+    XCTAssertFalse(setup.canCapture)
+    XCTAssertFalse(setup.canSave)
+    await setup.restart()
+    XCTAssertEqual(setup.phase, .scanning)
+    XCTAssertNil(setup.frame.failure)
+    XCTAssertEqual(setup.referenceState, .unavailable)
+    XCTAssertNil(setup.message)
+    camera.emitMapped()
+    try await until {setup.canCapture}
+    await setup.cancel()
+  }
+
   func testSavedCompletionWaitsForCameraTeardownAndContainsCapturedReference() async throws {
     let stop = ArenaSetupGate(), camera = ArenaSetupCamera(stopGate: nil)
     await camera.setStopGate(stop)
@@ -239,6 +298,10 @@ private actor ArenaSetupCamera: TargetingSession, DuelFrameSessionDriving {
   nonisolated func emitMapped() {
     observations.yield(.init(epoch: 1, frameID: nil, phase: .mapping, tracking: .normal,
       isMapped: true, pose: nil, observedAt: Date(), failure: nil))
+  }
+  nonisolated func emitFailure(_ failure: DuelFrameFailure) {
+    observations.yield(.init(epoch: 1, frameID: nil, phase: .mapping, tracking: .unavailable,
+      isMapped: false, pose: nil, observedAt: Date(), failure: failure))
   }
   func start() async throws {
     starts += 1; lifecycle.append("start")
