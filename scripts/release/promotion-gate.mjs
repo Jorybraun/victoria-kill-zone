@@ -10,7 +10,7 @@ import { appendFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 import { fetchCurrentMainSha, hasSuccessfulCiPushRun } from "./github-api.mjs";
-import { hasSuccessfulDeployment } from "./deployment-gate.mjs";
+import { hasSuccessfulDeployment, DEPLOY_WORKFLOW_PATH } from "./deployment-gate.mjs";
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/u;
 
@@ -39,7 +39,7 @@ export function decidePromotion(input) {
   const {
     enabled,
     eventName,
-    deployWorkflowName,
+    deployWorkflowPath,
     deployEvent,
     deployConclusion,
     ciVerifiedForSha,
@@ -74,7 +74,7 @@ export function decidePromotion(input) {
     return decide("invalidCurrent");
   }
   if (eventName === "workflow_run") {
-    if (deployWorkflowName !== "Deploy") {
+    if (deployWorkflowPath !== DEPLOY_WORKFLOW_PATH) {
       return decide("notDeployWorkflow");
     }
     if (deployConclusion !== "success") {
@@ -110,7 +110,7 @@ export function decideFromEnvironment(environment = process.env) {
   return decidePromotion({
     enabled: environment.VKZ_TESTFLIGHT_ENABLED === "true",
     eventName: environment.VKZ_EVENT_NAME,
-    deployWorkflowName: environment.VKZ_DEPLOY_WORKFLOW_NAME,
+    deployWorkflowPath: environment.VKZ_DEPLOY_WORKFLOW_PATH,
     deployEvent: environment.VKZ_DEPLOY_EVENT,
     deployConclusion: environment.VKZ_DEPLOY_CONCLUSION,
     ciVerifiedForSha: environment.VKZ_CI_VERIFIED_FOR_SHA === "true",
@@ -170,7 +170,7 @@ export async function decideWithRemoteFacts(environment = process.env, deps = {}
   return decidePromotion({
     enabled: true,
     eventName: environment.VKZ_EVENT_NAME,
-    deployWorkflowName: environment.VKZ_DEPLOY_WORKFLOW_NAME,
+    deployWorkflowPath: environment.VKZ_DEPLOY_WORKFLOW_PATH,
     deployEvent: environment.VKZ_DEPLOY_EVENT,
     deployConclusion: environment.VKZ_DEPLOY_CONCLUSION,
     ciVerifiedForSha,
