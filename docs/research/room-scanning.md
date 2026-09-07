@@ -99,21 +99,23 @@ unverified; another phone's pass cannot close it.
 
 ## Sequence and checkpoints
 
-Queued dispatch briefs: [KIL-47 — CI repair](https://linear.app/kill-victoria/issue/KIL-47/restore-green-ci-for-the-stalled-combat-receiver-regression),
+Active work briefs: [KIL-47 — CI repair](https://linear.app/kill-victoria/issue/KIL-47/restore-green-ci-for-the-stalled-combat-receiver-regression),
 [KIL-48 — Scan & Save](https://linear.app/kill-victoria/issue/KIL-48/make-scan-and-save-independent-and-test-saved-maps-on-one-phone),
 [KIL-49 — automatic alignment](https://linear.app/kill-victoria/issue/KIL-49/prove-temporary-two-phone-alignment-before-adopting-quick-play),
 [KIL-50 — projectile/combat proof](https://linear.app/kill-victoria/issue/KIL-50/prove-visible-projectile-rendering-and-multiplayer-state-convergence).
-KIL-47 is In Progress with one exclusive Worker/CI owner in
-`/tmp/vkz-receiver-ci`, branch `codex/receiver-backpressure-test`, based on main
-`2929fd69`. First checkpoint: 2026-09-07 17:10 UTC (45 minutes from dispatch).
-KIL-48–50 remain Backlog with explicit paths, exclusions, dependencies,
-checkpoints and acceptance commands. Root owns the combined docs and publication.
+PR #73's repaired receiver test and PR #74's frozen foundation both passed actual
+GitHub CI on their exact heads. KIL-48–50 are in progress: three agents returned
+the independent scanner, shared-origin experiment and engine-event replay.
+Integration owns their reviewed composition, native verification and draft PRs.
+The scanner now has an offline entry and storage; main Create Arena bypasses the
+saved-map picker. Existing production calibration remains until the spatial and
+target-association evidence supports replacing it. No phone acceptance is implied.
 
 | Step | Status | Owner | Exit evidence |
 |---|---|---|---|
-| 0. Establish a green baseline | in_progress: CI repair dispatched | CI/Worker owner, root review | Reproduce or classify the timeout, repair the owning code/fixture, canonical checks and real GitHub jobs pass on exact heads |
-| 1. Freeze interfaces and the two user flows | pending | Integration | Accepted next-slice design, supported-device matrix, typed local contracts, exact ownership and dispatch briefs in Linear |
-| 2. Fan out scanner, spatial experiment and combat replay | pending; parallel after inputs are green/frozen | Three agents | Each returns a small draft PR plus its specific evidence below |
+| 0. Establish a green baseline | complete on PR #74; older unpropagated PR checks remain historical | CI/Worker owner, root review | Reproduced stalled producer; deterministic receiver test; canonical checks and actual exact-head GitHub CI passed |
+| 1. Freeze interfaces and the two user flows | complete for this slice | Integration | `design/scan-play-foundation.md`, `MapLabModels.swift`, ownership and dispatch briefs; physical support matrix remains untested |
+| 2. Fan out scanner, spatial experiment and combat replay | in_progress: source implemented, integration verification underway | Three agents + Integration | Each returns a small draft PR plus its specific evidence below |
 | 3. Decide positioning and targeting compatibility | pending; needs spatial device evidence | Integration + targeting | Measured method and successor ADR; no fabricated or stale accuracy evidence |
 | 4. Integrate Quick Play | pending; depends on 2/3 | Integration + combat | No saved-map dependency; transformed accepted projectiles and real associated targets, lifecycle/reconnect tests |
 | 5. Prove the signed build on phones | pending | Integration + device operator | Same-SHA scanner trials across representative device classes, mixed-model two-phone gameplay recordings/ledger, then mixed three/four-player trials |
