@@ -107,7 +107,7 @@ struct HomeView: View {
       #endif
 
       #if DEBUG
-      NavigationLink("SHARED ARENA HARNESS (KIL-20)") {
+      NavigationLink("SHARED ORIGIN EXPERIMENT") {
         SharedArenaHarnessView()
       }
       .font(.caption.weight(.semibold).monospaced())

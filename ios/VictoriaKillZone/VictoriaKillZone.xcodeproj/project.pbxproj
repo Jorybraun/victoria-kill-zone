@@ -118,6 +118,12 @@
 		B36270717FE62236842484C6 /* SavedArenaLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F89FFE5AB0052EF627FED14 /* SavedArenaLibraryTests.swift */; };
 		2ACB3CC9AE91331F37E6D3C2 /* ArenaScanPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DF6C3AC2366303589DAD0BA /* ArenaScanPresentation.swift */; };
 		142FD9EF4B73CA5A6FA7E8DC /* MapLabModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 708A954FAB9905479A061B24 /* MapLabModels.swift */; };
+		B6B5ADB20560B46711D5F3E0 /* SharedOriginCredentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C1B0690C993E66A1452B1C6 /* SharedOriginCredentials.swift */; };
+		C304641446990957151211CB /* SharedOriginMeasurementLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08D7C6A818E2E9A8CA7096B7 /* SharedOriginMeasurementLog.swift */; };
+		39B9C7FCEAF08AEBCD9F60D7 /* SharedOriginPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B25BDF7966080B2100D8B53 /* SharedOriginPolicy.swift */; };
+		F189CDAC5539E249D935AEBC /* SharedOriginWireMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A37B40F1A27B24B497830328 /* SharedOriginWireMessage.swift */; };
+		029755FBF9B996493595A9FF /* SharedOriginExperimentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00F27B7461ADB133F2B09D32 /* SharedOriginExperimentTests.swift */; };
+		7432E1957B219ECD5C1FB460 /* SharedOriginLinkContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 258A7609550DC30E01AC3CBD /* SharedOriginLinkContractTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -241,6 +247,12 @@
 		7F89FFE5AB0052EF627FED14 /* SavedArenaLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/SavedArenaLibraryTests.swift"; sourceTree = SOURCE_ROOT; };
 		9DF6C3AC2366303589DAD0BA /* ArenaScanPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Arenas/ArenaScanPresentation.swift"; sourceTree = SOURCE_ROOT; };
 		708A954FAB9905479A061B24 /* MapLabModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Domain/MapLabModels.swift"; sourceTree = SOURCE_ROOT; };
+		3C1B0690C993E66A1452B1C6 /* SharedOriginCredentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Targeting/QuickPlay/SharedOriginCredentials.swift"; sourceTree = SOURCE_ROOT; };
+		08D7C6A818E2E9A8CA7096B7 /* SharedOriginMeasurementLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Targeting/QuickPlay/SharedOriginMeasurementLog.swift"; sourceTree = SOURCE_ROOT; };
+		5B25BDF7966080B2100D8B53 /* SharedOriginPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Targeting/QuickPlay/SharedOriginPolicy.swift"; sourceTree = SOURCE_ROOT; };
+		A37B40F1A27B24B497830328 /* SharedOriginWireMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Targeting/QuickPlay/SharedOriginWireMessage.swift"; sourceTree = SOURCE_ROOT; };
+		00F27B7461ADB133F2B09D32 /* SharedOriginExperimentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/SharedOriginExperimentTests.swift"; sourceTree = SOURCE_ROOT; };
+		258A7609550DC30E01AC3CBD /* SharedOriginLinkContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/SharedOriginLinkContractTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -345,6 +357,10 @@
 		G00100000000000000000006 /* Targeting */ = {
 			isa = PBXGroup;
 			children = (
+				A37B40F1A27B24B497830328 /* SharedOriginWireMessage.swift */,
+				5B25BDF7966080B2100D8B53 /* SharedOriginPolicy.swift */,
+				08D7C6A818E2E9A8CA7096B7 /* SharedOriginMeasurementLog.swift */,
+				3C1B0690C993E66A1452B1C6 /* SharedOriginCredentials.swift */,
 				F00100000000000000000006 /* TargetingSession.swift */,
 				F00100000000000000000019 /* BodyTargetingGeometry.swift */,
 				G00200000000000000000001 /* SharedArena */,
@@ -434,6 +450,8 @@
 		G0010000000000000000000C /* VictoriaKillZoneTests */ = {
 			isa = PBXGroup;
 			children = (
+				258A7609550DC30E01AC3CBD /* SharedOriginLinkContractTests.swift */,
+				00F27B7461ADB133F2B09D32 /* SharedOriginExperimentTests.swift */,
 				7F89FFE5AB0052EF627FED14 /* SavedArenaLibraryTests.swift */,
 				ECD1963DD0CA6DC023769434 /* SavedArenaMatchTests.swift */,
 				1C61701949C67614C297F723 /* ArenaSetupTests.swift */,
@@ -609,6 +627,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F189CDAC5539E249D935AEBC /* SharedOriginWireMessage.swift in Sources */,
+				39B9C7FCEAF08AEBCD9F60D7 /* SharedOriginPolicy.swift in Sources */,
+				C304641446990957151211CB /* SharedOriginMeasurementLog.swift in Sources */,
+				B6B5ADB20560B46711D5F3E0 /* SharedOriginCredentials.swift in Sources */,
 				142FD9EF4B73CA5A6FA7E8DC /* MapLabModels.swift in Sources */,
 				1902D232B2C0F07075114A90 /* RealtimeReferencePanel.swift in Sources */,
 				C580C11A7C59BAE21A4EC5B7 /* DuelFrameReferenceCapture.swift in Sources */,
@@ -687,6 +709,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7432E1957B219ECD5C1FB460 /* SharedOriginLinkContractTests.swift in Sources */,
+				029755FBF9B996493595A9FF /* SharedOriginExperimentTests.swift in Sources */,
 				167D331E02D4F1E83F205377 /* DuelFrameReferenceTests.swift in Sources */,
 				B36270717FE62236842484C6 /* SavedArenaLibraryTests.swift in Sources */,
 				0C7BE8F2ECA75ECDF07B90E3 /* SavedArenaMatchTests.swift in Sources */,

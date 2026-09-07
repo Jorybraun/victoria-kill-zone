@@ -200,6 +200,20 @@ struct ByteCursor {
 extension ArenaRigidTransform {
   static let identity = try! ArenaRigidTransform(columnMajor: identityStorage)
 
+  /// Column-vector composition: A-from-B composed with B-from-C produces A-from-C.
+  func composed(with rhs: ArenaRigidTransform) throws -> ArenaRigidTransform {
+    let lhs = columnMajor, right = rhs.columnMajor
+    var result = [Double](repeating: 0, count: 16)
+    for column in 0..<4 {
+      for row in 0..<4 {
+        var sum: Double = 0
+        for index in 0..<4 {sum += lhs[index * 4 + row] * right[column * 4 + index]}
+        result[column * 4 + row] = sum
+      }
+    }
+    return try ArenaRigidTransform(columnMajor: result)
+  }
+
   /// ARKit hands back `simd_float4x4` camera/anchor transforms whose rotation
   /// blocks are only orthonormal to single precision — well outside the 1e-6
   /// tolerance the strict initializer demands. Re-orthonormalize (Gram–Schmidt
