@@ -4,6 +4,35 @@ Status: Draft for review — 2026-08-24
 Owner: Integration
 Purpose: This is the re-founding document. It critiques the hackathon prototype honestly, defines the target architecture for a multiplayer, scale-ready product, and sequences the path. It does not change contracts by itself; contract and stack changes flow through decision records.
 
+## Active goal checkpoint — 2026-09-07
+
+The owner has not observed multiplayer, visible bullets, or the new engine working
+on their phones. The full M0–M6 goal remains open. The next accepted result is
+**a demonstrated two-phone match**, including the reported iPhone 14, with shared
+alignment, visible incoming/outgoing projectiles, agreed damage/ammo/reload and
+death/respawn, and correct departure updates. Saved maps and green builds alone
+do not complete this goal. See the executable [room-scanning plan](research/room-scanning.md)
+and [KIL-46](https://linear.app/kill-victoria/issue/KIL-46/resolve-creator-phone-room-scanning-on-iphone-14-before-multiplayer).
+
+Current order: repair and observe creator-phone scanning; prove two-phone spatial
+alignment; demonstrate the combat loop; validate shield/slowdown/dodging; finish
+remaining durability/performance/accessibility/release evidence. Continue the
+dependent PR chain #69 → #70 → the scoped scanning repair. No merge or TestFlight
+release is implied by this checkpoint.
+
+Outdoor play must separate a host-defined play boundary from the AR world map.
+The spec's 30 m default radius (20–60 m selectable) describes the coarse geofence,
+not proven camera coverage or bullet accuracy. Walls are not a mapping prerequisite.
+ADR 0009's continuously visible reference is still a calibration candidate and
+does not establish freely moving outdoor play. A replacement or validated
+extension must prove spatial accuracy before removing that readiness gate.
+
+Current observed deployment evidence: the server snapshot-ordering repair at
+2929fd69 passed the recorded live native-transport and Node probes; the creator's
+phone scanning report remains unresolved. PR #69 is unmerged and #70 remains a
+draft. Earlier deployment/configuration checkpoints below are historical and
+must not be used as the current execution step.
+
 ## 1. Product thesis
 
 Real-world laser tag with the feel of a modern shooter. Phones are weapons and bodies are the arena. The experience that must survive every architectural decision:

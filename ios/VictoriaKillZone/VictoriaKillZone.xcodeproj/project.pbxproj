@@ -116,6 +116,7 @@
 		0BC0461A14A28834C8D346DA /* ArenaSetupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C61701949C67614C297F723 /* ArenaSetupTests.swift */; };
 		0C7BE8F2ECA75ECDF07B90E3 /* SavedArenaMatchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECD1963DD0CA6DC023769434 /* SavedArenaMatchTests.swift */; };
 		B36270717FE62236842484C6 /* SavedArenaLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F89FFE5AB0052EF627FED14 /* SavedArenaLibraryTests.swift */; };
+		2ACB3CC9AE91331F37E6D3C2 /* ArenaScanPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DF6C3AC2366303589DAD0BA /* ArenaScanPresentation.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -237,6 +238,7 @@
 		1C61701949C67614C297F723 /* ArenaSetupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/ArenaSetupTests.swift"; sourceTree = SOURCE_ROOT; };
 		ECD1963DD0CA6DC023769434 /* SavedArenaMatchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/SavedArenaMatchTests.swift"; sourceTree = SOURCE_ROOT; };
 		7F89FFE5AB0052EF627FED14 /* SavedArenaLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/SavedArenaLibraryTests.swift"; sourceTree = SOURCE_ROOT; };
+		9DF6C3AC2366303589DAD0BA /* ArenaScanPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Arenas/ArenaScanPresentation.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -352,6 +354,7 @@
 			children = (
 				FCB005DFB4160E790E8F1E6E /* SavedArenaLibraryView.swift */,
 				35E89CF07BDB7BA4DADF3447 /* SavedArenaLibrary.swift */,
+				9DF6C3AC2366303589DAD0BA /* ArenaScanPresentation.swift */,
 				CDECB07B2FFCF3F441DC1A74 /* ArenaSetupView.swift */,
 				2919D0408EF5D6D30D2AD064 /* ArenaSetupController.swift */,
 				8BAE51F8DB45B928F47CF5C5 /* RealtimeReferencePanel.swift */,
@@ -615,6 +618,7 @@
 				1DB5B4B4D2B49BF70D18B8A3 /* CombatMapClient.swift in Sources */,
 				AF3F604F32241AAA5F834790 /* SavedArenaLibraryView.swift in Sources */,
 				0FE193D48FEBBD73580EEE06 /* SavedArenaLibrary.swift in Sources */,
+				2ACB3CC9AE91331F37E6D3C2 /* ArenaScanPresentation.swift in Sources */,
 				7F8FF15CA733644A59EBF9BA /* ArenaSetupView.swift in Sources */,
 				5E50982D1D7C57405C52FE8C /* ArenaSetupController.swift in Sources */,
 				B21DEF00BB8BA5CBD5F00054 /* SavedArenaStore.swift in Sources */,

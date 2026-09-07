@@ -30,17 +30,18 @@ struct ArenaSetupView: View {
           .clipShape(RoundedRectangle(cornerRadius: 20))
           .accessibilityLabel("Live arena camera")
         VStack(alignment: .leading, spacing: 12) {
+          Text(stepLabel).font(.caption.bold()).foregroundStyle(VKZPalette.pending)
           HStack {
             Text(title).font(.title3.bold()).accessibilityAddTraits(.isHeader)
             if controller.isBusy {ProgressView().tint(VKZPalette.pending)}
           }
           Text(guidance).font(.subheadline).foregroundStyle(VKZPalette.textMuted)
             .fixedSize(horizontal: false, vertical: true)
-          if let message = controller.message {
+          if let message = controller.message, message != guidance {
             Text(message).font(.subheadline.bold()).foregroundStyle(VKZPalette.pending)
               .fixedSize(horizontal: false, vertical: true)
           }
-          if controller.frame.stage == .mapReady || controller.referenceState == .capturing {
+          if controller.frame.stage == .mapReady {
             RealtimeReferencePanel(state: controller.referenceState, imageData: controller.referenceImageData,
               onCapture: {Task {await controller.captureReference()}})
               .disabled(!controller.canCapture)
@@ -93,6 +94,7 @@ struct ArenaSetupView: View {
   }
 
   private var title: String {
+    if controller.frame.stage == .lost {return controller.scanPresentation.title}
     switch controller.phase {
     case .idle, .starting: return "Opening camera"
     case .capturing: return "Measuring your reference"
@@ -101,24 +103,28 @@ struct ArenaSetupView: View {
     case .paused: return "Scan paused"
     case .finished: return "Arena setup complete"
     case .scanning:
-      if controller.frame.failure == .mappingTimedOut {return "The scan needs another try"}
       if controller.frame.stage == .mapReady {
         if case .captured = controller.referenceState {return "Name your arena"}
         return "Choose a fixed reference"
       }
-      return "Scan the play area"
+      return controller.scanPresentation.title
     }
   }
 
   private var guidance: String {
-    if controller.frame.failure == .mappingTimedOut {
-      return "Find a well-lit surface with detail, then restart the scan. Avoid pointing only at a blank wall."
-    }
+    if controller.frame.stage == .lost {return controller.scanPresentation.guidance}
     if controller.phase == .paused {return "Restart the scan before saving. Your existing arenas are still saved."}
     if case .captured = controller.referenceState {
       return "Give this space a name. You can choose it for future games; each player will align with it before playing."
     }
     if controller.frame.stage == .mapReady {return "Choose something that will stay in the same place for future games."}
-    return "Move slowly around the area, keeping the floor, walls and fixed objects in view. No game has started."
+    return controller.scanPresentation.guidance
+  }
+
+  private var stepLabel: String {
+    if controller.frame.stage == .lost || controller.phase == .paused {return "Scan paused"}
+    if case .captured = controller.referenceState {return "3 · Save arena"}
+    if controller.frame.stage == .mapReady {return "2 · Choose reference"}
+    return "1 · Scan surroundings"
   }
 }
