@@ -4,6 +4,7 @@ struct HomeView: View {
   @ObservedObject var store: LobbyStore
   var onCreateArena: () -> Void
   var onSavedArenas: () -> Void
+  var onUseSavedArena: (() -> Void)? = nil
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   var body: some View {
@@ -77,11 +78,22 @@ struct HomeView: View {
         .accessibilityHint("Enter a friend’s arena or classic duel code.")
 
         Button(action: onSavedArenas) {
-          Label("SAVED ARENAS", systemImage: "map")
+          Label("SCAN & SAVE", systemImage: "map")
             .frame(minHeight: 44)
         }
         .disabled(store.isBusy)
-        .accessibilityHint("Scan a play area ahead of time and keep it for future games.")
+        .accessibilityHint("Save your surroundings and test recognition later. Works offline without a game.")
+
+        if let onUseSavedArena {
+          DisclosureGroup("Saved arena games") {
+            Button("PLAY A SAVED ARENA", action: onUseSavedArena)
+              .frame(minHeight: 44)
+              .accessibilityHint("Create a game with an existing calibrated arena.")
+          }
+          .font(.subheadline)
+          .foregroundStyle(VKZPalette.textMuted)
+          .disabled(store.isBusy)
+        }
       }
 
       #if VKZ_DEBUG_FIRE || DEBUG
