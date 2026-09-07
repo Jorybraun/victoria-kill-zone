@@ -4,15 +4,18 @@ struct AppEnvironment: Sendable {
   let gameSessionClient: any GameSessionClient
   let targetingSession: any TargetingSession
   let savedArenas: any SavedArenaStoring
+  let mapLabStore: any MapLabStoring
 
   init(
     gameSessionClient: any GameSessionClient,
     targetingSession: any TargetingSession,
-    savedArenas: any SavedArenaStoring = LocalSavedArenaStore()
+    savedArenas: any SavedArenaStoring = LocalSavedArenaStore(),
+    mapLabStore: any MapLabStoring = LocalMapLabStore()
   ) {
     self.gameSessionClient = gameSessionClient
     self.targetingSession = targetingSession
     self.savedArenas = savedArenas
+    self.mapLabStore = mapLabStore
   }
 
   static let phaseZeroShell = AppEnvironment(
