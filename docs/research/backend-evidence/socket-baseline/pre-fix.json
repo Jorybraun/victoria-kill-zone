@@ -76,6 +76,6 @@
   "limitations": [
     "No shots or calibration commands sent.",
     "No physical-device evidence.",
-    "Presence transitions prove observed Worker-to-Convex projection; exact outbox receipt cursor is not publicly exposed."
+    "Projection transitions were not exercised because host admission failed; exact outbox receipt cursor is not publicly exposed."
   ]
 }
