@@ -303,9 +303,11 @@ final class RealtimeArenaController: ObservableObject {
       reconciledSnapshotRevision = combat.snapshotRevision
     }
     if let authorityEpoch, authorityEpoch != value.authorityEpoch {
-      configuredEpoch = nil; readiness = RealtimeReadinessState(); lastSubmittedPose = nil; lastPoseDate = nil
+      // Authority recovery keeps the frame epoch, so the installed map and any
+      // scan in progress stay valid; only server-side readiness must be reacquired.
+      readiness = RealtimeReadinessState(); lastSubmittedPose = nil; lastPoseDate = nil
       commands = RealtimeCommandState(); actionFeedback = nil; lastLocalFireAtMs = nil; setTriggerHeld(false)
-      frameProvider?.invalidate(reason: .sessionInterrupted)
+      associatedBody = nil
     }
     authorityEpoch = value.authorityEpoch
     configureMapIfNeeded()
