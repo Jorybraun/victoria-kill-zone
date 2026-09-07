@@ -382,6 +382,7 @@ struct RealtimeArenaView: View {
     if let issue = controller.connectionIssue {return issue}
     if let message = controller.message {return message}
     if case .failed(let explanation) = controller.mapState {return explanation}
+    if let initialScan {return initialScan.guidance}
     if let name = controller.savedArenaName, [.mapping, .mapReady, .relocalizing].contains(controller.stage) {
       return "Loading \(name). Point at the fixed objects you scanned so your phone can recognize this arena."
     }
@@ -409,6 +410,7 @@ struct RealtimeArenaView: View {
   }
   private var stageTitle: String {
     if controller.connectionIssue != nil {return "Connection needs attention"}
+    if let initialScan {return initialScan.title}
     if scanTimedOut {return "Scan needs another try"}
     if controller.stage == .paused && !controller.combat.clockReady {return "Synchronizing match"}
     if controller.savedArenaName != nil && [.mapping, .mapReady, .relocalizing].contains(controller.stage) {
@@ -418,6 +420,14 @@ struct RealtimeArenaView: View {
   }
   private var scanTimedOut: Bool {
     controller.connection == .connected && controller.frame.failure == .mappingTimedOut
+  }
+  private var initialScan: ArenaScanPresentation? {
+    guard controller.connection == .connected, controller.isHost, controller.savedArenaName == nil,
+      controller.frame.frameID == nil, controller.frame.epoch != nil,
+      [.mapping, .lost].contains(controller.frame.stage),
+      controller.mapState == .mapping
+    else {return nil}
+    return ArenaScanPresentation(frame: controller.frame)
   }
   private var roundTime: String {
     guard let ms = RealtimeActionEligibility.remainingRoundMs(snapshot: controller.snapshot, now: controller.matchTimeMs ?? controller.snapshot?.matchTimeMs) else {return "—:—"}

@@ -10,6 +10,87 @@ final class DuelFramePolicyTests: XCTestCase {
   private let base = Date(timeIntervalSince1970: 1_000)
   private let matrix: [Double] = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
 
+  func testScanFeedbackShowsFreshReasonsAndResetsOnBeginAndStop() throws {
+    var policy = DuelFramePolicy()
+    XCTAssertEqual(policy.snapshot.scanFeedback, .waitingForCamera)
+    try policy.beginCalibration(epoch: 1, at: base)
+    policy.ingest(scanObservation(time: 0.1, feedback: .movingTooFast), at: base.addingTimeInterval(0.1))
+    XCTAssertEqual(policy.snapshot.scanFeedback, .movingTooFast)
+    policy.ingest(scanObservation(time: 0.2, feedback: .insufficientDetail), at: base.addingTimeInterval(0.2))
+    XCTAssertEqual(policy.snapshot.scanFeedback, .insufficientDetail)
+    XCTAssertEqual(policy.snapshot.stage, .mapping)
+    XCTAssertFalse(policy.snapshot.permitsSpatialFire(at: base.addingTimeInterval(0.2)))
+    try policy.beginCalibration(epoch: 2, at: base.addingTimeInterval(1))
+    XCTAssertEqual(policy.snapshot.scanFeedback, .waitingForCamera)
+    policy.ingest(scanObservation(time: 1.1, epoch: 2, feedback: .initializing), at: base.addingTimeInterval(1.1))
+    XCTAssertEqual(policy.snapshot.scanFeedback, .initializing)
+    policy.stop()
+    XCTAssertEqual(policy.snapshot.scanFeedback, .waitingForCamera)
+  }
+
+  func testRejectedScanObservationsCannotReplaceCurrentGuidance() throws {
+    var policy = DuelFramePolicy()
+    try policy.beginCalibration(epoch: 1, at: base)
+    policy.ingest(scanObservation(time: 1, feedback: .insufficientDetail), at: base.addingTimeInterval(1))
+    let before = policy.snapshot
+    let rejected = [
+      scanObservation(time: 0.8, feedback: .ready), // Too old.
+      scanObservation(time: 1, feedback: .ready), // Already consumed.
+      scanObservation(time: 1.2, feedback: .ready), // From the future.
+      scanObservation(time: 1.01, epoch: 2, feedback: .ready),
+      scanObservation(time: 1.02, phase: .worldRelocalization, feedback: .ready),
+      scanObservation(time: 1.03, phase: .bodyRelocalization, feedback: .ready),
+    ]
+    for observation in rejected {
+      policy.ingest(observation, at: base.addingTimeInterval(1.04))
+      XCTAssertEqual(policy.snapshot, before)
+    }
+  }
+
+  func testScanFeedbackFallsBackWithoutChangingReadinessOrTimeout() throws {
+    let cases: [(DuelFrameTracking, Bool, DuelFrameScanFeedback)] = [
+      (.unavailable, false, .trackingUnavailable), (.limited, true, .trackingLimited),
+      (.relocalizing, false, .relocalizing), (.normal, false, .mapping), (.normal, true, .ready),
+    ]
+    for (tracking, mapped, expected) in cases {
+      var policy = DuelFramePolicy()
+      try policy.beginCalibration(epoch: 1, at: base)
+      policy.ingest(scanObservation(time: 1, tracking: tracking, mapped: mapped), at: base.addingTimeInterval(1))
+      XCTAssertEqual(policy.snapshot.scanFeedback, expected)
+      XCTAssertEqual(policy.snapshot.stage, expected == .ready ? .mapReady : .mapping)
+      XCTAssertFalse(policy.snapshot.permitsSpatialFire(at: base.addingTimeInterval(1)))
+    }
+    var policy = DuelFramePolicy()
+    try policy.beginCalibration(epoch: 1, at: base)
+    for second in 1..<30 {
+      // Even an inconsistent diagnostic cannot claim a usable map or extend its deadline.
+      policy.ingest(scanObservation(time: Double(second), feedback: .ready), at: base.addingTimeInterval(Double(second)))
+      XCTAssertEqual(policy.snapshot.scanFeedback, .trackingLimited)
+      XCTAssertEqual(policy.snapshot.stage, .mapping)
+    }
+    policy.tick(at: base.addingTimeInterval(30))
+    XCTAssertEqual(policy.snapshot.failure, .mappingTimedOut)
+    XCTAssertFalse(policy.snapshot.permitsSpatialFire(at: base.addingTimeInterval(30)))
+  }
+
+  func testScanFeedbackDoesNotFollowFramesAfterMapInstallationOrFailure() throws {
+    var policy = DuelFramePolicy()
+    try policy.beginCalibration(epoch: 1, at: base)
+    policy.ingest(scanObservation(time: 0.1, tracking: .normal, mapped: true), at: base.addingTimeInterval(0.1))
+    XCTAssertEqual(policy.snapshot.scanFeedback, .ready)
+    let map = try DuelFrameMap(epoch: 1, bytes: Data([1]))
+    try policy.beginInstall(map, at: base.addingTimeInterval(0.2))
+    let before = policy.snapshot.scanFeedback
+    let observation = scanObservation(time: 0.3, frameID: map.frameID, phase: .worldRelocalization,
+      tracking: .relocalizing, feedback: .movingTooFast)
+    policy.ingest(observation, at: base.addingTimeInterval(0.3))
+    XCTAssertEqual(policy.snapshot.scanFeedback, before)
+    policy.invalidate(reason: .sessionInterrupted)
+    policy.ingest(scanObservation(time: 0.4, feedback: .ready), at: base.addingTimeInterval(0.4))
+    XCTAssertEqual(policy.snapshot.scanFeedback, before)
+    XCTAssertFalse(policy.snapshot.permitsSpatialFire(at: base.addingTimeInterval(0.4)))
+  }
+
   func testMappingWithoutAnyCameraObservationsTimesOutAndStopAllowsRetry() throws {
     var policy = DuelFramePolicy()
     try policy.beginCalibration(epoch: 1, at: base)
@@ -91,6 +172,25 @@ final class DuelFramePolicyTests: XCTestCase {
   }
 
   #if os(iOS) && canImport(ARKit)
+  func testARScanFeedbackDistinguishesMotionDetailAndCameraStartup() {
+    let reasons: [(ARCamera.TrackingState, DuelFrameScanFeedback)] = [
+      (.notAvailable, .trackingUnavailable), (.limited(.initializing), .initializing),
+      (.limited(.excessiveMotion), .movingTooFast), (.limited(.insufficientFeatures), .insufficientDetail),
+      (.limited(.relocalizing), .relocalizing),
+    ]
+    for (tracking, expected) in reasons {
+      // A nominal mapped status cannot override a limited or unavailable camera.
+      XCTAssertEqual(DuelFrameMapCaptureEligibility.feedback(mapping: .mapped, tracking: tracking), expected)
+      XCTAssertFalse(DuelFrameMapCaptureEligibility.permits(mapping: .mapped, tracking: tracking))
+    }
+    for status in [ARFrame.WorldMappingStatus.extending, .mapped] {
+      XCTAssertEqual(DuelFrameMapCaptureEligibility.feedback(mapping: status, tracking: .normal), .ready)
+    }
+    for status in [ARFrame.WorldMappingStatus.notAvailable, .limited] {
+      XCTAssertEqual(DuelFrameMapCaptureEligibility.feedback(mapping: status, tracking: .normal), .mapping)
+    }
+  }
+
   func testARMapCaptureAcceptsExtendingAndMappedOnlyWithNormalTracking() throws {
     for status in [ARFrame.WorldMappingStatus.extending, .mapped] {
       XCTAssertTrue(DuelFrameMapCaptureEligibility.permits(mapping: status, tracking: .normal))
@@ -252,6 +352,12 @@ final class DuelFramePolicyTests: XCTestCase {
     ingest(&policy, map: map, phase: .bodyRelocalization, tracking: .relocalizing, time: 0.3)
     ingest(&policy, map: map, phase: .bodyRelocalization, tracking: .normal, time: 0.4)
     return (policy, map)
+  }
+
+  private func scanObservation(time: Double, epoch: UInt16 = 1, frameID: String? = nil, phase: DuelFrameSessionPhase = .mapping,
+    tracking: DuelFrameTracking = .limited, mapped: Bool = false, feedback: DuelFrameScanFeedback? = nil) -> DuelFrameObservation {
+    .init(epoch: epoch, frameID: frameID, phase: phase, tracking: tracking, isMapped: mapped,
+      pose: nil, observedAt: base.addingTimeInterval(time), failure: nil, scanFeedback: feedback)
   }
 
   @discardableResult

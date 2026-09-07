@@ -64,6 +64,10 @@ struct DuelFramePolicy: Sendable {
     if snapshot.stage == .mapping || snapshot.stage == .mapReady {
       guard observation.phase == .mapping else { return false }
       lastObservationAt = observation.observedAt
+      let fallback = Self.scanFeedback(tracking: observation.tracking, isMapped: observation.isMapped)
+      // Diagnostics cannot claim a usable map when the existing readiness gate is closed.
+      snapshot.scanFeedback = observation.scanFeedback == .ready && fallback != .ready
+        ? fallback : observation.scanFeedback ?? fallback
       if observation.tracking == .normal && observation.isMapped {
         snapshot.stage = .mapReady
         phaseDeadline = nil
@@ -170,6 +174,15 @@ struct DuelFramePolicy: Sendable {
   static func isFresh(_ date: Date, at now: Date) -> Bool {
     let age = now.timeIntervalSince(date)
     return age.isFinite && age >= 0 && age <= maximumSampleAge
+  }
+
+  private static func scanFeedback(tracking: DuelFrameTracking, isMapped: Bool) -> DuelFrameScanFeedback {
+    switch tracking {
+    case .unavailable: .trackingUnavailable
+    case .limited: .trackingLimited
+    case .relocalizing: .relocalizing
+    case .normal: isMapped ? .ready : .mapping
+    }
   }
 
   private mutating func degrade(reason: DuelFrameFailure) {

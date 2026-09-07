@@ -47,6 +47,12 @@ enum DuelFrameTracking: Equatable, Sendable {
   case unavailable, limited, relocalizing, normal
 }
 
+/// Local scan guidance only. Map usability and combat alignment remain separate gates.
+enum DuelFrameScanFeedback: Equatable, Sendable {
+  case waitingForCamera, initializing, movingTooFast, insufficientDetail
+  case trackingLimited, trackingUnavailable, relocalizing, mapping, ready
+}
+
 /// A rigid, column-major camera transform in the installed map's frame. The AR
 /// adapter validates/orthonormalizes sensor precision before publishing it.
 struct DuelFramePose: Equatable, Sendable {
@@ -71,6 +77,7 @@ struct DuelFrameObservation: Equatable, Sendable {
   let observedAt: Date
   let failure: DuelFrameFailure?
   var referenceObservation: DuelFrameReferenceObservation? = nil
+  var scanFeedback: DuelFrameScanFeedback? = nil
 }
 
 struct DuelFrameResidual: Equatable, Sendable {
@@ -86,6 +93,7 @@ struct DuelFrameSnapshot: Equatable, Sendable {
   var localPose: DuelFramePose?
   var residual: DuelFrameResidual?
   var failure: DuelFrameFailure?
+  var scanFeedback: DuelFrameScanFeedback = .waitingForCamera
 
   /// Read this at the instant of firing; a delayed UI publisher cannot extend
   /// permission after the last pose or independently measured residual expires.
