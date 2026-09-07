@@ -10,6 +10,7 @@ bash scripts/ci/verify-repo.sh
 pnpm -r --if-present lint
 pnpm -r --if-present typecheck
 pnpm -r --if-present test
+node scripts/combat-replay/generate.mjs --check
 node scripts/release/self-test.mjs
 node scripts/release/testflight-self-test.mjs
 node scripts/release/combat-deploy-self-test.mjs
