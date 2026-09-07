@@ -20,6 +20,7 @@ final class RealtimeArenaController: ObservableObject {
   let targeting: any TargetingSession
   let combat: RealtimeCombatSession
   let frameProvider: DuelFrameProvider?
+  let savedArenaName: String?
   @Published private(set) var snapshot: CombatWire.Snapshot?
   @Published private(set) var frame = DuelFrameSnapshot()
   @Published private(set) var targetingSnapshot = TargetingSnapshot.unavailable()
@@ -60,13 +61,16 @@ final class RealtimeArenaController: ObservableObject {
   private var lastBodyMatchTimeMs: Double?
   private var alignedSince: Date?
 
-  init(session: PlayerSession, client: any GameSessionClient, targeting: any TargetingSession) {
+  init(session: PlayerSession, client: any GameSessionClient, targeting: any TargetingSession,
+       savedArena: SavedArenaBundle? = nil) {
     self.session = session; self.targeting = targeting
+    savedArenaName = savedArena?.summary.name
     let combat = RealtimeCombatSession(gameClient: client); self.combat = combat
     if let driver = targeting as? any DuelFrameSessionDriving {
       let provider = DuelFrameProvider(targeting: driver)
       frameProvider = provider
-      mapCoordinator = RealtimeMapCoordinator(session: session, client: client, combat: combat, frame: provider)
+      mapCoordinator = RealtimeMapCoordinator(session: session, client: client, combat: combat, frame: provider,
+        savedArena: savedArena)
     } else {frameProvider = nil; mapCoordinator = nil}
     combat.$connectionIssue.sink { [weak self] in self?.connectionIssue = $0 }.store(in: &subscriptions)
     combat.$snapshot.sink { [weak self] in self?.receiveSnapshot($0) }.store(in: &subscriptions)

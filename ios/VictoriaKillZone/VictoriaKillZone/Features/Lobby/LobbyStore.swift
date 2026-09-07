@@ -66,6 +66,7 @@ final class LobbyStore: ObservableObject {
 
   private var stateMachine: LobbyStateMachine
   private var session: PlayerSession?
+  private var selectedArena: SavedArenaBundle?
   private var latestSnapshot: MatchSnapshot?
   private var actionTask: Task<Void, Never>?
   private var snapshotTask: Task<Void, Never>?
@@ -73,6 +74,10 @@ final class LobbyStore: ObservableObject {
   private var connectionTask: Task<Void, Never>?
   private var recoveryTask: Task<Void, Never>?
   private var targetingTask: Task<Void, Never>?
+  private var targetingStart: Task<Void, Never>?
+  private var targetingTeardown: Task<Void, Never>?
+  private var ownsTargeting = false
+  private var targetingGeneration = 0
   private var latestAppliedServerNow: Double?
   private var transportState = GameSessionConnectionState.connecting
   private var duelCancellable: AnyCancellable?
@@ -192,6 +197,12 @@ final class LobbyStore: ObservableObject {
     schedule { store in await store.performCreateDuel(combatMode: .durableObject) }
   }
 
+  func createRealtimeArena(using arena: SavedArenaBundle) {
+    schedule { store in await store.performCreateDuel(combatMode: .durableObject, savedArena: arena) }
+  }
+
+  func waitForTargetingTeardown() async { await targetingTeardown?.value }
+
   func joinDuel() {
     schedule { store in await store.performJoinDuel() }
   }
@@ -220,14 +231,18 @@ final class LobbyStore: ObservableObject {
   }
 
   func startTargeting() async {
+    await targetingTeardown?.value
+    guard !Task.isCancelled else { return }
+    if ownsTargeting { await targetingStart?.value; return }
     targetingBlocker = nil
     guard environment.targetingSession.availability == .available else {
       targetingSnapshot = .unavailable()
       targetingBlocker = .unsupportedDevice
       return
     }
-    guard targetingTask == nil else { return }
-
+    ownsTargeting = true
+    targetingGeneration += 1
+    let token = targetingGeneration
     let targetingSession = environment.targetingSession
     targetingTask = Task { [weak self] in
       for await snapshot in targetingSession.snapshots() {
@@ -236,21 +251,42 @@ final class LobbyStore: ObservableObject {
       }
     }
 
-    do {
-      try await targetingSession.start()
-    } catch TargetingSessionError.cameraPermissionDenied {
-      targetingBlocker = .cameraDenied
-    } catch {
-      targetingBlocker = .unsupportedDevice
+    let starting = Task { [weak self] in
+      do { try await targetingSession.start() }
+      catch {
+        guard let self, self.ownsTargeting, self.targetingGeneration == token else { return }
+        self.targetingBlocker = error as? TargetingSessionError == .cameraPermissionDenied
+          ? .cameraDenied : .unsupportedDevice
+      }
     }
+    targetingStart = starting
+    await starting.value
+    if targetingGeneration == token { targetingStart = nil }
   }
 
   func stopTargeting() async {
     targetingBlocker = nil
+    beginTargetingTeardown()
+    await targetingTeardown?.value
+    targetingSnapshot = environment.targetingSession.currentSnapshot
+  }
+
+  /// Relinquish this owner's camera synchronously. A disappearing classic view
+  /// can await cleanup again, but cannot stop a later offline setup session.
+  private func beginTargetingTeardown() {
+    guard ownsTargeting else { return }
+    ownsTargeting = false
+    targetingGeneration += 1
     targetingTask?.cancel()
     targetingTask = nil
-    await environment.targetingSession.stop()
-    targetingSnapshot = environment.targetingSession.currentSnapshot
+    let starting = targetingStart, previous = targetingTeardown
+    targetingStart = nil
+    let targeting = environment.targetingSession
+    targetingTeardown = Task {
+      await previous?.value
+      await starting?.value
+      await targeting.stop()
+    }
   }
 
   func leave() {
@@ -279,16 +315,14 @@ final class LobbyStore: ObservableObject {
     snapshotTask?.cancel()
     snapshotRetryTask?.cancel()
     recoveryTask?.cancel()
-    targetingTask?.cancel()
-    targetingTask = nil
     // Realtime leave already awaited this shared camera's complete teardown.
     // Starting another asynchronous stop here could outlive the reset and shut
     // down the camera after the next arena starts.
     if stopTargeting {
-      let targetingSession = environment.targetingSession
-      Task { await targetingSession.stop() }
+      beginTargetingTeardown()
     }
     session = nil
+    selectedArena = nil
     latestSnapshot = nil
     duel.reset()
     operation = nil
@@ -309,7 +343,7 @@ final class LobbyStore: ObservableObject {
     errorMessage = nil
   }
 
-  func performCreateDuel(combatMode: CombatMode? = nil) async {
+  func performCreateDuel(combatMode: CombatMode? = nil, savedArena: SavedArenaBundle? = nil) async {
     guard operation == nil else { return }
     let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !name.isEmpty else {
@@ -330,7 +364,7 @@ final class LobbyStore: ObservableObject {
           combatMode: combatMode, maxPlayers: combatMode == .durableObject ? 4 : nil)
       )
       guard !Task.isCancelled else { return }
-      beginSession(newSession)
+      beginSession(newSession, savedArena: combatMode == .durableObject ? savedArena : nil)
     } catch {
       guard !Task.isCancelled else { return }
       operation = nil
@@ -428,11 +462,12 @@ final class LobbyStore: ObservableObject {
     }
   }
 
-  private func beginSession(_ newSession: PlayerSession) {
+  private func beginSession(_ newSession: PlayerSession, savedArena: SavedArenaBundle? = nil) {
     snapshotTask?.cancel()
     snapshotRetryTask?.cancel()
     recoveryTask?.cancel()
     session = newSession
+    selectedArena = savedArena
     latestSnapshot = nil
     lastSyncAt = nil
     duel.attach(session: newSession)
@@ -499,7 +534,8 @@ final class LobbyStore: ObservableObject {
       if snapshot.match.phase != .lobby, realtimeArena == nil {
         duel.reset()
         realtimeArena = RealtimeArenaController(session: expectedSession,
-          client: environment.gameSessionClient, targeting: environment.targetingSession)
+          client: environment.gameSessionClient, targeting: environment.targetingSession,
+          savedArena: selectedArena)
       }
     } else {
       duel.receive(snapshot)

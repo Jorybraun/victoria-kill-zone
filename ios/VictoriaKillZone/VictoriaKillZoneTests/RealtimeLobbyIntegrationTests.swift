@@ -41,6 +41,27 @@ final class RealtimeLobbyIntegrationTests: XCTestCase {
     store.leave()
   }
 
+  func testSavedSelectionBelongsOnlyToCreatedHostSession() async throws {
+    let client = ArenaLobbyClient()
+    let store = makeStore(client)
+    let saved = try SavedArenaMatchTests.arena()
+    await store.performCreateDuel(combatMode: .durableObject, savedArena: saved)
+    client.emit(Self.snapshot(count: 2, phase: .running))
+    try await until { store.realtimeArena != nil }
+    XCTAssertEqual(store.realtimeArena?.savedArenaName, "Living room")
+    store.leave()
+    try await until { store.route == .home }
+
+    // Joining cannot inherit the previously created host's private selection.
+    store.joinCode = "ABC123"
+    await store.performJoinDuel()
+    client.emit(Self.snapshot(count: 2, phase: .running))
+    try await until { store.realtimeArena != nil }
+    XCTAssertNil(store.realtimeArena?.savedArenaName)
+    store.leave()
+    try await until { store.route == .home }
+  }
+
   func testProjectionKeepsOneCombatControllerAndLeaveClearsIt() async throws {
     let client = ArenaLobbyClient()
     let store = makeStore(client)
@@ -89,6 +110,30 @@ final class RealtimeLobbyIntegrationTests: XCTestCase {
     XCTAssertEqual(stopsAfterRestart, 1)
     XCTAssertTrue(running)
     await nextArena.stop()
+  }
+
+  func testClassicLeaveAndLateViewCleanupCannotStopOfflineSetup() async throws {
+    let camera = LobbyTeardownCamera()
+    let store = LobbyStore(environment: .init(gameSessionClient: ArenaLobbyClient(), targetingSession: camera))
+    await store.startTargeting()
+    store.leave()
+    await camera.waitForStop()
+    let disappearingView = Task { await store.stopTargeting() }
+    let openingLibrary = Task { await store.waitForTargetingTeardown() }
+    let before = await camera.stops
+    XCTAssertEqual(before, 1)
+    await camera.releaseStop()
+    await openingLibrary.value
+    await disappearingView.value
+
+    // Offline setup now owns this same camera; a late classic onDisappear must
+    // be an idempotent wait, even after the earlier cleanup already completed.
+    try await camera.start()
+    await store.stopTargeting()
+    let after = await camera.stops, running = await camera.running
+    XCTAssertEqual(after, 1)
+    XCTAssertTrue(running)
+    await camera.stop()
   }
 
   private func makeStore(_ client: ArenaLobbyClient) -> LobbyStore {
@@ -140,7 +185,7 @@ private actor LobbyTeardownCamera: TargetingSession {
 private final class ArenaLobbyClient: GameSessionClient, @unchecked Sendable {
   let availability = GameSessionAvailability.available
   private let lock = NSLock()
-  private let pair = AsyncThrowingStream<MatchSnapshot, Error>.makeStream()
+  private var pair = AsyncThrowingStream<MatchSnapshot, Error>.makeStream()
   private var storedRequests: [CreateDuelRequest] = []
   private var storedPrepares = 0
   private var storedLegacyStarts = 0
@@ -148,15 +193,18 @@ private final class ArenaLobbyClient: GameSessionClient, @unchecked Sendable {
   var prepares: Int {lock.withLock {storedPrepares}}
   var legacyStarts: Int {lock.withLock {storedLegacyStarts}}
   func createDuel(_ request: CreateDuelRequest) async throws -> PlayerSession {
-    lock.withLock {storedRequests.append(request)}
+    lock.withLock {storedRequests.append(request); pair = AsyncThrowingStream<MatchSnapshot, Error>.makeStream()}
     return .init(matchId: "match", code: "ABC123", playerId: "p0", sessionSecret: UUID().uuidString)
   }
-  func joinDuel(_ request: JoinDuelRequest) async throws -> PlayerSession {throw GameSessionClientError.notConfigured}
+  func joinDuel(_ request: JoinDuelRequest) async throws -> PlayerSession {
+    lock.withLock {pair = AsyncThrowingStream<MatchSnapshot, Error>.makeStream()}
+    return .init(matchId: "match", code: "ABC123", playerId: "p0", sessionSecret: UUID().uuidString)
+  }
   func setReady(session: PlayerSession, isReady: Bool) async throws {}
   func startDuel(session: PlayerSession) async throws {lock.withLock {storedLegacyStarts += 1}}
   func prepareRealtimeCombat(session: PlayerSession) async throws {lock.withLock {storedPrepares += 1}}
   func debugFire(session: PlayerSession, clientShotId: String) async throws -> DebugFireResult {throw GameSessionClientError.notConfigured}
-  func snapshots(for session: PlayerSession) -> AsyncThrowingStream<MatchSnapshot, Error> {pair.stream}
+  func snapshots(for session: PlayerSession) -> AsyncThrowingStream<MatchSnapshot, Error> {lock.withLock {pair.stream}}
   func connectionStates() -> AsyncStream<GameSessionConnectionState> {AsyncStream {$0.yield(.connected); $0.finish()}}
-  func emit(_ snapshot: MatchSnapshot) {pair.continuation.yield(snapshot)}
+  func emit(_ snapshot: MatchSnapshot) {lock.withLock {pair.continuation}.yield(snapshot)}
 }

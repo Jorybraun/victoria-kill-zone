@@ -2,6 +2,8 @@ import SwiftUI
 
 struct RootView: View {
   @StateObject private var store: LobbyStore
+  @State private var arenaLibrary: ArenaLibraryMode?
+  @State private var pendingInvite: URL?
 
   init(environment: AppEnvironment = .liveOrShell()) {
     _store = StateObject(wrappedValue: LobbyStore(environment: environment))
@@ -15,7 +17,9 @@ struct RootView: View {
 
         switch store.route {
         case .home:
-          HomeView(store: store)
+          HomeView(store: store,
+            onCreateArena: { showArenaLibrary(.createMatch) },
+            onSavedArenas: { showArenaLibrary(.manage) })
         case .join:
           JoinDuelView(store: store)
         case .waiting(let room):
@@ -47,8 +51,21 @@ struct RootView: View {
         Text(store.errorMessage ?? "SOMETHING WENT WRONG")
       }
     }
+    .sheet(item: $arenaLibrary, onDismiss: {
+      if let invite = pendingInvite {
+        pendingInvite = nil
+        store.openInviteLink(invite)
+      }
+    }) { mode in
+      SavedArenaLibraryView(environment: store.environment, mode: mode) { arena in
+        arenaLibrary = nil
+        store.createRealtimeArena(using: arena)
+      }
+    }
     .onOpenURL { url in
-      store.openInviteLink(url)
+      // A link cannot start another camera owner while offline setup is open.
+      if arenaLibrary != nil { pendingInvite = url }
+      else { store.openInviteLink(url) }
     }
   }
 
@@ -58,5 +75,13 @@ struct RootView: View {
     guard store.realtimeArena == nil else { return false }
     if case .active(let duel) = store.route { return duel.phase == .running }
     return false
+  }
+
+  private func showArenaLibrary(_ mode: ArenaLibraryMode) {
+    Task {
+      await store.waitForTargetingTeardown()
+      guard store.route == .home, !store.isBusy else { return }
+      arenaLibrary = mode
+    }
   }
 }

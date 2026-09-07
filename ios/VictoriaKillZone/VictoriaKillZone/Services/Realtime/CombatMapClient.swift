@@ -1,10 +1,15 @@
 import Foundation
 
-enum CombatMapError: Error, Equatable {case invalidEndpoint, unavailable, unauthorized, invalidResponse, oversizedMap}
+enum CombatMapError: Error, Equatable {case invalidEndpoint, unavailable, unauthorized, conflict, invalidResponse, oversizedMap}
+
+protocol CombatMapTransferring: Sendable {
+  func upload(_ map: DuelFrameMap, ticket: CombatAccessTicket) async throws
+  func download(epoch: UInt16, ticket: CombatAccessTicket) async throws -> DuelFrameMap
+}
 
 /// Bounded authenticated transfer. A map is private match data and is never
 /// persisted in a public cache or exposed through a credential-bearing URL.
-struct CombatMapClient: Sendable {
+struct CombatMapClient: CombatMapTransferring {
   private let session: URLSession
   init() {
     let configuration=URLSessionConfiguration.ephemeral
@@ -50,6 +55,7 @@ struct CombatMapClient: Sendable {
     guard let http=response as? HTTPURLResponse else {throw CombatMapError.invalidResponse}
     if http.statusCode == 401 || http.statusCode == 403 {throw CombatMapError.unauthorized}
     if http.statusCode == 404 {throw CombatMapError.unavailable}
+    if http.statusCode == 409 {throw CombatMapError.conflict}
     guard (200..<300).contains(http.statusCode) else {throw CombatMapError.invalidResponse}
     return http
   }
