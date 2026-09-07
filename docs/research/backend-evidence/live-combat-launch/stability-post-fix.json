@@ -1,0 +1,735 @@
+{
+  "schemaVersion": 1,
+  "evidenceScope": "production-synthetic-transport-clock-stability",
+  "candidateSha": "2929fd69e6768192f91fbf206cbed62cb202626e",
+  "recordedAtUtc": "2026-09-07T03:53:14.111Z",
+  "success": true,
+  "elapsedMs": 34181,
+  "httpRequests": 13,
+  "passedStages": [
+    {
+      "stage": "local-preflight",
+      "elapsedMs": 51
+    },
+    {
+      "stage": "synthetic-lobby-create-and-join",
+      "elapsedMs": 563
+    },
+    {
+      "stage": "combat-prepare",
+      "elapsedMs": 680
+    },
+    {
+      "stage": "host-authenticated-websocket-and-roster",
+      "elapsedMs": 1283
+    },
+    {
+      "stage": "projection-guest-disconnected-before-connect",
+      "elapsedMs": 2100
+    },
+    {
+      "stage": "guest-authenticated-websocket-and-roster",
+      "elapsedMs": 2401
+    },
+    {
+      "stage": "projection-guest-connected",
+      "elapsedMs": 3215
+    },
+    {
+      "stage": "thirty-second-native-ping-stability",
+      "elapsedMs": 33216
+    },
+    {
+      "stage": "projection-guest-disconnected-after-close",
+      "elapsedMs": 34124
+    }
+  ],
+  "holdCompleted": true,
+  "holdTargetMs": 30000,
+  "nativeClockFormula": {
+    "minimumSamples": 3,
+    "maximumUncertaintyMs": 25,
+    "maximumFreshnessMs": 3000,
+    "sampleRetentionMs": 10000,
+    "sampleLimit": 16,
+    "pingSchedule": "0/100/200/300/400ms then every1000ms; relative timer after each send"
+  },
+  "clients": [
+    {
+      "label": "host",
+      "upgraded": true,
+      "firstMessageKind": "snapshot",
+      "firstTwelveMessageKinds": [
+        "snapshot",
+        "events",
+        "pong",
+        "pong",
+        "pong",
+        "snapshot",
+        "pong",
+        "pong",
+        "snapshot",
+        "snapshot",
+        "snapshot",
+        "events"
+      ],
+      "pingsSent": 37,
+      "snapshots": 132,
+      "clockSamples": [
+        {
+          "atMs": 20.612,
+          "accepted": true,
+          "rttMs": 20.481,
+          "uncertaintyMs": 10.241,
+          "ready": false,
+          "samples": 1
+        },
+        {
+          "atMs": 220.128,
+          "accepted": true,
+          "rttMs": 116.544,
+          "uncertaintyMs": 98.453,
+          "ready": false,
+          "samples": 2
+        },
+        {
+          "atMs": 267.125,
+          "accepted": true,
+          "rttMs": 60.918,
+          "uncertaintyMs": 135.076,
+          "ready": false,
+          "samples": 3
+        },
+        {
+          "atMs": 338.626,
+          "accepted": true,
+          "rttMs": 31.153,
+          "uncertaintyMs": 86.343,
+          "ready": false,
+          "samples": 4
+        },
+        {
+          "atMs": 432.008,
+          "accepted": true,
+          "rttMs": 21.419,
+          "uncertaintyMs": 10.241,
+          "ready": true,
+          "samples": 5
+        },
+        {
+          "atMs": 1428.752,
+          "accepted": true,
+          "rttMs": 15.937,
+          "uncertaintyMs": 7.968,
+          "ready": true,
+          "samples": 6
+        },
+        {
+          "atMs": 2433.116,
+          "accepted": true,
+          "rttMs": 18.677,
+          "uncertaintyMs": 7.968,
+          "ready": true,
+          "samples": 7
+        },
+        {
+          "atMs": 3434.018,
+          "accepted": true,
+          "rttMs": 17.936,
+          "uncertaintyMs": 7.968,
+          "ready": true,
+          "samples": 8
+        },
+        {
+          "atMs": 4433.176,
+          "accepted": true,
+          "rttMs": 15.891,
+          "uncertaintyMs": 7.946,
+          "ready": true,
+          "samples": 9
+        },
+        {
+          "atMs": 5435.711,
+          "accepted": true,
+          "rttMs": 16.263,
+          "uncertaintyMs": 7.946,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 6435.733,
+          "accepted": true,
+          "rttMs": 15.589,
+          "uncertaintyMs": 7.795,
+          "ready": true,
+          "samples": 11
+        },
+        {
+          "atMs": 7444.037,
+          "accepted": true,
+          "rttMs": 21.471,
+          "uncertaintyMs": 7.795,
+          "ready": true,
+          "samples": 12
+        },
+        {
+          "atMs": 8438.737,
+          "accepted": true,
+          "rttMs": 15.807,
+          "uncertaintyMs": 7.795,
+          "ready": true,
+          "samples": 13
+        },
+        {
+          "atMs": 9441.78,
+          "accepted": true,
+          "rttMs": 17.767,
+          "uncertaintyMs": 7.795,
+          "ready": true,
+          "samples": 14
+        },
+        {
+          "atMs": 10441.512,
+          "accepted": true,
+          "rttMs": 16.567,
+          "uncertaintyMs": 7.795,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 11447.414,
+          "accepted": true,
+          "rttMs": 20.108,
+          "uncertaintyMs": 7.795,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 12445.702,
+          "accepted": true,
+          "rttMs": 16.023,
+          "uncertaintyMs": 7.795,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 13471.075,
+          "accepted": true,
+          "rttMs": 40.555,
+          "uncertaintyMs": 7.795,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 14443.968,
+          "accepted": true,
+          "rttMs": 12.353,
+          "uncertaintyMs": 6.177,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 15471.729,
+          "accepted": true,
+          "rttMs": 38.558,
+          "uncertaintyMs": 6.177,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 16469.974,
+          "accepted": true,
+          "rttMs": 36.383,
+          "uncertaintyMs": 6.177,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 17469.342,
+          "accepted": true,
+          "rttMs": 34.238,
+          "uncertaintyMs": 6.177,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 18469.999,
+          "accepted": true,
+          "rttMs": 33.193,
+          "uncertaintyMs": 6.177,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 19470.854,
+          "accepted": true,
+          "rttMs": 32.546,
+          "uncertaintyMs": 6.177,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 20473.537,
+          "accepted": true,
+          "rttMs": 34.643,
+          "uncertaintyMs": 6.177,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 21470.502,
+          "accepted": true,
+          "rttMs": 28.957,
+          "uncertaintyMs": 6.177,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 22469.766,
+          "accepted": true,
+          "rttMs": 25.338,
+          "uncertaintyMs": 6.177,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 23471.24,
+          "accepted": true,
+          "rttMs": 24.605,
+          "uncertaintyMs": 6.177,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 24481.74,
+          "accepted": true,
+          "rttMs": 33.257,
+          "uncertaintyMs": 12.303,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 25480.114,
+          "accepted": true,
+          "rttMs": 29.755,
+          "uncertaintyMs": 12.303,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 26472.375,
+          "accepted": true,
+          "rttMs": 20.532,
+          "uncertaintyMs": 10.266,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 27477.074,
+          "accepted": true,
+          "rttMs": 23.827,
+          "uncertaintyMs": 10.266,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 28473.136,
+          "accepted": true,
+          "rttMs": 17.719,
+          "uncertaintyMs": 8.859,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 29476.016,
+          "accepted": true,
+          "rttMs": 19.121,
+          "uncertaintyMs": 8.859,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 30474.965,
+          "accepted": true,
+          "rttMs": 16.771,
+          "uncertaintyMs": 8.386,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 31486.22,
+          "accepted": true,
+          "rttMs": 27.071,
+          "uncertaintyMs": 8.386,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 32484.2,
+          "accepted": true,
+          "rttMs": 22.911,
+          "uncertaintyMs": 8.386,
+          "ready": true,
+          "samples": 10
+        }
+      ],
+      "readinessTransitions": [
+        {
+          "atMs": 432.026,
+          "ready": true,
+          "trigger": "pong",
+          "uncertaintyMs": 10.241,
+          "samples": 5
+        }
+      ],
+      "nativeWouldDisconnect": [],
+      "pongAnomalies": 0,
+      "receiptAnomalies": 0,
+      "errors": [],
+      "close": {
+        "code": 1000,
+        "reason": "closed",
+        "expected": true,
+        "atMs": 32899
+      }
+    },
+    {
+      "label": "guest",
+      "upgraded": true,
+      "firstMessageKind": "snapshot",
+      "firstTwelveMessageKinds": [
+        "snapshot",
+        "events",
+        "pong",
+        "snapshot",
+        "pong",
+        "pong",
+        "pong",
+        "snapshot",
+        "pong",
+        "snapshot",
+        "snapshot",
+        "snapshot"
+      ],
+      "pingsSent": 35,
+      "snapshots": 124,
+      "clockSamples": [
+        {
+          "atMs": 23.934,
+          "accepted": true,
+          "rttMs": 23.926,
+          "uncertaintyMs": 11.963,
+          "ready": false,
+          "samples": 1
+        },
+        {
+          "atMs": 127.919,
+          "accepted": true,
+          "rttMs": 26.839,
+          "uncertaintyMs": 11.963,
+          "ready": false,
+          "samples": 2
+        },
+        {
+          "atMs": 227.726,
+          "accepted": true,
+          "rttMs": 22.582,
+          "uncertaintyMs": 11.291,
+          "ready": true,
+          "samples": 3
+        },
+        {
+          "atMs": 323.818,
+          "accepted": true,
+          "rttMs": 16.847,
+          "uncertaintyMs": 8.424,
+          "ready": true,
+          "samples": 4
+        },
+        {
+          "atMs": 426.274,
+          "accepted": true,
+          "rttMs": 16.745,
+          "uncertaintyMs": 8.372,
+          "ready": true,
+          "samples": 5
+        },
+        {
+          "atMs": 1449.832,
+          "accepted": true,
+          "rttMs": 38.577,
+          "uncertaintyMs": 8.372,
+          "ready": true,
+          "samples": 6
+        },
+        {
+          "atMs": 2449.063,
+          "accepted": true,
+          "rttMs": 35.654,
+          "uncertaintyMs": 8.372,
+          "ready": true,
+          "samples": 7
+        },
+        {
+          "atMs": 3450.499,
+          "accepted": true,
+          "rttMs": 35.982,
+          "uncertaintyMs": 8.372,
+          "ready": true,
+          "samples": 8
+        },
+        {
+          "atMs": 4451.437,
+          "accepted": true,
+          "rttMs": 34.335,
+          "uncertaintyMs": 8.372,
+          "ready": true,
+          "samples": 9
+        },
+        {
+          "atMs": 5449.215,
+          "accepted": true,
+          "rttMs": 29.278,
+          "uncertaintyMs": 8.372,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 6448.99,
+          "accepted": true,
+          "rttMs": 27.748,
+          "uncertaintyMs": 8.372,
+          "ready": true,
+          "samples": 11
+        },
+        {
+          "atMs": 7450.103,
+          "accepted": true,
+          "rttMs": 26.66,
+          "uncertaintyMs": 8.372,
+          "ready": true,
+          "samples": 12
+        },
+        {
+          "atMs": 8450.235,
+          "accepted": true,
+          "rttMs": 24.83,
+          "uncertaintyMs": 8.372,
+          "ready": true,
+          "samples": 13
+        },
+        {
+          "atMs": 9451.022,
+          "accepted": true,
+          "rttMs": 22.969,
+          "uncertaintyMs": 8.372,
+          "ready": true,
+          "samples": 14
+        },
+        {
+          "atMs": 10453.24,
+          "accepted": true,
+          "rttMs": 23.058,
+          "uncertaintyMs": 11.485,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 11454.647,
+          "accepted": true,
+          "rttMs": 21.407,
+          "uncertaintyMs": 10.703,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 12451.758,
+          "accepted": true,
+          "rttMs": 16.333,
+          "uncertaintyMs": 8.166,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 13453.232,
+          "accepted": true,
+          "rttMs": 15.874,
+          "uncertaintyMs": 7.937,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 14457.674,
+          "accepted": true,
+          "rttMs": 19.099,
+          "uncertaintyMs": 7.937,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 15458.093,
+          "accepted": true,
+          "rttMs": 17.708,
+          "uncertaintyMs": 7.937,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 16464.692,
+          "accepted": true,
+          "rttMs": 22.14,
+          "uncertaintyMs": 7.937,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 17464.662,
+          "accepted": true,
+          "rttMs": 20.431,
+          "uncertaintyMs": 7.937,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 18463.05,
+          "accepted": true,
+          "rttMs": 15.963,
+          "uncertaintyMs": 7.937,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 19484.168,
+          "accepted": true,
+          "rttMs": 34.374,
+          "uncertaintyMs": 7.937,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 20472.9,
+          "accepted": true,
+          "rttMs": 21.109,
+          "uncertaintyMs": 7.937,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 21470.548,
+          "accepted": true,
+          "rttMs": 17.632,
+          "uncertaintyMs": 7.937,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 22476.803,
+          "accepted": true,
+          "rttMs": 21.486,
+          "uncertaintyMs": 7.937,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 23498.614,
+          "accepted": true,
+          "rttMs": 42.288,
+          "uncertaintyMs": 7.981,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 24503.606,
+          "accepted": true,
+          "rttMs": 46.227,
+          "uncertaintyMs": 7.981,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 25477.868,
+          "accepted": true,
+          "rttMs": 18.237,
+          "uncertaintyMs": 7.981,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 26500.925,
+          "accepted": true,
+          "rttMs": 39.498,
+          "uncertaintyMs": 7.981,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 27497.671,
+          "accepted": true,
+          "rttMs": 34.3,
+          "uncertaintyMs": 7.981,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 28499.306,
+          "accepted": true,
+          "rttMs": 34.942,
+          "uncertaintyMs": 8.816,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 29496.885,
+          "accepted": true,
+          "rttMs": 30.653,
+          "uncertaintyMs": 8.816,
+          "ready": true,
+          "samples": 10
+        },
+        {
+          "atMs": 30509.342,
+          "accepted": true,
+          "rttMs": 41.797,
+          "uncertaintyMs": 8.816,
+          "ready": true,
+          "samples": 10
+        }
+      ],
+      "readinessTransitions": [
+        {
+          "atMs": 227.741,
+          "ready": true,
+          "trigger": "pong",
+          "uncertaintyMs": 11.291,
+          "samples": 3
+        }
+      ],
+      "nativeWouldDisconnect": [],
+      "pongAnomalies": 0,
+      "receiptAnomalies": 0,
+      "errors": [],
+      "close": {
+        "code": 1000,
+        "reason": "closed",
+        "expected": true,
+        "atMs": 30860
+      }
+    }
+  ],
+  "transport": {
+    "socketsOpened": 2,
+    "socketsClosed": true,
+    "acknowledgedOnlyReceivedSequences": true
+  },
+  "syntheticData": {
+    "matchesCreated": 1,
+    "playersCreated": 2,
+    "retained": true,
+    "cleanup": "No public match deletion/end/leave API. Sockets closed; synthetic rows remain."
+  },
+  "limitations": [
+    "No shots or calibration commands sent.",
+    "No physical-device evidence.",
+    "All three presence stages passed, demonstrating observed Worker-to-Convex projection; exact outbox receipt cursor is not publicly exposed."
+  ]
+}

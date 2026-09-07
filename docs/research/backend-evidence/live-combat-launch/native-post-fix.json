@@ -1,0 +1,286 @@
+{
+  "schemaVersion": 1,
+  "evidenceScope": "actual-native-macos-combat-transport",
+  "recordedAtUtc": "2026-09-07T03:52:24.574Z",
+  "deploymentSha": "2929fd69e6768192f91fbf206cbed62cb202626e",
+  "sourceManifest": {
+    "sourceSha": "17e4a50771dd7caa59b915aa9acc6c0ccbac5280",
+    "sources": [
+      {
+        "file": "CombatWire.swift",
+        "sha256": "5bf1577d92f17965e91a05bde0f1823933e810c9f9769f85e7b540d11c4d9be3"
+      },
+      {
+        "file": "CombatReplica.swift",
+        "sha256": "15f7ee85a1119d46522992c54a695b3ca69239ab4649bee1206c609e41061026"
+      },
+      {
+        "file": "CombatSocketTransport.swift",
+        "sha256": "bc685491bd44239960e62558024fc6fa23d00f740952cb795fd3b2eb8461519f"
+      },
+      {
+        "file": "CombatClock.swift",
+        "sha256": "522cc405384d024725de69cafc4ab5c74b9955a6dfcebb8a3640a5cdd9d4e09b"
+      }
+    ]
+  },
+  "success": true,
+  "stage": "native-decoder-transport-clock",
+  "elapsedMs": 12300,
+  "httpRequests": 7,
+  "clients": [
+    {
+      "label": "host",
+      "nativeWouldDisconnect": false,
+      "snapshotsAccepted": 41,
+      "peerDepartureRequired": false,
+      "firstKind": "snapshot",
+      "unmatchedPongs": 0,
+      "baselineAccepted": true,
+      "pingsSent": 14,
+      "elapsedMs": 10698.73791667074,
+      "holdCompleted": true,
+      "physicalDeviceEvidence": "not-claimed",
+      "clockReady": true,
+      "clockEverReady": true,
+      "finalPeerConnected": [
+        true
+      ],
+      "eventsApplied": 1,
+      "peerDisconnectEventsApplied": 0,
+      "clock": [
+        {
+          "ready": false,
+          "accepted": true,
+          "uncertaintyMs": 366.960750002414,
+          "elapsedMs": 735.4859583377838,
+          "rttMs": 733.921500004828
+        },
+        {
+          "ready": false,
+          "accepted": true,
+          "uncertaintyMs": 48.45218749716878,
+          "elapsedMs": 819.417000003159,
+          "rttMs": 96.90437499433756
+        },
+        {
+          "ready": false,
+          "accepted": true,
+          "uncertaintyMs": 35.3048750013113,
+          "elapsedMs": 904.0700416713953,
+          "rttMs": 70.6097500026226
+        },
+        {
+          "ready": false,
+          "accepted": true,
+          "uncertaintyMs": 35.3048750013113,
+          "elapsedMs": 1033.4330000057817,
+          "rttMs": 91.86025000363588
+        },
+        {
+          "ready": false,
+          "accepted": true,
+          "uncertaintyMs": 35.3048750013113,
+          "elapsedMs": 1162.5198750048876,
+          "rttMs": 110.56312499940395
+        },
+        {
+          "ready": true,
+          "accepted": true,
+          "uncertaintyMs": 18.27768750116229,
+          "elapsedMs": 2106.034416668117,
+          "rttMs": 36.55537500232458
+        },
+        {
+          "ready": true,
+          "accepted": true,
+          "uncertaintyMs": 9.211541667580605,
+          "elapsedMs": 3154.5267500057817,
+          "rttMs": 18.42308333516121
+        },
+        {
+          "ready": true,
+          "accepted": true,
+          "uncertaintyMs": 9.211541667580605,
+          "elapsedMs": 4215.575208336115,
+          "rttMs": 33.98174999654293
+        },
+        {
+          "ready": true,
+          "accepted": true,
+          "uncertaintyMs": 9.211541667580605,
+          "elapsedMs": 5307.744083337486,
+          "rttMs": 59.169416666030884
+        },
+        {
+          "ready": true,
+          "accepted": true,
+          "uncertaintyMs": 9.211541667580605,
+          "elapsedMs": 6358.385791666806,
+          "rttMs": 42.75874999910593
+        },
+        {
+          "ready": true,
+          "accepted": true,
+          "uncertaintyMs": 9.211541667580605,
+          "elapsedMs": 7410.148416668177,
+          "rttMs": 50.889083325862885
+        },
+        {
+          "ready": true,
+          "accepted": true,
+          "uncertaintyMs": 9.211541667580605,
+          "elapsedMs": 8455.383916668594,
+          "rttMs": 39.76391666382551
+        },
+        {
+          "ready": true,
+          "accepted": true,
+          "uncertaintyMs": 9.211541667580605,
+          "elapsedMs": 9507.660750001669,
+          "rttMs": 25.928666666150093
+        },
+        {
+          "ready": true,
+          "accepted": true,
+          "uncertaintyMs": 9.211541667580605,
+          "elapsedMs": 10609.854125007987,
+          "rttMs": 59.632000006735325
+        }
+      ],
+      "eventBatchesApplied": 2
+    },
+    {
+      "label": "guest",
+      "peerDepartureRequired": true,
+      "baselineAccepted": true,
+      "finalPeerConnected": [
+        false
+      ],
+      "snapshotsAccepted": 41,
+      "nativeWouldDisconnect": false,
+      "unmatchedPongs": 0,
+      "elapsedMs": 10492.200833328068,
+      "clock": [
+        {
+          "ready": false,
+          "uncertaintyMs": 207.38833333551884,
+          "accepted": true,
+          "elapsedMs": 415.59904166311026,
+          "rttMs": 414.7766666710377
+        },
+        {
+          "ready": false,
+          "uncertaintyMs": 31.323791667819023,
+          "accepted": true,
+          "elapsedMs": 499.4574999958277,
+          "rttMs": 62.647583335638046
+        },
+        {
+          "ready": false,
+          "uncertaintyMs": 31.323791667819023,
+          "accepted": true,
+          "elapsedMs": 629.3767499923706,
+          "rttMs": 88.70804166048765
+        },
+        {
+          "ready": false,
+          "uncertaintyMs": 31.25777083262801,
+          "accepted": true,
+          "elapsedMs": 714.2999583259225,
+          "rttMs": 62.51554166525602
+        },
+        {
+          "ready": false,
+          "uncertaintyMs": 31.25777083262801,
+          "accepted": true,
+          "elapsedMs": 884.9131666645408,
+          "rttMs": 123.98462500423193
+        },
+        {
+          "ready": true,
+          "uncertaintyMs": 9.277375001460314,
+          "accepted": true,
+          "elapsedMs": 1838.9425416588783,
+          "rttMs": 18.554750002920628
+        },
+        {
+          "ready": true,
+          "uncertaintyMs": 9.277375001460314,
+          "accepted": true,
+          "elapsedMs": 2886.8589166626334,
+          "rttMs": 42.853375002741814
+        },
+        {
+          "ready": true,
+          "uncertaintyMs": 9.277375001460314,
+          "accepted": true,
+          "elapsedMs": 3895.521541662514,
+          "rttMs": 33.88966666907072
+        },
+        {
+          "ready": true,
+          "uncertaintyMs": 9.277375001460314,
+          "accepted": true,
+          "elapsedMs": 4988.574124991894,
+          "rttMs": 59.944458335638046
+        },
+        {
+          "ready": true,
+          "uncertaintyMs": 9.277375001460314,
+          "accepted": true,
+          "elapsedMs": 6038.460374996066,
+          "rttMs": 42.77170833945274
+        },
+        {
+          "ready": true,
+          "uncertaintyMs": 9.277375001460314,
+          "accepted": true,
+          "elapsedMs": 7090.531583324075,
+          "rttMs": 51.19529166072607
+        },
+        {
+          "ready": true,
+          "uncertaintyMs": 9.277375001460314,
+          "accepted": true,
+          "elapsedMs": 8136.195124998689,
+          "rttMs": 40.50062499940395
+        },
+        {
+          "ready": true,
+          "uncertaintyMs": 9.277375001460314,
+          "accepted": true,
+          "elapsedMs": 9187.652416661382,
+          "rttMs": 25.946333333849907
+        },
+        {
+          "ready": true,
+          "uncertaintyMs": 9.277375001460314,
+          "accepted": true,
+          "elapsedMs": 10290.445583328605,
+          "rttMs": 60.15858333557844
+        }
+      ],
+      "clockReady": true,
+      "physicalDeviceEvidence": "not-claimed",
+      "holdCompleted": true,
+      "eventBatchesApplied": 2,
+      "pingsSent": 14,
+      "clockEverReady": true,
+      "eventsApplied": 1,
+      "firstKind": "snapshot",
+      "peerDisconnectEventsApplied": 1
+    }
+  ],
+  "syntheticData": {
+    "matchesCreated": 1,
+    "playersCreated": 2,
+    "retained": true,
+    "cleanup": "Sockets closed; no public deletion/end/leave API. Synthetic rows remain."
+  },
+  "limitations": [
+    "Actual active Swift decoder/replica/clock/URLSession transport compiled for macOS.",
+    "No physical iPhone, AR calibration, poses, or fire evidence.",
+    "Clock readiness is measured, not a prerequisite for transport pass; ready-to-unready transitions fail."
+  ]
+}
