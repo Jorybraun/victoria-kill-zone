@@ -53,6 +53,31 @@ final class SavedArenaMatchTests: XCTestCase {
     await coordinator.stop()
   }
 
+  func testTransientDownloadErrorRetriesBeforeHostScans() async throws {
+    let camera = SavedMatchCamera(), maps = SavedMatchMaps(failures: [URLError(.networkConnectionLost)])
+    let provider = DuelFrameProvider(targeting: camera)
+    let coordinator = makeCoordinator(frame: provider, saved: nil, maps: maps)
+    coordinator.configure(epoch: 1, isHost: true)
+    try await until(timeout: 5) { coordinator.state == .mapping }
+    let uploads = await maps.uploads
+    XCTAssertTrue(uploads.isEmpty)
+    await coordinator.stop()
+  }
+
+  func testRepeatedTransferErrorsFailAfterRetries() async throws {
+    let camera = SavedMatchCamera()
+    let maps = SavedMatchMaps(failures: [URLError(.timedOut), URLError(.timedOut), URLError(.timedOut)])
+    let provider = DuelFrameProvider(targeting: camera)
+    let coordinator = makeCoordinator(frame: provider, saved: nil, maps: maps)
+    coordinator.configure(epoch: 1, isHost: true)
+    try await until(timeout: 8) { if case .failed = coordinator.state { true } else { false } }
+    guard case .failed(let message) = coordinator.state else { return XCTFail("Expected failed map state") }
+    XCTAssertTrue(message.contains("could not be loaded"))
+    let uploads = await maps.uploads
+    XCTAssertTrue(uploads.isEmpty)
+    await coordinator.stop()
+  }
+
   func testGuestWaitsForAuthenticatedMapAndNeverUploadsSelection() async throws {
     let camera = SavedMatchCamera(), maps = SavedMatchMaps()
     let provider = DuelFrameProvider(targeting: camera)
@@ -78,7 +103,7 @@ final class SavedArenaMatchTests: XCTestCase {
     await coordinator.stop()
   }
 
-  private func makeCoordinator(frame: DuelFrameProvider, saved: SavedArenaBundle,
+  private func makeCoordinator(frame: DuelFrameProvider, saved: SavedArenaBundle?,
                                maps: SavedMatchMaps, epoch: Int = 1) -> RealtimeMapCoordinator {
     let client = SavedMatchClient(epoch: epoch)
     return RealtimeMapCoordinator(session: .init(matchId: "match", code: "ABC123", playerId: "host",
@@ -95,8 +120,8 @@ final class SavedArenaMatchTests: XCTestCase {
       frameID: map.frameID, byteCount: bytes.count), bytes: bytes)
   }
 
-  private func until(_ predicate: @MainActor () -> Bool) async throws {
-    let deadline = Date().addingTimeInterval(3)
+  private func until(timeout: TimeInterval = 3, _ predicate: @MainActor () -> Bool) async throws {
+    let deadline = Date().addingTimeInterval(timeout)
     while !predicate(), Date() < deadline { try await Task.sleep(for: .milliseconds(5)) }
     XCTAssertTrue(predicate())
   }
@@ -113,10 +138,12 @@ private actor SavedMatchCamera: DuelFrameSessionDriving {
 
 private actor SavedMatchMaps: CombatMapTransferring {
   private let published: DuelFrameMap?
+  private var downloadFailures: [Error]
   private(set) var uploads: [DuelFrameMap] = []
-  init(published: DuelFrameMap? = nil) { self.published = published }
+  init(published: DuelFrameMap? = nil, failures: [Error] = []) { self.published = published; self.downloadFailures = failures }
   func upload(_ map: DuelFrameMap, ticket: CombatAccessTicket) async throws { uploads.append(map) }
   func download(epoch: UInt16, ticket: CombatAccessTicket) async throws -> DuelFrameMap {
+    if !downloadFailures.isEmpty { throw downloadFailures.removeFirst() }
     guard let published else { throw CombatMapError.unavailable }
     return published
   }
