@@ -1,6 +1,6 @@
 import { env, exports as workerExports } from "cloudflare:workers";
 import { abortAllDurableObjects, runInDurableObject } from "cloudflare:test";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LIMITS, type CombatTicketClaims } from "@vkz/combat-protocol";
 import { claims, command, connect, token } from "./helpers.js";
 
@@ -92,15 +92,27 @@ describe("immutable authenticated shared AR maps", () => {
     let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
     const body = new ReadableStream<Uint8Array>({ start(value) { controller = value; value.enqueue(new Uint8Array([1])); } });
     const uploaded = mapRequest(payload, { body });
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect((await mapRequest(payload, { body: new Uint8Array([2]) })).status).toBe(429);
-    expect((await mapRequest(payload)).status).toBe(404);
-    socket.send(command(initial, 1, { kind: "reload" }));
-    expect((await socket.next("ack")).clientSequence).toBe(1);
-    controller?.enqueue(new Uint8Array([2, 3]));
-    controller?.close();
-    expect((await uploaded).status).toBe(201);
-    expect(new Uint8Array(await (await mapRequest(payload)).arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
-    socket.close();
+    try {
+      // Observe admission inside the real room; client-side stream pulls and
+      // elapsed wall time do not prove that the server has begun this upload.
+      await vi.waitFor(async () => {
+        const admitted = await runInDurableObject(env.COMBAT_ROOMS.getByName(payload.matchId), (instance) =>
+          (instance as unknown as { maps: { uploading: boolean } }).maps.uploading);
+        expect(admitted).toBe(true);
+      }, { timeout: 2_000, interval: 5 });
+      expect((await mapRequest(payload, { body: new Uint8Array([2]) })).status).toBe(429);
+      expect((await mapRequest(payload)).status).toBe(404);
+      socket.send(command(initial, 1, { kind: "reload" }));
+      expect((await socket.next("ack")).clientSequence).toBe(1);
+      controller?.enqueue(new Uint8Array([2, 3]));
+      controller?.close();
+      controller = undefined;
+      expect((await uploaded).status).toBe(201);
+      expect(new Uint8Array(await (await mapRequest(payload)).arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+    } finally {
+      controller?.close();
+      await uploaded.catch(() => undefined);
+      socket.close();
+    }
   });
 });
