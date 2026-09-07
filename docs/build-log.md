@@ -4,6 +4,10 @@
 
 CI job 101853784553 failed at cycle-1 respawn: the guest still displayed the previous snapshot after twenty scheduler yields. The regression now awaits both clients receiving the exact authoritative respawn projection using the fixture's existing bounded condition wait, then retains the original health, ammo, life-state and full convergence assertions. Production code and timing limits are unchanged. The six-test convergence suite passed initially and in five repeated runs under the Xcode Swift toolchain. Canonical workspace verification is recorded in the PR after completion; current-head GitHub checks remain required before merge.
 
+## PR #75 paused-scan watchdog review — 2026-09-07
+
+Integration stops and releases the MapLab watchdog on failed or interrupted policy states, preserving camera pause and pending capture completion. Retry still calls start, which stops the previous attempt and creates a fresh watchdog. `pnpm verify` passed all 323 workspace tests and required gates; iOS-target Swift syntax parsing and the actual iOS Simulator Debug app build passed. Full current-head GitHub checks remain required before merge. No physical battery or camera behavior is claimed.
+
 This is the integration-owned, evidence-based status record. Append observed results; do not paste secrets, signing material, unique device identifiers, or unsanitized logs.
 
 ## PR #70 review correction — 2026-09-07

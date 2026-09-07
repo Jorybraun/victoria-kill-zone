@@ -231,8 +231,12 @@ final class MapLabARDriver: MapLabDriving {
   private func publishPolicy() {
     setState(policy.state)
     switch policy.state {
-    case .failed(let failure): session?.pause(); finishCurrentCapture(.failure(failure))
-    case .interrupted: session?.pause(); finishCurrentCapture(.failure(MapLabFailure.interrupted))
+    case .failed(let failure):
+      watchdog?.cancel(); watchdog = nil
+      session?.pause(); finishCurrentCapture(.failure(failure))
+    case .interrupted:
+      watchdog?.cancel(); watchdog = nil
+      session?.pause(); finishCurrentCapture(.failure(MapLabFailure.interrupted))
     default: break
     }
   }
