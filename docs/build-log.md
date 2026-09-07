@@ -2,6 +2,12 @@
 
 This is the integration-owned, evidence-based status record. Append observed results; do not paste secrets, signing material, unique device identifiers, or unsanitized logs.
 
+## PR #70 review correction — 2026-09-07
+
+Integration corrected the saved-arena management entry: only create-match mode can select an arena or render the lobby creation action. Management retains scanning and deletion; saving a scan does not select it for a match. The management heading and accessibility hint describe preparation rather than match creation.
+
+Verification: `pnpm verify` passed (323 workspace tests and required gates); Xcode-toolchain `swift test --package-path ios/VictoriaKillZone` passed 329 tests with one physical-device-only skip and zero failures. This is local compile/test evidence, not physical-device acceptance or a deployment. Current-head GitHub iOS checks remain required before merge.
+
 ## Current status — 2026-08-22
 
 - **Current gate:** Pipeline bootstrap, before G0 Hardware.

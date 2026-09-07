@@ -19,7 +19,7 @@ struct SavedArenaLibraryView: View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
-          Text(library.arenas.isEmpty ? "Your arenas, ready to play" : "Choose your arena")
+          Text(mode == .manage ? "Manage saved arenas" : (library.arenas.isEmpty ? "Your arenas, ready to play" : "Choose your arena"))
             .font(.largeTitle.bold())
             .accessibilityAddTraits(.isHeader)
           Text("Scan a room once, then reuse it for your next game. Saved on this phone.")
@@ -37,7 +37,7 @@ struct SavedArenaLibraryView: View {
           ForEach(library.arenas, id: \.id) { arena in
             arenaRow(arena)
           }
-          if let selected = library.selected {
+          if mode == .createMatch, let selected = library.selected {
             VStack(alignment: .leading, spacing: 12) {
               Text(selected.summary.name).font(.title3.bold())
               Text("Play in the same room. Everyone will briefly align their phone with the saved reference before firing.")
@@ -93,14 +93,17 @@ struct SavedArenaLibraryView: View {
   private var setupView: some View {
     ArenaSetupView(targeting: environment.targetingSession, store: environment.savedArenas) { saved in
       showsSetup = false
-      library.refresh(select: saved?.summary.id)
+      library.refresh(select: mode == .createMatch ? saved?.summary.id : nil)
     }
     .interactiveDismissDisabled()
   }
 
   private func arenaRow(_ arena: SavedArenaSummary) -> some View {
     HStack(spacing: 12) {
-      Button { library.select(arena) } label: {
+      Button {
+        guard mode == .createMatch else { return }
+        library.select(arena)
+      } label: {
         HStack(spacing: 12) {
           Image(systemName: library.selected?.summary.id == arena.id ? "checkmark.circle.fill" : "map")
             .font(.title2).foregroundStyle(VKZPalette.pending)
@@ -118,7 +121,8 @@ struct SavedArenaLibraryView: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .accessibilityHint("Load this arena before creating a game.")
+      .disabled(mode == .manage)
+      .accessibilityHint(mode == .createMatch ? "Load this arena before creating a game." : "Saved on this phone. Use the delete button to remove it.")
       Button { pendingDelete = arena } label: {
         Image(systemName: "trash").frame(minWidth: 44, minHeight: 44)
       }
