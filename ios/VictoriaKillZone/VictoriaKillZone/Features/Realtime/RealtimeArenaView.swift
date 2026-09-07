@@ -43,9 +43,9 @@ struct RealtimeArenaView: View {
         #endif
     }
     .onChange(of: menuPresented) {_, _ in controller.setTriggerHeld(false)}
-    .task {controller.setSceneActive(scenePhase == .active); await controller.start()}
+    .task {controller.setSceneActive(scenePhase != .background); await controller.start()}
     .onChange(of: scenePhase) {_, phase in
-      controller.setSceneActive(phase == .active)
+      controller.setSceneActive(phase != .background)
       if phase != .active {clearPresentation()}
     }
     .onDisappear {

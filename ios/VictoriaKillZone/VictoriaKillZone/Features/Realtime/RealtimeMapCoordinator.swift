@@ -41,18 +41,14 @@ final class RealtimeMapCoordinator: ObservableObject {
           guard self.current(token) else {return}
           self.state = .installed; return
         }
+        var transferAttempts = 0
         while self.current(token) {
           self.state = .transferring
-          let ticket = try await self.accessTicket(epoch: epoch)
+          var ticket: CombatAccessTicket!
+          let map: DuelFrameMap
           do {
-            let map = try await self.maps.download(epoch: epoch, ticket: ticket)
-            guard self.current(token) else {return}
-            if isHost, let savedArena = self.savedArena, map.frameID != savedArena.summary.frameID {
-              throw CombatMapError.conflict
-            }
-            try await self.frame.installMap(map)
-            guard self.current(token) else {return}
-            self.installedMap = map; self.state = .installed; return
+            ticket = try await self.accessTicket(epoch: epoch)
+            map = try await self.maps.download(epoch: epoch, ticket: ticket)
           } catch CombatMapError.unavailable {
             if isHost, let savedArena = self.savedArena {
               // Hashing/decoding up to 8 MiB must not stall the camera or clock.
@@ -69,7 +65,24 @@ final class RealtimeMapCoordinator: ObservableObject {
             if isHost {self.state = .mapping; return}
             self.state = .waitingForHost
             try await Task.sleep(for: .seconds(2))
+            continue
+          } catch let error as CombatMapError where error == .conflict {
+            throw error
+          } catch {
+            transferAttempts += 1
+            if transferAttempts >= 3 {throw error}
+            guard self.current(token) else {return}
+            self.state = .transferring
+            try await Task.sleep(for: .seconds(2))
+            continue
           }
+          guard self.current(token) else {return}
+          if isHost, let savedArena = self.savedArena, map.frameID != savedArena.summary.frameID {
+            throw CombatMapError.conflict
+          }
+          try await self.frame.installMap(map)
+          guard self.current(token) else {return}
+          self.installedMap = map; self.state = .installed; return
         }
       } catch {
         guard self.current(token) else {return}

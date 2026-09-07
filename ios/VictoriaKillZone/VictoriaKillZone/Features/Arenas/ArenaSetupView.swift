@@ -69,10 +69,10 @@ struct ArenaSetupView: View {
     .scrollDismissesKeyboard(.interactively)
     .interactiveDismissDisabled()
     .task {
-      await controller.setSceneActive(scenePhase == .active)
+      await controller.setSceneActive(scenePhase != .background)
       await controller.start()
     }
-    .onChange(of: scenePhase) {_, phase in Task {await controller.setSceneActive(phase == .active)}}
+    .onChange(of: scenePhase) {_, phase in Task {await controller.setSceneActive(phase != .background)}}
     .onChange(of: controller.completion) {_, completion in
       switch completion {
       case .saved(let bundle): onFinish(bundle)
