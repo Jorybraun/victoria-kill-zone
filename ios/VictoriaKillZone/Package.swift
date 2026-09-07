@@ -36,6 +36,7 @@ let package = Package(
       ],
       resources: [
         .copy("Features/Game/SkeletonAssets"),
+        .copy("Features/Replay/Fixtures"),
       ],
       linkerSettings: [
         .linkedFramework("AVFoundation", .when(platforms: [.iOS])),

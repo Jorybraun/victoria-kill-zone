@@ -2,7 +2,7 @@ import Combine
 import Foundation
 
 enum ArenaLibraryMode: String, Identifiable {
-  case createMatch, manage
+  case createMatch, manage, scanLab
   var id: String { rawValue }
 }
 

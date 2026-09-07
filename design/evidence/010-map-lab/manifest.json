@@ -1,0 +1,126 @@
+{
+  "kind": "Candidate actual SwiftUI component captures in synthetic macOS phone-sized viewports",
+  "repositoryHEAD": "b684c73a2bb11d3e4d9b4644dee5909bc38dbdc5",
+  "sourceSHA256": {
+    "ios/VictoriaKillZone/VictoriaKillZone/Features/Home/HomeView.swift": "e880e83d6caca633276041f7a81a5f3e4df1c6d0711b9456a9edf78efd14f405",
+    "ios/VictoriaKillZone/VictoriaKillZone/Features/MapLab/MapLabLibraryView.swift": "6710020286264c2b475d53d6a62b3f6b2c71805ffbbfb756d8f71d8907b9480e"
+  },
+  "supportingModuleSHA256": "9260ce668b058d5b88ac1fe6c4033aade0badc46818fd2fb1402d8e0e201f417",
+  "rendererSHA256": "08f5b7012580a0323682d47fda2f6b0cdaeaede6ca420d605e86793156c8eabb",
+  "sourcePreparation": "Unmodified component source copies with @testable import prepended; existing production dependencies linked. No DEBUG preview compilation flag.",
+  "viewportPoints": [
+    375,
+    667
+  ],
+  "dynamicTypeCases": [
+    "large",
+    "accessibility3"
+  ],
+  "fixtures": {
+    "home": "Blank callsign, phaseZeroShell environment, explicit no-op Create Arena / Scan & Save / Use Saved Arena callbacks; no actions invoked",
+    "empty": "Synthetic actor returns an empty summary array",
+    "saved": "Synthetic actor returns one valid-shaped summary named Living room \u00b7 afternoon light; synthetic metadata only, no ARWorldMap or camera capture",
+    "storage-error": "Synthetic actor throws MapLabFailure.storageUnavailable from list()"
+  },
+  "renderer": "Offscreen NSHostingView cacheDisplay; selected programmatically scrolled bottom views",
+  "captures": [
+    {
+      "dynamicType": "large",
+      "fixtureListCalls": 0,
+      "name": "home-standard",
+      "position": "top",
+      "scrollOffset": 0,
+      "unexpectedStorageActions": 0,
+      "viewportHeight": 667,
+      "viewportWidth": 375
+    },
+    {
+      "dynamicType": "large",
+      "fixtureListCalls": 0,
+      "name": "home-standard-bottom",
+      "position": "bottom",
+      "scrollOffset": 154,
+      "unexpectedStorageActions": 0,
+      "viewportHeight": 667,
+      "viewportWidth": 375
+    },
+    {
+      "dynamicType": "large",
+      "fixtureListCalls": 1,
+      "name": "map-lab-empty-standard",
+      "position": "top",
+      "scrollOffset": 0,
+      "unexpectedStorageActions": 0,
+      "viewportHeight": 667,
+      "viewportWidth": 375
+    },
+    {
+      "dynamicType": "large",
+      "fixtureListCalls": 1,
+      "name": "map-lab-saved-standard",
+      "position": "top",
+      "scrollOffset": 0,
+      "unexpectedStorageActions": 0,
+      "viewportHeight": 667,
+      "viewportWidth": 375
+    },
+    {
+      "dynamicType": "large",
+      "fixtureListCalls": 1,
+      "name": "map-lab-storage-error-standard",
+      "position": "top",
+      "scrollOffset": 0,
+      "unexpectedStorageActions": 0,
+      "viewportHeight": 667,
+      "viewportWidth": 375
+    },
+    {
+      "dynamicType": "accessibility3",
+      "fixtureListCalls": 0,
+      "name": "home-accessibility-bottom",
+      "position": "bottom",
+      "scrollOffset": 180,
+      "unexpectedStorageActions": 0,
+      "viewportHeight": 667,
+      "viewportWidth": 375
+    },
+    {
+      "dynamicType": "accessibility3",
+      "fixtureListCalls": 1,
+      "name": "map-lab-saved-accessibility-bottom",
+      "position": "bottom",
+      "scrollOffset": 0,
+      "unexpectedStorageActions": 0,
+      "viewportHeight": 667,
+      "viewportWidth": 375
+    },
+    {
+      "dynamicType": "accessibility3",
+      "fixtureListCalls": 1,
+      "name": "map-lab-storage-error-accessibility-bottom",
+      "position": "bottom",
+      "scrollOffset": 0,
+      "unexpectedStorageActions": 0,
+      "viewportHeight": 667,
+      "viewportWidth": 375
+    }
+  ],
+  "limitations": [
+    "Not iPhone screenshots or physical-device evidence",
+    "macOS SwiftUI font metrics, navigation chrome and accessibility rendering differ from iOS",
+    "Accessibility Dynamic Type exercises the layout branch; not VoiceOver or touch validation",
+    "Synthetic fixtures exercise library rendering only; no map capture, recognition, camera, permission or networking acceptance",
+    "No buttons invoked; bottom positions use native programmatic scrolling",
+    "Current component source hashes and linked module hash are recorded; integration must supply an existing build matching these sources"
+  ],
+  "PNGs": {
+    "home-standard.png": "1c634cb5c09027d43ae4e9370d9ab95cab7e05f07e22319c2e4269da7c4144ae",
+    "home-standard-bottom.png": "11159ad8f2e88fa0eeaf22f67b98732c09600796b7d751e5a1368e2ddd3ec200",
+    "map-lab-empty-standard.png": "d036895c5e36f6b34f881b013e24cc7970e14a0fbf6f453adfaf08dbabda440d",
+    "map-lab-saved-standard.png": "a8ec7a2f528c3219944b458c72ce4e7aef16097858b4f7916cd682cf58194ce1",
+    "map-lab-storage-error-standard.png": "7d98ea5baa114e6371f4b9665bfa91998c3dad7350d10cf5d249f1e14c2d8dc5",
+    "home-accessibility-bottom.png": "9e24f8201770ef5708417a6ed088b579a1911ddb4e26dae46982f02333ca69f9",
+    "map-lab-saved-accessibility-bottom.png": "a8ec7a2f528c3219944b458c72ce4e7aef16097858b4f7916cd682cf58194ce1",
+    "map-lab-storage-error-accessibility-bottom.png": "7d98ea5baa114e6371f4b9665bfa91998c3dad7350d10cf5d249f1e14c2d8dc5"
+  }
+}
