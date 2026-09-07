@@ -2385,7 +2385,14 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
       // Respawn: server-owned delay, then both clients observe the reset.
       rig.advance(milliseconds: MatchAuthority.respawnDelayMs)
       rig.authority.publish()
-      await rig.settle()
+      // Publishing enqueues subscription delivery; twenty scheduler yields do
+      // not guarantee both clients have consumed the respawn snapshot on CI.
+      let expectedRespawn = rig.authoritativeProjection()
+      let receivedRespawn = await rig.wait {
+        rig.clientProjection(.host) == expectedRespawn
+          && rig.clientProjection(.guest) == expectedRespawn
+      }
+      XCTAssertTrue(receivedRespawn, "cycle \(cycle): both clients must receive the respawn snapshot")
       rig.authority.record("cycle=\(cycle) respawn victim=\(victim.rawValue) \(rig.projection)")
       XCTAssertEqual(rig.authority.player(victim).health, 100)
       XCTAssertEqual(rig.authority.player(victim).ammo, 8)
