@@ -37,7 +37,7 @@ jobs:
         (
           (
             github.event_name == 'workflow_run' &&
-            github.event.workflow_run.name == 'Deploy' &&
+            github.event.workflow_run.path == '.github/workflows/deploy.yml' &&
             github.event.workflow_run.conclusion == 'success' &&
             (github.event.workflow_run.event == 'workflow_run' || github.event.workflow_run.event == 'workflow_dispatch') &&
             github.event.workflow_run.head_branch == 'main' &&
@@ -72,7 +72,7 @@ jobs:
           VKZ_GITHUB_TOKEN: ${{ github.token }}
           VKZ_TESTFLIGHT_ENABLED: ${{ vars.VKZ_TESTFLIGHT_ENABLED }}
           VKZ_EVENT_NAME: ${{ github.event_name }}
-          VKZ_DEPLOY_WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          VKZ_DEPLOY_WORKFLOW_PATH: ${{ github.event.workflow_run.path }}
           VKZ_DEPLOY_EVENT: ${{ github.event.workflow_run.event }}
           VKZ_DEPLOY_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           VKZ_DEPLOY_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}

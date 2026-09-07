@@ -22,7 +22,7 @@ const REPOSITORY = "example/victoria-kill-zone";
 const greenRun = {
   enabled: true,
   eventName: "workflow_run",
-  deployWorkflowName: "Deploy",
+  deployWorkflowPath: DEPLOY_WORKFLOW_PATH,
   deployEvent: "workflow_run",
   deployConclusion: "success",
   ciVerifiedForSha: true,
@@ -42,6 +42,14 @@ assert.deepEqual(decidePromotion(greenRun), {
   sha: CURRENT_SHA,
 });
 
+// GitHub's run name includes the candidate SHA. Stable workflow identity,
+// plus independently verified deployment evidence, controls promotion.
+assert.equal(decidePromotion({ ...greenRun, deployWorkflowName: `Deploy ${CURRENT_SHA}` }).promote, true);
+for (const path of [undefined, "", ".github/workflows/other.yml"]) {
+  assert.equal(decidePromotion({ ...greenRun, deployWorkflowPath: path, deployWorkflowName: "Deploy" }).reasonKey,
+    "notDeployWorkflow");
+}
+
 // Gate: a stale revision is skipped rather than promoted.
 const stale = decidePromotion({ ...greenRun, candidateSha: STALE_SHA });
 assert.equal(stale.promote, false);
@@ -57,7 +65,7 @@ assert.equal(decidePromotion({ ...greenRun, deployConclusion: "failure" }).reaso
 assert.equal(decidePromotion({ ...greenRun, headBranch: "feature" }).reasonKey, "notMain");
 // A green pull-request CI run must never queue the signing runner.
 assert.equal(decidePromotion({ ...greenRun, deployEvent: "pull_request" }).reasonKey, "notDeployEvent");
-assert.equal(decidePromotion({ ...greenRun, deployWorkflowName: "CI" }).reasonKey, "notDeployWorkflow");
+assert.equal(decidePromotion({ ...greenRun, deployWorkflowPath: ".github/workflows/ci.yml" }).reasonKey, "notDeployWorkflow");
 assert.equal(
   decidePromotion({ ...greenRun, headRepository: "fork/victoria-kill-zone" }).reasonKey,
   "forkedRepository",
@@ -422,7 +430,7 @@ assert.equal((await decideWithRemoteFacts(remoteEnvironment, {
   verifyDeployment: async () => { throw new Error("unavailable"); },
 })).reasonKey, "remoteUnavailable");
 const automaticEnvironment = { ...remoteEnvironment, VKZ_EVENT_NAME: "workflow_run",
-  VKZ_DEPLOY_WORKFLOW_NAME: "Deploy", VKZ_DEPLOY_EVENT: "workflow_run",
+  VKZ_DEPLOY_WORKFLOW_PATH: DEPLOY_WORKFLOW_PATH, VKZ_DEPLOY_EVENT: "workflow_run",
   VKZ_DEPLOY_CONCLUSION: "success", VKZ_DEPLOY_HEAD_BRANCH: "main",
   VKZ_DEPLOY_HEAD_REPOSITORY: REPOSITORY, VKZ_DEPLOY_RUN_ID: "101", VKZ_DEPLOY_RUN_ATTEMPT: "1",
   VKZ_CANDIDATE_SHA: STALE_SHA,
@@ -436,7 +444,7 @@ const automatic = await decideWithRemoteFacts(automaticEnvironment, {
 });
 assert.equal(automatic.promote, true);
 assert.equal(automatic.sha, CURRENT_SHA);
-assert.equal((await decideWithRemoteFacts({ ...automaticEnvironment, VKZ_DEPLOY_WORKFLOW_NAME: "CI" }, {
+assert.equal((await decideWithRemoteFacts({ ...automaticEnvironment, VKZ_DEPLOY_WORKFLOW_PATH: ".github/workflows/ci.yml" }, {
   fetchCurrentMain: async () => CURRENT_SHA, verifyCi: async () => true, verifyDeployment: async () => true,
 })).reasonKey, "notDeployWorkflow");
 
@@ -445,6 +453,9 @@ assert.equal((await decideWithRemoteFacts({ ...automaticEnvironment, VKZ_DEPLOY_
 const workflow = await readFile(new URL("../../.github/workflows/testflight.yml", import.meta.url), "utf8");
 assert.match(workflow, /workflows:\s*\n\s*- Deploy\n/u);
 assert.doesNotMatch(workflow, /workflows:\s*\n\s*- CI\n/u);
+assert.ok(workflow.includes("github.event.workflow_run.path == '.github/workflows/deploy.yml'"));
+assert.ok(workflow.includes("VKZ_DEPLOY_WORKFLOW_PATH: ${{ github.event.workflow_run.path }}"));
+assert.ok(!workflow.includes("github.event.workflow_run.name"));
 assert.match(workflow, /ref: \$\{\{ github\.sha \}\}/u);
 const deployWorkflow = await readFile(new URL("../../.github/workflows/deploy.yml", import.meta.url), "utf8");
 assert.match(deployWorkflow, /run-name: Deploy \$\{\{ github\.event_name == 'workflow_run' && github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}/u);
