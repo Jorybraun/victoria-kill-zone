@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import SwiftUI
 
 enum MapLabMode: Equatable { case capture, recognition(MapLabBundle) }
 enum MapLabPhase: Equatable { case idle, starting, live, saving, stopping, paused, finished }
@@ -112,6 +113,13 @@ final class MapLabSessionController: ObservableObject, Identifiable {
     sceneActive = active
     guard !active, completion == nil, phase != .finished else { return }
     if await halt(then: .paused) { message = "Scan paused. Retry when you are ready." }
+  }
+
+  func setScenePhase(_ phase: ScenePhase) async {
+    // Permission prompts and system overlays are inactive, but the app remains
+    // in the foreground. Only backgrounding abandons this camera/save attempt;
+    // actual AR interruptions still arrive through the driver independently.
+    await setSceneActive(phase != .background)
   }
 
   func stop() async {
