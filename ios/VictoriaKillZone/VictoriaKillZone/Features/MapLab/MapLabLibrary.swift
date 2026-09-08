@@ -6,6 +6,7 @@ final class MapLabLibrary: ObservableObject {
   @Published private(set) var scans: [MapLabSummary] = []
   @Published private(set) var isBusy = false
   @Published private(set) var message: String?
+  @Published private(set) var savedScanName: String?
   @Published private(set) var activeSession: MapLabSessionController?
   private let store: any MapLabStoring
   private let makeDriver: @MainActor () -> any MapLabDriving
@@ -19,7 +20,7 @@ final class MapLabLibrary: ObservableObject {
   func refresh() async {
     guard !closed, activeSession == nil else { return }
     generation += 1; let token = generation
-    isBusy = true; message = nil
+    isBusy = true; message = nil; savedScanName = nil
     do {
       let saved = try await store.list()
       guard current(token) else { return }
@@ -34,13 +35,14 @@ final class MapLabLibrary: ObservableObject {
   func newScan() {
     guard !closed, !isBusy, activeSession == nil else { return }
     guard scans.count < MapLabBundle.maximumMaps else { message = MapLabFailure.libraryFull.errorDescription; return }
+    savedScanName = nil
     activeSession = MapLabSessionController(mode: .capture, driver: makeDriver(), store: store)
   }
 
   func testScan(_ id: UUID) async {
     guard !closed, !isBusy, activeSession == nil else { return }
     generation += 1; let token = generation
-    isBusy = true; message = nil
+    isBusy = true; message = nil; savedScanName = nil
     do {
       let bundle = try await store.load(id: id)
       try await Task.detached(priority: .userInitiated) { try bundle.validate() }.value
@@ -74,6 +76,11 @@ final class MapLabLibrary: ObservableObject {
     guard activeSession?.id == id, !closed else { return }
     activeSession = nil
     await refresh()
+    // A completed write must also appear in the persisted listing before the
+    // library confirms it. Cancelled sessions and failed refreshes cannot claim success.
+    if !closed, case .saved(let bundle) = session.completion, scans.contains(bundle.summary), message == nil {
+      savedScanName = bundle.summary.name
+    }
   }
 
   /// Root's Done callback can follow only after this awaited camera boundary.

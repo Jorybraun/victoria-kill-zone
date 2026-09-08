@@ -21,6 +21,15 @@ struct MapLabLibraryView: View {
             .foregroundStyle(VKZPalette.textMuted)
           Button { library.newScan() } label: { Label("NEW SCAN", systemImage: "viewfinder") }
             .buttonStyle(VKZPrimaryButtonStyle()).disabled(library.isBusy || closing)
+          if let savedName = library.savedScanName {
+            VStack(alignment: .leading, spacing: 8) {
+              Label("Saved \(savedName) on this phone.", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(VKZPalette.ready)
+              Text("Choose TEST SCAN below to check whether this phone recognizes the room.")
+                .font(.subheadline).foregroundStyle(VKZPalette.textMuted)
+            }
+            .accessibilityElement(children: .combine)
+          }
           if library.isBusy { ProgressView("Opening scans…").frame(maxWidth: .infinity, minHeight: 44) }
           if let message = library.message {
             VStack(alignment: .leading, spacing: 8) {
@@ -161,6 +170,7 @@ private struct MapLabSessionView: View {
               .disabled(controller.isBusy)
             Button("SAVE SCAN") { Task { await controller.save() } }
               .buttonStyle(VKZPrimaryButtonStyle()).disabled(!controller.canSave)
+              .opacity(controller.canSave ? 1 : 0.5)
           } else {
             Text("Recognition on this phone only. Multiplayer alignment is tested separately.")
               .font(.footnote).foregroundStyle(VKZPalette.textMuted)
@@ -173,10 +183,10 @@ private struct MapLabSessionView: View {
     }
     .foregroundStyle(VKZPalette.text)
     .task {
-      await controller.setSceneActive(scenePhase == .active)
+      await controller.setScenePhase(scenePhase)
       await controller.start()
     }
-    .onChange(of: scenePhase) { _, next in Task { await controller.setSceneActive(next == .active) } }
+    .onChange(of: scenePhase) { _, next in Task { await controller.setScenePhase(next) } }
     .onChange(of: controller.completion) { _, completion in
       guard completion != nil, !sentCompletion else { return }
       sentCompletion = true; onFinished()

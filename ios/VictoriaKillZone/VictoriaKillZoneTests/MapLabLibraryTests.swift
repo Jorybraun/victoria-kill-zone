@@ -4,6 +4,43 @@ import XCTest
 
 @MainActor
 final class MapLabLibraryTests: XCTestCase {
+  func testSavedScanSurvivesFreshLibraryAndDiskStoreThenLoadsIntoRecognition() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("map-lab-reopen-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let camera = MapLabTestDriver()
+    // The store writes real files; only AR map encoding/recognition uses fixture data.
+    let original = MapLabLibrary(store: LocalMapLabStore(rootDirectory: root, validateWorldMap: { _ in }), makeDriver: { camera })
+    await original.refresh(); original.newScan()
+    let capture = try XCTUnwrap(original.activeSession)
+    await capture.start(); capture.name = "Living room"
+    camera.emit(.scanning(feedback: .ready, canSave: true))
+    await capture.save(); await original.sessionFinished(capture.id)
+    XCTAssertEqual(original.savedScanName, "Living room")
+    let saved = try XCTUnwrap(original.scans.first)
+    await original.close()
+
+    let recognitionCamera = MapLabTestDriver()
+    let reopened = MapLabLibrary(store: LocalMapLabStore(rootDirectory: root, validateWorldMap: { _ in }),
+      makeDriver: { recognitionCamera })
+    await reopened.refresh()
+    XCTAssertEqual(reopened.scans, [saved]); XCTAssertNil(reopened.savedScanName)
+    await reopened.testScan(saved.id)
+    let recognition = try XCTUnwrap(reopened.activeSession)
+    await recognition.start()
+    XCTAssertEqual(recognitionCamera.recognitionBytes, [camera.bytes])
+    XCTAssertEqual(recognition.state, .recognizing, "Loading saved bytes alone cannot claim that the room was recognized")
+    await reopened.close()
+  }
+
+  func testCancelledScanNeverShowsSaveConfirmation() async throws {
+    let library = MapLabLibrary(store: MapLabTestStore(), makeDriver: { MapLabTestDriver() })
+    await library.refresh(); library.newScan()
+    let session = try XCTUnwrap(library.activeSession)
+    await session.start(); await session.close(); await library.sessionFinished(session.id)
+    XCTAssertNil(library.savedScanName); XCTAssertTrue(library.scans.isEmpty)
+    await library.close()
+  }
+
   func testOfflineNewScanNeedsOnlyLocalStoreAndDriverThenRefreshesAfterSave() async throws {
     let camera = MapLabTestDriver(), store = MapLabTestStore()
     let library = MapLabLibrary(store: store, makeDriver: { camera })

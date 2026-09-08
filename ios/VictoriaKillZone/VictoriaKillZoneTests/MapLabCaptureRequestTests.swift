@@ -4,6 +4,58 @@ import XCTest
 
 @MainActor
 final class MapLabCaptureRequestTests: XCTestCase {
+  func testCompletedArchiveSurvivesScanQualityDipAfterFreshReadyCaptureStarted() async throws {
+    for tracking in [MapLabFrameTracking.normal, .limited(.moveSlowly)] {
+      var policy = MapLabFramePolicy()
+      let token = policy.begin(.capture, at: 0)
+      policy.receive(MapLabFrameSample(timestamp: 0.1, capturedAt: 0.1, tracking: .normal, usableMap: true),
+        generation: token, at: 0.1)
+      XCTAssertEqual(policy.state, .scanning(feedback: .ready, canSave: true))
+      let owner = MapLabCaptureRequest(), request = UUID()
+      let capture = Task { try await withCheckedThrowingContinuation { owner.begin(request, continuation: $0) } }
+      try await until { owner.contains(request) }
+
+      // The archive is still encoding when another delivered camera frame makes
+      // a new capture unavailable. Finish through the driver's actual boundary.
+      policy.receive(MapLabFrameSample(timestamp: 0.2, capturedAt: 0.2, tracking: tracking, usableMap: false),
+        generation: token, at: 0.2)
+      let expectedFeedback: MapLabFeedback = tracking == .normal ? .mapping : .moveSlowly
+      XCTAssertEqual(policy.state, .scanning(feedback: expectedFeedback, canSave: false))
+      XCTAssertTrue(owner.finishArchive(.success(Data([1, 2, 3])), request: request, state: policy.state))
+      let bytes = try await capture.value
+      XCTAssertEqual(bytes, Data([1, 2, 3]))
+      XCTAssertNil(owner.activeID)
+      XCTAssertEqual(policy.state, .scanning(feedback: expectedFeedback, canSave: false),
+        "Saving already captured bytes must not renew camera readiness")
+    }
+  }
+
+  func testArchiveCompletionCannotSucceedAfterScanAttemptStopsInterruptsOrTimesOut() async throws {
+    let cases: [(MapLabSessionState, MapLabFailure)] = [
+      (.idle, .notReady), (.interrupted, .interrupted), (.failed(.timedOut), .timedOut),
+      (.recognizing, .notReady), (.recognized, .notReady),
+    ]
+    for (state, expected) in cases {
+      let owner = MapLabCaptureRequest(), request = UUID()
+      let capture = Task { try await withCheckedThrowingContinuation { owner.begin(request, continuation: $0) } }
+      try await until { owner.contains(request) }
+      XCTAssertTrue(owner.finishArchive(.success(Data([1])), request: request, state: state))
+      do { _ = try await capture.value; XCTFail("Archive completion cannot succeed in \(state)") }
+      catch { XCTAssertEqual(error as? MapLabFailure, expected) }
+      XCTAssertNil(owner.activeID)
+    }
+  }
+
+  func testArchiveFailureRemainsAnErrorWhenCurrentScanReadinessDrops() async throws {
+    let owner = MapLabCaptureRequest(), request = UUID()
+    let capture = Task { try await withCheckedThrowingContinuation { owner.begin(request, continuation: $0) } }
+    try await until { owner.contains(request) }
+    XCTAssertTrue(owner.finishArchive(.failure(MapLabFailure.mapTooLarge), request: request,
+      state: .scanning(feedback: .mapping, canSave: false)))
+    do { _ = try await capture.value; XCTFail("A scan-quality dip must not hide the archive failure") }
+    catch { XCTAssertEqual(error as? MapLabFailure, .mapTooLarge) }
+  }
+
   func testTimeoutThenRetryRejectsOldMapArchiveTimerAndCancellationCompletions() async throws {
     let owner = MapLabCaptureRequest(), a = UUID(), b = UUID()
     let first = Task {
@@ -24,16 +76,19 @@ final class MapLabCaptureRequestTests: XCTestCase {
     // These are the same request checks and continuation completion boundary used
     // by getCurrentWorldMap, archive completion, timeout and cancellation in the driver.
     XCTAssertFalse(owner.contains(a), "A late map callback cannot launch an archive for B")
-    XCTAssertFalse(owner.finish(.success(Data([1])), request: a), "A late archive cannot resolve B")
+    XCTAssertFalse(owner.finishArchive(.success(Data([1])), request: a,
+      state: .scanning(feedback: .ready, canSave: true)), "A late archive cannot resolve B")
     XCTAssertFalse(owner.finish(.failure(MapLabFailure.timedOut), request: a), "A late timer cannot time out B")
     XCTAssertFalse(owner.finish(.failure(CancellationError()), request: a), "A late cancellation cannot cancel B")
     XCTAssertFalse(retryResolved)
     XCTAssertTrue(owner.contains(b))
-    XCTAssertTrue(owner.finish(.success(Data([2])), request: b))
+    XCTAssertTrue(owner.finishArchive(.success(Data([2])), request: b,
+      state: .scanning(feedback: .mapping, canSave: false)))
     let result = try await retry.value
     XCTAssertEqual(result, Data([2]))
     XCTAssertTrue(retryResolved); XCTAssertNil(owner.activeID)
-    XCTAssertFalse(owner.finish(.success(Data([3])), request: b), "A completed request cannot resume twice")
+    XCTAssertFalse(owner.finishArchive(.success(Data([3])), request: b,
+      state: .scanning(feedback: .ready, canSave: true)), "A completed request cannot resume twice")
   }
 
   func testOverlappingCaptureIsRejectedWithoutReplacingItsCurrentContinuation() async throws {

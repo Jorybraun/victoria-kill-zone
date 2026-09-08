@@ -5,6 +5,49 @@ import XCTest
 
 @MainActor
 final class MapLabSessionTests: XCTestCase {
+  func testInactivePermissionPromptDoesNotAbandonCameraStartup() async throws {
+    let gate = MapLabTestGate(), camera = MapLabTestDriver()
+    camera.startGate = gate
+    let controller = MapLabSessionController(mode: .capture, driver: camera, store: MapLabTestStore())
+    // A view can first appear during the system's inactive transition.
+    await controller.setScenePhase(.inactive)
+    let starting = Task { await controller.start() }
+    try await until { await gate.entered }
+    await controller.setScenePhase(.inactive)
+    XCTAssertEqual(controller.phase, .starting)
+    XCTAssertEqual(camera.stops, 0)
+    await controller.setScenePhase(.active)
+    await gate.release(); await starting.value
+    XCTAssertEqual(controller.phase, .live)
+    XCTAssertTrue(camera.running); XCTAssertNil(controller.message)
+    await controller.close()
+  }
+
+  func testInactiveOverlayDuringCapturePreservesSaveButBackgroundStillCancels() async throws {
+    for background in [false, true] {
+      let gate = MapLabTestGate(), camera = MapLabTestDriver(), store = MapLabTestStore()
+      camera.captureGate = gate
+      let controller = MapLabSessionController(mode: .capture, driver: camera, store: store)
+      await ready(controller, camera)
+      let saving = Task { await controller.save() }
+      try await until { await gate.entered }
+      await controller.setScenePhase(.inactive)
+      XCTAssertEqual(controller.phase, .saving)
+      XCTAssertEqual(camera.stops, 0)
+      let transition = Task { await controller.setScenePhase(background ? .background : .active) }
+      if background { try await until { camera.stops == 1 } }
+      await gate.release(); await saving.value; await transition.value
+      let names = await store.savedNames
+      XCTAssertEqual(names, background ? [] : ["Room"])
+      if background {
+        XCTAssertEqual(controller.phase, .paused); XCTAssertNil(controller.completion)
+      } else {
+        guard case .saved = controller.completion else { return XCTFail("Inactive transition discarded the saved scan") }
+      }
+      await controller.close()
+    }
+  }
+
   func testCaptureSaveReturnsOnlyAfterCameraHasStopped() async throws {
     let camera = MapLabTestDriver(), store = MapLabTestStore()
     let controller = MapLabSessionController(mode: .capture, driver: camera, store: store)
