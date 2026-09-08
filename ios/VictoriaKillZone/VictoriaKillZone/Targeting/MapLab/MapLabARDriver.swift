@@ -16,6 +16,20 @@ final class MapLabCaptureRequest {
 
   func contains(_ id: UUID) -> Bool { activeID == id }
 
+  /// Capture readiness was checked before requesting this immutable map. A
+  /// later scan-quality dip cannot erase it, but ending the attempt still can.
+  @discardableResult
+  func finishArchive(_ result: Result<Data, Error>, request id: UUID, state: MapLabSessionState) -> Bool {
+    let completion: Result<Data, Error>
+    switch state {
+    case .scanning: completion = result
+    case .failed(let failure): completion = .failure(failure)
+    case .interrupted: completion = .failure(MapLabFailure.interrupted)
+    default: completion = .failure(MapLabFailure.notReady)
+    }
+    return finish(completion, request: id)
+  }
+
   @discardableResult
   func finish(_ result: Result<Data, Error>, request id: UUID) -> Bool {
     guard activeID == id else { return false }
@@ -162,10 +176,7 @@ final class MapLabARDriver: MapLabDriving {
               guard self.generation == token, !Task.isCancelled,
                 self.captureRequest.contains(request) else { return }
               self.policy.tick(at: self.uptime); self.publishPolicy()
-              guard case .scanning(_, true) = self.state else {
-                self.finishCapture(.failure(MapLabFailure.notReady), request: request); return
-              }
-              self.finishCapture(result, request: request)
+              self.finishCapture(result, request: request, archiveState: self.state)
             }
           }
         }
@@ -244,8 +255,11 @@ final class MapLabARDriver: MapLabDriving {
     guard let request = captureRequest.activeID else { return }
     finishCapture(result, request: request)
   }
-  private func finishCapture(_ result: Result<Data, Error>, request: UUID) {
-    guard captureRequest.finish(result, request: request) else { return }
+  private func finishCapture(_ result: Result<Data, Error>, request: UUID, archiveState: MapLabSessionState? = nil) {
+    let finished: Bool
+    if let archiveState { finished = captureRequest.finishArchive(result, request: request, state: archiveState) }
+    else { finished = captureRequest.finish(result, request: request) }
+    guard finished else { return }
     captureTimeout?.cancel(); captureTimeout = nil
     archiveTasks[request]?.cancel()
   }
