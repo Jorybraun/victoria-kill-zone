@@ -14,6 +14,7 @@ struct RealtimeReferencePanel: View {
   let imageData: Data?
   var onCapture: (() -> Void)? = nil
   var onShare: (() -> Void)? = nil
+  var captureAvailable = true
   @State private var thumbnail: Image?
 
   var body: some View {
@@ -32,10 +33,18 @@ struct RealtimeReferencePanel: View {
             Text("Keep this in view during play.").font(.caption).foregroundStyle(VKZPalette.pending)
           }
         }
-        if let onShare {Button("Share arena scan", action: onShare).buttonStyle(VKZPrimaryButtonStyle())}
-        if let onCapture {Button("Choose another reference", action: onCapture).font(.subheadline.bold()).frame(minHeight: 44)}
+        if let onShare {
+          Button(captureAvailable ? "Share arena scan" : "Waiting for tracking…", action: onShare)
+            .buttonStyle(VKZPrimaryButtonStyle()).opacity(captureAvailable ? 1 : 0.5)
+            .disabled(!captureAvailable)
+        }
+        if let onCapture {
+          Button("Choose another reference", action: onCapture).font(.subheadline.bold()).frame(minHeight: 44)
+            .opacity(captureAvailable ? 1 : 0.5)
+            .disabled(!captureAvailable)
+        }
       } else if let onCapture {
-        Text("Center a flat, textured rectangle already in the area, such as a sign or mural. Move close, face it straight on, and hold steady.")
+        Text("Use a fixed picture or sign with clear detail. Center all four corners, face it straight on, and hold still. Every phone needs to see this reference during play.")
           .font(.subheadline).foregroundStyle(VKZPalette.textMuted).fixedSize(horizontal: false, vertical: true)
         if case .failed(let failure) = state {
           Text(Self.guidance(for: failure)).font(.caption.bold()).foregroundStyle(VKZPalette.pending)
@@ -44,10 +53,11 @@ struct RealtimeReferencePanel: View {
         Button(action: onCapture) {
           HStack(spacing: 8) {
             if state == .capturing {ProgressView().tint(VKZPalette.background)}
-            Text(state == .capturing ? "Measuring reference…" : "Capture reference")
+            Text(state == .capturing ? "Measuring reference…" : captureAvailable ? "Capture reference" : "Waiting for tracking…")
           }
         }
-        .buttonStyle(VKZPrimaryButtonStyle()).disabled(state == .capturing)
+        .buttonStyle(VKZPrimaryButtonStyle()).disabled(!captureAvailable || state == .capturing)
+        .opacity(captureAvailable || state == .capturing ? 1 : 0.5)
       }
     }
     .onAppear(perform: decodeThumbnail)

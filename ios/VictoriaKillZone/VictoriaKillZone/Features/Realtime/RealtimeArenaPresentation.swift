@@ -3,6 +3,18 @@ import Foundation
 /// Player-facing descriptions derived from accepted state. These helpers never
 /// change authority eligibility, cooldowns, damage, or projectile timing.
 enum RealtimeArenaPresentation {
+  struct ReferenceSetup: Equatable {
+    let isVisible: Bool
+    let captureAvailable: Bool
+
+    init(stage: RealtimeArenaStage, isHost: Bool, usesSavedArena: Bool) {
+      // Keep the next action in place while mapping quality changes. Visibility
+      // is presentation only; actual capture still requires a usable live map.
+      isVisible = isHost && !usesSavedArena && [.mapping, .mapReady].contains(stage)
+      captureAvailable = isVisible && stage == .mapReady
+    }
+  }
+
   enum AbilityStatus: Equatable {
     case active(seconds: Int)
     case cooldown(seconds: Int)

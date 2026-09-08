@@ -59,7 +59,9 @@ final class DuelFrameProvider: ObservableObject {
       throw DuelFrameFailure.referenceUnavailable
     }
     let bytes = try await targeting.captureFrameMap(epoch: token.epoch)
-    guard policy.accepts(token), snapshot.stage == .mapReady else { throw DuelFrameFailure.operationSuperseded }
+    // The driver validates capture quality. Later scan fluctuations do not
+    // invalidate its result; replacement or loss of this mapping run does.
+    guard policy.accepts(token) else { throw DuelFrameFailure.operationSuperseded }
     return try DuelFrameMap(epoch: token.epoch,
       bytes: DuelFrameCalibrationBundle.encode(worldMap: bytes, reference: reference))
   }
@@ -72,7 +74,7 @@ final class DuelFrameProvider: ObservableObject {
     referenceState = .capturing
     do {
       let reference = try await targeting.captureFrameReference(epoch: token.epoch)
-      guard policy.accepts(token), snapshot.stage == .mapReady else { throw DuelFrameFailure.operationSuperseded }
+      guard policy.accepts(token) else { throw DuelFrameFailure.operationSuperseded }
       guard reference.isValid else { throw DuelFrameFailure.referenceUnsuitable }
       capturedReference = reference
       referenceState = .captured(reference.summary)
