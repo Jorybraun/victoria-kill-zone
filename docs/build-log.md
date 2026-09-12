@@ -10,6 +10,12 @@ Integration stops and releases the MapLab watchdog on failed or interrupted poli
 
 This is the integration-owned, evidence-based status record. Append observed results; do not paste secrets, signing material, unique device identifiers, or unsanitized logs.
 
+## PR #43 authority integration — 2026-09-07
+
+Integration combined the existing host-authority candidate with main `b453f0b`. Its additive verdict/snapshot transport cases exposed an exhaustive-switch compile failure in the app arena mapper. The mapper now leaves those messages to the authority channel. A regression supplies arena-shaped payloads under both authority kinds, verifies neither is consumed, then verifies the real arena frame remains decodable.
+
+Local `pnpm verify:ios` passed: simulation, transport and authority packages; 330 app tests with zero failures and one existing physical-device-only skip; Debug app/test-target and Release app builds. Two earlier attempts stopped because the local disk filled; their failures are not passing evidence. Completed task-generated caches were removed and the full clean retry passed. The existing candidate remains separate from the production backend selection; no physical multiplayer, production authority switch or deployment is claimed. Current main has since advanced through #71/#72 and must be integrated and reverified before publication/merge.
+
 ## PR #70 review correction — 2026-09-07
 
 Integration corrected the saved-arena management entry: only create-match mode can select an arena or render the lobby creation action. Management retains scanning and deletion; saving a scan does not select it for a match. The management heading and accessibility hint describe preparation rather than match creation.

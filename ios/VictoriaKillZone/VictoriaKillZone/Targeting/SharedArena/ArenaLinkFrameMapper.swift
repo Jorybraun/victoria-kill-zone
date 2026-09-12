@@ -92,6 +92,10 @@ struct ArenaLinkFrameMapper {
       }
     case .bulkChunk:
       return nil
+    case .verdict, .snapshot:
+      // CombatAuthority owns these payloads; the arena channel must not
+      // interpret them as calibration or legacy tracer messages.
+      return nil
     }
   }
 

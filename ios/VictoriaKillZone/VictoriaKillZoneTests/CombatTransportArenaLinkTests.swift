@@ -5,6 +5,21 @@ import XCTest
 @testable import VictoriaKillZone
 
 final class CombatTransportArenaLinkTests: XCTestCase {
+  func testArenaMapperDoesNotConsumeAuthorityMessages() throws {
+    var sender = ArenaLinkFrameMapper(senderSlot: 0, epoch: 1)
+    var receiver = ArenaLinkFrameMapper(senderSlot: 1, epoch: 1)
+    let fire = try XCTUnwrap(sender.outbound(.shotRetracted(shotId: "separate-channel")).first)
+    for kind in [ReliableEventKind.verdict, .snapshot] {
+      let authority = ReliableEventFrame(epoch: fire.epoch, senderSlot: fire.senderSlot,
+        sequence: fire.sequence, eventKind: kind, payload: fire.payload)
+      XCTAssertNil(receiver.inbound(authority))
+    }
+    guard case .shotRetracted(let shotId) = receiver.inbound(fire) else {
+      return XCTFail("The real arena frame must remain decodable")
+    }
+    XCTAssertEqual(shotId, "separate-channel")
+  }
+
   func testBothAdaptersReachConnected() {
     let pair = makePair()
     let hostConnected = expectation(description: "host connected")

@@ -1,5 +1,7 @@
-import CryptoKit
 import Foundation
+#if canImport(CryptoKit)
+import CryptoKit
+#endif
 
 public struct PeerLinkStateMachine: Equatable, Sendable {
   public enum Role: Equatable, Sendable {
@@ -138,7 +140,7 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
     var nonceLE = nonce.littleEndian
     withUnsafeBytes(of: &nonceLE) { input.append(contentsOf: $0) }
     input.append(claimedSlot)
-    return Data(SHA256.hash(data: input))
+    return SHA256Digest.hash(input)
   }
 
   public static func pairingDigest(
@@ -149,7 +151,7 @@ public struct PeerLinkStateMachine: Equatable, Sendable {
     var input = Data(preSharedKey)
     input.append(token)
     input.append(claimedSlot)
-    return Data(SHA256.hash(data: input))
+    return SHA256Digest.hash(input)
   }
 
   public static func makePairingClaim(

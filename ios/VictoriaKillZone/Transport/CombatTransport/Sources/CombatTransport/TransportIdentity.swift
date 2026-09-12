@@ -1,6 +1,4 @@
 import Foundation
-import Network
-import Security
 
 /// TLS credential for the QUIC peer session.
 ///
@@ -9,11 +7,17 @@ import Security
 /// external PSK (`-9858`), so the session is authenticated by a certificate
 /// identity supplied by the embedding app and pinned by public key on clients.
 public protocol TransportIdentityProvider: Sendable {
+  #if canImport(Security)
   /// Host-side identity presented during the QUIC handshake.
   func localIdentity() -> sec_identity_t?
+  #endif
   /// Public-key bytes (`SecKeyCopyExternalRepresentation`) clients pin.
   var pinnedPublicKey: Data { get }
 }
+
+#if canImport(Network)
+import Network
+import Security
 
 public enum TransportSecurity {
   public static func publicKeyBytes(of certificate: SecCertificate) -> Data? {
@@ -56,3 +60,4 @@ public enum TransportSecurity {
     )
   }
 }
+#endif
