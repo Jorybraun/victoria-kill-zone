@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import {
   deploymentConfig, parseSecrets, validateIdentity, deploymentResult,
   validateHealth, runCombatDeploy,
@@ -38,7 +39,7 @@ for (const override of [
   { VKZ_CANDIDATE_SHA: "invalid" }, { VKZ_GITHUB_TOKEN: "" },
   { CLOUDFLARE_ACCOUNT_ID: "" }, { VKZ_CONVEX_CONFIGURATION_CONFIRMED: "false" },
   { VKZ_COMBAT_EVIDENCE_PATH: "relative.json" },
-  { VKZ_COMBAT_EVIDENCE_PATH: new URL("./fixture-evidence.json", import.meta.url).pathname },
+  { VKZ_COMBAT_EVIDENCE_PATH: fileURLToPath(new URL("./fixture-evidence.json", import.meta.url)) },
 ]) assert.throws(() => deploymentConfig({ ...environment, ...override }));
 
 assert.ok(Object.keys(parseSecrets(JSON.stringify(secrets))).length === 2);
