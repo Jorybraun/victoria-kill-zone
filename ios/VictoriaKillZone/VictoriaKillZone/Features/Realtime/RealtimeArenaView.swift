@@ -326,9 +326,10 @@ struct RealtimeArenaView: View {
       if controller.stage == .respawning {
         Text("\(seconds(until: controller.localPlayer?.respawnAtMs ?? 0))").font(.system(.largeTitle, design: .rounded, weight: .black)).monospacedDigit()
       }
-      if controller.stage == .mapReady && controller.isHost && controller.savedArenaName == nil {
+      if referenceSetup.isVisible {
         RealtimeReferencePanel(state: controller.referenceState, imageData: controller.referenceImageData,
-          onCapture: controller.captureReference, onShare: controller.captureAndShareMap)
+          onCapture: controller.captureReference, onShare: controller.captureAndShareMap,
+          captureAvailable: referenceSetup.captureAvailable)
       } else if [.relocalizing, .measuringReference, .paused, .awaitingMembers].contains(controller.stage) {
         RealtimeReferencePanel(state: controller.referenceState, imageData: controller.referenceImageData)
       }
@@ -382,6 +383,9 @@ struct RealtimeArenaView: View {
     if let issue = controller.connectionIssue {return issue}
     if let message = controller.message {return message}
     if case .failed(let explanation) = controller.mapState {return explanation}
+    if referenceSetup.isVisible && controller.referenceState == .capturing {
+      return "Hold still while the reference is measured."
+    }
     if let initialScan {return initialScan.guidance}
     if let name = controller.savedArenaName, [.mapping, .mapReady, .relocalizing].contains(controller.stage) {
       return "Loading \(name). Point at the fixed objects you scanned so your phone can recognize this arena."
@@ -391,7 +395,9 @@ struct RealtimeArenaView: View {
     }
     switch controller.stage {
     case .mapping: return "Move slowly around the play area, keeping the floor, walls and fixed objects in view. Avoid aiming only at a blank wall."
-    case .mapReady: return "The area is scanned. Hold still and capture a fixed object that every player can recognize."
+    case .mapReady:
+      if case .captured = controller.referenceState {return "Reference captured. Share the scan so the other phones can align with this play area."}
+      return "Ready to capture. Choose a reference below so the phones can align with the same play area."
     case .waitingForMap: return "Waiting for the host’s arena scan. Stay nearby; it will load automatically."
     case .transferringMap: return "Keep this screen open while the shared arena scan transfers."
     case .relocalizing: return "Point at the same fixed objects the host scanned. Move slowly until the camera recognizes the area."
@@ -410,6 +416,7 @@ struct RealtimeArenaView: View {
   }
   private var stageTitle: String {
     if controller.connectionIssue != nil {return "Connection needs attention"}
+    if referenceSetup.isVisible {return "Set up play area"}
     if let initialScan {return initialScan.title}
     if scanTimedOut {return "Scan needs another try"}
     if controller.stage == .paused && !controller.combat.clockReady {return "Synchronizing match"}
@@ -420,6 +427,9 @@ struct RealtimeArenaView: View {
   }
   private var scanTimedOut: Bool {
     controller.connection == .connected && controller.frame.failure == .mappingTimedOut
+  }
+  private var referenceSetup: RealtimeArenaPresentation.ReferenceSetup {
+    .init(stage: controller.stage, isHost: controller.isHost, usesSavedArena: controller.savedArenaName != nil)
   }
   private var initialScan: ArenaScanPresentation? {
     guard controller.connection == .connected, controller.isHost, controller.savedArenaName == nil,

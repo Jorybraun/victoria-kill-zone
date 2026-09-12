@@ -121,6 +121,108 @@ final class DuelFrameReferenceTests: XCTestCase {
 
 @MainActor
 final class DuelFrameReferenceProviderTests: XCTestCase {
+  func testCompletedReferenceSurvivesTemporaryMappingRegression() async throws {
+    let capture = ReferenceCaptureSuspension(), clock = ReferenceTestClock()
+    let driver = ReferenceFrameDriver(referenceCapture: capture)
+    let provider = DuelFrameProvider(targeting: driver, now: { clock.now })
+    addTeardownBlock { await provider.stop() }
+    try await provider.beginCalibration(epoch: 1)
+    await driver.emit(phase: .mapping, tracking: .normal, mapped: true, at: clock.advance())
+
+    let task = Task { try await provider.captureReference() }
+    await capture.waitForRequest()
+    await driver.emit(phase: .mapping, tracking: .normal, mapped: false, at: clock.advance())
+    XCTAssertEqual(provider.snapshot.stage, .mapping)
+    XCTAssertEqual(provider.referenceState, .capturing)
+    await capture.complete()
+
+    let summary = try await task.value
+    XCTAssertEqual(provider.referenceState, .captured(summary))
+    XCTAssertEqual(provider.referenceImageData, try makeFrameReference().imageData)
+    XCTAssertEqual(provider.snapshot.stage, .mapping, "Capture success must not claim current map readiness")
+    XCTAssertFalse(provider.snapshot.permitsSpatialFire(at: clock.now))
+  }
+
+  func testCompletedMapSurvivesTemporaryTrackingRegression() async throws {
+    let capture = ReferenceCaptureSuspension(), clock = ReferenceTestClock()
+    let driver = ReferenceFrameDriver(mapCapture: capture)
+    let provider = DuelFrameProvider(targeting: driver, now: { clock.now })
+    addTeardownBlock { await provider.stop() }
+    try await provider.beginCalibration(epoch: 1)
+    await driver.emit(phase: .mapping, tracking: .normal, mapped: true, at: clock.advance())
+    let reference = try await provider.captureReference()
+
+    let task = Task { try await provider.captureMap() }
+    await capture.waitForRequest()
+    await driver.emit(phase: .mapping, tracking: .limited, mapped: true, at: clock.advance())
+    XCTAssertEqual(provider.snapshot.stage, .mapping)
+    await capture.complete()
+
+    let map = try await task.value
+    XCTAssertEqual(map.reference?.summary, reference)
+    XCTAssertEqual(map.worldMapBytes, Data([1, 2, 3]))
+    XCTAssertEqual(provider.referenceState, .captured(reference))
+    XCTAssertEqual(provider.snapshot.stage, .mapping)
+    XCTAssertFalse(provider.snapshot.permitsSpatialFire(at: clock.now))
+  }
+
+  func testLateReferenceCannotReplaceStateAfterMappingRunEnds() async throws {
+    for end in MappingRunEnd.allCases {
+      let capture = ReferenceCaptureSuspension(), clock = ReferenceTestClock()
+      let driver = ReferenceFrameDriver(referenceCapture: capture)
+      let provider = DuelFrameProvider(targeting: driver, now: { clock.now })
+      addTeardownBlock { await provider.stop() }
+      try await provider.beginCalibration(epoch: 1)
+      await driver.emit(phase: .mapping, tracking: .normal, mapped: true, at: clock.advance())
+      let task = Task { try await provider.captureReference() }
+      await capture.waitForRequest()
+      try await end.apply(to: provider)
+      let snapshot = provider.snapshot, referenceState = provider.referenceState
+      let image = provider.referenceImageData
+      await capture.complete()
+
+      do {
+        _ = try await task.value
+        XCTFail("A late reference must be rejected after \(end)")
+      } catch {
+        XCTAssertEqual(error as? DuelFrameFailure, .operationSuperseded, "\(end)")
+      }
+      XCTAssertEqual(provider.snapshot, snapshot, "\(end)")
+      XCTAssertEqual(provider.referenceState, referenceState, "\(end)")
+      XCTAssertEqual(provider.referenceImageData, image, "\(end)")
+      XCTAssertFalse(provider.snapshot.permitsSpatialFire(at: clock.now))
+      await provider.stop()
+    }
+  }
+
+  func testLateMapCannotEscapeAfterMappingRunEnds() async throws {
+    for end in MappingRunEnd.allCases {
+      let capture = ReferenceCaptureSuspension(), clock = ReferenceTestClock()
+      let driver = ReferenceFrameDriver(mapCapture: capture)
+      let provider = DuelFrameProvider(targeting: driver, now: { clock.now })
+      addTeardownBlock { await provider.stop() }
+      try await provider.beginCalibration(epoch: 1)
+      await driver.emit(phase: .mapping, tracking: .normal, mapped: true, at: clock.advance())
+      try await provider.captureReference()
+      let task = Task { try await provider.captureMap() }
+      await capture.waitForRequest()
+      try await end.apply(to: provider)
+      let snapshot = provider.snapshot, referenceState = provider.referenceState
+      await capture.complete()
+
+      do {
+        _ = try await task.value
+        XCTFail("A late map must be rejected after \(end)")
+      } catch {
+        XCTAssertEqual(error as? DuelFrameFailure, .operationSuperseded, "\(end)")
+      }
+      XCTAssertEqual(provider.snapshot, snapshot, "\(end)")
+      XCTAssertEqual(provider.referenceState, referenceState, "\(end)")
+      XCTAssertFalse(provider.snapshot.permitsSpatialFire(at: clock.now))
+      await provider.stop()
+    }
+  }
+
   func testHostMustCaptureReferenceBeforeArchivingAndBundleContainsActualDriverResult() async throws {
     let driver = ReferenceFrameDriver(), clock = ReferenceTestClock()
     let active = DuelFrameProvider(targeting: driver, now: { clock.now })
@@ -231,14 +333,28 @@ private final class ReferenceTestClock {
 
 private final class ReferenceFrameDriver: DuelFrameSessionDriving, @unchecked Sendable {
   private let source = ReferenceObservationSource()
+  private let referenceCapture: ReferenceCaptureSuspension?
+  private let mapCapture: ReferenceCaptureSuspension?
+
+  init(referenceCapture: ReferenceCaptureSuspension? = nil, mapCapture: ReferenceCaptureSuspension? = nil) {
+    self.referenceCapture = referenceCapture
+    self.mapCapture = mapCapture
+  }
+
   func duelFrameObservations() -> AsyncStream<DuelFrameObservation> {
     AsyncStream(unfolding: { [source] in await source.next() })
   }
   func beginFrameMapping(epoch: UInt16) async throws {}
   func installFrameMap(_ map: DuelFrameMap, phase: DuelFrameSessionPhase) async throws {}
   func endFrameMapping() async { await source.finish() }
-  func captureFrameReference(epoch: UInt16) async throws -> DuelFrameReference { try makeFrameReference() }
-  func captureFrameMap(epoch: UInt16) async throws -> Data { Data([1, 2, 3]) }
+  func captureFrameReference(epoch: UInt16) async throws -> DuelFrameReference {
+    await referenceCapture?.suspend()
+    return try makeFrameReference()
+  }
+  func captureFrameMap(epoch: UInt16) async throws -> Data {
+    await mapCapture?.suspend()
+    return Data([1, 2, 3])
+  }
   @MainActor
   func emit(map: DuelFrameMap? = nil, phase: DuelFrameSessionPhase, tracking: DuelFrameTracking,
     mapped: Bool = false, reference: DuelFrameReferenceObservation? = nil, at date: Date,
@@ -250,6 +366,47 @@ private final class ReferenceFrameDriver: DuelFrameSessionDriving, @unchecked Se
       observedAt: date, failure: nil, referenceObservation: reference), consumed: consumed)
     let result = await XCTWaiter.fulfillment(of: [consumed], timeout: 1)
     XCTAssertEqual(result, .completed, "Provider must finish processing before the next sensor event", file: file, line: line)
+  }
+}
+
+private enum MappingRunEnd: CaseIterable {
+  case stop, recalibrate, install, permanentLoss
+
+  @MainActor
+  func apply(to provider: DuelFrameProvider) async throws {
+    switch self {
+    case .stop: await provider.stop()
+    case .recalibrate: try await provider.beginCalibration(epoch: 2)
+    case .install:
+      let map = try DuelFrameMap(epoch: 1, bytes: DuelFrameCalibrationBundle.encode(
+        worldMap: Data([9]), reference: makeFrameReference()))
+      try await provider.installMap(map)
+    case .permanentLoss: provider.invalidate(reason: .sessionInterrupted)
+    }
+  }
+}
+
+/// Completes a driver capture only after a test has delivered the intervening state.
+private actor ReferenceCaptureSuspension {
+  private var pending: CheckedContinuation<Void, Never>?
+  private var requestWaiters: [CheckedContinuation<Void, Never>] = []
+
+  func suspend() async {
+    await withCheckedContinuation { continuation in
+      pending = continuation
+      requestWaiters.forEach { $0.resume() }
+      requestWaiters.removeAll()
+    }
+  }
+
+  func waitForRequest() async {
+    if pending != nil { return }
+    await withCheckedContinuation { requestWaiters.append($0) }
+  }
+
+  func complete() {
+    pending?.resume()
+    pending = nil
   }
 }
 
