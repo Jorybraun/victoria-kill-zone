@@ -65,7 +65,9 @@
 		AE0DB34F0A784EB332C639F7 /* DuelFrameModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D85B1581DC7043312A2F5F3 /* DuelFrameModels.swift */; };
 		DF7754BF4D9CB81AB5319E43 /* DuelFramePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 552EF9E0A6ACAE0FE038BB24 /* DuelFramePolicy.swift */; };
 		98430F39C0573B1CFC1CC94A /* DuelFrameProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A12B84FA719C41A0D1C0802 /* DuelFrameProvider.swift */; };
+		0E7A3B1C9D4F5E2A8B6C4D10 /* DuelFrameDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F8B4C2DAE5F6E3B9C7D5E21 /* DuelFrameDiagnostics.swift */; };
 		1C837AA0C6E438ABDB66E399 /* DuelFramePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CC0422002E75C2F96FB947A /* DuelFramePolicyTests.swift */; };
+		2G9C5D3EBF6F7F4CAD8E6F32 /* DuelFrameDiagnosticsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3HAD6E4FCG7G8G5DBE9F7G43 /* DuelFrameDiagnosticsTests.swift */; };
 		4B9266AAA0392F139CDD2824 /* RealtimeCombatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC6BA0DA13B39C9E2D61222C /* RealtimeCombatTests.swift */; };
 		5C5DB7C340E880F6A3E05BDF /* RealtimeCombatFX.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EF59390EBB4F144CFE9FE51 /* RealtimeCombatFX.swift */; };
 		87D85F48E4703E9E9AD23519 /* SkeletonAnatomyLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9B798B7EF9951EE79134342 /* SkeletonAnatomyLayout.swift */; };
@@ -212,7 +214,9 @@
 		9D85B1581DC7043312A2F5F3 /* DuelFrameModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Targeting/SharedArena/DuelFrame/DuelFrameModels.swift"; sourceTree = SOURCE_ROOT; };
 		552EF9E0A6ACAE0FE038BB24 /* DuelFramePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Targeting/SharedArena/DuelFrame/DuelFramePolicy.swift"; sourceTree = SOURCE_ROOT; };
 		4A12B84FA719C41A0D1C0802 /* DuelFrameProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Targeting/SharedArena/DuelFrame/DuelFrameProvider.swift"; sourceTree = SOURCE_ROOT; };
+		1F8B4C2DAE5F6E3B9C7D5E21 /* DuelFrameDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Targeting/SharedArena/DuelFrame/DuelFrameDiagnostics.swift"; sourceTree = SOURCE_ROOT; };
 		8CC0422002E75C2F96FB947A /* DuelFramePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/DuelFramePolicyTests.swift"; sourceTree = SOURCE_ROOT; };
+		3HAD6E4FCG7G8G5DBE9F7G43 /* DuelFrameDiagnosticsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/DuelFrameDiagnosticsTests.swift"; sourceTree = SOURCE_ROOT; };
 		FC6BA0DA13B39C9E2D61222C /* RealtimeCombatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/RealtimeCombatTests.swift"; sourceTree = SOURCE_ROOT; };
 		5EF59390EBB4F144CFE9FE51 /* RealtimeCombatFX.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Game/RealtimeCombatFX.swift"; sourceTree = SOURCE_ROOT; };
 		F9B798B7EF9951EE79134342 /* SkeletonAnatomyLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Game/SkeletonAnatomyLayout.swift"; sourceTree = SOURCE_ROOT; };
@@ -339,6 +343,7 @@
 			children = (
 				FC6BA0DA13B39C9E2D61222C /* RealtimeCombatTests.swift */,
 				8CC0422002E75C2F96FB947A /* DuelFramePolicyTests.swift */,
+				3HAD6E4FCG7G8G5DBE9F7G43 /* DuelFrameDiagnosticsTests.swift */,
 				G00100000000000000000003 /* App */,
 				G00100000000000000000004 /* Domain */,
 				G00100000000000000000005 /* Services */,
@@ -444,6 +449,7 @@
 				F9B798B7EF9951EE79134342 /* SkeletonAnatomyLayout.swift */,
 				5EF59390EBB4F144CFE9FE51 /* RealtimeCombatFX.swift */,
 				4A12B84FA719C41A0D1C0802 /* DuelFrameProvider.swift */,
+				1F8B4C2DAE5F6E3B9C7D5E21 /* DuelFrameDiagnostics.swift */,
 				552EF9E0A6ACAE0FE038BB24 /* DuelFramePolicy.swift */,
 				9D85B1581DC7043312A2F5F3 /* DuelFrameModels.swift */,
 				0DAE45AD9CE3B5B2D0BB044D /* DuelFrameARSupport.swift */,
@@ -724,6 +730,7 @@
 				87D85F48E4703E9E9AD23519 /* SkeletonAnatomyLayout.swift in Sources */,
 				5C5DB7C340E880F6A3E05BDF /* RealtimeCombatFX.swift in Sources */,
 				98430F39C0573B1CFC1CC94A /* DuelFrameProvider.swift in Sources */,
+				0E7A3B1C9D4F5E2A8B6C4D10 /* DuelFrameDiagnostics.swift in Sources */,
 				DF7754BF4D9CB81AB5319E43 /* DuelFramePolicy.swift in Sources */,
 				AE0DB34F0A784EB332C639F7 /* DuelFrameModels.swift in Sources */,
 				68D2AF92F9F6239DDE5D3F86 /* DuelFrameARSupport.swift in Sources */,
@@ -806,6 +813,7 @@
 				A588F37D1B1E6B6884B1D4E1 /* ArenaShotTracerTests.swift in Sources */,
 				4B9266AAA0392F139CDD2824 /* RealtimeCombatTests.swift in Sources */,
 				1C837AA0C6E438ABDB66E399 /* DuelFramePolicyTests.swift in Sources */,
+				2G9C5D3EBF6F7F4CAD8E6F32 /* DuelFrameDiagnosticsTests.swift in Sources */,
 				B0010000000000000000000D /* LobbyStateMachineTests.swift in Sources */,
 				B00300000000000000000003 /* DuelInviteLinkTests.swift in Sources */,
 				B00400000000000000000004 /* DuelSessionTests.swift in Sources */,
