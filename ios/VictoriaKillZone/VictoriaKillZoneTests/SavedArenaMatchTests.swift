@@ -130,7 +130,7 @@ final class SavedArenaMatchTests: XCTestCase {
 private actor SavedMatchCamera: DuelFrameSessionDriving {
   private(set) var installed: [DuelFrameMap] = []
   nonisolated func duelFrameObservations() -> AsyncStream<DuelFrameObservation> { AsyncStream { $0.finish() } }
-  func beginFrameMapping(epoch: UInt16) async throws {}
+  func beginFrameMapping(epoch: UInt16, mode: DuelFrameAlignmentMode) async throws {}
   func captureFrameMap(epoch: UInt16) async throws -> Data { throw DuelFrameFailure.unsupported }
   func installFrameMap(_ map: DuelFrameMap, phase: DuelFrameSessionPhase) async throws { installed.append(map) }
   func endFrameMapping() async {}

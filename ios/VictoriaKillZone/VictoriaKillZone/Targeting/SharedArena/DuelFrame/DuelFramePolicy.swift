@@ -26,12 +26,14 @@ struct DuelFramePolicy: Sendable {
     operationToken == token && snapshot.stage != .unaligned && snapshot.stage != .lost
   }
 
-  mutating func beginCalibration(epoch: UInt16, captureRequired: Bool = true, at now: Date = Date()) throws {
+  mutating func beginCalibration(epoch: UInt16, captureRequired: Bool = true,
+    mode: DuelFrameAlignmentMode = .measured, at now: Date = Date()
+  ) throws {
     guard epoch > 0 else { throw DuelFrameFailure.invalidEpoch }
     guard epoch > latestEpoch else { throw DuelFrameFailure.staleEpoch }
     generation &+= 1
     latestEpoch = epoch
-    snapshot = DuelFrameSnapshot(stage: .mapping, epoch: epoch)
+    snapshot = DuelFrameSnapshot(stage: .mapping, epoch: epoch, mode: mode)
     resetEvidence()
     self.captureRequired = captureRequired
     phaseDeadline = captureRequired ? now.addingTimeInterval(Self.mappingTimeout) : nil
@@ -40,9 +42,11 @@ struct DuelFramePolicy: Sendable {
   mutating func beginInstall(_ map: DuelFrameMap, at now: Date) throws {
     guard snapshot.epoch == map.epoch, map.epoch == latestEpoch else { throw DuelFrameFailure.staleEpoch }
     guard snapshot.stage == .mapping || snapshot.stage == .mapReady else { throw DuelFrameFailure.mapNotReady }
+    let mode = snapshot.mode
     generation &+= 1
     resetEvidence()
-    snapshot = DuelFrameSnapshot(stage: .relocalizingWorld, epoch: map.epoch, frameID: map.frameID)
+    snapshot = DuelFrameSnapshot(stage: .relocalizingWorld, epoch: map.epoch, frameID: map.frameID,
+      mode: mode)
     phaseDeadline = now.addingTimeInterval(Self.relocalizationTimeout)
   }
 
@@ -80,7 +84,10 @@ struct DuelFramePolicy: Sendable {
       return false
     }
     guard observation.frameID == snapshot.frameID else { return false }
-    let expectedPhase: DuelFrameSessionPhase = snapshot.stage == .relocalizingWorld
+    // Relocalized mode never installs the body configuration, so world-phase
+    // frames remain the live evidence for the rest of the match.
+    let expectedPhase: DuelFrameSessionPhase =
+      snapshot.stage == .relocalizingWorld || snapshot.mode == .relocalized
       ? .worldRelocalization : .bodyRelocalization
     guard observation.phase == expectedPhase else { return false }
     lastObservationAt = observation.observedAt
@@ -91,6 +98,13 @@ struct DuelFramePolicy: Sendable {
         Self.isFresh(pose.capturedAt, at: now)
       else { return false }
       if snapshot.stage == .relocalizingWorld {
+        if snapshot.mode == .relocalized {
+          snapshot.stage = .aligned
+          snapshot.localPose = pose
+          phaseDeadline = nil
+          sawRelocalizing = false
+          return false
+        }
         snapshot.stage = .relocalizingBody
         sawRelocalizing = false
         phaseDeadline = now.addingTimeInterval(Self.relocalizationTimeout)
@@ -105,10 +119,24 @@ struct DuelFramePolicy: Sendable {
     guard observation.tracking == .normal, let pose = observation.pose, pose.isValid,
       Self.isFresh(pose.capturedAt, at: now)
     else {
-      invalidate(reason: .trackingLost)
+      if snapshot.mode == .relocalized {
+        let reason: DuelFrameFailure = observation.tracking == .normal ? .stalePose : .trackingLimited
+        let alreadyLimited = snapshot.stage == .degraded && snapshot.failure == .trackingLimited
+        degrade(reason: reason)
+        if reason == .trackingLimited && !alreadyLimited {
+          phaseDeadline = now.addingTimeInterval(Self.relocalizationTimeout)
+        }
+      } else {
+        invalidate(reason: .trackingLost)
+      }
       return false
     }
     snapshot.localPose = pose
+    if snapshot.mode == .relocalized && snapshot.stage != .awaitingResidual {
+      snapshot.stage = .aligned
+      snapshot.failure = nil
+      phaseDeadline = nil
+    }
     return false
   }
 
