@@ -45,7 +45,8 @@ export const prepare = mutation({
     await ctx.db.patch(match._id, {
       status:"active",phase:"running",startsAt:null,startedAt:null,endsAt:null,
       combatPreparedAt:now,combatFrameEpoch:1,combatAuthorityEpoch:1,combatProjectionSequence:0,
-      combatPhase:"calibrating",combatRulesJson:JSON.stringify(DEFAULT_RULES),updatedAt:now,
+      combatPhase:"calibrating",updatedAt:now,
+      combatRulesJson:JSON.stringify({...DEFAULT_RULES, geometry:match.combatGeometry ?? DEFAULT_RULES.geometry}),
     });
     return null;
   },
