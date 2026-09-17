@@ -49,4 +49,5 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SESSION_URL: ${{ steps.devin.outputs.url }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-        run: gh issue comment "$ISSUE_NUMBER" --body "Devin session: $SESSION_URL" --repo "$GITHUB_REPOSITORY"
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --body "Devin session: $SESSION_URL" --repo "$GITHUB_REPOSITORY"
