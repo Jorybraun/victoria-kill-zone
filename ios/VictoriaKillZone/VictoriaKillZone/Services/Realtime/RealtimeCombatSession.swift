@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import os
 
 enum RealtimeConnectionState: Equatable {case disconnected, connecting, synchronizing, connected, retrying, finished}
 
@@ -7,7 +8,19 @@ enum RealtimeConnectionState: Equatable {case disconnected, connecting, synchron
 /// clock synchronization and the replica consumed by the game presentation.
 @MainActor
 final class RealtimeCombatSession: ObservableObject {
-  @Published private(set) var state: RealtimeConnectionState = .disconnected
+  /// Streams connection and verdict transitions to unified logging in all
+  /// builds — physical trials read them live in Console.app under subsystem
+  /// com.victoriakillzone.combat. Detail stays match-scoped: no session
+  /// secrets, ticket fields or player identifiers.
+  private static let logger = Logger(subsystem: "com.victoriakillzone.combat", category: "session")
+
+  @Published private(set) var state: RealtimeConnectionState = .disconnected {
+    didSet {
+      if oldValue != state {
+        Self.logger.info("connection \(String(describing: oldValue), privacy: .public) -> \(String(describing: self.state), privacy: .public)")
+      }
+    }
+  }
   @Published private(set) var snapshot: CombatWire.Snapshot?
   @Published private(set) var events: [CombatWire.ServerEvent] = []
   @Published private(set) var clockReady = false
@@ -254,6 +267,16 @@ final class RealtimeCombatSession: ObservableObject {
         if !fresh.isEmpty {events=fresh}
         for event in fresh {
           if case .commandResult(_,_,let player,false,let reason)=event.event, player == session?.playerId {refusal=reason}
+          switch event.event {
+          case .commandResult(_,_,let player,let accepted,let reason) where player == session?.playerId:
+            Self.logger.info("command \(accepted ? "accepted" : "rejected", privacy: .public) \(reason ?? "", privacy: .public)")
+          case .projectileSpawn(let projectile) where projectile.shooterId == session?.playerId:
+            Self.logger.info("shot out spawned")
+          case .projectileTerminal(let terminal):
+            let side = terminal.shooterId == session?.playerId ? "out" : (terminal.targetPlayerId == session?.playerId ? "in" : "other")
+            Self.logger.info("shot \(side, privacy: .public) \(terminal.reason, privacy: .public) dmg=\(terminal.damage)")
+          default: break
+          }
         }
         if snapshot?.phase == .finished {state = .finished}
         try await transport?.send(.received(eventSequence:replica.eventSequence))
