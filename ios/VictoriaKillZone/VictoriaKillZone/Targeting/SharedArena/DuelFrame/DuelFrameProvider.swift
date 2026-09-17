@@ -7,13 +7,19 @@ import Foundation
 @MainActor
 final class DuelFrameProvider: ObservableObject {
   @Published private(set) var snapshot = DuelFrameSnapshot()
-  @Published private(set) var referenceState: DuelFrameReferenceState = .unavailable
+  @Published private(set) var referenceState: DuelFrameReferenceState = .unavailable {
+    didSet { recordReferenceChange(from: oldValue) }
+  }
   private let targeting: any DuelFrameSessionDriving
   private let now: @MainActor () -> Date
   private var policy = DuelFramePolicy()
   private var installedMap: DuelFrameMap?
   private var capturedReference: DuelFrameReference?
   private var referencePolicy = DuelFrameReferencePolicy()
+  private var diagnostics: DuelFrameDiagnostics
+  private var lastTrackingDiagnostic: (tracking: DuelFrameTracking, mapped: Bool)?
+  private var calibrationStartedAt: Date?
+  private var installStartedAt: Date?
   var referenceImageData: Data? { installedMap?.reference?.imageData ?? capturedReference?.imageData }
   private var observationsTask: Task<Void, Never>?
   private var watchdogTask: Task<Void, Never>?
@@ -21,6 +27,7 @@ final class DuelFrameProvider: ObservableObject {
   init(targeting: any DuelFrameSessionDriving, now: @escaping @MainActor () -> Date = Date.init) {
     self.targeting = targeting
     self.now = now
+    self.diagnostics = DuelFrameDiagnostics(startedAt: now())
     let observations = targeting.duelFrameObservations()
     observationsTask = Task { [weak self] in
       for await observation in observations {
@@ -39,6 +46,9 @@ final class DuelFrameProvider: ObservableObject {
     mode: DuelFrameAlignmentMode = .measured
   ) async throws {
     try policy.beginCalibration(epoch: epoch, captureRequired: captureRequired, mode: mode, at: now())
+    diagnostics.reset(at: now())
+    diagnostics.record("stage", "beginCalibration epoch=\(epoch) captureRequired=\(captureRequired) mode=\(mode)", at: now())
+    calibrationStartedAt = now(); installStartedAt = nil; lastTrackingDiagnostic = nil
     installedMap = nil
     capturedReference = nil
     referenceState = .unavailable
@@ -103,6 +113,7 @@ final class DuelFrameProvider: ObservableObject {
   /// ARKit relocalizes in world tracking before a second, map-seeded body run.
   func installMap(_ map: DuelFrameMap) async throws {
     try policy.beginInstall(map, at: now())
+    installStartedAt = now()
     installedMap = map
     referenceState = map.reference.map { .captured($0.summary) } ?? .unavailable
     referencePolicy = DuelFrameReferencePolicy()
@@ -124,12 +135,13 @@ final class DuelFrameProvider: ObservableObject {
     yawDegrees: Double, observedAt: Date
   ) throws {
     defer { publish() }
-    try policy.recordResidual(frameID: frameID, epoch: epoch, translationMeters: translationMeters,
-      yawDegrees: yawDegrees, observedAt: observedAt, now: now())
+    try applyResidual(frameID: frameID, epoch: epoch, translationMeters: translationMeters,
+      yawDegrees: yawDegrees, observedAt: observedAt, at: now())
   }
 
   func invalidate(reason: DuelFrameFailure) {
     policy.invalidate(reason: reason)
+    diagnostics.record("failure", reason.rawValue, at: now())
     installedMap = nil
     capturedReference = nil
     referenceState = .unavailable
@@ -150,15 +162,16 @@ final class DuelFrameProvider: ObservableObject {
 
   private func receive(_ observation: DuelFrameObservation) async {
     let evaluatedAt = now()
+    recordTracking(observation, at: evaluatedAt)
     let switchToBody = policy.ingest(observation, at: evaluatedAt)
     if observation.phase == .bodyRelocalization, observation.epoch == snapshot.epoch,
       observation.frameID == snapshot.frameID {
       if let expected = installedMap?.reference, let sample = observation.referenceObservation {
         do {
           if let residual = try referencePolicy.measure(sample, expected: expected, now: evaluatedAt) {
-            try policy.recordResidual(frameID: observation.frameID!, epoch: observation.epoch,
+            try applyResidual(frameID: observation.frameID!, epoch: observation.epoch,
               translationMeters: residual.translationMeters, yawDegrees: residual.yawDegrees,
-              observedAt: residual.observedAt, now: evaluatedAt)
+              observedAt: residual.observedAt, at: evaluatedAt)
           }
         } catch DuelFrameFailure.residualExceeded {
           // recordResidual already revoked readiness; preserve its useful reason.
@@ -191,14 +204,77 @@ final class DuelFrameProvider: ObservableObject {
     guard policy.accepts(token) else { return }
     let failure = error as? DuelFrameFailure ?? .cameraUnavailable
     policy.invalidate(reason: failure)
+    diagnostics.record("failure", failure.rawValue, at: now())
     installedMap = nil
     capturedReference = nil
     referenceState = .failed(failure)
     publish()
   }
 
+  func exportDiagnostics() throws -> URL { try diagnostics.export() }
+
   private func publish() {
-    if snapshot != policy.snapshot { snapshot = policy.snapshot }
+    let previous = snapshot
+    guard previous != policy.snapshot else { return }
+    snapshot = policy.snapshot
+    let at = now()
+    if previous.stage != snapshot.stage {
+      var detail = "\(previous.stage.rawValue) -> \(snapshot.stage.rawValue)"
+      if let failure = snapshot.failure { detail += " (\(failure.rawValue))" }
+      diagnostics.record("stage", detail, at: at)
+      if snapshot.stage == .mapReady, let started = calibrationStartedAt {
+        diagnostics.record("timing", "mapReady after \(Int64(at.timeIntervalSince(started) * 1000))ms", at: at)
+        calibrationStartedAt = nil
+      }
+      if snapshot.stage == .aligned, let started = installStartedAt {
+        diagnostics.record("timing", "aligned after \(Int64(at.timeIntervalSince(started) * 1000))ms", at: at)
+        installStartedAt = nil
+      }
+    }
+    if previous.scanFeedback != snapshot.scanFeedback {
+      diagnostics.record("scanFeedback", "\(snapshot.scanFeedback)", at: at)
+    }
+  }
+
+  private func recordTracking(_ observation: DuelFrameObservation, at: Date) {
+    let current = (tracking: observation.tracking, mapped: observation.isMapped)
+    if let last = lastTrackingDiagnostic, last == current { return }
+    lastTrackingDiagnostic = current
+    diagnostics.record("tracking",
+      "\(observation.tracking) mapped=\(observation.isMapped) phase=\(observation.phase)", at: at)
+  }
+
+  private func applyResidual(frameID: String, epoch: UInt16, translationMeters: Double,
+    yawDegrees: Double, observedAt: Date, at: Date) throws {
+    let outcome: String
+    do {
+      try policy.recordResidual(frameID: frameID, epoch: epoch, translationMeters: translationMeters,
+        yawDegrees: yawDegrees, observedAt: observedAt, now: at)
+      outcome = "accepted"
+    } catch {
+      outcome = (error as? DuelFrameFailure).map { $0 == .residualExceeded ? "exceeded" : $0.rawValue } ?? "error"
+      diagnostics.record("residual",
+        String(format: "t=%.3fm yaw=%.2fdeg %@", translationMeters, yawDegrees, outcome), at: at)
+      throw error
+    }
+    diagnostics.record("residual",
+      String(format: "t=%.3fm yaw=%.2fdeg %@", translationMeters, yawDegrees, outcome), at: at)
+  }
+
+  private func recordReferenceChange(from old: DuelFrameReferenceState) {
+    guard old != referenceState else { return }
+    let detail: String
+    switch referenceState {
+    case .unavailable: detail = "unavailable"
+    case .capturing: detail = "capturing"
+    case .captured(let summary):
+      let reference = capturedReference ?? installedMap?.reference
+      detail = String(format: "captured w=%.3fm h=%.3fm samples=%d deviation=%.3fm",
+        summary.widthMeters, summary.heightMeters,
+        reference?.sampleCount ?? 0, reference?.maximumCornerDeviationMeters ?? 0)
+    case .failed(let failure): detail = "failed \(failure.rawValue)"
+    }
+    diagnostics.record("reference", detail, at: now())
   }
 }
 

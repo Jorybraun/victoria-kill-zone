@@ -266,6 +266,10 @@ final class RealtimeArenaController: ObservableObject {
     guard let frameProvider else {throw DuelFrameFailure.unsupported}
     try frameProvider.recordResidual(frameID: frameID, epoch: epoch, translationMeters: translationMeters, yawDegrees: yawDegrees, observedAt: observedAt)
   }
+  func exportSetupLog() throws -> URL {
+    guard let frameProvider else {throw DuelFrameFailure.unsupported}
+    return try frameProvider.exportDiagnostics()
+  }
   func retryConnection() {setTriggerHeld(false); combat.retryConnection()}
   func beginRound() {
     guard eligibility.begin, let id = combat.submit(.start) else {return}
