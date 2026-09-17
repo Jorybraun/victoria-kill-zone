@@ -28,7 +28,7 @@ struct ArenaLinkFrameMapper {
   mutating func outbound(_ message: ArenaLinkMessage) throws -> [ReliableEventFrame] {
     let encoded = try ArenaLinkBodyCodec.encode(message)
     switch message {
-    case .hello, .poseSample, .anchorSet, .experiment:
+    case .hello, .poseSample, .anchorSet:
       if encoded.body.count <= Self.controlBodyLimit {
         return [nextFrame(kind: .control, payload: Data([encoded.kind]) + encoded.body)]
       }
