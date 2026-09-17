@@ -485,6 +485,91 @@ final class DuelFrameRelocalizedTests: XCTestCase {
   }
 }
 
+final class DuelFrameCollaborativeTests: XCTestCase {
+  private let base = Date(timeIntervalSince1970: 1_000)
+  private let matrix: [Double] = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+
+  func testCollaborativeWaitsForPeerMergeWithoutDeadline() throws {
+    var policy = try collaborativeWaiting()
+    // Normal tracking alone is not a merge; a peer anchor must appear.
+    ingest(&policy, tracking: .normal, mergedPeers: 0, time: 0.3)
+    XCTAssertEqual(policy.snapshot.stage, .relocalizingWorld)
+    XCTAssertFalse(policy.snapshot.permitsSpatialFire(at: base.addingTimeInterval(0.3)))
+    // Arriving late from an unmapped room must never time out.
+    policy.tick(at: base.addingTimeInterval(120))
+    XCTAssertEqual(policy.snapshot.stage, .relocalizingWorld)
+  }
+
+  func testPeerAnchorAlignsAndPermitsFireWithoutResidualOrRelocalizing() throws {
+    var policy = try collaborativeWaiting()
+    XCTAssertFalse(ingest(&policy, tracking: .normal, mergedPeers: 1, time: 0.4),
+      "Collaborative mode must never request the body configuration run")
+    XCTAssertEqual(policy.snapshot.stage, .aligned)
+    XCTAssertNil(policy.snapshot.residual)
+    XCTAssertTrue(policy.snapshot.permitsSpatialFire(at: base.addingTimeInterval(0.4)))
+  }
+
+  func testPeerAnchorLeavingDoesNotUnmergeAnAlignedSession() throws {
+    var policy = try collaborativeAligned()
+    ingest(&policy, tracking: .normal, mergedPeers: 0, time: 0.5)
+    XCTAssertEqual(policy.snapshot.stage, .aligned)
+    XCTAssertTrue(policy.snapshot.permitsSpatialFire(at: base.addingTimeInterval(0.5)))
+  }
+
+  func testTrackingDipDegradesAndRecoversWithoutDeadline() throws {
+    var policy = try collaborativeAligned()
+    ingest(&policy, tracking: .limited, mergedPeers: 1, time: 0.5)
+    XCTAssertEqual(policy.snapshot.stage, .degraded)
+    XCTAssertEqual(policy.snapshot.failure, .trackingLimited)
+    policy.tick(at: base.addingTimeInterval(60))
+    XCTAssertEqual(policy.snapshot.stage, .degraded,
+      "No relocalization deadline applies to a merged session")
+    ingest(&policy, tracking: .normal, mergedPeers: 0, time: 60.1)
+    XCTAssertEqual(policy.snapshot.stage, .aligned)
+    XCTAssertNil(policy.snapshot.failure)
+  }
+
+  func testCollaborativeRejectsResidualsAndMapInstalls() throws {
+    var policy = try collaborativeWaiting()
+    XCTAssertThrowsError(try policy.recordResidual(frameID: "collab-1", epoch: 1,
+      translationMeters: 0, yawDegrees: 0, observedAt: base, now: base)) {
+      XCTAssertEqual($0 as? DuelFrameFailure, .invalidResidual)
+    }
+    XCTAssertThrowsError(try policy.beginInstall(try DuelFrameMap(epoch: 1, bytes: Data([1])), at: base)) {
+      XCTAssertEqual($0 as? DuelFrameFailure, .mapNotReady)
+    }
+  }
+
+  private func collaborativeWaiting() throws -> DuelFramePolicy {
+    var policy = DuelFramePolicy()
+    try policy.beginCalibration(epoch: 1, captureRequired: false, mode: .collaborative, at: base)
+    XCTAssertEqual(policy.snapshot.stage, .relocalizingWorld)
+    XCTAssertEqual(policy.snapshot.frameID, "collab-1")
+    XCTAssertEqual(policy.snapshot.mode, .collaborative)
+    return policy
+  }
+
+  private func collaborativeAligned() throws -> DuelFramePolicy {
+    var policy = try collaborativeWaiting()
+    ingest(&policy, tracking: .normal, mergedPeers: 1, time: 0.4)
+    XCTAssertEqual(policy.snapshot.stage, .aligned)
+    return policy
+  }
+
+  @discardableResult
+  private func ingest(_ policy: inout DuelFramePolicy, tracking: DuelFrameTracking,
+    mergedPeers: Int, time: Double) -> Bool {
+    let date = base.addingTimeInterval(time)
+    var observation = DuelFrameObservation(epoch: 1,
+      frameID: DuelFramePolicy.collaborativeFrameID(epoch: 1),
+      phase: .worldRelocalization, tracking: tracking, isMapped: true,
+      pose: tracking == .normal ? DuelFramePose(columnMajor: matrix, capturedAt: date, frameTimestamp: time) : nil,
+      observedAt: date, failure: nil)
+    observation.mergedPeers = mergedPeers
+    return policy.ingest(observation, at: date)
+  }
+}
+
 @MainActor
 final class DuelFrameProviderTests: XCTestCase {
   func testGuestProviderDoesNotExpireWhileWaitingForHostMap() async throws {
@@ -563,6 +648,21 @@ final class DuelFrameProviderTests: XCTestCase {
     await provider.stop()
   }
 
+  func testCollaborationPassthroughReachesTheDriver() async throws {
+    let driver = DelayedDuelFrameDriver()
+    let provider = DuelFrameProvider(targeting: driver)
+    let outputs = provider.collaborationOutputs()
+    driver.emitCollaboration(Data([9, 9, 9]))
+    var iterator = outputs.makeAsyncIterator()
+    let first = await iterator.next()
+    XCTAssertEqual(first, Data([9, 9, 9]), "Collaboration deltas must arrive in order, undropped")
+    await provider.applyCollaboration(Data([7]))
+    await provider.applyCollaboration(Data([8]))
+    let applied = await driver.appliedCollaboration()
+    XCTAssertEqual(applied, [Data([7]), Data([8])])
+    await provider.stop()
+  }
+
   func testMeasuredCaptureMapStillRequiresACapturedReference() async throws {
     let driver = DelayedDuelFrameDriver()
     let provider = DuelFrameProvider(targeting: driver)
@@ -588,10 +688,16 @@ private final class MappingTestClock {
 
 private actor DelayedDuelFrameDriver: DuelFrameSessionDriving {
   nonisolated let hub = DuelFrameObservationHub()
+  nonisolated let collaborationHub = DuelFrameStreamHub<Data>(buffering: .unbounded)
   private var capture: CheckedContinuation<Data, any Error>?
   private var captureWaiters: [CheckedContinuation<Void, Never>] = []
+  private var applied: [Data] = []
 
   nonisolated func duelFrameObservations() -> AsyncStream<DuelFrameObservation> { hub.stream() }
+  nonisolated func duelFrameCollaboration() -> AsyncStream<Data> { collaborationHub.stream() }
+  func applyFrameCollaboration(_ data: Data) async throws { applied.append(data) }
+  func appliedCollaboration() -> [Data] { applied }
+  nonisolated func emitCollaboration(_ data: Data) { collaborationHub.yield(data) }
   func beginFrameMapping(epoch: UInt16, mode: DuelFrameAlignmentMode) async throws {}
   func installFrameMap(_ map: DuelFrameMap, phase: DuelFrameSessionPhase) async throws {}
   func endFrameMapping() async {}

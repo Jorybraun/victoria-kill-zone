@@ -840,6 +840,7 @@ enum TargetingSessionFactory {
       arSession.pause()
       snapshotHub.finish()
       duelFrameState.hub.finish()
+      duelFrameState.collaborationHub.finish()
     }
 
     func snapshots() -> AsyncStream<TargetingSnapshot> {
@@ -1368,6 +1369,15 @@ enum TargetingSessionFactory {
     }
 
     func sessionShouldAttemptRelocalization(_ session: ARSession) -> Bool { true }
+
+    func session(_ session: ARSession, didOutputCollaborationData data: ARSession.CollaborationData) {
+      guard session === arSession, duelFrameState.configuration != nil,
+        duelFrameState.alignmentMode == .collaborative,
+        let archived = try? NSKeyedArchiver.archivedData(withRootObject: data, requiringSecureCoding: true),
+        archived.count <= DuelFrameCollaboration.maximumBytes
+      else { return }
+      duelFrameState.collaborationHub.yield(archived)
+    }
   }
 
   extension ARVisionTargetingSession: DuelFrameSessionDriving {
@@ -1375,10 +1385,33 @@ enum TargetingSessionFactory {
       duelFrameState.hub.stream()
     }
 
+    func duelFrameCollaboration() -> AsyncStream<Data> {
+      duelFrameState.collaborationHub.stream()
+    }
+
+    func applyFrameCollaboration(_ data: Data) async throws {
+      try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+        sessionQueue.async { [self] in
+          guard runRequested, !isBackgrounded,
+            duelFrameState.alignmentMode == .collaborative,
+            duelFrameState.configuration != nil,
+            !data.isEmpty, data.count <= DuelFrameCollaboration.maximumBytes,
+            let collaboration = try? NSKeyedUnarchiver.unarchivedObject(
+              ofClass: ARSession.CollaborationData.self, from: data)
+          else {
+            continuation.resume(throwing: DuelFrameFailure.invalidCollaboration)
+            return
+          }
+          arSession.update(with: collaboration)
+          continuation.resume()
+        }
+      }
+    }
+
     func beginFrameMapping(epoch: UInt16, mode: DuelFrameAlignmentMode) async throws {
       guard epoch > 0 else { throw DuelFrameFailure.invalidEpoch }
       guard ARWorldTrackingConfiguration.isSupported,
-        mode == .relocalized || ARBodyTrackingConfiguration.isSupported
+        !mode.usesBodyPhase || ARBodyTrackingConfiguration.isSupported
       else {
         throw DuelFrameFailure.unsupported
       }
@@ -1396,11 +1429,17 @@ enum TargetingSessionFactory {
           let configuration = ARWorldTrackingConfiguration()
           configuration.worldAlignment = .gravity
           configuration.planeDetection = [.horizontal, .vertical]
+          configuration.isCollaborationEnabled = mode == .collaborative
           duelFrameState.reference = nil
           duelFrameState.alignmentMode = mode
+          // Collaborative sessions have nothing to scan: they merge with
+          // peers and run the targeting pipeline from the first frame.
           runDuelFrameConfiguration(configuration,
-            metadata: DuelFrameSessionConfiguration(epoch: epoch, frameID: nil, phase: .mapping,
-              processesTargeting: false))
+            metadata: DuelFrameSessionConfiguration(epoch: epoch,
+              frameID: mode == .collaborative
+                ? DuelFramePolicy.collaborativeFrameID(epoch: epoch) : nil,
+              phase: mode == .collaborative ? .worldRelocalization : .mapping,
+              processesTargeting: mode == .collaborative))
           continuation.resume()
         }
       }
@@ -1726,10 +1765,12 @@ enum TargetingSessionFactory {
         ? (try? ArenaRigidTransform.rigidApproximation(columnMajor: raw)).map {
           DuelFramePose(columnMajor: $0.columnMajor, capturedAt: capturedAt, frameTimestamp: frame.timestamp)
         } : nil
+      let mergedPeers = frame.anchors.reduce(0) { $0 + ($1 is ARParticipantAnchor ? 1 : 0) }
       duelFrameState.hub.yield(DuelFrameObservation(epoch: configuration.epoch, frameID: configuration.frameID,
         phase: configuration.phase, tracking: tracking,
         isMapped: DuelFrameMapCaptureEligibility.permits(mapping: frame.worldMappingStatus, tracking: frame.camera.trackingState),
-        pose: pose, observedAt: now, failure: nil, referenceObservation: duelFrameState.latestReferenceObservation,
+        pose: pose, observedAt: now, failure: nil, mergedPeers: mergedPeers,
+        referenceObservation: duelFrameState.latestReferenceObservation,
         scanFeedback: DuelFrameMapCaptureEligibility.feedback(mapping: frame.worldMappingStatus, tracking: frame.camera.trackingState)))
     }
 

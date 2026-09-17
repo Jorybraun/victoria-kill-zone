@@ -8,6 +8,10 @@ struct DuelFramePolicy: Sendable {
   static let relocalizationTimeout: TimeInterval = 15
   static let requiredGoodResiduals = 3
 
+  /// Collaborative sessions share one synthesized identity per epoch so the
+  /// same stage/fire invariants hold without a frozen map hash.
+  static func collaborativeFrameID(epoch: UInt16) -> String { "collab-\(epoch)" }
+
   private(set) var snapshot = DuelFrameSnapshot()
   private var generation: UInt64 = 0
   private var latestEpoch: UInt16 = 0
@@ -33,10 +37,15 @@ struct DuelFramePolicy: Sendable {
     guard epoch > latestEpoch else { throw DuelFrameFailure.staleEpoch }
     generation &+= 1
     latestEpoch = epoch
-    snapshot = DuelFrameSnapshot(stage: .mapping, epoch: epoch, mode: mode)
+    // Collaborative sessions wait on a peer merge, not a scan, and carry no
+    // deadline: arriving late from an unmapped room must not time out.
+    snapshot = DuelFrameSnapshot(stage: mode.installsMap ? .mapping : .relocalizingWorld,
+      epoch: epoch, frameID: mode.installsMap ? nil : Self.collaborativeFrameID(epoch: epoch),
+      mode: mode)
     resetEvidence()
     self.captureRequired = captureRequired
-    phaseDeadline = captureRequired ? now.addingTimeInterval(Self.mappingTimeout) : nil
+    phaseDeadline = captureRequired && mode.installsMap
+      ? now.addingTimeInterval(Self.mappingTimeout) : nil
   }
 
   mutating func beginInstall(_ map: DuelFrameMap, at now: Date) throws {
@@ -84,21 +93,23 @@ struct DuelFramePolicy: Sendable {
       return false
     }
     guard observation.frameID == snapshot.frameID else { return false }
-    // Relocalized mode never installs the body configuration, so world-phase
-    // frames remain the live evidence for the rest of the match.
+    // Only measured mode installs the body configuration; every other mode
+    // keeps world-phase frames as the live evidence for the whole match.
     let expectedPhase: DuelFrameSessionPhase =
-      snapshot.stage == .relocalizingWorld || snapshot.mode == .relocalized
+      snapshot.stage == .relocalizingWorld || !snapshot.mode.usesBodyPhase
       ? .worldRelocalization : .bodyRelocalization
     guard observation.phase == expectedPhase else { return false }
     lastObservationAt = observation.observedAt
 
     if snapshot.stage == .relocalizingWorld || snapshot.stage == .relocalizingBody {
       if observation.tracking == .relocalizing { sawRelocalizing = true }
-      guard sawRelocalizing, observation.tracking == .normal, let pose = observation.pose, pose.isValid,
-        Self.isFresh(pose.capturedAt, at: now)
+      let mergeReady = !snapshot.mode.requiresPeerMerge || observation.mergedPeers > 0
+      let relocalizationSeen = sawRelocalizing || !snapshot.mode.requiresRelocalizingEvidence
+      guard relocalizationSeen, mergeReady, observation.tracking == .normal,
+        let pose = observation.pose, pose.isValid, Self.isFresh(pose.capturedAt, at: now)
       else { return false }
       if snapshot.stage == .relocalizingWorld {
-        if snapshot.mode == .relocalized {
+        if !snapshot.mode.usesBodyPhase {
           snapshot.stage = .aligned
           snapshot.localPose = pose
           phaseDeadline = nil
@@ -119,20 +130,22 @@ struct DuelFramePolicy: Sendable {
     guard observation.tracking == .normal, let pose = observation.pose, pose.isValid,
       Self.isFresh(pose.capturedAt, at: now)
     else {
-      if snapshot.mode == .relocalized {
+      if snapshot.mode == .measured {
+        invalidate(reason: .trackingLost)
+      } else {
         let reason: DuelFrameFailure = observation.tracking == .normal ? .stalePose : .trackingLimited
         let alreadyLimited = snapshot.stage == .degraded && snapshot.failure == .trackingLimited
         degrade(reason: reason)
-        if reason == .trackingLimited && !alreadyLimited {
+        // Collaborative alignment is open-ended; only map installs bound the
+        // recovery window because a frozen map cannot grow to meet the player.
+        if reason == .trackingLimited && !alreadyLimited && snapshot.mode.installsMap {
           phaseDeadline = now.addingTimeInterval(Self.relocalizationTimeout)
         }
-      } else {
-        invalidate(reason: .trackingLost)
       }
       return false
     }
     snapshot.localPose = pose
-    if snapshot.mode == .relocalized && snapshot.stage != .awaitingResidual {
+    if !snapshot.mode.usesBodyPhase && snapshot.stage != .awaitingResidual {
       snapshot.stage = .aligned
       snapshot.failure = nil
       phaseDeadline = nil
@@ -144,6 +157,7 @@ struct DuelFramePolicy: Sendable {
     frameID: String, epoch: UInt16, translationMeters: Double,
     yawDegrees: Double, observedAt: Date, now: Date
   ) throws {
+    guard snapshot.mode.requiresResidualProof else { throw DuelFrameFailure.invalidResidual }
     guard snapshot.epoch == epoch, snapshot.frameID == frameID else { throw DuelFrameFailure.staleEpoch }
     guard [.awaitingResidual, .aligned, .degraded].contains(snapshot.stage) else { throw DuelFrameFailure.mapNotReady }
     guard translationMeters.isFinite, yawDegrees.isFinite, translationMeters >= 0, yawDegrees >= 0,
