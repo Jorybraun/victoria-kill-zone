@@ -49,6 +49,9 @@
 
   final class DuelFrameARState: @unchecked Sendable {
     let hub = DuelFrameObservationHub()
+    /// Ordered, lossless: a dropped collaboration delta would corrupt the
+    /// merge stream, so the transport (not this hub) applies backpressure.
+    let collaborationHub = DuelFrameStreamHub<Data>(buffering: .unbounded)
     let archiveQueue = DispatchQueue(label: "com.victoriakillzone.frame.archive", qos: .userInitiated)
     // Mutable fields belong exclusively to ARVisionTargetingSession.sessionQueue.
     var configuration: DuelFrameSessionConfiguration?

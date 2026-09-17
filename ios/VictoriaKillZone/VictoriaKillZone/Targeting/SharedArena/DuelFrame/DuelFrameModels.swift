@@ -12,13 +12,32 @@ enum DuelFrameFailure: String, Error, Equatable, Sendable {
   case operationSuperseded, relocalizationTimedOut, trackingLost, trackingLimited, sessionInterrupted
   case backgrounded, sessionStopped, stalePose, staleResidual, residualExceeded, invalidResidual
   case referenceUnavailable, referenceNotFound, referenceUnsuitable, referenceCaptureTimedOut
+  /// A peer's collaboration delta could not be decoded, e.g. a mixed-iOS
+  /// payload; the session keeps running and the drop is logged, not fatal.
+  case invalidCollaboration
 }
 
 /// Measured mode requires the visible reference and fresh residuals (ADR 0009).
 /// Relocalized mode treats ARKit's relocalizing→normal transition into the
 /// shared raw world map as the alignment gate and accepts no residual proof.
+/// Collaborative mode never installs a map: sessions exchange
+/// ARSession.CollaborationData continuously and a peer participant anchor is
+/// the merge proof (ADR 0011).
 enum DuelFrameAlignmentMode: String, Equatable, Sendable {
-  case measured, relocalized
+  case measured, relocalized, collaborative
+
+  /// Frozen-map modes install bytes before aligning; collaborative sessions
+  /// merge continuously instead.
+  var installsMap: Bool { self != .collaborative }
+  /// Only measured alignment requires reference residuals.
+  var requiresResidualProof: Bool { self == .measured }
+  /// Only measured alignment ends with a map-seeded body configuration run.
+  var usesBodyPhase: Bool { self == .measured }
+  /// Map installs must witness .relocalizing before accepting normal tracking;
+  /// collaborative merges are proven by a peer anchor instead.
+  var requiresRelocalizingEvidence: Bool { self != .collaborative }
+  /// A peer participant anchor must be visible before aligning.
+  var requiresPeerMerge: Bool { self == .collaborative }
 }
 
 /// Targeting-local value, not a transport envelope. The app authenticates the
@@ -83,6 +102,9 @@ struct DuelFrameObservation: Equatable, Sendable {
   let pose: DuelFramePose?
   let observedAt: Date
   let failure: DuelFrameFailure?
+  /// Peer ARParticipantAnchors in the frame; nonzero proves a collaboration
+  /// merge has placed this session in a shared frame with that peer.
+  var mergedPeers = 0
   var referenceObservation: DuelFrameReferenceObservation? = nil
   var scanFeedback: DuelFrameScanFeedback? = nil
 }
@@ -105,18 +127,30 @@ struct DuelFrameSnapshot: Equatable, Sendable {
 
   /// Read this at the instant of firing; a delayed UI publisher cannot extend
   /// permission after the last pose or independently measured residual expires.
-  /// Relocalized mode has no residual source: ARKit relocalization plus a fresh
-  /// pose is the entire gate (ADR 0010).
+  /// Non-measured modes have no residual source: ARKit's own alignment
+  /// evidence plus a fresh pose is the entire gate (ADR 0010, ADR 0011).
   func permitsSpatialFire(at date: Date = Date()) -> Bool {
     stage == .aligned && epoch != nil && frameID != nil
       && localPose.map { $0.isValid && DuelFramePolicy.isFresh($0.capturedAt, at: date) } == true
-      && (mode == .relocalized
+      && (!mode.requiresResidualProof
         || residual.map { DuelFramePolicy.isFresh($0.observedAt, at: date) } == true)
   }
 }
 
+/// Bounds one archived ARSession.CollaborationData payload so the relay and
+/// any pre-link buffering stay finite. Larger deltas are dropped; ARKit keeps
+/// emitting, so a dropped delta is retried by the next one.
+enum DuelFrameCollaboration {
+  static let maximumBytes = 288_000
+}
+
 protocol DuelFrameSessionDriving: Sendable {
   func duelFrameObservations() -> AsyncStream<DuelFrameObservation>
+  /// Archived ARSession.CollaborationData in emission order. The stream only
+  /// produces while a collaborative alignment mode runs.
+  func duelFrameCollaboration() -> AsyncStream<Data>
+  /// Applies a peer's archived collaboration delta to the local session.
+  func applyFrameCollaboration(_ data: Data) async throws
   func beginFrameMapping(epoch: UInt16, mode: DuelFrameAlignmentMode) async throws
   func captureFrameMap(epoch: UInt16) async throws -> Data
   func captureFrameReference(epoch: UInt16) async throws -> DuelFrameReference
@@ -126,6 +160,12 @@ protocol DuelFrameSessionDriving: Sendable {
 
 extension DuelFrameSessionDriving {
   func captureFrameReference(epoch: UInt16) async throws -> DuelFrameReference {
+    throw DuelFrameFailure.unsupported
+  }
+  func duelFrameCollaboration() -> AsyncStream<Data> {
+    AsyncStream { $0.finish() }
+  }
+  func applyFrameCollaboration(_ data: Data) async throws {
     throw DuelFrameFailure.unsupported
   }
 }
