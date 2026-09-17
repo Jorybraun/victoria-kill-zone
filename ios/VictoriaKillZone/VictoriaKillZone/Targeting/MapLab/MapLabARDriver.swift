@@ -76,14 +76,20 @@ private final class MapLabWorldMapBox: @unchecked Sendable {
   init(_ map: ARWorldMap) { self.map = map }
 }
 
+@MainActor
+protocol MapLabCameraSource: ObservableObject {
+  var session: ARSession? { get }
+  func reassertDelegate()
+}
+
 /// A new ARSession for each attempt fences queued delegate callbacks by identity.
 /// Only ARWorldTrackingConfiguration is used; no body or reference-image support
 /// is needed and this driver cannot submit game state.
 @MainActor
-final class MapLabARDriver: MapLabDriving {
+final class MapLabARDriver: MapLabDriving, MapLabCameraSource {
   private(set) var state: MapLabSessionState = .idle
   var onStateChange: ((MapLabSessionState) -> Void)?
-  private(set) var session: ARSession?
+  @Published private(set) var session: ARSession?
   private var delegate: MapLabARDelegate?
   private var policy = MapLabFramePolicy()
   private var generation: UInt64 = 0
@@ -282,8 +288,20 @@ private final class MapLabARDelegate: NSObject, ARSessionDelegate {
   func sessionShouldAttemptRelocalization(_ session: ARSession) -> Bool { false }
 }
 
-struct MapLabCameraPreview: UIViewRepresentable {
-  let driver: MapLabARDriver
+/// Observes the driver so a session created after the first render, replaced
+/// by a retry, or cleared by stop reaches the representable as a new input.
+struct MapLabCameraPreview<Source: MapLabCameraSource>: View {
+  @ObservedObject var driver: Source
+  var body: some View { MapLabCameraSurface(driver: driver, session: driver.session) }
+}
+
+struct MapLabCameraSurface<Source: MapLabCameraSource>: UIViewRepresentable {
+  let driver: Source
+  let session: ARSession?
+
+  final class Coordinator { weak var attached: ARSession? }
+  func makeCoordinator() -> Coordinator { Coordinator() }
+
   func makeUIView(context: Context) -> ARSCNView {
     let view = ARSCNView(frame: .zero)
     view.scene = SCNScene(); view.backgroundColor = .black
@@ -291,10 +309,18 @@ struct MapLabCameraPreview: UIViewRepresentable {
     updateUIView(view, context: context)
     return view
   }
+
   func updateUIView(_ view: ARSCNView, context: Context) {
-    if let session = driver.session, view.session !== session { view.session = session }
-    driver.reassertDelegate()
+    if let session {
+      if view.session !== session { view.session = session }
+      driver.reassertDelegate()
+    } else if context.coordinator.attached != nil {
+      // The driver stopped. Release its paused session rather than showing a frozen frame.
+      view.session = ARSession()
+    }
+    context.coordinator.attached = session
   }
-  static func dismantleUIView(_ view: ARSCNView, coordinator: Void) { view.session = ARSession() }
+
+  static func dismantleUIView(_ view: ARSCNView, coordinator: Coordinator) { view.session = ARSession() }
 }
 #endif
