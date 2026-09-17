@@ -18,10 +18,10 @@ beforeEach(() => {
 });
 afterEach(() => {vi.restoreAllMocks(); vi.unstubAllEnvs();});
 
-function room() {
+function room(combatGeometry?: "trackedBody" | "phoneProxy") {
   const b=mutationContext(), host=storedPlayer(testIds.host,{ready:true}), guest=storedPlayer(testIds.guest,{ready:true});
   b.seed("players",host.doc); b.seed("players",guest.doc);
-  b.seed("matches",storedMatch({status:"waiting",phase:"lobby",combatMode:"durableObject",maxPlayers:4}));
+  b.seed("matches",storedMatch({status:"waiting",phase:"lobby",combatMode:"durableObject",maxPlayers:4,...(combatGeometry===undefined?{}:{combatGeometry})}));
   return {...b,host,guest,auth:{matchId:testIds.match,playerId:testIds.host,sessionSecret:host.sessionSecret}};
 }
 
@@ -32,6 +32,29 @@ describe("realtime room admission", () => {
     for (const displayName of ["Second","Third","Fourth"]) await mutationHandler(join)(b.ctx,{code:host.code,displayName});
     await expect(mutationHandler(join)(b.ctx,{code:host.code,displayName:"Fifth"})).rejects.toMatchObject({data:{code:"MATCH_FULL"}});
     expect(b.writes.filter(w=>w.kind==="insert" && w.table==="players")).toHaveLength(4);
+  });
+  it("accepts combatGeometry only on durableObject creates and persists the selection", async () => {
+    const b=mutationContext();
+    await expect(mutationHandler(create)(b.ctx,{displayName:"Host",arenaRadiusMeters:30,combatGeometry:"phoneProxy"})).rejects.toMatchObject({data:{code:"INVALID_ARENA"}});
+    await mutationHandler(create)(b.ctx,{displayName:"Host",arenaRadiusMeters:30,combatMode:"durableObject",combatGeometry:"phoneProxy"});
+    const insert=b.writes.find(w=>w.kind==="insert" && w.table==="matches");
+    expect(insert?.doc).toMatchObject({combatMode:"durableObject",combatGeometry:"phoneProxy"});
+  });
+  it("keeps trackedBody as the default geometry when the match selects none", async () => {
+    const b=room(); await mutationHandler(prepare)(b.ctx,b.auth);
+    const patch=b.writes.find(w=>w.kind==="patch" && w.doc.combatRulesJson!==undefined);
+    expect(JSON.parse(String(patch?.doc.combatRulesJson))).toMatchObject({geometry:"trackedBody"});
+    const issued=await mutationHandler(ticket)(b.ctx,b.auth);
+    const claims: unknown=JSON.parse(new TextDecoder().decode(decode(issued.ticket.split(".")[1] ?? "")));
+    expect(validateTicketClaims(claims,Math.floor(Date.now()/1000))).toMatchObject({rules:{geometry:"trackedBody"}});
+  });
+  it("serializes a stored phoneProxy selection into the prepared rules and ticket", async () => {
+    const b=room("phoneProxy"); await mutationHandler(prepare)(b.ctx,b.auth);
+    const patch=b.writes.find(w=>w.kind==="patch" && w.doc.combatRulesJson!==undefined);
+    expect(JSON.parse(String(patch?.doc.combatRulesJson))).toMatchObject({geometry:"phoneProxy"});
+    const issued=await mutationHandler(ticket)(b.ctx,b.auth);
+    const claims: unknown=JSON.parse(new TextDecoder().decode(decode(issued.ticket.split(".")[1] ?? "")));
+    expect(validateTicketClaims(claims,Math.floor(Date.now()/1000))).toMatchObject({rules:{geometry:"phoneProxy"}});
   });
   it("preserves the legacy two-slot match and rejects invalid caps", async () => {
     const b=mutationContext();
