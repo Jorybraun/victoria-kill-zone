@@ -28,7 +28,7 @@ export class MatchReportHandler {
     try {
       const raw = await request.text();
       if (new TextEncoder().encode(raw).byteLength > BODY_BYTES) return new Response(null, { status: 413 });
-      report = JSON.parse(raw);
+      report = JSON.parse(raw) as MatchReport;
     } catch { return new Response(null, { status: 400 }); }
     if (typeof report !== "object" || report === null || Array.isArray(report)) return new Response(null, { status: 400 });
     const issue = await this.createIssue({
@@ -56,7 +56,7 @@ export function reportHandler(env: Env): MatchReportHandler | null {
       body: JSON.stringify({ ...input, labels: ["devin-report"] }),
     });
     if (response.status !== 201) throw new Error("issue-rejected");
-    const created = await response.json() as { number?: number; html_url?: string };
+    const created: { number?: number; html_url?: string } = await response.json();
     if (typeof created.number !== "number" || typeof created.html_url !== "string") throw new Error("issue-receipt-invalid");
     return { number: created.number, url: created.html_url };
   });
@@ -67,7 +67,7 @@ function text(value: unknown, limit: number): string {
 }
 
 function issueTitle(report: MatchReport): string {
-  const summary = text(report.transcript, TRANSCRIPT_CHARS).split("\n")[0].trim().slice(0, 72);
+  const summary = (text(report.transcript, TRANSCRIPT_CHARS).split("\n")[0] ?? "").trim().slice(0, 72);
   return `[match report] ${summary === "" ? "player report" : summary}`;
 }
 
