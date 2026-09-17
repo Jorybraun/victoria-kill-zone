@@ -15,6 +15,8 @@ final class RealtimeCombatSession: ObservableObject {
   @Published private(set) var refusal: String?
   @Published private(set) var connectionIssue: String?
   private(set) var latestAccessTicket: CombatAccessTicket?
+  /// Opaque ARKit collaboration archives, verbatim from peers. Set by the controller.
+  var onCollaboration: ((String, Data) -> Void)?
   /// Full authority snapshots only; event projection does not advance this.
   /// Kept monotonic across start/stop so observers can distinguish reconciliation.
   private(set) var snapshotRevision = 0
@@ -178,12 +180,18 @@ final class RealtimeCombatSession: ObservableObject {
     return id
   }
 
+  /// Fire-and-forget opaque relay; not a command envelope, no ack expected.
+  /// Callers await sends sequentially so wire ordering is preserved.
+  func sendCollaboration(_ data: Data) async {
+    try? await transport?.send(.collab(data))
+  }
+
   func stop() {
     generation += 1
     runner?.cancel(); runner=nil
     disconnectTransport()
     pending.removeAll(); replica=nil; snapshot=nil; events=[]; session=nil
-    latestAccessTicket=nil
+    latestAccessTicket=nil; onCollaboration=nil
     nextSequence=1; refusal=nil; connectionIssue=nil; connectionSuspended=false; state = .disconnected
   }
 
@@ -216,6 +224,8 @@ final class RealtimeCombatSession: ObservableObject {
   }
 
   private func receive(_ message: CombatWire.ServerMessage) async throws {
+    // Relay bytes never depend on replica state and must not throw.
+    if case .collab(let playerId,let data)=message {onCollaboration?(playerId,data); return}
     guard var replica else {throw CombatReplicaError.invalidSnapshot}
     guard calibrationClockRecoveryIsValid(at: localNow()) else {throw CombatTransportError.disconnected}
     switch message {
@@ -270,6 +280,7 @@ final class RealtimeCombatSession: ObservableObject {
         try await transport?.send(.resume(afterEventSequence:replica.eventSequence))
       } else if code == "unauthorized" {throw CombatTransportError.admissionRejected}
       else if code == "unavailable" {throw CombatTransportError.disconnected}
+    case .collab: return // Already handled above the replica guard.
     }
     guard calibrationClockRecoveryIsValid(at: localNow()) else {throw CombatTransportError.disconnected}
   }
