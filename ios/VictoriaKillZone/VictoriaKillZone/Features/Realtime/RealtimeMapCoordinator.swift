@@ -24,7 +24,7 @@ final class RealtimeMapCoordinator: ObservableObject {
     self.savedArena = savedArena; self.maps = maps
   }
 
-  func configure(epoch: UInt16, isHost: Bool) {
+  func configure(epoch: UInt16, isHost: Bool, mode: DuelFrameAlignmentMode = .measured) {
     generation += 1; let previous = task; previous?.cancel(); let token = generation
     task = Task { [weak self] in
       guard let self else {return}
@@ -34,7 +34,8 @@ final class RealtimeMapCoordinator: ObservableObject {
         guard self.current(token) else {return}
         await self.frame.stop()
         guard self.current(token) else {return}
-        try await self.frame.beginCalibration(epoch: epoch, captureRequired: isHost && self.savedArena == nil)
+        try await self.frame.beginCalibration(epoch: epoch, captureRequired: isHost && self.savedArena == nil,
+          mode: mode)
         guard self.current(token) else {return}
         if let map = self.installedMap, map.epoch == epoch {
           try await self.frame.installMap(map)

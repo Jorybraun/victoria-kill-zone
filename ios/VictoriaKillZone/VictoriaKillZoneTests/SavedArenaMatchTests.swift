@@ -103,6 +103,29 @@ final class SavedArenaMatchTests: XCTestCase {
     await coordinator.stop()
   }
 
+  func testRelocalizedQuickPlaySharesTheRawWorldMapWithoutAReference() async throws {
+    let camera = SavedMatchCamera(), maps = SavedMatchMaps()
+    let provider = DuelFrameProvider(targeting: camera)
+    let coordinator = makeCoordinator(frame: provider, saved: nil, maps: maps)
+    coordinator.configure(epoch: 1, isHost: true, mode: .relocalized)
+    try await until { coordinator.state == .mapping }
+    await camera.emit(.init(epoch: 1, frameID: nil, phase: .mapping, tracking: .normal,
+      isMapped: true, pose: nil, observedAt: Date(), failure: nil))
+    try await until { provider.snapshot.stage == .mapReady }
+    let modes = await camera.mappingModes
+    XCTAssertEqual(modes, [.relocalized])
+
+    coordinator.captureAndShare()
+    try await until { coordinator.state == .installed }
+    let uploads = await maps.uploads, installs = await camera.installed, captured = await camera.captured
+    XCTAssertEqual(uploads.count, 1)
+    XCTAssertEqual(uploads.first?.bytes, captured, "Quick Play shares raw world-map bytes, not a reference bundle")
+    XCTAssertEqual(installs.count, 1)
+    XCTAssertEqual(provider.snapshot.stage, .relocalizingWorld)
+    XCTAssertEqual(provider.snapshot.mode, .relocalized)
+    await coordinator.stop()
+  }
+
   private func makeCoordinator(frame: DuelFrameProvider, saved: SavedArenaBundle?,
                                maps: SavedMatchMaps, epoch: Int = 1) -> RealtimeMapCoordinator {
     let client = SavedMatchClient(epoch: epoch)
@@ -129,9 +152,13 @@ final class SavedArenaMatchTests: XCTestCase {
 
 private actor SavedMatchCamera: DuelFrameSessionDriving {
   private(set) var installed: [DuelFrameMap] = []
-  nonisolated func duelFrameObservations() -> AsyncStream<DuelFrameObservation> { AsyncStream { $0.finish() } }
-  func beginFrameMapping(epoch: UInt16, mode: DuelFrameAlignmentMode) async throws {}
-  func captureFrameMap(epoch: UInt16) async throws -> Data { throw DuelFrameFailure.unsupported }
+  private(set) var mappingModes: [DuelFrameAlignmentMode] = []
+  private let pair = AsyncStream<DuelFrameObservation>.makeStream()
+  var captured = Data([9, 9, 9])
+  nonisolated func duelFrameObservations() -> AsyncStream<DuelFrameObservation> { pair.stream }
+  func beginFrameMapping(epoch: UInt16, mode: DuelFrameAlignmentMode) async throws { mappingModes.append(mode) }
+  func emit(_ observation: DuelFrameObservation) { pair.continuation.yield(observation) }
+  func captureFrameMap(epoch: UInt16) async throws -> Data { captured }
   func installFrameMap(_ map: DuelFrameMap, phase: DuelFrameSessionPhase) async throws { installed.append(map) }
   func endFrameMapping() async {}
 }

@@ -7,10 +7,11 @@ enum RealtimeArenaPresentation {
     let isVisible: Bool
     let captureAvailable: Bool
 
-    init(stage: RealtimeArenaStage, isHost: Bool, usesSavedArena: Bool) {
+    init(stage: RealtimeArenaStage, isHost: Bool, usesSavedArena: Bool, usesRelocalizedFrame: Bool = false) {
       // Keep the next action in place while mapping quality changes. Visibility
       // is presentation only; actual capture still requires a usable live map.
-      isVisible = isHost && !usesSavedArena && [.mapping, .mapReady].contains(stage)
+      // Relocalized Quick Play shares the raw map and has no reference step.
+      isVisible = isHost && !usesSavedArena && !usesRelocalizedFrame && [.mapping, .mapReady].contains(stage)
       captureAvailable = isVisible && stage == .mapReady
     }
   }

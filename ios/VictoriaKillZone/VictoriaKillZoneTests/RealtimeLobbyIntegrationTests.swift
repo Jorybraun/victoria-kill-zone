@@ -14,6 +14,29 @@ final class RealtimeLobbyIntegrationTests: XCTestCase {
     store.leave()
   }
 
+  func testQuickPlaySelectsPhoneProxyWhileSavedArenasAndClassicKeepTheirs() async throws {
+    let client = ArenaLobbyClient()
+    let store = makeStore(client)
+    store.displayName = "Host"
+    await store.performCreateDuel(combatMode: .durableObject)
+    XCTAssertEqual(client.requests.last?.combatGeometry, "phoneProxy",
+      "Quick Play without a saved arena runs the relocalized frame")
+    store.leave()
+    try await until { store.route == .home }
+
+    let saved = try SavedArenaMatchTests.arena()
+    await store.performCreateDuel(combatMode: .durableObject, savedArena: saved)
+    XCTAssertEqual(client.requests.last?.combatGeometry, "trackedBody",
+      "Saved arenas keep the measured reference flow and body colliders")
+    store.leave()
+    try await until { store.route == .home }
+
+    await store.performCreateDuel()
+    XCTAssertNil(client.requests.last?.combatGeometry,
+      "The classic duel cannot select a realtime-only geometry")
+    store.leave()
+  }
+
   func testThreeReadyMembersPrepareAuthorityWithoutCallingLegacyStart() async throws {
     let client = ArenaLobbyClient()
     let store = makeStore(client)
