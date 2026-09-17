@@ -23,6 +23,7 @@ Quick Play replaces the one-shot map share with **continuous collaborative mappi
 5. **Shared frame**: the host plants a named shared-origin `ARAnchor` at its session origin; the anchor propagates through collaboration data. Combat poses are expressed relative to that origin, following the existing `SharedArenaSession`/`arenaFromPhone` pattern. `phoneProxy` verdict geometry (ADR 0010) is unchanged — only the alignment transport changes.
 6. **Removed from Quick Play**: host scan → `captureMap` → upload → download → `installMap` → timed relocalization, plus the Sharing stage and the map-store dependency for unsaved matches. The offline Scan & Save feature and saved-arena measured mode (reference capture, `trackedBody` geometry, world-map install) are unchanged.
 7. **iOS version parity**: Apple documents that unarchiving collaboration data may fail across OS versions. The client must surface a clear incompatibility message rather than a generic failure, and trial evidence must record both devices' iOS versions.
+8. **Cover mechanic**: `phoneProxy` verdicts alone admit through-wall hits — the worker checks ray/sphere intersection against a shared frame that contains no walls, and the HUD projects opponent positions, so blind wall shots would be trivial. Owner decision: cover must be real — if you cannot be seen, you cannot be hit. A `phoneProxy` hit therefore additionally requires a recent (bounded freshness window, ~1 s) Vision body observation of the victim *by the shooter* — soft per-shot coverage, not the old match-pausing rule. Coverage drops degrade offense, never pause the match; a victim's own tracking state does not protect them.
 
 ## What changes for the player
 
@@ -41,7 +42,7 @@ Negative / risks:
 - Alignment still requires visual overlap — a participant sealed in space nobody has mapped cannot align until they reach some mapped feature. This is inherent; copy must say "move toward the play area," not promise instant join.
 - Collaboration bandwidth is continuous for the match's duration, not one burst. `.optional` data must be droppable; link congestion policy needs a bound.
 - iOS version parity is a hard constraint for unarchiving; mixed-OS sessions need explicit detection and copy.
-- `phoneProxy` verdicts do not check line of sight — after this change a player in another room can be hit through walls once both are aligned. Whether that is acceptable is a product decision, flagged here explicitly rather than discovered later.
+- Soft coverage reintroduces a bounded version of the tracked-body dependency: body tracking must function during combat for offense to work at all, and partial-body visibility edge cases will favor cover (a conservative bias — failures protect the victim, never gift a hit).
 - The merged one-shot relocalized mode becomes dead code for Quick Play setup; saved-arena measured mode still uses the install path.
 
 ## Alternatives considered
@@ -58,5 +59,6 @@ Two phones, same iOS version, named models and build:
 2. Joiner starts in a different unmapped room → shows "move toward the play area"; aligns on reaching overlap; total time recorded.
 3. During a match, a player roams into an unmapped room → their coverage merges; a second player later aligns there.
 4. Combat at ~3 m and ~8 m after roaming alignment: phoneProxy verdicts, health/ammo/K-D convergence.
-5. Mixed-iOS-version pair → incompatibility surfaced cleanly (expected failure, not a crash).
-6. Setup-log export captured on both phones for each run.
+5. Cover check: shots at a victim who moved fully behind a wall within the freshness window do not register; the same shot with line of sight does.
+6. Mixed-iOS-version pair → incompatibility surfaced cleanly (expected failure, not a crash).
+7. Setup-log export captured on both phones for each run.
