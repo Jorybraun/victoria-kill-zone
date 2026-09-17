@@ -5,6 +5,7 @@ import type {BodyHistory, SimulationCheckpoint} from "./state.js";
 /** Plausibility limits reject teleports; they do not authenticate camera truth. */
 const MAX_SPEED = 15;
 const POSITION_SLACK = 0.1;
+const COVER_OBSERVATION_MS = 1_000;
 const withinSpeed = (a: Vec3, b: Vec3, dtMs: number): boolean => distance(a, b) <= MAX_SPEED * dtMs / 1000 + POSITION_SLACK;
 function pair<T extends {capturedAtMs: number}>(samples: readonly T[], atMs: number): [T, T, number] | null {
   const before = [...samples].reverse().find(p => p.capturedAtMs <= atMs);
@@ -60,6 +61,13 @@ export function selectBody(state: SimulationCheckpoint, targetId: string, fromMs
     && phoneAt(state, h.observerId, now) && bodyAt(h, fromMs) && bodyAt(h, toMs));
   histories.sort((a, b) => b.samples.at(-1)!.capturedAtMs - a.samples.at(-1)!.capturedAtMs || a.observerId.localeCompare(b.observerId));
   return histories[0] ?? null;
+}
+/** phoneProxy geometry is a bare sphere with no occlusion; cover is the
+ * shooter's own sighting of the target within the freshness window.
+ */
+export function coverObserved(state: SimulationCheckpoint, observerId: string, targetId: string, atMs: number): boolean {
+  const history = state.bodies.find(h => h.observerId === observerId && h.targetId === targetId);
+  return history?.samples.some(s => s.capturedAtMs <= atMs && atMs - s.capturedAtMs <= COVER_OBSERVATION_MS) ?? false;
 }
 export function colliderPairs(state: SimulationCheckpoint, playerId: string, fromMs: number, toMs: number): [BodyCollider, BodyCollider][] | null {
   if (state.snapshot.rules.geometry === "phoneProxy") {

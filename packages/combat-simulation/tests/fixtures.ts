@@ -12,6 +12,7 @@ export class Fixture {
   body: Record<string, BodyCollider[]> = {};
   orientation: Record<string, Quaternion> = {};
   observed = true;
+  blind = new Set<string>();
   private sequence = 0;
   constructor(public config = rules(), count = 2) {
     this.ids = ["a", "b", "c", "d"].slice(0, count);
@@ -30,7 +31,7 @@ export class Fixture {
   poseCommands(): AuthenticatedCommand[] {
     const at = this.now + 50;
     return this.ids.map(id => this.envelope(id, {kind: "pose", pose: {sequence: at / 50, capturedAtMs: at,
-      position: this.phone[id]!, orientation: this.orientation[id]!, tracking: "normal"}, observations: this.observed ? this.ids.filter(other => other !== id)
+      position: this.phone[id]!, orientation: this.orientation[id]!, tracking: "normal"}, observations: this.observed && !this.blind.has(id) ? this.ids.filter(other => other !== id)
       .map(other => ({targetPlayerId: other, capturedAtMs: at, associationConfidence: 1, uncertaintyMeters: 0.01, colliders: this.body[other]!})) : []}));
   }
   tick(extra: AuthenticatedCommand[] = []): CombatEvent[] { return this.simulation.advance([...this.poseCommands(), ...extra]); }
