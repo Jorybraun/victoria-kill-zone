@@ -1,7 +1,7 @@
 import Combine
 import Foundation
 
-enum RealtimeMapState: Equatable {case idle, mapping, waitingForHost, transferring, installed, failed(String)}
+enum RealtimeMapState: Equatable {case idle, mapping, waitingForHost, transferring, collaborating, installed, failed(String)}
 
 @MainActor
 final class RealtimeMapCoordinator: ObservableObject {
@@ -37,6 +37,9 @@ final class RealtimeMapCoordinator: ObservableObject {
         try await self.frame.beginCalibration(epoch: epoch, captureRequired: isHost && self.savedArena == nil,
           mode: mode)
         guard self.current(token) else {return}
+        // Collaborative sessions merge continuously through the combat relay;
+        // no frozen map exists to transfer, capture, or install.
+        guard mode.installsMap else {self.state = .collaborating; return}
         if let map = self.installedMap, map.epoch == epoch {
           try await self.frame.installMap(map)
           guard self.current(token) else {return}

@@ -42,6 +42,7 @@ final class RealtimeArenaController: ObservableObject {
   private var pumpTask: Task<Void, Never>?
   private var triggerTask: Task<Void, Never>?
   private var referenceTask: Task<Void, Never>?
+  private var collabTask: Task<Void, Never>?
   private var startTask: Task<Void, Never>?
   private var stopTask: Task<Void, Never>?
   private var started = false
@@ -104,11 +105,16 @@ final class RealtimeArenaController: ObservableObject {
   var canOpenCameraSettings: Bool {message != nil && !cameraReady}
   var localPlayer: CombatWire.Player? {snapshot?.players.first {$0.playerId == session.playerId}}
   var isHost: Bool {localPlayer?.role == "host"}
-  /// Quick Play matches run the relocalized shared frame: raw-map install,
-  /// no natural-scene reference, phoneProxy verdicts. Saved arenas stay
-  /// measured. The wire rules are the single source every client agrees on.
-  var usesRelocalizedFrame: Bool {snapshot?.rules.geometry == "phoneProxy"}
-  var frameAlignmentMode: DuelFrameAlignmentMode {usesRelocalizedFrame ? .relocalized : .measured}
+  /// Quick Play matches share one live frame: ARKit collaboration merges
+  /// peers continuously (ADR 0011), with the frozen-map relocalized flow kept
+  /// as a fallback for trials. Saved arenas stay measured. The wire rules are
+  /// the single source every client agrees on.
+  var usesQuickPlayFrame: Bool {snapshot?.rules.geometry == "phoneProxy"}
+  var usesCollaborativeFrame: Bool {frameAlignmentMode == .collaborative}
+  var frameAlignmentMode: DuelFrameAlignmentMode {
+    guard usesQuickPlayFrame else {return .measured}
+    return ProcessInfo.processInfo.environment["VKZ_QUICKPLAY_MAP_FALLBACK"] != nil ? .relocalized : .collaborative
+  }
   /// Connected roster members whose phones report an aligned shared frame.
   var alignedPlayers: (aligned: Int, total: Int) {
     let connected = (snapshot?.players ?? []).filter {$0.connected}
@@ -175,6 +181,7 @@ final class RealtimeArenaController: ObservableObject {
   private func performStart(token: Int) async {
     guard started, generation == token else {return}
     combat.start(session: session)
+    wireCollaboration()
     if !sceneActive {combat.suspendConnection()}
     let stream = targeting.snapshots()
     cameraTask = Task { [weak self] in
@@ -203,7 +210,7 @@ final class RealtimeArenaController: ObservableObject {
     if let stopTask {await stopTask.value; return}
     guard started else {return}; started = false; cameraReady = false; generation += 1
     setTriggerHeld(false); cameraTask?.cancel(); cameraTask = nil; pumpTask?.cancel(); pumpTask = nil
-    referenceTask?.cancel(); referenceTask = nil
+    referenceTask?.cancel(); referenceTask = nil; collabTask?.cancel(); collabTask = nil
     combat.stop(); configuredEpoch = nil; authorityEpoch = nil; readiness = RealtimeReadinessState()
     associatedBody = nil; confirmedHits = []; lastSubmittedPose = nil; lastPoseDate = nil
     commands = RealtimeCommandState(); actionFeedback = nil; lastLocalFireAtMs = nil
@@ -230,8 +237,37 @@ final class RealtimeArenaController: ObservableObject {
       if frame.stage == .lost {retryAlignment()}
     }
   }
+  /// ARKit collaboration deltas are transport bytes, not combat commands:
+  /// outbound archives ride the combat socket verbatim; inbound archives apply
+  /// to the AR session in receipt order through a single consumer. Other modes
+  /// get a finished stream and an apply path that fails closed, so the wiring
+  /// needs no mode check.
+  private func wireCollaboration() {
+    var inbound: AsyncStream<Data>.Continuation!
+    let inboundStream = AsyncStream<Data>(bufferingPolicy: .bufferingNewest(16)) { inbound = $0 }
+    combat.onCollaboration = { _, data in inbound.yield(data) }
+    let outbound = frameProvider?.collaborationOutputs()
+    collabTask = Task { [weak self] in
+      await withTaskGroup(of: Void.self) { group in
+        group.addTask {
+          for await data in inboundStream {
+            if Task.isCancelled {return}
+            await self?.frameProvider?.applyCollaboration(data)
+          }
+        }
+        if let outbound {
+          group.addTask {
+            for await data in outbound {
+              if Task.isCancelled {return}
+              await self?.combat.sendCollaboration(data)
+            }
+          }
+        }
+      }
+    }
+  }
   func captureReference() {
-    guard isHost, !usesRelocalizedFrame, frame.stage == .mapReady, referenceTask == nil, let frameProvider else {return}
+    guard isHost, frameAlignmentMode == .measured, frame.stage == .mapReady, referenceTask == nil, let frameProvider else {return}
     let token = generation
     referenceTask = Task { [weak self] in
       do {_ = try await frameProvider.captureReference()} catch {
@@ -245,7 +281,7 @@ final class RealtimeArenaController: ObservableObject {
     // Relocalized Quick Play shares the raw world map; measured arenas still
     // require the captured reference before the scan may be shared.
     guard isHost, frame.stage == .mapReady else {return}
-    if !usesRelocalizedFrame {
+    if frameAlignmentMode == .measured {
       guard case .captured = referenceState else {return}
     }
     mapCoordinator?.captureAndShare()
@@ -353,8 +389,12 @@ final class RealtimeArenaController: ObservableObject {
     guard let sample = frame.localPose, sample.capturedAt != lastPoseDate,
       let pose = RealtimePoseBuilder.pose(sample, sequence: poseSequence + 1, matchTimeMs: matchTimeMs, now: date) else {return}
     var observations: [CombatWire.Observation] = []
-    if let body = associatedBody, let residual = frame.residual {
-      let uncertainty = residual.translationMeters + 0.05
+    if let body = associatedBody {
+      // Measured frames scale sighting uncertainty with the live residual;
+      // shared frames carry none, so a fixed value under the wire's 0.1 m gate
+      // reports the real sighting the cover verdict needs (ADR 0011).
+      let uncertainty = frame.mode == .measured
+        ? (frame.residual?.translationMeters ?? 1) + 0.05 : 0.08
       if uncertainty <= 0.1 {
         if lastBodyDate != body.skeleton.capturedAt {
           lastBodyDate = body.skeleton.capturedAt
