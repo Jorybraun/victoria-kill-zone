@@ -70,6 +70,11 @@ deferred from Quick Play's critical path. Walls are not a mapping prerequisite.
 ADR 0009's continuously visible reference is still a calibration candidate and
 does not establish freely moving outdoor play. A replacement or validated
 extension must prove spatial accuracy before removing that readiness gate.
+[ADR 0010](decisions/0010-quick-play-relocalized-frame-and-phone-proxy.md)
+(proposed 2026-09-13) is that replacement for Quick Play only: relocalization
+into the host's raw world map as the alignment gate and `phoneProxy` verdicts,
+with the measured mode retained for saved arenas. It trades the 10 cm / 0.5°
+proof for playability and says so; its two-phone evidence table is the gate.
 
 Current observed deployment evidence: the server snapshot-ordering repair at
 2929fd69 passed the recorded live native-transport and Node probes; the creator's
@@ -231,6 +236,8 @@ Phases are gates, not dates. Every phase ends with physical-device evidence. B-t
 | 0006 (proposed now) | Duel shared frame: one-time `ARWorldMap` alignment, then `ARBodyTrackingConfiguration(initialWorldMap:)` on both phones, poses over `CombatTransport`, receiver-confirmation as drift monitor; two-phone acceptance plan + retirement list | ADR 0004/0005 conflict + Apple ARKit/Vision docs ([0006](decisions/0006-duel-shared-frame.md)) |
 | 0007 (accepted) | Combat feedback/cadence and hit-only presentation | [Combat feedback decision](decisions/0007-combat-feedback-and-cadence.md) |
 | 0008 (accepted implementation scope) | Complete M0–M6 review, cloud authority candidate and single-writer migration | [Realtime implementation decision](decisions/0008-realtime-combat-implementation.md) |
+| 0009 (accepted implementation scope) | Natural-scene reference as the calibration candidate; continuous visibility, fresh residuals | [Natural-scene calibration](decisions/0009-natural-scene-calibration-candidate.md) |
+| 0010 (proposed) | Quick Play: relocalized shared frame (raw map, no reference) + `phoneProxy` verdicts; measured mode kept for saved arenas | 2026-09-12 playability assessment, 09-08 phone recording ([0010](decisions/0010-quick-play-relocalized-frame-and-phone-proxy.md), [slice 010](../design/slices/010-quick-play-setup.md)) |
 | Future ADR | Spatial provider for street scale | R5 research + Phase 3 spike; remains outside the current commitment |
 
 ## 7. Risks and honest unknowns
