@@ -160,6 +160,21 @@ final class DuelFrameProvider: ObservableObject {
     await targeting.endFrameMapping()
   }
 
+  /// Archived peer-bound ARSession.CollaborationData, in emission order.
+  /// Collaborative matches wire this to the match transport; other modes get
+  /// an already-finished stream.
+  func collaborationOutputs() -> AsyncStream<Data> { targeting.duelFrameCollaboration() }
+
+  /// Forwards a peer's archived collaboration delta into the AR session.
+  /// Undecodable deltas are dropped and logged; alignment is unaffected.
+  func applyCollaboration(_ data: Data) async {
+    do {
+      try await targeting.applyFrameCollaboration(data)
+    } catch {
+      diagnostics.record("collab", "apply-failed \(data.count)B", at: now())
+    }
+  }
+
   private func receive(_ observation: DuelFrameObservation) async {
     let evaluatedAt = now()
     recordTracking(observation, at: evaluatedAt)
@@ -279,13 +294,19 @@ final class DuelFrameProvider: ObservableObject {
 }
 
 /// Latest-only delivery bounds the camera→UI queue independently of frame rate.
-final class DuelFrameObservationHub: @unchecked Sendable {
+/// Collaboration deltas instead buffer every value: they must apply in order.
+final class DuelFrameStreamHub<Value: Sendable>: @unchecked Sendable {
   private let lock = NSLock()
-  private var continuations: [UUID: AsyncStream<DuelFrameObservation>.Continuation] = [:]
+  private var continuations: [UUID: AsyncStream<Value>.Continuation] = [:]
+  private let buffering: AsyncStream<Value>.Continuation.BufferingPolicy
 
-  func stream() -> AsyncStream<DuelFrameObservation> {
+  init(buffering: AsyncStream<Value>.Continuation.BufferingPolicy = .bufferingNewest(1)) {
+    self.buffering = buffering
+  }
+
+  func stream() -> AsyncStream<Value> {
     let id = UUID()
-    return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+    return AsyncStream(bufferingPolicy: buffering) { continuation in
       lock.lock()
       continuations[id] = continuation
       lock.unlock()
@@ -298,11 +319,11 @@ final class DuelFrameObservationHub: @unchecked Sendable {
     }
   }
 
-  func yield(_ observation: DuelFrameObservation) {
+  func yield(_ value: Value) {
     lock.lock()
     let current = Array(continuations.values)
     lock.unlock()
-    for continuation in current { continuation.yield(observation) }
+    for continuation in current { continuation.yield(value) }
   }
 
   func finish() {
@@ -313,3 +334,5 @@ final class DuelFrameObservationHub: @unchecked Sendable {
     for continuation in current { continuation.finish() }
   }
 }
+
+typealias DuelFrameObservationHub = DuelFrameStreamHub<DuelFrameObservation>
