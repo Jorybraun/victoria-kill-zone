@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 struct DuelFrameDiagnosticEvent: Codable, Equatable, Sendable {
   let elapsedMs: Int64
@@ -7,8 +8,12 @@ struct DuelFrameDiagnosticEvent: Codable, Equatable, Sendable {
 }
 
 /// Sanitized bounded setup log: no frame IDs, peer IDs, codes, images or AR archives.
+/// Every record also mirrors to unified logging in all builds so a phone on a
+/// cable (or wireless debugging) streams live trials in Console.app — filter
+/// subsystem com.victoriakillzone.duelFrame.
 struct DuelFrameDiagnostics: Sendable {
   static let capacity = 256
+  private static let logger = Logger(subsystem: "com.victoriakillzone.duelFrame", category: "setup")
   private(set) var events: [DuelFrameDiagnosticEvent] = []
   private var startedAt: Date
 
@@ -20,9 +25,11 @@ struct DuelFrameDiagnostics: Sendable {
   }
 
   mutating func record(_ kind: String, _ detail: String, at: Date) {
-    events.append(DuelFrameDiagnosticEvent(elapsedMs: Int64(at.timeIntervalSince(startedAt) * 1000),
-      kind: kind, detail: detail))
+    let event = DuelFrameDiagnosticEvent(elapsedMs: Int64(at.timeIntervalSince(startedAt) * 1000),
+      kind: kind, detail: detail)
+    events.append(event)
     if events.count > Self.capacity { events.removeFirst(events.count - Self.capacity) }
+    Self.logger.info("\(event.elapsedMs)ms \(event.kind, privacy: .public): \(event.detail, privacy: .public)")
   }
 
   func export() throws -> URL {
