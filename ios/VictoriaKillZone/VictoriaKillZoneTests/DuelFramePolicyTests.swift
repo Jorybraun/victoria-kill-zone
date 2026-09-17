@@ -377,6 +377,114 @@ final class DuelFramePolicyTests: XCTestCase {
   }
 }
 
+/// ADR 0010: relocalized mode aligns on ARKit's relocalizing→normal transition
+/// into the shared raw map, needs no residual, and degrades recoverably on
+/// tracking dips instead of losing the match.
+final class DuelFrameRelocalizedTests: XCTestCase {
+  private let base = Date(timeIntervalSince1970: 1_000)
+  private let matrix: [Double] = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+
+  func testRelocalizedWorldNormalAlignsDirectlyAndPermitsFireWithoutResidual() throws {
+    var (policy, map) = try relocalizedInstalling()
+    XCTAssertFalse(ingest(&policy, map: map, phase: .worldRelocalization, tracking: .relocalizing, time: 0.3))
+    XCTAssertEqual(policy.snapshot.stage, .relocalizingWorld)
+    XCTAssertFalse(ingest(&policy, map: map, phase: .worldRelocalization, tracking: .normal, time: 0.4),
+      "Relocalized mode must never request the body configuration run")
+    XCTAssertEqual(policy.snapshot.stage, .aligned)
+    XCTAssertEqual(policy.snapshot.mode, .relocalized)
+    XCTAssertNil(policy.snapshot.residual)
+    XCTAssertTrue(policy.snapshot.permitsSpatialFire(at: base.addingTimeInterval(0.4)))
+  }
+
+  func testRelocalizedNormalFrameWithoutPriorRelocalizingCannotAlign() throws {
+    var (policy, map) = try relocalizedInstalling()
+    XCTAssertFalse(ingest(&policy, map: map, phase: .worldRelocalization, tracking: .normal, time: 0.3))
+    XCTAssertEqual(policy.snapshot.stage, .relocalizingWorld)
+    XCTAssertFalse(policy.snapshot.permitsSpatialFire(at: base.addingTimeInterval(0.3)))
+  }
+
+  func testRelocalizedTrackingDipDegradesAndFreshNormalPoseRecovers() throws {
+    var (policy, map) = try relocalizedAligned()
+    XCTAssertFalse(ingest(&policy, map: map, phase: .worldRelocalization, tracking: .limited, time: 0.5))
+    XCTAssertEqual(policy.snapshot.stage, .degraded)
+    XCTAssertEqual(policy.snapshot.failure, .trackingLimited)
+    XCTAssertFalse(policy.snapshot.permitsSpatialFire(at: base.addingTimeInterval(0.5)))
+    XCTAssertFalse(ingest(&policy, map: map, phase: .worldRelocalization, tracking: .normal, time: 0.6))
+    XCTAssertEqual(policy.snapshot.stage, .aligned)
+    XCTAssertNil(policy.snapshot.failure)
+    XCTAssertTrue(policy.snapshot.permitsSpatialFire(at: base.addingTimeInterval(0.6)))
+  }
+
+  func testRelocalizedPersistentRelocalizingLosesAfterFifteenSeconds() throws {
+    var (policy, map) = try relocalizedAligned()
+    ingest(&policy, map: map, phase: .worldRelocalization, tracking: .relocalizing, time: 0.5)
+    XCTAssertEqual(policy.snapshot.stage, .degraded)
+    ingest(&policy, map: map, phase: .worldRelocalization, tracking: .relocalizing, time: 1.0)
+    XCTAssertEqual(policy.snapshot.stage, .degraded, "An armed deadline must not re-arm on each dip frame")
+    policy.tick(at: base.addingTimeInterval(15.49))
+    XCTAssertEqual(policy.snapshot.stage, .degraded)
+    policy.tick(at: base.addingTimeInterval(15.5))
+    XCTAssertEqual(policy.snapshot.stage, .lost)
+    XCTAssertEqual(policy.snapshot.failure, .relocalizationTimedOut)
+  }
+
+  func testRelocalizedAlignmentStillRejectsWrongPhaseEpochAndMap() throws {
+    var (policy, map) = try relocalizedAligned()
+    let other = try DuelFrameMap(epoch: 1, bytes: Data([9]))
+    XCTAssertFalse(ingest(&policy, map: map, phase: .bodyRelocalization, tracking: .normal, time: 0.5))
+    XCTAssertEqual(policy.snapshot.stage, .aligned)
+    XCTAssertFalse(ingest(&policy, map: other, phase: .worldRelocalization, tracking: .normal, time: 0.6))
+    XCTAssertEqual(policy.snapshot.stage, .aligned)
+  }
+
+  func testMeasuredModeKeepsBodyRunResidualGateAndTrackingLoss() throws {
+    var policy = DuelFramePolicy()
+    let map = try DuelFrameMap(epoch: 1, bytes: Data([1]))
+    try policy.beginCalibration(epoch: 1, mode: .measured, at: base)
+    ingest(&policy, map: nil, phase: .mapping, tracking: .normal, time: 0.1, mapped: true)
+    try policy.beginInstall(map, at: base.addingTimeInterval(0.2))
+    ingest(&policy, map: map, phase: .worldRelocalization, tracking: .relocalizing, time: 0.3)
+    XCTAssertTrue(ingest(&policy, map: map, phase: .worldRelocalization, tracking: .normal, time: 0.4))
+    XCTAssertEqual(policy.snapshot.stage, .relocalizingBody)
+    ingest(&policy, map: map, phase: .bodyRelocalization, tracking: .relocalizing, time: 0.5)
+    ingest(&policy, map: map, phase: .bodyRelocalization, tracking: .normal, time: 0.6)
+    XCTAssertEqual(policy.snapshot.stage, .awaitingResidual)
+    XCTAssertFalse(policy.snapshot.permitsSpatialFire(at: base.addingTimeInterval(0.6)),
+      "Measured mode must still require fresh residuals")
+    ingest(&policy, map: map, phase: .bodyRelocalization, tracking: .limited, time: 0.7)
+    XCTAssertEqual(policy.snapshot.stage, .lost)
+    XCTAssertEqual(policy.snapshot.failure, .trackingLost)
+  }
+
+  private func relocalizedInstalling() throws -> (DuelFramePolicy, DuelFrameMap) {
+    var policy = DuelFramePolicy()
+    let map = try DuelFrameMap(epoch: 1, bytes: Data([1]))
+    try policy.beginCalibration(epoch: 1, mode: .relocalized, at: base)
+    ingest(&policy, map: nil, phase: .mapping, tracking: .normal, time: 0.1, mapped: true)
+    XCTAssertEqual(policy.snapshot.stage, .mapReady)
+    try policy.beginInstall(map, at: base.addingTimeInterval(0.2))
+    return (policy, map)
+  }
+
+  private func relocalizedAligned() throws -> (DuelFramePolicy, DuelFrameMap) {
+    var (policy, map) = try relocalizedInstalling()
+    ingest(&policy, map: map, phase: .worldRelocalization, tracking: .relocalizing, time: 0.3)
+    ingest(&policy, map: map, phase: .worldRelocalization, tracking: .normal, time: 0.4)
+    XCTAssertEqual(policy.snapshot.stage, .aligned)
+    return (policy, map)
+  }
+
+  @discardableResult
+  private func ingest(_ policy: inout DuelFramePolicy, map: DuelFrameMap?,
+    phase: DuelFrameSessionPhase, tracking: DuelFrameTracking, time: Double, mapped: Bool = false) -> Bool {
+    let date = base.addingTimeInterval(time)
+    return policy.ingest(DuelFrameObservation(epoch: map?.epoch ?? 1, frameID: map?.frameID,
+      phase: phase, tracking: tracking, isMapped: mapped,
+      pose: tracking == .normal ? DuelFramePose(columnMajor: matrix, capturedAt: date, frameTimestamp: time) : nil,
+      observedAt: date, failure: nil), at: date)
+  }
+}
+
 @MainActor
 final class DuelFrameProviderTests: XCTestCase {
   func testGuestProviderDoesNotExpireWhileWaitingForHostMap() async throws {
@@ -428,6 +536,49 @@ final class DuelFrameProviderTests: XCTestCase {
     XCTAssertNil(provider.snapshot.frameID)
     await provider.stop()
   }
+
+  func testRelocalizedCaptureMapSharesRawArchiveAndRejectsReferenceCapture() async throws {
+    let driver = DelayedDuelFrameDriver()
+    let provider = DuelFrameProvider(targeting: driver)
+    try await provider.beginCalibration(epoch: 1, mode: .relocalized)
+    driver.emitMapped(epoch: 1)
+    for _ in 0..<100 where provider.snapshot.stage != .mapReady {
+      try await Task.sleep(for: .milliseconds(1))
+    }
+    XCTAssertEqual(provider.snapshot.stage, .mapReady)
+    XCTAssertEqual(provider.referenceState, .unavailable)
+    do {
+      _ = try await provider.captureReference()
+      XCTFail("Relocalized matches never capture a scene reference")
+    } catch {
+      XCTAssertEqual(error as? DuelFrameFailure, .referenceUnavailable)
+    }
+    let capture = Task { try await provider.captureMap() }
+    await driver.waitForCapture()
+    await driver.completeCapture()
+    let map = try await capture.value
+    XCTAssertEqual(map.bytes, Data([1, 2, 3]), "Relocalized mode shares the raw archive, not a bundle")
+    XCTAssertNil(map.reference)
+    XCTAssertEqual(map.worldMapBytes, Data([1, 2, 3]))
+    await provider.stop()
+  }
+
+  func testMeasuredCaptureMapStillRequiresACapturedReference() async throws {
+    let driver = DelayedDuelFrameDriver()
+    let provider = DuelFrameProvider(targeting: driver)
+    try await provider.beginCalibration(epoch: 1, mode: .measured)
+    driver.emitMapped(epoch: 1)
+    for _ in 0..<100 where provider.snapshot.stage != .mapReady {
+      try await Task.sleep(for: .milliseconds(1))
+    }
+    do {
+      _ = try await provider.captureMap()
+      XCTFail("Measured mode must not share a map without its captured reference")
+    } catch {
+      XCTAssertEqual(error as? DuelFrameFailure, .referenceUnavailable)
+    }
+    await provider.stop()
+  }
 }
 
 @MainActor
@@ -441,7 +592,7 @@ private actor DelayedDuelFrameDriver: DuelFrameSessionDriving {
   private var captureWaiters: [CheckedContinuation<Void, Never>] = []
 
   nonisolated func duelFrameObservations() -> AsyncStream<DuelFrameObservation> { hub.stream() }
-  func beginFrameMapping(epoch: UInt16) async throws {}
+  func beginFrameMapping(epoch: UInt16, mode: DuelFrameAlignmentMode) async throws {}
   func installFrameMap(_ map: DuelFrameMap, phase: DuelFrameSessionPhase) async throws {}
   func endFrameMapping() async {}
   func captureFrameReference(epoch: UInt16) async throws -> DuelFrameReference {

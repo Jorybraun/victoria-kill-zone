@@ -35,6 +35,9 @@
     let epoch: UInt16
     let frameID: String?
     let phase: DuelFrameSessionPhase
+    /// Relocalized matches keep the world configuration for the whole match;
+    /// the targeting pipeline must run during it, not only under body tracking.
+    let processesTargeting: Bool
   }
 
   /// Immutable captured/decoded maps cross onto the archive queue as Apple
@@ -49,6 +52,7 @@
     let archiveQueue = DispatchQueue(label: "com.victoriakillzone.frame.archive", qos: .userInitiated)
     // Mutable fields belong exclusively to ARVisionTargetingSession.sessionQueue.
     var configuration: DuelFrameSessionConfiguration?
+    var alignmentMode: DuelFrameAlignmentMode = .measured
     var generation = 0
     var minimumFrameTimestamp = -Double.infinity
     var lastPublishedTimestamp = -Double.infinity

@@ -344,7 +344,7 @@ private final class ReferenceFrameDriver: DuelFrameSessionDriving, @unchecked Se
   func duelFrameObservations() -> AsyncStream<DuelFrameObservation> {
     AsyncStream(unfolding: { [source] in await source.next() })
   }
-  func beginFrameMapping(epoch: UInt16) async throws {}
+  func beginFrameMapping(epoch: UInt16, mode: DuelFrameAlignmentMode) async throws {}
   func installFrameMap(_ map: DuelFrameMap, phase: DuelFrameSessionPhase) async throws {}
   func endFrameMapping() async { await source.finish() }
   func captureFrameReference(epoch: UInt16) async throws -> DuelFrameReference {
