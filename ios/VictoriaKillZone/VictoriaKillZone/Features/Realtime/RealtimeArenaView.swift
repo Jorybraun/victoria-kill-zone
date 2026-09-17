@@ -19,10 +19,8 @@ struct RealtimeArenaView: View {
   @State private var confirmedTargetID: String?
   @State private var confirmedZone: TargetingHitZone?
   @State private var menuPresented = false
-  #if DEBUG
   @State private var setupLogURL: URL?
   @State private var setupLogFailed = false
-  #endif
 
   var body: some View {
     ZStack {
@@ -305,7 +303,6 @@ struct RealtimeArenaView: View {
           }
           .font(.subheadline).foregroundStyle(VKZPalette.telemetry)
           if controller.stage != .running {Text(guidance).font(.subheadline).foregroundStyle(VKZPalette.textMuted)}
-          #if DEBUG
           VStack(alignment: .leading, spacing: 6) {
             if let setupLogURL {
               ShareLink("Share setup log", item: setupLogURL).frame(minHeight: 44)
@@ -317,7 +314,6 @@ struct RealtimeArenaView: View {
           .alert("Export unavailable", isPresented: $setupLogFailed) {
             Button("OK") {}
           } message: {Text("The setup log could not be saved. Try again.")}
-          #endif
           Button(role: .destructive, action: leave) {
             Text(controller.stage == .finished ? "Return home" : "Leave match")
               .frame(maxWidth: .infinity, minHeight: 44)
