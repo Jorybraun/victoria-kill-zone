@@ -1,6 +1,6 @@
 # ADR 0011 — Quick Play: continuous collaborative mapping instead of one-shot map share
 
-Status: **proposed**, 2026-09-17. Owner acceptance is required before implementation lanes may proceed. Integration owns this record, the transport wiring and the client flow; targeting owns the session/policy changes; design owns the slice update. Nothing in this record is physical-device evidence beyond the cited trial observation.
+Status: **accepted**, 2026-09-17. Owner accepted this record; the cover mechanic (point 8) was decided during review. Integration owns this record, the transport wiring and the client flow; targeting owns the session/policy changes; design owns the slice update. Nothing in this record is physical-device evidence beyond the cited trial observation.
 
 ## Context
 
