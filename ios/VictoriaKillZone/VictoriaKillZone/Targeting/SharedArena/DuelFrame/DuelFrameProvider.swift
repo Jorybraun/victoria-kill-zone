@@ -150,6 +150,7 @@ final class DuelFrameProvider: ObservableObject {
   }
 
   func stop() async {
+    diagnostics.flush()
     policy.stop()
     installedMap = nil
     capturedReference = nil
