@@ -46,6 +46,24 @@ describe("cumulative socket receipt accounting", () => {
     sender.close(1000, "test-complete"); receiver.close();
   });
 
+  it("bounds collab relay bytes with a refilling per-receiver budget", () => {
+    const { sender, receiver } = connection();
+    expect(sender.admitCollab(0, 512 * 1024)).toBe(true);
+    expect(sender.admitCollab(0, 1)).toBe(false);
+    expect(sender.admitCollab(1000, 256 * 1024)).toBe(true);
+    expect(sender.admitCollab(1000, 1)).toBe(false);
+    sender.close(1000, "test-complete"); receiver.close();
+  });
+
+  it("does not charge collab relay bytes against the receipt window", () => {
+    const { sender, receiver } = connection();
+    expect(sender.sendSerialized("x".repeat(120 * 1024), 1)).toBe(true);
+    expect(sender.sendSerialized("x".repeat(120 * 1024), 2)).toBe(true);
+    expect(sender.sendCollab("x".repeat(100 * 1024))).toBe(true);
+    expect(sender.sendSerialized("x".repeat(10 * 1024), 3)).toBe(true);
+    sender.close(1000, "test-complete"); receiver.close();
+  });
+
   it("budgets command admission independently from other players' receipt traffic", () => {
     const { sender, receiver } = connection();
     for (let second = 0; second < 5; second += 1) {
