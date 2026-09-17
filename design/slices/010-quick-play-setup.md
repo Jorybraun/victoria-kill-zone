@@ -1,6 +1,6 @@
 # Quick Play setup (relocalized frame)
 
-Proposed scope under [ADR 0010](../../docs/decisions/0010-quick-play-relocalized-frame-and-phone-proxy.md); frozen once that record is accepted. Covers the pregame surface of Home → CREATE ARENA and the recovery states during a match. Existing combat HUD (ammo, reload, hold-to-fire, shield, slow field, health, round time, menu) from slice 009 is unchanged. The saved-arena flow keeps its current measured setup (reference thumbnail, capture retry) and is not covered here.
+Frozen scope under accepted [ADR 0010](../../docs/decisions/0010-quick-play-relocalized-frame-and-phone-proxy.md). Covers the pregame surface of Home → CREATE ARENA and the recovery states during a match. Existing combat HUD (ammo, reload, hold-to-fire, shield, slow field, health, round time, menu) from slice 009 is unchanged. The saved-arena flow keeps its current measured setup (reference thumbnail, capture retry) and is not covered here.
 
 ## User states
 

@@ -1,6 +1,6 @@
 # ADR 0010 — Quick Play: relocalized shared frame and phone-proxy verdicts
 
-Status: **proposed**, 2026-09-13. Owner acceptance is required before the targeting, backend or client lanes in [design/slices/010-quick-play-setup.md](../../design/slices/010-quick-play-setup.md) may be implemented. Integration owns this record, the per-match geometry contract and the client flow; targeting owns the frame policy and provider; backend owns the Convex change; design owns the slice freeze. Nothing in this record is physical-device evidence.
+Status: **accepted**, 2026-09-16. Owner accepted this record; the targeting, backend and client lanes in [design/slices/010-quick-play-setup.md](../../design/slices/010-quick-play-setup.md) are implemented under PRs #89, #90 and #91. Integration owns this record, the per-match geometry contract and the client flow; targeting owns the frame policy and provider; backend owns the Convex change; design owns the slice freeze. Nothing in this record is physical-device evidence.
 
 ## Context
 
