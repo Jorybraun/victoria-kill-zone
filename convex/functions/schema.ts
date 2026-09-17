@@ -61,6 +61,9 @@ export default defineSchema({
     radiusMeters: v.number(),
     maxPlayers: v.number(),
     combatMode: v.optional(v.literal("durableObject")),
+    // Per-match combat geometry selected at create. Absent on legacy matches,
+    // which keep the "trackedBody" default baked into their prepared rules.
+    combatGeometry: v.optional(v.union(v.literal("trackedBody"), v.literal("phoneProxy"))),
     combatFrameEpoch: v.optional(v.number()),
     combatAuthorityEpoch: v.optional(v.number()),
     combatPreparedAt: v.optional(v.number()),

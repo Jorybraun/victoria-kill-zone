@@ -9,6 +9,7 @@ struct CreateDuelRequest: Equatable, Sendable {
   let displayName: String
   let arenaRadiusMeters: Double
   var combatMode: CombatMode? = nil
+  var combatGeometry: String? = nil
   var maxPlayers: Int? = nil
 }
 

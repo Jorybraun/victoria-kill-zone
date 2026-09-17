@@ -25,6 +25,7 @@ enum ConvexGameSessionArguments {
       "arenaRadiusMeters": request.arenaRadiusMeters,
     ]
     if let mode = request.combatMode {result["combatMode"] = mode.rawValue}
+    if let geometry = request.combatGeometry {result["combatGeometry"] = geometry}
     if let count = request.maxPlayers {result["maxPlayers"] = Double(count)}
     return result
   }

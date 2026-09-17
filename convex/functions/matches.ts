@@ -59,6 +59,9 @@ export const create = mutation({
     displayName: v.string(),
     arenaRadiusMeters: v.number(),
     combatMode: v.optional(v.literal("durableObject")),
+    // Optional verdict geometry for durableObject matches. Absent keeps the
+    // "trackedBody" default; "phoneProxy" is the relocalized Quick Play mode.
+    combatGeometry: v.optional(v.union(v.literal("trackedBody"), v.literal("phoneProxy"))),
     maxPlayers: v.optional(v.number()),
     // phase0.v1 arenaCenter. Optional during the migration window: the smaller
     // G2 create shape stays accepted, but a match created without a valid
@@ -70,6 +73,7 @@ export const create = mutation({
     const displayName = displayNameOrFail(args.displayName);
     if (args.maxPlayers !== undefined && (args.combatMode !== "durableObject" ||
       !Number.isInteger(args.maxPlayers) || args.maxPlayers < 2 || args.maxPlayers > 4)) fail("INVALID_ARENA");
+    if (args.combatGeometry !== undefined && args.combatMode !== "durableObject") fail("INVALID_ARENA");
     const now = Date.now();
     const center = validatedArenaCenter(args.arenaCenter, now);
     const code = await allocateMatchCode(ctx);
@@ -91,6 +95,7 @@ export const create = mutation({
     const matchId = await ctx.db.insert("matches", {
       ...plan.match,
       ...(args.combatMode === "durableObject" ? {combatMode: args.combatMode, maxPlayers: args.maxPlayers ?? 4} : {}),
+      ...(args.combatGeometry !== undefined ? {combatGeometry: args.combatGeometry} : {}),
       startedAt: null,
       hostPlayerId: null,
     });

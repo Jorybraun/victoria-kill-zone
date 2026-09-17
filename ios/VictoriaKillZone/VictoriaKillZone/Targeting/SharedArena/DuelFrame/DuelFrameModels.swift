@@ -9,9 +9,16 @@ enum DuelFrameStage: String, Equatable, Sendable {
 enum DuelFrameFailure: String, Error, Equatable, Sendable {
   case unsupported, cameraUnavailable, invalidEpoch, staleEpoch, mapNotReady
   case mappingTimedOut, mapCaptureFailed, mapCaptureTimedOut, mapTooLarge, invalidMap, hashMismatch
-  case operationSuperseded, relocalizationTimedOut, trackingLost, sessionInterrupted
+  case operationSuperseded, relocalizationTimedOut, trackingLost, trackingLimited, sessionInterrupted
   case backgrounded, sessionStopped, stalePose, staleResidual, residualExceeded, invalidResidual
   case referenceUnavailable, referenceNotFound, referenceUnsuitable, referenceCaptureTimedOut
+}
+
+/// Measured mode requires the visible reference and fresh residuals (ADR 0009).
+/// Relocalized mode treats ARKit's relocalizing→normal transition into the
+/// shared raw world map as the alignment gate and accepts no residual proof.
+enum DuelFrameAlignmentMode: String, Equatable, Sendable {
+  case measured, relocalized
 }
 
 /// Targeting-local value, not a transport envelope. The app authenticates the
@@ -94,19 +101,23 @@ struct DuelFrameSnapshot: Equatable, Sendable {
   var residual: DuelFrameResidual?
   var failure: DuelFrameFailure?
   var scanFeedback: DuelFrameScanFeedback = .waitingForCamera
+  var mode: DuelFrameAlignmentMode = .measured
 
   /// Read this at the instant of firing; a delayed UI publisher cannot extend
   /// permission after the last pose or independently measured residual expires.
+  /// Relocalized mode has no residual source: ARKit relocalization plus a fresh
+  /// pose is the entire gate (ADR 0010).
   func permitsSpatialFire(at date: Date = Date()) -> Bool {
     stage == .aligned && epoch != nil && frameID != nil
       && localPose.map { $0.isValid && DuelFramePolicy.isFresh($0.capturedAt, at: date) } == true
-      && residual.map { DuelFramePolicy.isFresh($0.observedAt, at: date) } == true
+      && (mode == .relocalized
+        || residual.map { DuelFramePolicy.isFresh($0.observedAt, at: date) } == true)
   }
 }
 
 protocol DuelFrameSessionDriving: Sendable {
   func duelFrameObservations() -> AsyncStream<DuelFrameObservation>
-  func beginFrameMapping(epoch: UInt16) async throws
+  func beginFrameMapping(epoch: UInt16, mode: DuelFrameAlignmentMode) async throws
   func captureFrameMap(epoch: UInt16) async throws -> Data
   func captureFrameReference(epoch: UInt16) async throws -> DuelFrameReference
   func installFrameMap(_ map: DuelFrameMap, phase: DuelFrameSessionPhase) async throws

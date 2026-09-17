@@ -113,3 +113,59 @@ final class MapLabCaptureRequestTests: XCTestCase {
     }
   }
 }
+
+#if os(iOS) && canImport(ARKit)
+import ARKit
+import SwiftUI
+import UIKit
+
+@MainActor final class MapLabTestCameraSource: MapLabCameraSource {
+  @Published var session: ARSession?
+  var onReassert: (() -> Void)?
+  func reassertDelegate() { onReassert?() }
+}
+
+@MainActor
+final class MapLabCameraPreviewTests: XCTestCase {
+  func testPreviewFollowsSessionCreatedAfterFirstRenderReplacedByRetryAndClearedByStop() async throws {
+    // Compile-time proof the shipped driver is a valid preview source.
+    let _: any MapLabCameraSource = MapLabARDriver()
+    let source = MapLabTestCameraSource()
+    let host = UIHostingController(rootView: MapLabCameraPreview(driver: source))
+    let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 640))
+    window.rootViewController = host; window.makeKeyAndVisible()
+    host.view.layoutIfNeeded()
+    let sceneView = try XCTUnwrap(findARSCNView(in: host.view))
+    let own = sceneView.session
+    let s1 = ARSession(), s2 = ARSession()
+    var reassertedWhileAttachedToS1 = false
+    source.onReassert = { reassertedWhileAttachedToS1 = reassertedWhileAttachedToS1 || sceneView.session === s1 }
+
+    source.session = s1
+    try await until { sceneView.session === s1 }
+    XCTAssertTrue(reassertedWhileAttachedToS1, "Driver delegate must be reasserted after ARSCNView takes the session")
+
+    source.session = nil
+    try await until { sceneView.session !== s1 }
+    XCTAssertTrue(sceneView.session !== own, "Stop must not fall back to a stale session")
+
+    source.session = s2
+    try await until { sceneView.session === s2 }
+    XCTAssertTrue(findARSCNView(in: host.view) === sceneView, "Session changes update the existing view, they do not recreate it")
+    withExtendedLifetime(window) {}
+  }
+
+  private func findARSCNView(in view: UIView) -> ARSCNView? {
+    if let scene = view as? ARSCNView { return scene }
+    for child in view.subviews { if let found = findARSCNView(in: child) { return found } }
+    return nil
+  }
+  private func until(_ condition: () -> Bool) async throws {
+    let deadline = ContinuousClock.now + .seconds(2)
+    while !condition() {
+      guard ContinuousClock.now < deadline else { XCTFail("Preview did not follow the session change"); throw MapLabFailure.timedOut }
+      try? await Task.sleep(for: .milliseconds(20))
+    }
+  }
+}
+#endif

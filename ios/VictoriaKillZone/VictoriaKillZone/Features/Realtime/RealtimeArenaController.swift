@@ -104,6 +104,16 @@ final class RealtimeArenaController: ObservableObject {
   var canOpenCameraSettings: Bool {message != nil && !cameraReady}
   var localPlayer: CombatWire.Player? {snapshot?.players.first {$0.playerId == session.playerId}}
   var isHost: Bool {localPlayer?.role == "host"}
+  /// Quick Play matches run the relocalized shared frame: raw-map install,
+  /// no natural-scene reference, phoneProxy verdicts. Saved arenas stay
+  /// measured. The wire rules are the single source every client agrees on.
+  var usesRelocalizedFrame: Bool {snapshot?.rules.geometry == "phoneProxy"}
+  var frameAlignmentMode: DuelFrameAlignmentMode {usesRelocalizedFrame ? .relocalized : .measured}
+  /// Connected roster members whose phones report an aligned shared frame.
+  var alignedPlayers: (aligned: Int, total: Int) {
+    let connected = (snapshot?.players ?? []).filter {$0.connected}
+    return (connected.filter {$0.frameReady}.count, connected.count)
+  }
   var matchTimeMs: Double? {combat.matchTimeMs}
   var worldReady: Bool {sceneActive && connection == .connected && combat.clockReady && frame.permitsSpatialFire(at: Date())}
   var eligibility: RealtimeActionEligibility {
@@ -221,7 +231,7 @@ final class RealtimeArenaController: ObservableObject {
     }
   }
   func captureReference() {
-    guard isHost, frame.stage == .mapReady, referenceTask == nil, let frameProvider else {return}
+    guard isHost, !usesRelocalizedFrame, frame.stage == .mapReady, referenceTask == nil, let frameProvider else {return}
     let token = generation
     referenceTask = Task { [weak self] in
       do {_ = try await frameProvider.captureReference()} catch {
@@ -232,7 +242,12 @@ final class RealtimeArenaController: ObservableObject {
     }
   }
   func captureAndShareMap() {
-    guard isHost, case .captured = referenceState else {return}
+    // Relocalized Quick Play shares the raw world map; measured arenas still
+    // require the captured reference before the scan may be shared.
+    guard isHost, frame.stage == .mapReady else {return}
+    if !usesRelocalizedFrame {
+      guard case .captured = referenceState else {return}
+    }
     mapCoordinator?.captureAndShare()
   }
   func retryAlignment() {
@@ -315,7 +330,7 @@ final class RealtimeArenaController: ObservableObject {
   private func configureMapIfNeeded() {
     guard started, cameraReady, sceneActive, let snapshot, configuredEpoch != snapshot.frameEpoch, let epoch = UInt16(exactly: snapshot.frameEpoch), epoch > 0 else {return}
     configuredEpoch = snapshot.frameEpoch
-    mapCoordinator?.configure(epoch: epoch, isHost: isHost)
+    mapCoordinator?.configure(epoch: epoch, isHost: isHost, mode: frameAlignmentMode)
   }
   private func tick() {
     guard started else {return}

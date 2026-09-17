@@ -36,6 +36,15 @@ final class RealtimeArenaPresentationTests: XCTestCase {
     }
   }
 
+  func testRelocalizedFrameNeverShowsReferenceControls() {
+    for stage in [RealtimeArenaStage.mapping, .mapReady] {
+      let controls = RealtimeArenaPresentation.ReferenceSetup(stage: stage, isHost: true,
+        usesSavedArena: false, usesRelocalizedFrame: true)
+      XCTAssertFalse(controls.isVisible, "Quick Play shares the raw map; there is no reference step")
+      XCTAssertFalse(controls.captureAvailable)
+    }
+  }
+
   func testOnlyCurrentLocalFieldOverridesCooldownAndExpiresAtBoundary() {
     let fields = [field(owner: "local", start: 1000, end: 3000), field(owner: "remote", start: 1000, end: 9000)]
     XCTAssertEqual(RealtimeArenaPresentation.slowFieldStatus(fields: fields, localPlayerID: "local", readyAt: 11000, now: 1000), .active(seconds: 2))

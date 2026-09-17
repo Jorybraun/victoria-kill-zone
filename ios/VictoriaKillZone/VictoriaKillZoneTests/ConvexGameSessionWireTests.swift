@@ -30,6 +30,12 @@ final class ConvexGameSessionWireTests: XCTestCase {
       ["displayName", "arenaRadiusMeters"]
     )
     XCTAssertEqual(
+      Set(
+        ConvexGameSessionArguments.create(.init(displayName: "Host", arenaRadiusMeters: 30,
+          combatMode: .durableObject, combatGeometry: "phoneProxy", maxPlayers: 4)).keys),
+      ["displayName", "arenaRadiusMeters", "combatMode", "combatGeometry", "maxPlayers"]
+    )
+    XCTAssertEqual(
       Set(ConvexGameSessionArguments.join(.init(displayName: "Guest", code: "ABC123")).keys),
       ["displayName", "code"]
     )

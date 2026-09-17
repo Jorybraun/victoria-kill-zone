@@ -35,8 +35,10 @@ final class DuelFrameProvider: ObservableObject {
     watchdogTask?.cancel()
   }
 
-  func beginCalibration(epoch: UInt16, captureRequired: Bool = true) async throws {
-    try policy.beginCalibration(epoch: epoch, captureRequired: captureRequired, at: now())
+  func beginCalibration(epoch: UInt16, captureRequired: Bool = true,
+    mode: DuelFrameAlignmentMode = .measured
+  ) async throws {
+    try policy.beginCalibration(epoch: epoch, captureRequired: captureRequired, mode: mode, at: now())
     installedMap = nil
     capturedReference = nil
     referenceState = .unavailable
@@ -45,7 +47,7 @@ final class DuelFrameProvider: ObservableObject {
     startWatchdog()
     let token = policy.operationToken!
     do {
-      try await targeting.beginFrameMapping(epoch: epoch)
+      try await targeting.beginFrameMapping(epoch: epoch, mode: mode)
       guard policy.accepts(token) else { throw DuelFrameFailure.operationSuperseded }
     } catch {
       fail(error, ifCurrent: token)
@@ -55,19 +57,31 @@ final class DuelFrameProvider: ObservableObject {
 
   func captureMap() async throws -> DuelFrameMap {
     guard snapshot.stage == .mapReady, let token = policy.operationToken else { throw DuelFrameFailure.mapNotReady }
-    guard let reference = capturedReference, referenceState == .captured(reference.summary) else {
-      throw DuelFrameFailure.referenceUnavailable
+    let reference: DuelFrameReference?
+    if snapshot.mode == .measured {
+      guard let captured = capturedReference, referenceState == .captured(captured.summary) else {
+        throw DuelFrameFailure.referenceUnavailable
+      }
+      reference = captured
+    } else {
+      reference = nil
     }
     let bytes = try await targeting.captureFrameMap(epoch: token.epoch)
     // The driver validates capture quality. Later scan fluctuations do not
     // invalidate its result; replacement or loss of this mapping run does.
     guard policy.accepts(token) else { throw DuelFrameFailure.operationSuperseded }
-    return try DuelFrameMap(epoch: token.epoch,
-      bytes: DuelFrameCalibrationBundle.encode(worldMap: bytes, reference: reference))
+    // Relocalized mode shares the raw world-map archive; the bundle decoder
+    // reads it back with no reference.
+    if let reference {
+      return try DuelFrameMap(epoch: token.epoch,
+        bytes: try DuelFrameCalibrationBundle.encode(worldMap: bytes, reference: reference))
+    }
+    return try DuelFrameMap(epoch: token.epoch, bytes: bytes)
   }
 
   @discardableResult
   func captureReference() async throws -> DuelFrameReferenceSummary {
+    guard snapshot.mode == .measured else { throw DuelFrameFailure.referenceUnavailable }
     guard snapshot.stage == .mapReady, let token = policy.operationToken,
       referenceState != .capturing else { throw DuelFrameFailure.mapNotReady }
     capturedReference = nil

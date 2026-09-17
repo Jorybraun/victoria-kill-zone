@@ -285,6 +285,9 @@ struct RealtimeArenaView: View {
           Text("The match continues while this menu is open.")
             .font(.subheadline).foregroundStyle(VKZPalette.textMuted)
           Text(stageTitle).font(.headline)
+          if controller.usesRelocalizedFrame {
+            Text("Aligned by shared scan (approximate)").font(.caption).foregroundStyle(VKZPalette.textMuted)
+          }
           RealtimeRosterStrip(players: controller.snapshot?.players ?? [], localPlayerID: controller.session.playerId)
           VStack(alignment: .leading, spacing: 6) {
             Text(RealtimeArenaPresentation.weaponName(controller.snapshot?.rules.weapon.id)).font(.headline)
@@ -316,7 +319,10 @@ struct RealtimeArenaView: View {
         Image(systemName: controller.stage == .respawning ? "heart.slash" : "viewfinder").font(.title2).foregroundStyle(VKZPalette.pending)
         Text(stageTitle).font(.title3.bold())
         Spacer(minLength: 0)
-        if [.connecting, .waitingForMap, .transferringMap, .relocalizing, .reconnecting].contains(controller.stage) {ProgressView().tint(.white)}
+        if [.connecting, .waitingForMap, .transferringMap, .relocalizing, .reconnecting].contains(controller.stage)
+          || (controller.usesRelocalizedFrame && controller.stage == .paused && controller.frame.stage == .degraded) {
+          ProgressView().tint(.white)
+        }
       }
       Text(guidance).font(.subheadline).foregroundStyle(VKZPalette.textMuted).fixedSize(horizontal: false, vertical: true)
       if controller.stage == .measuringReference, let residual = controller.frame.residual {
@@ -330,14 +336,20 @@ struct RealtimeArenaView: View {
         RealtimeReferencePanel(state: controller.referenceState, imageData: controller.referenceImageData,
           onCapture: controller.captureReference, onShare: controller.captureAndShareMap,
           captureAvailable: referenceSetup.captureAvailable)
-      } else if [.relocalizing, .measuringReference, .paused, .awaitingMembers].contains(controller.stage) {
+      } else if !controller.usesRelocalizedFrame,
+        [.relocalizing, .measuringReference, .paused, .awaitingMembers].contains(controller.stage) {
         RealtimeReferencePanel(state: controller.referenceState, imageData: controller.referenceImageData)
+      }
+      if controller.usesRelocalizedFrame && controller.isHost && controller.stage == .mapReady {
+        Button("SHARE ARENA", action: controller.captureAndShareMap)
+          .buttonStyle(VKZPrimaryButtonStyle())
+          .accessibilityHint("Sends the scan so the other phones can align with this play area")
       }
       if controller.eligibility.begin || controller.startPending {
         Button(action: controller.beginRound) {
           HStack(spacing: 8) {
             if controller.startPending {ProgressView().tint(VKZPalette.background)}
-            Text(controller.startPending ? "Starting match…" : "Begin match")
+            Text(controller.startPending ? "Starting match…" : controller.usesRelocalizedFrame ? "PLAY" : "Begin match")
           }
         }
         .buttonStyle(VKZPrimaryButtonStyle()).disabled(controller.startPending)
@@ -350,10 +362,12 @@ struct RealtimeArenaView: View {
         Button("Retry connection", action: controller.retryConnection).buttonStyle(VKZSecondaryButtonStyle())
       }
       if controller.isHost && controller.savedArenaName == nil && ([.mapping, .mapReady].contains(controller.stage) || scanTimedOut) {
-        Button("Restart scan", action: controller.retryAlignment).buttonStyle(VKZSecondaryButtonStyle())
+        Button(controller.usesRelocalizedFrame && scanTimedOut ? "Scan again" : "Restart scan",
+          action: controller.retryAlignment).buttonStyle(VKZSecondaryButtonStyle())
       } else if controller.stage == .paused || controller.stage == .unavailable {
         if controller.connectionIssue == nil {
-          Button("Retry alignment", action: controller.retryAlignment).buttonStyle(VKZSecondaryButtonStyle())
+          Button(controller.usesRelocalizedFrame ? "Re-align" : "Retry alignment",
+            action: controller.retryAlignment).buttonStyle(VKZSecondaryButtonStyle())
         }
         #if os(iOS)
         if controller.canOpenCameraSettings {
@@ -391,22 +405,50 @@ struct RealtimeArenaView: View {
       return "Loading \(name). Point at the fixed objects you scanned so your phone can recognize this arena."
     }
     if scanTimedOut {
-      return "The camera couldn't find enough stable detail. Point at a well-lit floor, wall or fixed object, then restart the scan."
+      return controller.usesRelocalizedFrame
+        ? "Couldn't map this area — try somewhere with more detail"
+        : "The camera couldn't find enough stable detail. Point at a well-lit floor, wall or fixed object, then restart the scan."
     }
     switch controller.stage {
-    case .mapping: return "Move slowly around the play area, keeping the floor, walls and fixed objects in view. Avoid aiming only at a blank wall."
+    case .mapping:
+      return controller.usesRelocalizedFrame
+        ? "Walk slowly and look around until the ring fills."
+        : "Move slowly around the play area, keeping the floor, walls and fixed objects in view. Avoid aiming only at a blank wall."
     case .mapReady:
+      if controller.usesRelocalizedFrame {
+        return "Ready to share. Send the scan so the other phones can align with this play area."
+      }
       if case .captured = controller.referenceState {return "Reference captured. Share the scan so the other phones can align with this play area."}
       return "Ready to capture. Choose a reference below so the phones can align with the same play area."
     case .waitingForMap: return "Waiting for the host’s arena scan. Stay nearby; it will load automatically."
     case .transferringMap: return "Keep this screen open while the shared arena scan transfers."
-    case .relocalizing: return "Point at the same fixed objects the host scanned. Move slowly until the camera recognizes the area."
+    case .relocalizing:
+      if controller.usesRelocalizedFrame {
+        return controller.isHost ? "Look at the area you scanned" : "Look at the area the host scanned"
+      }
+      return "Point at the same fixed objects the host scanned. Move slowly until the camera recognizes the area."
     case .measuringReference:
       return controller.referenceState == .unavailable
         ? "This older arena scan has no shared reference. Return home and create a new arena to capture one."
         : "Point at the reference shown below and hold steady. Each phone must recognize it before the match can begin. Keep it in view while playing."
-    case .awaitingMembers: return "Keep players and their phones in view. The host begins when everyone has finished alignment."
-    case .paused: return RealtimeArenaPresentation.pauseGuidance(clockReady: controller.combat.clockReady,
+    case .awaitingMembers:
+      if controller.usesRelocalizedFrame {
+        let counts = controller.alignedPlayers
+        return "Aligned — waiting for players (\(counts.aligned)/\(counts.total))"
+      }
+      return "Keep players and their phones in view. The host begins when everyone has finished alignment."
+    case .paused:
+      if controller.usesRelocalizedFrame {
+        switch controller.frame.stage {
+        case .degraded: return "Hold steady — re-aligning"
+        case .lost:
+          return controller.frame.failure == .relocalizationTimedOut
+            ? "Couldn't align — move closer to where the host scanned"
+            : "Alignment lost. Re-align to rejoin the shared play area."
+        default: break
+        }
+      }
+      return RealtimeArenaPresentation.pauseGuidance(clockReady: controller.combat.clockReady,
       roundHasStarted: controller.snapshot?.roundStartedAtMs != nil)
     case .reconnecting: return "Your score is retained. Reconnecting and checking the shared arena before input resumes."
     case .respawning: return "Health and ammunition restore automatically. You can keep looking and moving."
@@ -417,6 +459,13 @@ struct RealtimeArenaView: View {
   private var stageTitle: String {
     if controller.connectionIssue != nil {return "Connection needs attention"}
     if referenceSetup.isVisible {return "Set up play area"}
+    if controller.usesRelocalizedFrame {
+      if controller.stage == .mapping {return "Scan the area"}
+      if controller.stage == .paused {
+        if controller.frame.stage == .degraded {return "Re-aligning"}
+        if controller.frame.stage == .lost {return "Alignment lost"}
+      }
+    }
     if let initialScan {return initialScan.title}
     if scanTimedOut {return "Scan needs another try"}
     if controller.stage == .paused && !controller.combat.clockReady {return "Synchronizing match"}
@@ -429,7 +478,8 @@ struct RealtimeArenaView: View {
     controller.connection == .connected && controller.frame.failure == .mappingTimedOut
   }
   private var referenceSetup: RealtimeArenaPresentation.ReferenceSetup {
-    .init(stage: controller.stage, isHost: controller.isHost, usesSavedArena: controller.savedArenaName != nil)
+    .init(stage: controller.stage, isHost: controller.isHost, usesSavedArena: controller.savedArenaName != nil,
+      usesRelocalizedFrame: controller.usesRelocalizedFrame)
   }
   private var initialScan: ArenaScanPresentation? {
     guard controller.connection == .connected, controller.isHost, controller.savedArenaName == nil,
