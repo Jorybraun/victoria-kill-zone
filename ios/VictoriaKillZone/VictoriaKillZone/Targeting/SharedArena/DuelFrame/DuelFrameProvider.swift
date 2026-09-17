@@ -17,7 +17,8 @@ final class DuelFrameProvider: ObservableObject {
   private var capturedReference: DuelFrameReference?
   private var referencePolicy = DuelFrameReferencePolicy()
   private var diagnostics: DuelFrameDiagnostics
-  private var lastTrackingDiagnostic: (tracking: DuelFrameTracking, mapped: Bool)?
+  private var lastTrackingDiagnostic: (tracking: DuelFrameTracking, mapped: Bool, peers: Int)?
+  private var collabApplied = 0
   private var calibrationStartedAt: Date?
   private var installStartedAt: Date?
   var referenceImageData: Data? { installedMap?.reference?.imageData ?? capturedReference?.imageData }
@@ -162,17 +163,42 @@ final class DuelFrameProvider: ObservableObject {
 
   /// Archived peer-bound ARSession.CollaborationData, in emission order.
   /// Collaborative matches wire this to the match transport; other modes get
-  /// an already-finished stream.
-  func collaborationOutputs() -> AsyncStream<Data> { targeting.duelFrameCollaboration() }
+  /// an already-finished stream. Emissions are counted so the setup log shows
+  /// whether this phone produced deltas at all.
+  func collaborationOutputs() -> AsyncStream<Data> {
+    let source = targeting.duelFrameCollaboration()
+    return AsyncStream { continuation in
+      let pump = Task { [weak self] in
+        var emitted = 0
+        for await data in source {
+          emitted += 1
+          if emitted == 1 || emitted % 20 == 0 {
+            await self?.recordCollab("emitted total=\(emitted) last=\(data.count)B")
+          }
+          continuation.yield(data)
+        }
+        continuation.finish()
+      }
+      continuation.onTermination = { _ in pump.cancel() }
+    }
+  }
 
   /// Forwards a peer's archived collaboration delta into the AR session.
   /// Undecodable deltas are dropped and logged; alignment is unaffected.
   func applyCollaboration(_ data: Data) async {
     do {
       try await targeting.applyFrameCollaboration(data)
+      collabApplied += 1
+      if collabApplied == 1 || collabApplied % 20 == 0 {
+        diagnostics.record("collab", "applied total=\(collabApplied) last=\(data.count)B", at: now())
+      }
     } catch {
       diagnostics.record("collab", "apply-failed \(data.count)B", at: now())
     }
+  }
+
+  private func recordCollab(_ detail: String) {
+    diagnostics.record("collab", detail, at: now())
   }
 
   private func receive(_ observation: DuelFrameObservation) async {
@@ -252,11 +278,11 @@ final class DuelFrameProvider: ObservableObject {
   }
 
   private func recordTracking(_ observation: DuelFrameObservation, at: Date) {
-    let current = (tracking: observation.tracking, mapped: observation.isMapped)
+    let current = (tracking: observation.tracking, mapped: observation.isMapped, peers: observation.mergedPeers)
     if let last = lastTrackingDiagnostic, last == current { return }
     lastTrackingDiagnostic = current
     diagnostics.record("tracking",
-      "\(observation.tracking) mapped=\(observation.isMapped) phase=\(observation.phase)", at: at)
+      "\(observation.tracking) mapped=\(observation.isMapped) peers=\(observation.mergedPeers) phase=\(observation.phase)", at: at)
   }
 
   private func applyResidual(frameID: String, epoch: UInt16, translationMeters: Double,
