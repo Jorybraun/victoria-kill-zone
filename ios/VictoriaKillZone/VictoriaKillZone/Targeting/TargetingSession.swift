@@ -1041,7 +1041,7 @@ enum TargetingSessionFactory {
           duelFrameState.pendingReferenceEvent = nil
         }
         publishDuelFrameObservation(frame: frame, configuration: configuration)
-        if configuration.phase != .bodyRelocalization { return }
+        if configuration.phase != .bodyRelocalization, !configuration.processesTargeting { return }
       }
       let now = Date()
       machine.cameraBecameReady(at: now)
@@ -1375,9 +1375,11 @@ enum TargetingSessionFactory {
       duelFrameState.hub.stream()
     }
 
-    func beginFrameMapping(epoch: UInt16) async throws {
+    func beginFrameMapping(epoch: UInt16, mode: DuelFrameAlignmentMode) async throws {
       guard epoch > 0 else { throw DuelFrameFailure.invalidEpoch }
-      guard ARWorldTrackingConfiguration.isSupported, ARBodyTrackingConfiguration.isSupported else {
+      guard ARWorldTrackingConfiguration.isSupported,
+        mode == .relocalized || ARBodyTrackingConfiguration.isSupported
+      else {
         throw DuelFrameFailure.unsupported
       }
       try await start()
@@ -1395,8 +1397,10 @@ enum TargetingSessionFactory {
           configuration.worldAlignment = .gravity
           configuration.planeDetection = [.horizontal, .vertical]
           duelFrameState.reference = nil
+          duelFrameState.alignmentMode = mode
           runDuelFrameConfiguration(configuration,
-            metadata: DuelFrameSessionConfiguration(epoch: epoch, frameID: nil, phase: .mapping))
+            metadata: DuelFrameSessionConfiguration(epoch: epoch, frameID: nil, phase: .mapping,
+              processesTargeting: false))
           continuation.resume()
         }
       }
@@ -1639,7 +1643,9 @@ enum TargetingSessionFactory {
           }
           duelFrameState.reference = map.reference
           runDuelFrameConfiguration(configuration,
-            metadata: DuelFrameSessionConfiguration(epoch: map.epoch, frameID: map.frameID, phase: phase))
+            metadata: DuelFrameSessionConfiguration(epoch: map.epoch, frameID: map.frameID, phase: phase,
+              processesTargeting: phase == .worldRelocalization
+                && duelFrameState.alignmentMode == .relocalized))
           continuation.resume()
         }
       }

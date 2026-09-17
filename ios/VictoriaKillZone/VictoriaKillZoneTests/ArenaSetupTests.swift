@@ -313,7 +313,7 @@ private actor ArenaSetupCamera: TargetingSession, DuelFrameSessionDriving {
     await stopGate?.wait()
     running = false; lifecycle.append("stopped")
   }
-  func beginFrameMapping(epoch: UInt16) async throws {mappings += 1; lifecycle.append("mapping")}
+  func beginFrameMapping(epoch: UInt16, mode: DuelFrameAlignmentMode) async throws {mappings += 1; lifecycle.append("mapping")}
   func endFrameMapping() async {lifecycle.append("mapping-ended")}
   func captureFrameMap(epoch: UInt16) async throws -> Data {
     await mapGate?.wait()
