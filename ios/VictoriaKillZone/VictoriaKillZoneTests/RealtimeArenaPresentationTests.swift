@@ -39,7 +39,7 @@ final class RealtimeArenaPresentationTests: XCTestCase {
   func testRelocalizedFrameNeverShowsReferenceControls() {
     for stage in [RealtimeArenaStage.mapping, .mapReady] {
       let controls = RealtimeArenaPresentation.ReferenceSetup(stage: stage, isHost: true,
-        usesSavedArena: false, usesRelocalizedFrame: true)
+        usesSavedArena: false, usesQuickPlayFrame: true)
       XCTAssertFalse(controls.isVisible, "Quick Play shares the raw map; there is no reference step")
       XCTAssertFalse(controls.captureAvailable)
     }
