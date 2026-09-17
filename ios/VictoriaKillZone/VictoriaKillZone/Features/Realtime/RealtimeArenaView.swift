@@ -19,6 +19,7 @@ struct RealtimeArenaView: View {
   @State private var confirmedTargetID: String?
   @State private var confirmedZone: TargetingHitZone?
   @State private var menuPresented = false
+  @State private var reportPresented = false
   @State private var setupLogURL: URL?
   @State private var setupLogFailed = false
 
@@ -43,6 +44,14 @@ struct RealtimeArenaView: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         #endif
+    }
+    .sheet(isPresented: $reportPresented) {
+      ReportProblemView(ticket: controller.combat.latestAccessTicket,
+        loadLog: {
+          try JSONDecoder().decode([DuelFrameDiagnosticEvent].self,
+            from: Data(contentsOf: controller.exportSetupLog()))
+        },
+        onDismiss: {reportPresented = false})
     }
     .onChange(of: menuPresented) {_, _ in controller.setTriggerHeld(false)}
     .task {controller.setSceneActive(scenePhase != .background); await controller.start()}
@@ -311,6 +320,7 @@ struct RealtimeArenaView: View {
             Button("Export setup log") {
               do {setupLogURL = try controller.exportSetupLog()} catch {setupLogFailed = true}
             }.frame(minHeight: 44)
+            Button("Report a problem") {reportPresented = true}.frame(minHeight: 44)
           }
           .alert("Export unavailable", isPresented: $setupLogFailed) {
             Button("OK") {}

@@ -1,0 +1,52 @@
+name: Devin report triage
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  issues: write
+
+jobs:
+  triage:
+    if: github.event.label.name == 'devin-report'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create Devin session
+        id: devin
+        env:
+          DEVIN_API_KEY: ${{ secrets.DEVIN_API_KEY }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+        run: |
+          PROMPT=$(python3 - <<'PY'
+          import json, os
+          prompt = (
+              "A Victoria Kill Zone player filed an in-game match report.\n\n"
+              f"Issue: {os.environ['ISSUE_URL']}\n"
+              f"Title: {os.environ['ISSUE_TITLE']}\n\n"
+              "The issue body contains the player's description, device metadata, and the "
+              "match diagnostics log (JSON of duel-frame events with elapsedMs, kind, detail).\n\n"
+              "Read the issue, clone this repository, correlate the log events with the code "
+              "paths that emit them (ios/**/Targeting/**/DuelFrame*, RealtimeCombatSession, "
+              "services/combat-worker), and determine the most likely root cause. "
+              "If the fix is clear, open a PR implementing it and reference this issue. "
+              "If not, comment your analysis on the issue. Do not print secrets or player data."
+          )
+          print(json.dumps({"prompt": prompt}))
+          PY
+          )
+          RESPONSE=$(curl -sS -X POST "https://api.devin.ai/v1/sessions" \
+            -H "Authorization: Bearer $DEVIN_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$PROMPT")
+          URL=$(echo "$RESPONSE" | python3 -c "import json,sys;print(json.load(sys.stdin).get('url',''))")
+          if [ -z "$URL" ]; then echo "Devin session creation failed"; echo "$RESPONSE" | python3 -c "import json,sys;d=json.load(sys.stdin);print({k:v for k,v in d.items() if k!='prompt'})" >&2; exit 1; fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+      - name: Comment session link
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SESSION_URL: ${{ steps.devin.outputs.url }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: gh issue comment "$ISSUE_NUMBER" --body "Devin session: $SESSION_URL" --repo "$GITHUB_REPOSITORY"

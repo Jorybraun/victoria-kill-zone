@@ -77,6 +77,8 @@
 		D2D197558054D5270A7ED55D /* RealtimeArenaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9C7DEF4D5729F12A73E75A0 /* RealtimeArenaView.swift */; };
 		750F8F9F7CDFBC5A444C21CC /* RealtimeBodyAssociation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58CF9FCE4EDB0A5CBCD84D65 /* RealtimeBodyAssociation.swift */; };
 		348AA1BCA2508640D26C53F6 /* RealtimeMapCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4436D26A42A9EB7B9E2685D /* RealtimeMapCoordinator.swift */; };
+		5A1E2F3B4C5D6E7F809012A1 /* MatchReportClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E2F3B4C5D6E7F809012A2 /* MatchReportClient.swift */; };
+		5A1E2F3B4C5D6E7F809012B1 /* ReportProblemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E2F3B4C5D6E7F809012B2 /* ReportProblemView.swift */; };
 		1DB5B4B4D2B49BF70D18B8A3 /* CombatMapClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04C88A00F5B2790C2E623BB4 /* CombatMapClient.swift */; };
 		A588F37D1B1E6B6884B1D4E1 /* ArenaShotTracerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F977CE42B9C3ED2D0FE2B882 /* ArenaShotTracerTests.swift */; };
 		A45B1B730BDDEFE820AB7D6F /* BodyTargetingGeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85B9DD15911F3C17781D07B9 /* BodyTargetingGeometryTests.swift */; };
@@ -226,6 +228,8 @@
 		C9C7DEF4D5729F12A73E75A0 /* RealtimeArenaView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Realtime/RealtimeArenaView.swift"; sourceTree = SOURCE_ROOT; };
 		58CF9FCE4EDB0A5CBCD84D65 /* RealtimeBodyAssociation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Realtime/RealtimeBodyAssociation.swift"; sourceTree = SOURCE_ROOT; };
 		E4436D26A42A9EB7B9E2685D /* RealtimeMapCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Realtime/RealtimeMapCoordinator.swift"; sourceTree = SOURCE_ROOT; };
+		5A1E2F3B4C5D6E7F809012A2 /* MatchReportClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Services/Realtime/MatchReportClient.swift"; sourceTree = SOURCE_ROOT; };
+		5A1E2F3B4C5D6E7F809012B2 /* ReportProblemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Realtime/ReportProblemView.swift"; sourceTree = SOURCE_ROOT; };
 		04C88A00F5B2790C2E623BB4 /* CombatMapClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Services/Realtime/CombatMapClient.swift"; sourceTree = SOURCE_ROOT; };
 		F977CE42B9C3ED2D0FE2B882 /* ArenaShotTracerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/ArenaShotTracerTests.swift"; sourceTree = SOURCE_ROOT; };
 		85B9DD15911F3C17781D07B9 /* BodyTargetingGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/BodyTargetingGeometryTests.swift"; sourceTree = SOURCE_ROOT; };
@@ -363,6 +367,7 @@
 				15A2891F8815C903348F31A3 /* RealtimeCombatSession.swift */,
 				ABBE8F2EF972E1EFEE3909D9 /* CombatWire.swift */,
 				5497BE5B56859453EF74D513 /* CombatSocketTransport.swift */,
+				5A1E2F3B4C5D6E7F809012A2 /* MatchReportClient.swift */,
 				2E97FF0D4A2949668B6C3C07 /* CombatReplica.swift */,
 				3C31A53D023AB0DDBB4BF960 /* CombatClock.swift */,
 				F00100000000000000000001 /* VictoriaKillZoneApp.swift */,
@@ -443,6 +448,7 @@
 				E4436D26A42A9EB7B9E2685D /* RealtimeMapCoordinator.swift */,
 				58CF9FCE4EDB0A5CBCD84D65 /* RealtimeBodyAssociation.swift */,
 				C9C7DEF4D5729F12A73E75A0 /* RealtimeArenaView.swift */,
+				5A1E2F3B4C5D6E7F809012B2 /* ReportProblemView.swift */,
 				28F2C6117B8ADD8A66DBF3A5 /* RealtimeArenaPolicy.swift */,
 				7DB8AACEB1ED5F0006EAA860 /* RealtimeArenaController.swift */,
 				75F5CA82F730B995EB944A1E /* SkeletonAnatomyModel.swift */,
@@ -722,6 +728,8 @@
 				B21DEF00BB8BA5CBD5F00054 /* SavedArenaStore.swift in Sources */,
 				C767BD90A6881F8F78F9F6EB /* SavedArenaModels.swift in Sources */,
 				348AA1BCA2508640D26C53F6 /* RealtimeMapCoordinator.swift in Sources */,
+				5A1E2F3B4C5D6E7F809012A1 /* MatchReportClient.swift in Sources */,
+				5A1E2F3B4C5D6E7F809012B1 /* ReportProblemView.swift in Sources */,
 				750F8F9F7CDFBC5A444C21CC /* RealtimeBodyAssociation.swift in Sources */,
 				D2D197558054D5270A7ED55D /* RealtimeArenaView.swift in Sources */,
 				810E61634284BC98C00CE3C1 /* RealtimeArenaPolicy.swift in Sources */,
