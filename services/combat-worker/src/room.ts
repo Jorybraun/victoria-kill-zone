@@ -163,7 +163,7 @@ export class CombatRoom extends DurableObject<Env> {
       await this.queue.run(() => {
         const connection = this.connections.get(socket);
         if (connection === undefined || socket.readyState !== WebSocket.OPEN) return;
-        if (typeof message !== "string" || message.length > LIMITS.messageBytes || encoder.encode(message).byteLength > LIMITS.messageBytes) {
+        if (typeof message !== "string" || message.length > LIMITS.collabMessageBytes || encoder.encode(message).byteLength > LIMITS.collabMessageBytes) {
           connection.close(1009, "message-too-large-or-binary");
           return;
         }
@@ -192,6 +192,16 @@ export class CombatRoom extends DurableObject<Env> {
             if (!connection.admitPing(Date.now())) { this.error(connection, "rateLimited"); connection.close(4008, "ping-rate-exceeded"); break; }
             const now = this.logicalNow();
             connection.send({ type: "pong", nonce: parsed.nonce, clientSentAtMs: parsed.clientSentAtMs, serverReceivedAtMs: now, serverSentAtMs: this.logicalNow() });
+            break;
+          }
+          // Opaque, droppable ARKit relay bytes: verbatim, unordered, never to the sender.
+          case "collab": {
+            const encoded = JSON.stringify({ type: "collab", playerId: connection.playerId, data: parsed.data });
+            const bytes = encoder.encode(encoded).byteLength;
+            const now = Date.now();
+            for (const other of this.connections.values()) {
+              if (other !== connection && other.admitCollab(now, bytes)) other.sendCollab(encoded);
+            }
             break;
           }
         }

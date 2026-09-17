@@ -49,7 +49,7 @@ final class CombatSocketTransport: CombatSocketConnecting {
     var request = URLRequest(url:url)
     request.setValue("Bearer \(ticket.token)",forHTTPHeaderField:"Authorization")
     let task = session.webSocketTask(with:request)
-    task.maximumMessageSize = CombatWire.maximumServerBytes
+    task.maximumMessageSize = CombatWire.maximumCollabMessageBytes
     socket = task
     let current = generation
     let stream = AsyncThrowingStream<CombatWire.ServerMessage,Error>(bufferingPolicy:.bufferingOldest(64)) {continuation in
@@ -73,7 +73,7 @@ final class CombatSocketTransport: CombatSocketConnecting {
           case .string(let text): bytes = Data(text.utf8)
           @unknown default: throw CombatTransportError.invalidMessage
           }
-          guard bytes.count <= CombatWire.maximumServerBytes else {throw CombatTransportError.oversizedMessage}
+          guard bytes.count <= CombatWire.maximumCollabMessageBytes else {throw CombatTransportError.oversizedMessage}
           guard let decoded = try? JSONDecoder().decode(CombatWire.ServerMessage.self,from:bytes) else {
             throw CombatTransportError.invalidMessage
           }
@@ -95,7 +95,9 @@ final class CombatSocketTransport: CombatSocketConnecting {
     guard let socket else {throw CombatTransportError.disconnected}
     let current = generation
     let bytes = try JSONEncoder().encode(message)
-    guard bytes.count <= CombatWire.maximumClientBytes, let text = String(data:bytes,encoding:.utf8) else {throw CombatTransportError.oversizedMessage}
+    var maximum = CombatWire.maximumClientBytes
+    if case .collab = message {maximum = CombatWire.maximumCollabMessageBytes}
+    guard bytes.count <= maximum, let text = String(data:bytes,encoding:.utf8) else {throw CombatTransportError.oversizedMessage}
     do {try await socket.send(.string(text))} catch {
       let safeError = Self.safeFailure(error, response: socket.response)
       // A failed send can be the first observable HTTP admission response. End
@@ -140,6 +142,7 @@ enum CombatWireValidation {
       }
     case .ack(let id,let clientSequence,_,let eventSequence): return validID(id) && clientSequence > 0 && eventSequence >= 0
     case .pong(let nonce,let sent,let received,let serverSent): return validID(nonce) && time(sent) && time(received) && time(serverSent) && serverSent >= received
+    case .collab(let playerId,let data): return validID(playerId) && !data.isEmpty && data.count <= CombatWire.maximumCollabDataBytes
     case .error(let code,let id): return code.count <= 64 && (id == nil || validID(id!))
     }
   }

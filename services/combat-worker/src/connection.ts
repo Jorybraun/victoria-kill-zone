@@ -16,6 +16,8 @@ export class Connection {
   private commandRefillAt: number;
   private pingTokens = 5;
   private pingRefillAt: number;
+  private collabTokens = 512 * 1024;
+  private collabRefillAt: number;
 
   constructor(readonly socket: WebSocket, readonly playerId: string, eventSequence: number, now: number) {
     this.receivedSequence = eventSequence;
@@ -24,6 +26,7 @@ export class Connection {
     this.refillAt = now;
     this.commandRefillAt = now;
     this.pingRefillAt = now;
+    this.collabRefillAt = now;
   }
 
   admitCommand(now: number): boolean {
@@ -48,6 +51,15 @@ export class Connection {
     if (this.tokens < 1) return false;
     this.tokens -= 1;
     this.lastActivityAt = now;
+    return true;
+  }
+
+  /** Opaque collab relay carries no sequence, so receivers get a decayed byte budget instead of the ack window. */
+  admitCollab(now: number, bytes: number): boolean {
+    this.collabTokens = Math.min(512 * 1024, this.collabTokens + Math.max(0, now - this.collabRefillAt) * (256 * 1024) / 1000);
+    this.collabRefillAt = now;
+    if (this.collabTokens < bytes) return false;
+    this.collabTokens -= bytes;
     return true;
   }
 
@@ -84,6 +96,18 @@ export class Connection {
       this.outstandingBytes += bytes;
       this.bytesBySequence.set(sentThrough, (this.bytesBySequence.get(sentThrough) ?? 0) + bytes);
       this.sentSequence = sentThrough;
+      return true;
+    } catch {
+      this.close(1011, "socket-send-failed");
+      return false;
+    }
+  }
+
+  /** Pre-encoded collab relay; deliberately outside bytesBySequence/outstandingBytes. */
+  sendCollab(data: string): boolean {
+    if (this.socket.readyState !== WebSocket.OPEN) return false;
+    try {
+      this.socket.send(data);
       return true;
     } catch {
       this.close(1011, "socket-send-failed");
