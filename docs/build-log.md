@@ -1,5 +1,9 @@
 # Build log
 
+## Physical trial observation — Quick Play one-shot share, multi-room failure — 2026-09-17
+
+First physical-device datapoint for the ADR 0010 relocalized Quick Play design (TestFlight 0.1.1 (61) era code, prior to build 61's own trial). Host phone completed a successful area scan; a joiner phone physically located in a different room could not join the match. Diagnosis: expected ARKit physics — relocalization requires the joining camera to see features present in the shared map, and the host's one-shot map covered only the scanned room. The system behaved as designed; the design boundary is wrong for the intended free-roaming multi-room game. Owner direction recorded: free-roaming multi-room. Response: proposed ADR 0011 — continuous `ARSession.CollaborationData` exchange replaces the one-shot share for Quick Play. Device models on record with this Mac: iPhone 14 (host role unconfirmed), iPhone 16; iOS versions not recorded. No other physical evidence is claimed by this entry.
+
 ## PR #74 convergence test scheduling repair — 2026-09-07
 
 CI job 101853784553 failed at cycle-1 respawn: the guest still displayed the previous snapshot after twenty scheduler yields. The regression now awaits both clients receiving the exact authoritative respawn projection using the fixture's existing bounded condition wait, then retains the original health, ammo, life-state and full convergence assertions. Production code and timing limits are unchanged. The six-test convergence suite passed initially and in five repeated runs under the Xcode Swift toolchain. Canonical workspace verification is recorded in the PR after completion; current-head GitHub checks remain required before merge.
