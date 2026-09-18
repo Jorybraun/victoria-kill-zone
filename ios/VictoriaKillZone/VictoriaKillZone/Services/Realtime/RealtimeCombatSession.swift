@@ -50,6 +50,8 @@ final class RealtimeCombatSession: ObservableObject {
   private var pings: [String:Double] = [:]
   private var nextSequence = 1
   private var runner: Task<Void,Never>?
+  private var collabBacklog: [Data] = []
+  private var collabDropped = 0
   private var ticker: Task<Void,Never>?
   private var writer: Task<Void,Never>?
   private var writerGeneration = 0
@@ -194,9 +196,27 @@ final class RealtimeCombatSession: ObservableObject {
   }
 
   /// Fire-and-forget opaque relay; not a command envelope, no ack expected.
-  /// Callers await sends sequentially so wire ordering is preserved.
+  /// Deltas emitted before the socket connects or during a reconnect are
+  /// held in a bounded FIFO and flushed ahead of newer deltas so peer map
+  /// context is not silently lost; overflow drops are logged.
   func sendCollaboration(_ data: Data) async {
-    try? await transport?.send(.collab(data))
+    while !collabBacklog.isEmpty, let transport {
+      let next = collabBacklog.removeFirst()
+      do {try await transport.send(.collab(next))}
+      catch {collabBacklog.insert(next, at: 0); queueCollab(data); return}
+    }
+    if let transport {
+      do {try await transport.send(.collab(data))} catch {queueCollab(data)}
+    } else {queueCollab(data)}
+  }
+
+  private func queueCollab(_ data: Data) {
+    if collabBacklog.count >= 32 {
+      collabBacklog.removeFirst(); collabDropped += 1
+      if collabDropped == 1 || collabDropped % 20 == 0 {
+        Self.logger.warning("collab outbound dropped total=\(self.collabDropped)")
+      }
+    } else {collabBacklog.append(data)}
   }
 
   func stop() {
@@ -205,6 +225,7 @@ final class RealtimeCombatSession: ObservableObject {
     disconnectTransport()
     pending.removeAll(); replica=nil; snapshot=nil; events=[]; session=nil
     latestAccessTicket=nil; onCollaboration=nil
+    collabBacklog.removeAll(); collabDropped=0
     nextSequence=1; refusal=nil; connectionIssue=nil; connectionSuspended=false; state = .disconnected
   }
 
