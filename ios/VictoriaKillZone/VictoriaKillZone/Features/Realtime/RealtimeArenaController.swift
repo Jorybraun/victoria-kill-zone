@@ -244,7 +244,9 @@ final class RealtimeArenaController: ObservableObject {
   /// needs no mode check.
   private func wireCollaboration() {
     var inbound: AsyncStream<Data>.Continuation!
-    let inboundStream = AsyncStream<Data>(bufferingPolicy: .bufferingNewest(16)) { inbound = $0 }
+    // Deltas must apply in order; a dropping policy can lose the critical map
+    // data a merge needs. The worker already bounds the byte rate upstream.
+    let inboundStream = AsyncStream<Data>(bufferingPolicy: .unbounded) { inbound = $0 }
     combat.onCollaboration = { _, data in inbound.yield(data) }
     let outbound = frameProvider?.collaborationOutputs()
     collabTask = Task { [weak self] in
