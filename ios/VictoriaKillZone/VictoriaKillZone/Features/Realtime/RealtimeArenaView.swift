@@ -448,7 +448,7 @@ struct RealtimeArenaView: View {
     case .transferringMap: return "Keep this screen open while the shared arena scan transfers."
     case .relocalizing:
       if controller.usesCollaborativeFrame {
-        return "Move toward the play area — the phones link automatically."
+        return "Stand side by side and point at the same spot — the phones link automatically."
       }
       if controller.usesQuickPlayFrame {
         return controller.isHost ? "Look at the area you scanned" : "Look at the area the host scanned"
