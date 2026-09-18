@@ -9,7 +9,9 @@ import UIKit
 /// the persisted setup log and device metadata. Creates a labeled GitHub issue
 /// via the combat worker, which a Devin session then triages.
 struct ReportProblemView: View {
-  let ticket: CombatAccessTicket?
+  /// Mints a fresh combat ticket at send time. Reports must not depend on the
+  /// socket's transient ticket, which is cleared on suspend/disconnect.
+  let acquireTicket: () async throws -> CombatAccessTicket?
   let loadLog: () throws -> [DuelFrameDiagnosticEvent]
   var onDismiss: () -> Void = {}
 
@@ -83,7 +85,7 @@ struct ReportProblemView: View {
   }
 
   private var canSend: Bool {
-    ticket != nil && !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       && ![.recording, .transcribing, .sending, .sent].contains(state)
   }
 
@@ -97,11 +99,18 @@ struct ReportProblemView: View {
         return
       }
       do {
+        // The AR session leaves the audio session in a non-recordable category;
+        // without this, AVAudioRecorder.record() silently fails on device.
+        #if os(iOS)
+        let audioSession = AVAudioSession.sharedInstance()
+        try audioSession.setCategory(.playAndRecord, mode: .spokenAudio, options: [.defaultToSpeaker])
+        try audioSession.setActive(true)
+        #endif
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("vkz-report-\(UUID().uuidString).m4a")
         recorder = try AVAudioRecorder(url: url, settings: [
           AVFormatIDKey: Int(kAudioFormatMPEG4AAC), AVSampleRateKey: 16_000, AVNumberOfChannelsKey: 1,
         ])
-        recorder?.record()
+        guard recorder?.record() == true else {throw CocoaError(.coderInvalidValue)}
         state = .recording
       } catch { state = .failed("Couldn't start recording — type your report instead.") }
     }
@@ -109,6 +118,9 @@ struct ReportProblemView: View {
 
   private func stopRecording() {
     recorder?.stop()
+    #if os(iOS)
+    try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    #endif
     state = .transcribing
     guard let url = recorder?.url, let recognizer, recognizer.isAvailable else {
       state = .idle
@@ -125,7 +137,6 @@ struct ReportProblemView: View {
   }
 
   private func send() async {
-    guard let ticket else {return}
     state = .sending
     do {
       #if os(iOS)
@@ -135,6 +146,10 @@ struct ReportProblemView: View {
       let device = MatchReport.Device(model: "Mac", ios: ProcessInfo.processInfo.operatingSystemVersionString,
         build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?")
       #endif
+      guard let ticket = try await acquireTicket() else {
+        state = .failed("Couldn't authenticate the report — rejoin the match and try again.")
+        return
+      }
       let report = MatchReport(device: device,
         transcript: transcript.trimmingCharacters(in: .whitespacesAndNewlines),
         log: (try? loadLog()) ?? [])

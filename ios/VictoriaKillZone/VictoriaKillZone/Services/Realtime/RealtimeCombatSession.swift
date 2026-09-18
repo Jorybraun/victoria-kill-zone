@@ -89,6 +89,14 @@ final class RealtimeCombatSession: ObservableObject {
     launchConnection(session: session)
   }
 
+  /// Fresh admission for out-of-band requests (e.g. match reports). Unlike
+  /// `latestAccessTicket`, this does not depend on socket lifecycle state —
+  /// reporting must work after suspension, disconnection, or match end.
+  func acquireAccessTicket() async throws -> CombatAccessTicket? {
+    guard let session else {return nil}
+    return try await gameClient.combatTicket(session: session)
+  }
+
   /// Revokes authority-side presence by closing the transport before iOS can
   /// suspend this process. No readiness message has to beat backgrounding.
   /// Exact pending identities remain available for the next snapshot/replay.

@@ -46,7 +46,7 @@ struct RealtimeArenaView: View {
         #endif
     }
     .sheet(isPresented: $reportPresented) {
-      ReportProblemView(ticket: controller.combat.latestAccessTicket,
+      ReportProblemView(acquireTicket: {try await controller.combat.acquireAccessTicket()},
         loadLog: {
           try JSONDecoder().decode([DuelFrameDiagnosticEvent].self,
             from: Data(contentsOf: controller.exportSetupLog()))
