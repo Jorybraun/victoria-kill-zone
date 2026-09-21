@@ -112,7 +112,7 @@ export interface SnapshotEvent {
   createdAt: number;
 }
 
-/** Authenticated projection carries no raw coordinates either. */
+/** Authenticated phone projection: arena-relative positions only, never raw coordinates. */
 export function buildMatchSnapshot(
   match: SnapshotMatch,
   localPlayerId: string,
