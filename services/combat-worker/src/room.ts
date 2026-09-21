@@ -163,7 +163,12 @@ export class CombatRoom extends DurableObject<Env> {
       await this.queue.run(() => {
         const connection = this.connections.get(socket);
         if (connection === undefined || socket.readyState !== WebSocket.OPEN) return;
-        if (typeof message !== "string" || message.length > LIMITS.collabMessageBytes || encoder.encode(message).byteLength > LIMITS.collabMessageBytes) {
+        if (typeof message !== "string") {
+          connection.close(1009, "message-too-large-or-binary");
+          return;
+        }
+        const bytes = encoder.encode(message).byteLength;
+        if (message.length > LIMITS.collabMessageBytes || bytes > LIMITS.collabMessageBytes) {
           connection.close(1009, "message-too-large-or-binary");
           return;
         }
@@ -174,6 +179,8 @@ export class CombatRoom extends DurableObject<Env> {
           connection.close(4008, "input-rate-exceeded");
           return;
         }
+        const large = bytes > LIMITS.messageBytes;
+        if (large && !connection.admitCollabIngest(Date.now(), bytes)) return;
         const parsed = parseClientMessage(message);
         if (parsed === null) {
           connection.send({ type: "error", code: "invalidMessage" });
@@ -196,11 +203,12 @@ export class CombatRoom extends DurableObject<Env> {
           }
           // Opaque, droppable ARKit relay bytes: verbatim, unordered, never to the sender.
           case "collab": {
-            const encoded = JSON.stringify({ type: "collab", playerId: connection.playerId, data: parsed.data });
-            const bytes = encoder.encode(encoded).byteLength;
             const now = Date.now();
+            if (!large && !connection.admitCollabIngest(now, bytes)) break;
+            const encoded = JSON.stringify({ type: "collab", playerId: connection.playerId, data: parsed.data });
+            const relayBytes = encoder.encode(encoded).byteLength;
             for (const other of this.connections.values()) {
-              if (other !== connection && other.admitCollab(now, bytes)) other.sendCollab(encoded);
+              if (other !== connection && other.admitCollab(now, relayBytes)) other.sendCollab(encoded, relayBytes);
             }
             break;
           }
@@ -288,9 +296,10 @@ export class CombatRoom extends DurableObject<Env> {
       this.error(connection, "sequenceConflict", envelope.commandId);
       return;
     }
-    if (this.pending.length >= LIMITS.commandsPerTick) {
+    const perPlayer = Math.floor(LIMITS.commandsPerTick / LIMITS.players);
+    const ownPending = this.pending.reduce((count, item) => item.command.playerId === connection.playerId ? count + 1 : count, 0);
+    if (ownPending >= perPlayer || this.pending.length >= LIMITS.commandsPerTick) {
       this.error(connection, "rateLimited", envelope.commandId);
-      connection.close(4008, "command-queue-full");
       return;
     }
     this.pending.push({ command: { ...envelope, playerId: connection.playerId }, fingerprint,
