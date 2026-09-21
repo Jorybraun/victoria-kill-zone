@@ -17,12 +17,10 @@ export default {
     if (route.kind === "connect" && request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response(null, { status: 426 });
     const claims = await verifyBearerTicket(request, env.COMBAT_TICKET_SECRET, Math.floor(Date.now() / 1000));
     if (claims === null || claims.matchId !== route.matchId) return new Response(null, { status: 401 });
-    if (route.kind === "report") {
-      const handler = reportHandler(env);
-      return handler === null ? new Response(null, { status: 503 }) : handler.fetch(request, claims);
-    }
+    if (route.kind === "report" && reportHandler(env) === null) return new Response(null, { status: 503 });
     // Routing occurs only after authentication. WebSocket upgrade responses use
     // fetch forwarding: WebSockets cannot cross Workers' structured-clone RPC.
+    // Reports also enter the room so their quota lives in its storage.
     return env.COMBAT_ROOMS.getByName(claims.matchId).fetch(request);
   },
 } satisfies ExportedHandler<Env>;
