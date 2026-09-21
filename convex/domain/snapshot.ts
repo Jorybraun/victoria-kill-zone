@@ -45,30 +45,17 @@ export interface PlayerSnapshot {
   lifeState: PlayerLifeState;
   arenaState: ArenaState;
   lastSeenAt: number;
+  arenaPosition?: ArenaRelativePosition;
   lastShotAt?: number;
   reloadEndsAt?: number;
   respawnAt?: number;
-  latitude?: number;
-  longitude?: number;
-  headingDegrees?: number;
-  locationAccuracyMeters?: number;
-  locationAt?: number;
 }
 
 /**
  * The public spectator projection never carries raw coordinates, accuracy,
- * location timestamps, or presence timestamps — only the sanitized
- * arena-relative position in metres.
+ * location timestamps, or presence timestamps.
  */
-export type SpectatorPlayerSnapshot = Omit<
-  PlayerSnapshot,
-  | "lastSeenAt"
-  | "latitude"
-  | "longitude"
-  | "headingDegrees"
-  | "locationAccuracyMeters"
-  | "locationAt"
-> & { arenaPosition?: ArenaRelativePosition };
+export type SpectatorPlayerSnapshot = Omit<PlayerSnapshot, "lastSeenAt">;
 
 export interface EventSnapshot {
   id: string;
@@ -86,7 +73,7 @@ export interface EventSnapshot {
 export interface MatchSnapshot {
   serverNow: number;
   match: MatchSummarySnapshot;
-  arena: { latitude: number; longitude: number; radiusMeters: number };
+  arena: { radiusMeters: number };
   localPlayerId: string;
   players: PlayerSnapshot[];
   events: EventSnapshot[];
@@ -125,7 +112,7 @@ export interface SnapshotEvent {
   createdAt: number;
 }
 
-/** Authenticated phone projection: additive phase0 fields retain every G2 field. */
+/** Authenticated projection carries no raw coordinates either. */
 export function buildMatchSnapshot(
   match: SnapshotMatch,
   localPlayerId: string,
@@ -136,11 +123,7 @@ export function buildMatchSnapshot(
   return {
     serverNow: now,
     match: projectMatch(match, now),
-    arena: {
-      latitude: match.centerLatitude,
-      longitude: match.centerLongitude,
-      radiusMeters: match.radiusMeters,
-    },
+    arena: { radiusMeters: match.radiusMeters },
     localPlayerId,
     players: orderedPlayers(players).map((player) => projectPlayer(player, match, now)),
     events: orderedEvents(events).map(projectEvent),
@@ -194,6 +177,7 @@ function projectedArenaState(player: PlayerState, match: SnapshotMatch, now: num
 }
 
 function projectPlayer(player: PlayerState, match: SnapshotMatch, now: number): PlayerSnapshot {
+  const arenaPosition = projectedArenaPosition(player, match);
   return {
     id: player.id,
     displayName: player.displayName,
@@ -211,16 +195,10 @@ function projectPlayer(player: PlayerState, match: SnapshotMatch, now: number): 
     lifeState: player.lifeState,
     arenaState: projectedArenaState(player, match, now),
     lastSeenAt: player.lastSeenAt,
+    ...(arenaPosition === undefined ? {} : { arenaPosition }),
     ...(player.lastShotAt === null ? {} : { lastShotAt: player.lastShotAt }),
     ...(player.reloadEndsAt === null ? {} : { reloadEndsAt: player.reloadEndsAt }),
     ...(player.respawnAt === null ? {} : { respawnAt: player.respawnAt }),
-    ...(player.latitude === null ? {} : { latitude: player.latitude }),
-    ...(player.longitude === null ? {} : { longitude: player.longitude }),
-    ...(player.headingDegrees === null ? {} : { headingDegrees: player.headingDegrees }),
-    ...(player.locationAccuracyMeters === null
-      ? {}
-      : { locationAccuracyMeters: player.locationAccuracyMeters }),
-    ...(player.locationAt === null ? {} : { locationAt: player.locationAt }),
   };
 }
 
@@ -229,8 +207,7 @@ function projectSpectatorPlayer(
   match: SnapshotMatch,
   now: number,
 ): SpectatorPlayerSnapshot {
-  const hasPosition =
-    match.arenaCenterAt !== null && player.latitude !== null && player.longitude !== null;
+  const arenaPosition = projectedArenaPosition(player, match);
   return {
     id: player.id,
     displayName: player.displayName,
@@ -247,20 +224,26 @@ function projectSpectatorPlayer(
     headshots: player.headshots,
     lifeState: player.lifeState,
     arenaState: projectedArenaState(player, match, now),
+    ...(arenaPosition === undefined ? {} : { arenaPosition }),
     ...(player.lastShotAt === null ? {} : { lastShotAt: player.lastShotAt }),
     ...(player.reloadEndsAt === null ? {} : { reloadEndsAt: player.reloadEndsAt }),
     ...(player.respawnAt === null ? {} : { respawnAt: player.respawnAt }),
-    ...(hasPosition && player.latitude !== null && player.longitude !== null
-      ? {
-          arenaPosition: arenaRelativePosition(
-            { latitude: match.centerLatitude, longitude: match.centerLongitude },
-            player.latitude,
-            player.longitude,
-            player.headingDegrees,
-          ),
-        }
-      : {}),
   };
+}
+
+function projectedArenaPosition(
+  player: PlayerState,
+  match: SnapshotMatch,
+): ArenaRelativePosition | undefined {
+  if (match.arenaCenterAt === null || player.latitude === null || player.longitude === null) {
+    return undefined;
+  }
+  return arenaRelativePosition(
+    { latitude: match.centerLatitude, longitude: match.centerLongitude },
+    player.latitude,
+    player.longitude,
+    player.headingDegrees,
+  );
 }
 
 function projectEvent(event: SnapshotEvent): EventSnapshot {
