@@ -57,12 +57,19 @@ function command(x: unknown): x is CombatCommand {
   }
 }
 
+const base64 = (x: unknown): x is string =>
+  typeof x === "string" && x.length >= 1 && x.length <= LIMITS.collabBytes &&
+  x.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(x);
+
 /** Reject malformed, oversized and identity-bearing client input before queueing. */
 export function parseClientMessage(raw: string): ClientMessage | null {
-  if (raw.length > LIMITS.messageBytes || new TextEncoder().encode(raw).length > LIMITS.messageBytes) return null;
+  const bytes = new TextEncoder().encode(raw).length;
+  if (raw.length > LIMITS.collabMessageBytes || bytes > LIMITS.collabMessageBytes) return null;
   let x: unknown;
   try { x = JSON.parse(raw); } catch { return null; }
   if (!record(x)) return null;
+  // Opaque collab relays claim the raised bound; every other type keeps 16 KiB.
+  if (x.type !== "collab" && (raw.length > LIMITS.messageBytes || bytes > LIMITS.messageBytes)) return null;
   if (x.type === "command") {
     const e = x.envelope;
     if (!keys(x, "type envelope") || !record(e) || !keys(e, "v commandId clientSequence authorityEpoch frameEpoch sentAtMs command") ||
@@ -72,6 +79,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   if (x.type === "received" && keys(x, "type eventSequence") && integer(x.eventSequence)) return {type:"received",eventSequence:x.eventSequence};
   if (x.type === "resume" && keys(x, "type afterEventSequence") && integer(x.afterEventSequence)) return {type:"resume",afterEventSequence:x.afterEventSequence};
   if (x.type === "ping" && keys(x, "type nonce clientSentAtMs") && id(x.nonce) && time(x.clientSentAtMs)) return {type:"ping",nonce:x.nonce,clientSentAtMs:x.clientSentAtMs};
+  if (x.type === "collab" && keys(x, "type data") && base64(x.data)) return {type:"collab",data:x.data};
   return null;
 }
 

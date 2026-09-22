@@ -107,7 +107,8 @@ function broadPhase(start: Vec3, end: Vec3, a: BodyCollider, b: BodyCollider, ra
 /** Sweeps a finite-radius bullet against independently moving capsule endpoints.
  * Body positions and radii interpolate between two validated observations.
  */
-export function sweepCollider(start: Vec3, end: Vec3, a: BodyCollider, b: BodyCollider, bulletRadius: number): number | null {
+export function sweepCollider(start: Vec3, end: Vec3, a: BodyCollider, b: BodyCollider | undefined, bulletRadius: number): number | null {
+  if (!b) return null;
   if (a.id !== b.id || a.kind !== b.kind || a.zone !== b.zone) return null;
   const r0 = a.radius + bulletRadius;
   const r1 = b.radius + bulletRadius;

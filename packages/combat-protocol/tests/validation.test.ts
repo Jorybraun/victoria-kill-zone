@@ -42,6 +42,20 @@ describe("untrusted combat messages", () => {
     expect(parse({type:"resume",afterEventSequence:0})).not.toBeNull();
     expect(parse({type:"received",eventSequence:-1})).toBeNull();
   });
+  it("accepts strict base64 collab archives under the raised inbound bound", () => {
+    const data = "QUJD".repeat(3);
+    expect(parse({type:"collab",data})).toEqual({type:"collab",data});
+    expect(parse({type:"collab",data:"A".repeat(LIMITS.collabBytes)})).not.toBeNull();
+  });
+  it("rejects malformed archives, extra keys and oversize", () => {
+    for (const data of ["", "a=b=", "QUJDQQ", "A".repeat(LIMITS.collabBytes + 4)])
+      expect(parse({type:"collab",data})).toBeNull();
+    expect(parse({type:"collab",data:"AAAA",extra:true})).toBeNull();
+    expect(parseClientMessage(JSON.stringify({type:"collab",data:"A".repeat(LIMITS.collabMessageBytes)}))).toBeNull();
+  });
+  it("keeps the 16 KiB bound on every non-collab type", () => {
+    expect(parse({type:"ping",nonce:"n",clientSentAtMs:0,pad:"x".repeat(LIMITS.messageBytes)})).toBeNull();
+  });
 });
 
 describe("ticket claims", () => {

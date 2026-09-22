@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import os
 
 enum RealtimeConnectionState: Equatable {case disconnected, connecting, synchronizing, connected, retrying, finished}
 
@@ -7,7 +8,19 @@ enum RealtimeConnectionState: Equatable {case disconnected, connecting, synchron
 /// clock synchronization and the replica consumed by the game presentation.
 @MainActor
 final class RealtimeCombatSession: ObservableObject {
-  @Published private(set) var state: RealtimeConnectionState = .disconnected
+  /// Streams connection and verdict transitions to unified logging in all
+  /// builds — physical trials read them live in Console.app under subsystem
+  /// com.victoriakillzone.combat. Detail stays match-scoped: no session
+  /// secrets, ticket fields or player identifiers.
+  private static let logger = Logger(subsystem: "com.victoriakillzone.combat", category: "session")
+
+  @Published private(set) var state: RealtimeConnectionState = .disconnected {
+    didSet {
+      if oldValue != state {
+        Self.logger.info("connection \(String(describing: oldValue), privacy: .public) -> \(String(describing: self.state), privacy: .public)")
+      }
+    }
+  }
   @Published private(set) var snapshot: CombatWire.Snapshot?
   @Published private(set) var events: [CombatWire.ServerEvent] = []
   @Published private(set) var clockReady = false
@@ -15,6 +28,8 @@ final class RealtimeCombatSession: ObservableObject {
   @Published private(set) var refusal: String?
   @Published private(set) var connectionIssue: String?
   private(set) var latestAccessTicket: CombatAccessTicket?
+  /// Opaque ARKit collaboration archives, verbatim from peers. Set by the controller.
+  var onCollaboration: ((String, Data) -> Void)?
   /// Full authority snapshots only; event projection does not advance this.
   /// Kept monotonic across start/stop so observers can distinguish reconciliation.
   private(set) var snapshotRevision = 0
@@ -35,6 +50,8 @@ final class RealtimeCombatSession: ObservableObject {
   private var pings: [String:Double] = [:]
   private var nextSequence = 1
   private var runner: Task<Void,Never>?
+  private var collabBacklog: [Data] = []
+  private var collabDropped = 0
   private var ticker: Task<Void,Never>?
   private var writer: Task<Void,Never>?
   private var writerGeneration = 0
@@ -72,6 +89,14 @@ final class RealtimeCombatSession: ObservableObject {
     disconnectTransport()
     latestAccessTicket=nil; connectionIssue=nil; connectionSuspended=false
     launchConnection(session: session)
+  }
+
+  /// Fresh admission for out-of-band requests (e.g. match reports). Unlike
+  /// `latestAccessTicket`, this does not depend on socket lifecycle state —
+  /// reporting must work after suspension, disconnection, or match end.
+  func acquireAccessTicket() async throws -> CombatAccessTicket? {
+    guard let session else {return nil}
+    return try await gameClient.combatTicket(session: session)
   }
 
   /// Revokes authority-side presence by closing the transport before iOS can
@@ -157,6 +182,14 @@ final class RealtimeCombatSession: ObservableObject {
       switch error {
       case .invalidEndpoint:
         return "The combat connection is not configured correctly. Retry after configuration is restored, or leave the match."
+      case .ticketRejected:
+        return "The combat server rejected this match's access ticket. This is a server configuration problem (lobby and combat server keys don't match), not your connection. Retry after the server is fixed, or leave the match."
+      case .notOnRoster:
+        return "This match's roster no longer includes you. Leave and join again."
+      case .roomStateMismatch:
+        return "The combat room is out of step with the lobby (players or match state changed). Retry to refresh access; if it keeps happening, leave and create a new arena."
+      case .matchFinished:
+        return "This match has already finished. Leave to return to the lobby."
       case .admissionRejected:
         return "Match access could not be verified. Retry to refresh access, or leave and join again."
       case .invalidMessage, .oversizedMessage:
@@ -178,12 +211,37 @@ final class RealtimeCombatSession: ObservableObject {
     return id
   }
 
+  /// Fire-and-forget opaque relay; not a command envelope, no ack expected.
+  /// Deltas emitted before the socket connects or during a reconnect are
+  /// held in a bounded FIFO and flushed ahead of newer deltas so peer map
+  /// context is not silently lost; overflow drops are logged.
+  func sendCollaboration(_ data: Data) async {
+    while !collabBacklog.isEmpty, let transport {
+      let next = collabBacklog.removeFirst()
+      do {try await transport.send(.collab(next))}
+      catch {collabBacklog.insert(next, at: 0); queueCollab(data); return}
+    }
+    if let transport {
+      do {try await transport.send(.collab(data))} catch {queueCollab(data)}
+    } else {queueCollab(data)}
+  }
+
+  private func queueCollab(_ data: Data) {
+    if collabBacklog.count >= 32 {
+      collabBacklog.removeFirst(); collabDropped += 1
+      if collabDropped == 1 || collabDropped % 20 == 0 {
+        Self.logger.warning("collab outbound dropped total=\(self.collabDropped)")
+      }
+    } else {collabBacklog.append(data)}
+  }
+
   func stop() {
     generation += 1
     runner?.cancel(); runner=nil
     disconnectTransport()
     pending.removeAll(); replica=nil; snapshot=nil; events=[]; session=nil
-    latestAccessTicket=nil
+    latestAccessTicket=nil; onCollaboration=nil
+    collabBacklog.removeAll(); collabDropped=0
     nextSequence=1; refusal=nil; connectionIssue=nil; connectionSuspended=false; state = .disconnected
   }
 
@@ -216,6 +274,8 @@ final class RealtimeCombatSession: ObservableObject {
   }
 
   private func receive(_ message: CombatWire.ServerMessage) async throws {
+    // Relay bytes never depend on replica state and must not throw.
+    if case .collab(let playerId,let data)=message {onCollaboration?(playerId,data); return}
     guard var replica else {throw CombatReplicaError.invalidSnapshot}
     guard calibrationClockRecoveryIsValid(at: localNow()) else {throw CombatTransportError.disconnected}
     switch message {
@@ -244,6 +304,16 @@ final class RealtimeCombatSession: ObservableObject {
         if !fresh.isEmpty {events=fresh}
         for event in fresh {
           if case .commandResult(_,_,let player,false,let reason)=event.event, player == session?.playerId {refusal=reason}
+          switch event.event {
+          case .commandResult(_,_,let player,let accepted,let reason) where player == session?.playerId:
+            Self.logger.info("command \(accepted ? "accepted" : "rejected", privacy: .public) \(reason ?? "", privacy: .public)")
+          case .projectileSpawn(let projectile) where projectile.shooterId == session?.playerId:
+            Self.logger.info("shot out spawned")
+          case .projectileTerminal(let terminal):
+            let side = terminal.shooterId == session?.playerId ? "out" : (terminal.targetPlayerId == session?.playerId ? "in" : "other")
+            Self.logger.info("shot \(side, privacy: .public) \(terminal.reason, privacy: .public) dmg=\(terminal.damage)")
+          default: break
+          }
         }
         if snapshot?.phase == .finished {state = .finished}
         try await transport?.send(.received(eventSequence:replica.eventSequence))
@@ -270,6 +340,7 @@ final class RealtimeCombatSession: ObservableObject {
         try await transport?.send(.resume(afterEventSequence:replica.eventSequence))
       } else if code == "unauthorized" {throw CombatTransportError.admissionRejected}
       else if code == "unavailable" {throw CombatTransportError.disconnected}
+    case .collab: return // Already handled above the replica guard.
     }
     guard calibrationClockRecoveryIsValid(at: localNow()) else {throw CombatTransportError.disconnected}
   }

@@ -3,6 +3,7 @@ import { LIMITS, type ServerMessage } from "@vkz/combat-protocol";
 const encoder = new TextEncoder();
 export const MAX_UNACKNOWLEDGED_EVENTS = 256;
 const MAX_UNACKNOWLEDGED_BYTES = 256 * 1024;
+const MAX_UNCONFIRMED_COLLAB_BYTES = 1024 * 1024;
 
 export class Connection {
   receivedSequence: number;
@@ -16,6 +17,11 @@ export class Connection {
   private commandRefillAt: number;
   private pingTokens = 5;
   private pingRefillAt: number;
+  private collabTokens = 512 * 1024;
+  private collabRefillAt: number;
+  private collabIngestTokens = 512 * 1024;
+  private collabIngestRefillAt: number;
+  private unconfirmedCollabBytes = 0;
 
   constructor(readonly socket: WebSocket, readonly playerId: string, eventSequence: number, now: number) {
     this.receivedSequence = eventSequence;
@@ -24,6 +30,8 @@ export class Connection {
     this.refillAt = now;
     this.commandRefillAt = now;
     this.pingRefillAt = now;
+    this.collabRefillAt = now;
+    this.collabIngestRefillAt = now;
   }
 
   admitCommand(now: number): boolean {
@@ -48,6 +56,25 @@ export class Connection {
     if (this.tokens < 1) return false;
     this.tokens -= 1;
     this.lastActivityAt = now;
+    this.unconfirmedCollabBytes = 0;
+    return true;
+  }
+
+  /** Opaque collab relay carries no sequence, so receivers get a decayed byte budget instead of the ack window. */
+  admitCollab(now: number, bytes: number): boolean {
+    this.collabTokens = Math.min(512 * 1024, this.collabTokens + Math.max(0, now - this.collabRefillAt) * (256 * 1024) / 1000);
+    this.collabRefillAt = now;
+    if (this.collabTokens < bytes) return false;
+    this.collabTokens -= bytes;
+    return true;
+  }
+
+  /** Sender-side aggregate byte budget so a client can't make the room parse far more collab than it relays. */
+  admitCollabIngest(now: number, bytes: number): boolean {
+    this.collabIngestTokens = Math.min(512 * 1024, this.collabIngestTokens + Math.max(0, now - this.collabIngestRefillAt) * (256 * 1024) / 1000);
+    this.collabIngestRefillAt = now;
+    if (this.collabIngestTokens < bytes) return false;
+    this.collabIngestTokens -= bytes;
     return true;
   }
 
@@ -84,6 +111,20 @@ export class Connection {
       this.outstandingBytes += bytes;
       this.bytesBySequence.set(sentThrough, (this.bytesBySequence.get(sentThrough) ?? 0) + bytes);
       this.sentSequence = sentThrough;
+      return true;
+    } catch {
+      this.close(1011, "socket-send-failed");
+      return false;
+    }
+  }
+
+  /** Pre-encoded collab relay; still outside bytesBySequence/outstandingBytes, bounded by unconfirmed relayed bytes instead. */
+  sendCollab(data: string, bytes: number): boolean {
+    if (this.socket.readyState !== WebSocket.OPEN) return false;
+    if (this.unconfirmedCollabBytes + bytes > MAX_UNCONFIRMED_COLLAB_BYTES) return false;
+    try {
+      this.socket.send(data);
+      this.unconfirmedCollabBytes += bytes;
       return true;
     } catch {
       this.close(1011, "socket-send-failed");

@@ -19,6 +19,7 @@ struct RealtimeArenaView: View {
   @State private var confirmedTargetID: String?
   @State private var confirmedZone: TargetingHitZone?
   @State private var menuPresented = false
+  @State private var reportPresented = false
   @State private var setupLogURL: URL?
   @State private var setupLogFailed = false
 
@@ -43,6 +44,14 @@ struct RealtimeArenaView: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         #endif
+    }
+    .sheet(isPresented: $reportPresented) {
+      ReportProblemView(acquireTicket: {try await controller.combat.acquireAccessTicket()},
+        loadLog: {
+          try JSONDecoder().decode([DuelFrameDiagnosticEvent].self,
+            from: Data(contentsOf: controller.exportSetupLog()))
+        },
+        onDismiss: {reportPresented = false})
     }
     .onChange(of: menuPresented) {_, _ in controller.setTriggerHeld(false)}
     .task {controller.setSceneActive(scenePhase != .background); await controller.start()}
@@ -287,8 +296,9 @@ struct RealtimeArenaView: View {
           Text("The match continues while this menu is open.")
             .font(.subheadline).foregroundStyle(VKZPalette.textMuted)
           Text(stageTitle).font(.headline)
-          if controller.usesRelocalizedFrame {
-            Text("Aligned by shared scan (approximate)").font(.caption).foregroundStyle(VKZPalette.textMuted)
+          if controller.usesQuickPlayFrame {
+            Text(controller.usesCollaborativeFrame ? "Aligned by live peer merge" : "Aligned by shared scan (approximate)")
+              .font(.caption).foregroundStyle(VKZPalette.textMuted)
           }
           RealtimeRosterStrip(players: controller.snapshot?.players ?? [], localPlayerID: controller.session.playerId)
           VStack(alignment: .leading, spacing: 6) {
@@ -310,6 +320,7 @@ struct RealtimeArenaView: View {
             Button("Export setup log") {
               do {setupLogURL = try controller.exportSetupLog()} catch {setupLogFailed = true}
             }.frame(minHeight: 44)
+            Button("Report a problem") {reportPresented = true}.frame(minHeight: 44)
           }
           .alert("Export unavailable", isPresented: $setupLogFailed) {
             Button("OK") {}
@@ -333,7 +344,8 @@ struct RealtimeArenaView: View {
         Text(stageTitle).font(.title3.bold())
         Spacer(minLength: 0)
         if [.connecting, .waitingForMap, .transferringMap, .relocalizing, .reconnecting].contains(controller.stage)
-          || (controller.usesRelocalizedFrame && controller.stage == .paused && controller.frame.stage == .degraded) {
+          || (controller.usesQuickPlayFrame && controller.stage == .paused && controller.frame.stage == .degraded)
+          || (controller.usesCollaborativeFrame && collaborativeSetup?.showsProgress == true) {
           ProgressView().tint(.white)
         }
       }
@@ -349,11 +361,12 @@ struct RealtimeArenaView: View {
         RealtimeReferencePanel(state: controller.referenceState, imageData: controller.referenceImageData,
           onCapture: controller.captureReference, onShare: controller.captureAndShareMap,
           captureAvailable: referenceSetup.captureAvailable)
-      } else if !controller.usesRelocalizedFrame,
+      } else if !controller.usesQuickPlayFrame,
         [.relocalizing, .measuringReference, .paused, .awaitingMembers].contains(controller.stage) {
         RealtimeReferencePanel(state: controller.referenceState, imageData: controller.referenceImageData)
       }
-      if controller.usesRelocalizedFrame && controller.isHost && controller.stage == .mapReady {
+      if controller.usesQuickPlayFrame && !controller.usesCollaborativeFrame && controller.isHost
+        && controller.stage == .mapReady {
         Button("SHARE ARENA", action: controller.captureAndShareMap)
           .buttonStyle(VKZPrimaryButtonStyle())
           .accessibilityHint("Sends the scan so the other phones can align with this play area")
@@ -362,7 +375,7 @@ struct RealtimeArenaView: View {
         Button(action: controller.beginRound) {
           HStack(spacing: 8) {
             if controller.startPending {ProgressView().tint(VKZPalette.background)}
-            Text(controller.startPending ? "Starting match…" : controller.usesRelocalizedFrame ? "PLAY" : "Begin match")
+            Text(controller.startPending ? "Starting match…" : controller.usesQuickPlayFrame ? "PLAY" : "Begin match")
           }
         }
         .buttonStyle(VKZPrimaryButtonStyle()).disabled(controller.startPending)
@@ -374,12 +387,15 @@ struct RealtimeArenaView: View {
       if controller.connectionIssue != nil || controller.stage == .reconnecting {
         Button("Retry connection", action: controller.retryConnection).buttonStyle(VKZSecondaryButtonStyle())
       }
-      if controller.isHost && controller.savedArenaName == nil && ([.mapping, .mapReady].contains(controller.stage) || scanTimedOut) {
-        Button(controller.usesRelocalizedFrame && scanTimedOut ? "Scan again" : "Restart scan",
+      if RealtimeArenaPresentation.showsScanControls(isHost: controller.isHost,
+        usesSavedArena: controller.savedArenaName != nil,
+        usesCollaborativeFrame: controller.usesCollaborativeFrame,
+        stage: controller.stage, scanTimedOut: scanTimedOut) {
+        Button(controller.usesQuickPlayFrame && scanTimedOut ? "Scan again" : "Restart scan",
           action: controller.retryAlignment).buttonStyle(VKZSecondaryButtonStyle())
       } else if controller.stage == .paused || controller.stage == .unavailable {
         if controller.connectionIssue == nil {
-          Button(controller.usesRelocalizedFrame ? "Re-align" : "Retry alignment",
+          Button(controller.usesQuickPlayFrame ? "Re-align" : "Retry alignment",
             action: controller.retryAlignment).buttonStyle(VKZSecondaryButtonStyle())
         }
         #if os(iOS)
@@ -413,22 +429,23 @@ struct RealtimeArenaView: View {
     if referenceSetup.isVisible && controller.referenceState == .capturing {
       return "Hold still while the reference is measured."
     }
+    if let collaborativeSetup {return collaborativeSetup.guidance}
     if let initialScan {return initialScan.guidance}
     if let name = controller.savedArenaName, [.mapping, .mapReady, .relocalizing].contains(controller.stage) {
       return "Loading \(name). Point at the fixed objects you scanned so your phone can recognize this arena."
     }
     if scanTimedOut {
-      return controller.usesRelocalizedFrame
+      return controller.usesQuickPlayFrame
         ? "Couldn't map this area — try somewhere with more detail"
         : "The camera couldn't find enough stable detail. Point at a well-lit floor, wall or fixed object, then restart the scan."
     }
     switch controller.stage {
     case .mapping:
-      return controller.usesRelocalizedFrame
+      return controller.usesQuickPlayFrame
         ? "Walk slowly and look around until the ring fills."
         : "Move slowly around the play area, keeping the floor, walls and fixed objects in view. Avoid aiming only at a blank wall."
     case .mapReady:
-      if controller.usesRelocalizedFrame {
+      if controller.usesQuickPlayFrame {
         return "Ready to share. Send the scan so the other phones can align with this play area."
       }
       if case .captured = controller.referenceState {return "Reference captured. Share the scan so the other phones can align with this play area."}
@@ -436,7 +453,7 @@ struct RealtimeArenaView: View {
     case .waitingForMap: return "Waiting for the host’s arena scan. Stay nearby; it will load automatically."
     case .transferringMap: return "Keep this screen open while the shared arena scan transfers."
     case .relocalizing:
-      if controller.usesRelocalizedFrame {
+      if controller.usesQuickPlayFrame {
         return controller.isHost ? "Look at the area you scanned" : "Look at the area the host scanned"
       }
       return "Point at the same fixed objects the host scanned. Move slowly until the camera recognizes the area."
@@ -445,13 +462,13 @@ struct RealtimeArenaView: View {
         ? "This older arena scan has no shared reference. Return home and create a new arena to capture one."
         : "Point at the reference shown below and hold steady. Each phone must recognize it before the match can begin. Keep it in view while playing."
     case .awaitingMembers:
-      if controller.usesRelocalizedFrame {
+      if controller.usesQuickPlayFrame {
         let counts = controller.alignedPlayers
         return "Aligned — waiting for players (\(counts.aligned)/\(counts.total))"
       }
       return "Keep players and their phones in view. The host begins when everyone has finished alignment."
     case .paused:
-      if controller.usesRelocalizedFrame {
+      if controller.usesQuickPlayFrame {
         switch controller.frame.stage {
         case .degraded: return "Hold steady — re-aligning"
         case .lost:
@@ -472,7 +489,8 @@ struct RealtimeArenaView: View {
   private var stageTitle: String {
     if controller.connectionIssue != nil {return "Connection needs attention"}
     if referenceSetup.isVisible {return "Set up play area"}
-    if controller.usesRelocalizedFrame {
+    if let collaborativeSetup {return collaborativeSetup.title}
+    if controller.usesQuickPlayFrame {
       if controller.stage == .mapping {return "Scan the area"}
       if controller.stage == .paused {
         if controller.frame.stage == .degraded {return "Re-aligning"}
@@ -492,10 +510,22 @@ struct RealtimeArenaView: View {
   }
   private var referenceSetup: RealtimeArenaPresentation.ReferenceSetup {
     .init(stage: controller.stage, isHost: controller.isHost, usesSavedArena: controller.savedArenaName != nil,
-      usesRelocalizedFrame: controller.usesRelocalizedFrame)
+      usesQuickPlayFrame: controller.usesQuickPlayFrame)
+  }
+  /// Collaborative Quick Play copy only replaces the setup stages it owns;
+  /// live-match and generic pause/reconnect states keep the shared wording.
+  private var collaborativeSetup: RealtimeArenaPresentation.CollaborativeSetup? {
+    guard controller.usesCollaborativeFrame,
+      [.mapping, .mapReady, .relocalizing, .awaitingMembers, .paused].contains(controller.stage),
+      controller.stage != .paused || [.degraded, .lost].contains(controller.frame.stage)
+    else {return nil}
+    let counts = controller.alignedPlayers
+    return .init(stage: controller.stage, frameStage: controller.frame.stage,
+      aligned: counts.aligned, total: counts.total)
   }
   private var initialScan: ArenaScanPresentation? {
     guard controller.connection == .connected, controller.isHost, controller.savedArenaName == nil,
+      !controller.usesCollaborativeFrame,
       controller.frame.frameID == nil, controller.frame.epoch != nil,
       [.mapping, .lost].contains(controller.frame.stage),
       controller.mapState == .mapping

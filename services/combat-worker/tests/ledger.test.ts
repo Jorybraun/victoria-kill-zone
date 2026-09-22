@@ -150,10 +150,13 @@ describe("full-match SQLite bullet ledger", () => {
       const input = (playerId: string, command: AuthenticatedCommand["command"]): AuthenticatedCommand => ({v: 1,
         commandId: `life-${++sequence}`, clientSequence: sequence, playerId, authorityEpoch: 1, frameEpoch: 1,
         sentAtMs: current.snapshot().matchTimeMs + 50, command});
+      const sighting = (targetPlayerId: string, center: [number, number, number], capturedAtMs: number) => ({
+        targetPlayerId, capturedAtMs, associationConfidence: 1, uncertaintyMeters: 0,
+        colliders: [{id: "torso", kind: "sphere", zone: "torso", center, radius: 0.3}] as const});
       const tick = (controls: AuthenticatedCommand[] = []): void => {
         const at = current.snapshot().matchTimeMs + 50;
-        const poses = [input("host", {kind: "pose", observations: [], pose: {sequence: at / 50, capturedAtMs: at,
-          position: [0, 0, 0], orientation: [0, 0, 0, 1], tracking: "normal"}}), input("guest", {kind: "pose", observations: [], pose: {sequence: at / 50,
+        const poses = [input("host", {kind: "pose", observations: [sighting("guest", [0, 0, -1], at)], pose: {sequence: at / 50, capturedAtMs: at,
+          position: [0, 0, 0], orientation: [0, 0, 0, 1], tracking: "normal"}}), input("guest", {kind: "pose", observations: [sighting("host", [0, 0, 0], at)], pose: {sequence: at / 50,
           capturedAtMs: at, position: [0, 0, -1], orientation: [0, 1, 0, 0], tracking: "normal"}})];
         const events = current.advance([...poses, ...controls]), snapshot = current.snapshot();
         store.commit(snapshot, current.checkpoint({includeTracking: false}), events.map(event => wrapped(snapshot, ++eventSequence, event)), [], eventSequence, at);

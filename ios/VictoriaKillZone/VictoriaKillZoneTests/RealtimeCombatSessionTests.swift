@@ -318,14 +318,40 @@ final class RealtimeCombatSessionTests: XCTestCase {
   func testHTTPAdmissionFailuresUseOnlySanitizedClassification() throws {
     let url = try XCTUnwrap(URL(string: "https://combat.example.test/connect"))
     let raw = NSError(domain: "untrusted-server-error", code: 1)
-    for status in [400, 401, 403, 404, 409, 426] {
+    for (status, expected) in [400: CombatTransportError.admissionRejected, 401: .ticketRejected,
+      403: .notOnRoster, 404: .admissionRejected, 409: .roomStateMismatch,
+      410: .matchFinished, 426: .admissionRejected] {
       let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)
-      XCTAssertEqual(CombatSocketTransport.safeFailure(raw, response: response), .admissionRejected)
+      XCTAssertEqual(CombatSocketTransport.safeFailure(raw, response: response), expected, "status \(status)")
     }
     for status in [408, 425, 429, 500, 502, 503] {
       let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)
       XCTAssertEqual(CombatSocketTransport.safeFailure(raw, response: response), .disconnected)
     }
+  }
+
+  func testRejectedTicketNamesServerKeyMismatchAndRetryRefreshesTicket() async throws {
+    let client = ControlledTicketClient()
+    let socket = ScriptedCombatSocket()
+    socket.connectError = CombatTransportError.ticketRejected
+    let game = RealtimeCombatSession(gameClient: client, makeTransport: {socket}, localNow: {1000})
+    defer {game.stop()}
+    game.start(session: Self.playerSession())
+    try await until {game.connectionIssue != nil}
+    XCTAssertEqual(game.state, .disconnected)
+    XCTAssertTrue(game.connectionIssue?.contains("access ticket") == true)
+    XCTAssertTrue(game.connectionIssue?.contains("server configuration") == true)
+    XCTAssertNil(game.latestAccessTicket)
+    try await Task.sleep(for: .milliseconds(1300))
+    let callsBeforeRetry = await client.calls
+    XCTAssertEqual(callsBeforeRetry, 1, "A rejected ticket must not spin")
+    socket.connectError = nil
+    game.retryConnection()
+    try await until {game.clockReady}
+    let callsAfterRetry = await client.calls
+    XCTAssertEqual(callsAfterRetry, 2, "Explicit retry requests a fresh ticket")
+    XCTAssertNil(game.connectionIssue)
+    XCTAssertEqual(game.state, .connected)
   }
 
   func testSuspendingQueuedReadinessClosesSocketUntilExplicitForegroundRetry() async throws {
@@ -444,8 +470,10 @@ private final class ScriptedCombatSocket: CombatSocketConnecting {
   var lastPing: (nonce: String, sent: Double)?
   var pingCount = 0
   var automaticallyRepliesToPings = true
+  var connectError: Error?
   func connect(ticket: CombatAccessTicket) throws -> AsyncThrowingStream<CombatWire.ServerMessage,Error> {
     connectCount += 1
+    if let connectError {throw connectError}
     let pair=AsyncThrowingStream<CombatWire.ServerMessage,Error>.makeStream()
     output=pair.continuation
     output?.yield(.snapshot(initialSnapshot,eventSequence:0,clientSequence:0))

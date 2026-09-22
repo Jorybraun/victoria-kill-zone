@@ -13,6 +13,7 @@ import { QueueFullError, SerialQueue } from "./serial-queue.js";
 import { RoomStore, type ProcessedCommand } from "./store.js";
 import { combatRoute } from "./routes.js";
 import { MapTransfer } from "./maps.js";
+import { ReportQuota, reportHandler } from "./report.js";
 import { ProjectionDelivery } from "./projection-delivery.js";
 import { TickCadence } from "./cadence.js";
 
@@ -29,6 +30,7 @@ export class CombatRoom extends DurableObject<Env> {
   private readonly queue = new SerialQueue();
   private readonly connections = new Map<WebSocket, Connection>();
   private readonly maps: MapTransfer;
+  private readonly reports: ReportQuota;
   private readonly delivery: ProjectionDelivery;
   private simulation: CombatSimulation | null = null;
   private bootstrap: string | null = null;
@@ -41,6 +43,7 @@ export class CombatRoom extends DurableObject<Env> {
     super(ctx, env);
     this.store = new RoomStore(ctx.storage);
     this.maps = new MapTransfer(ctx.storage, this.queue, (claims, frameEpoch, upload) => this.authorizeMap(claims, frameEpoch, upload));
+    this.reports = new ReportQuota(ctx.storage);
     this.delivery = new ProjectionDelivery(env, ctx.storage, this.queue, this.store.projections, () => this.failRoom());
     void ctx.blockConcurrencyWhile(async () => {
       this.store.initialize();
@@ -81,6 +84,10 @@ export class CombatRoom extends DurableObject<Env> {
         if (error instanceof QueueFullError) return new Response(null, { status: 503 });
         this.failRoom();
       }
+    }
+    if (route.kind === "report") {
+      const handler = reportHandler(this.env, this.reports);
+      return handler === null ? new Response(null, { status: 503 }) : handler.fetch(request, claims);
     }
     if (request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response(null, { status: 426 });
     return this.admitSocket(claims);
@@ -163,7 +170,12 @@ export class CombatRoom extends DurableObject<Env> {
       await this.queue.run(() => {
         const connection = this.connections.get(socket);
         if (connection === undefined || socket.readyState !== WebSocket.OPEN) return;
-        if (typeof message !== "string" || message.length > LIMITS.messageBytes || encoder.encode(message).byteLength > LIMITS.messageBytes) {
+        if (typeof message !== "string") {
+          connection.close(1009, "message-too-large-or-binary");
+          return;
+        }
+        const bytes = encoder.encode(message).byteLength;
+        if (message.length > LIMITS.collabMessageBytes || bytes > LIMITS.collabMessageBytes) {
           connection.close(1009, "message-too-large-or-binary");
           return;
         }
@@ -174,6 +186,8 @@ export class CombatRoom extends DurableObject<Env> {
           connection.close(4008, "input-rate-exceeded");
           return;
         }
+        const large = bytes > LIMITS.messageBytes;
+        if (large && !connection.admitCollabIngest(Date.now(), bytes)) return;
         const parsed = parseClientMessage(message);
         if (parsed === null) {
           connection.send({ type: "error", code: "invalidMessage" });
@@ -192,6 +206,17 @@ export class CombatRoom extends DurableObject<Env> {
             if (!connection.admitPing(Date.now())) { this.error(connection, "rateLimited"); connection.close(4008, "ping-rate-exceeded"); break; }
             const now = this.logicalNow();
             connection.send({ type: "pong", nonce: parsed.nonce, clientSentAtMs: parsed.clientSentAtMs, serverReceivedAtMs: now, serverSentAtMs: this.logicalNow() });
+            break;
+          }
+          // Opaque, droppable ARKit relay bytes: verbatim, unordered, never to the sender.
+          case "collab": {
+            const now = Date.now();
+            if (!large && !connection.admitCollabIngest(now, bytes)) break;
+            const encoded = JSON.stringify({ type: "collab", playerId: connection.playerId, data: parsed.data });
+            const relayBytes = encoder.encode(encoded).byteLength;
+            for (const other of this.connections.values()) {
+              if (other !== connection && other.admitCollab(now, relayBytes)) other.sendCollab(encoded, relayBytes);
+            }
             break;
           }
         }
@@ -278,9 +303,10 @@ export class CombatRoom extends DurableObject<Env> {
       this.error(connection, "sequenceConflict", envelope.commandId);
       return;
     }
-    if (this.pending.length >= LIMITS.commandsPerTick) {
+    const perPlayer = Math.floor(LIMITS.commandsPerTick / LIMITS.players);
+    const ownPending = this.pending.reduce((count, item) => item.command.playerId === connection.playerId ? count + 1 : count, 0);
+    if (ownPending >= perPlayer || this.pending.length >= LIMITS.commandsPerTick) {
       this.error(connection, "rateLimited", envelope.commandId);
-      connection.close(4008, "command-queue-full");
       return;
     }
     this.pending.push({ command: { ...envelope, playerId: connection.playerId }, fingerprint,
