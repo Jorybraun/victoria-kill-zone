@@ -21,12 +21,14 @@ final class RealtimeArenaController: ObservableObject {
   let combat: RealtimeCombatSession
   let frameProvider: DuelFrameProvider?
   let savedArenaName: String?
+  let rendezvous: NearbyRendezvousCoordinator
   @Published private(set) var snapshot: CombatWire.Snapshot?
   @Published private(set) var frame = DuelFrameSnapshot()
   @Published private(set) var targetingSnapshot = TargetingSnapshot.unavailable()
   @Published private(set) var associatedBody: RealtimeAssociatedBody?
   @Published private(set) var confirmedHits: [RealtimeHitFeedback] = []
   @Published private(set) var connection: RealtimeConnectionState = .disconnected
+  @Published private(set) var rendezvousPhase: NearbyRendezvousPhase = .inactive
   @Published private(set) var mapState: RealtimeMapState = .idle
   @Published private(set) var referenceState: DuelFrameReferenceState = .unavailable
   @Published private(set) var referenceImageData: Data?
@@ -47,6 +49,7 @@ final class RealtimeArenaController: ObservableObject {
   private var stopTask: Task<Void, Never>?
   private var started = false
   private var cameraReady = false
+  private var rendezvousStarted = false
   private var sceneActive = true
   private var generation = 0
   private var configuredEpoch: Int?
@@ -63,10 +66,11 @@ final class RealtimeArenaController: ObservableObject {
   private var alignedSince: Date?
 
   init(session: PlayerSession, client: any GameSessionClient, targeting: any TargetingSession,
-       savedArena: SavedArenaBundle? = nil) {
+       savedArena: SavedArenaBundle? = nil, nearby: (any NearbyRendezvousDriving)? = nil) {
     self.session = session; self.targeting = targeting
     savedArenaName = savedArena?.summary.name
     let combat = RealtimeCombatSession(gameClient: client); self.combat = combat
+    self.rendezvous = NearbyRendezvousCoordinator(driver: nearby)
     if let driver = targeting as? any DuelFrameSessionDriving {
       let provider = DuelFrameProvider(targeting: driver)
       frameProvider = provider
@@ -96,6 +100,7 @@ final class RealtimeArenaController: ObservableObject {
       self.referenceImageData = self.frameProvider?.referenceImageData
     }.store(in: &subscriptions)
     mapCoordinator?.$state.sink { [weak self] in self?.mapState = $0 }.store(in: &subscriptions)
+    rendezvous.$phase.sink { [weak self] in self?.rendezvousPhase = $0 }.store(in: &subscriptions)
   }
 
   deinit {cameraTask?.cancel(); pumpTask?.cancel(); triggerTask?.cancel(); referenceTask?.cancel()}
@@ -212,6 +217,7 @@ final class RealtimeArenaController: ObservableObject {
     setTriggerHeld(false); cameraTask?.cancel(); cameraTask = nil; pumpTask?.cancel(); pumpTask = nil
     referenceTask?.cancel(); referenceTask = nil; collabTask?.cancel(); collabTask = nil
     combat.stop(); configuredEpoch = nil; authorityEpoch = nil; readiness = RealtimeReadinessState()
+    rendezvousStarted = false
     associatedBody = nil; confirmedHits = []; lastSubmittedPose = nil; lastPoseDate = nil
     commands = RealtimeCommandState(); actionFeedback = nil; lastLocalFireAtMs = nil
     let pendingStart = startTask
@@ -219,7 +225,7 @@ final class RealtimeArenaController: ObservableObject {
       // An AR start may ignore cancellation while awaiting camera permission.
       // Wait for it, then stop; otherwise it can turn the camera on after leave.
       await pendingStart?.value
-      await mapCoordinator?.stop(); await targeting.stop()
+      await rendezvous.stop(); await mapCoordinator?.stop(); await targeting.stop()
       startTask = nil; stopTask = nil
     }
     stopTask = teardown
@@ -248,6 +254,12 @@ final class RealtimeArenaController: ObservableObject {
     // data a merge needs. The worker already bounds the byte rate upstream.
     let inboundStream = AsyncStream<Data>(bufferingPolicy: .unbounded) { inbound = $0 }
     combat.onCollaboration = { _, data in inbound.yield(data) }
+    combat.onNearbyToken = { [weak self] id, data in
+      self?.rendezvous.receivePeerToken(playerID: id, data: data)
+    }
+    rendezvous.onLocalToken = { [weak self] data in
+      Task { await self?.combat.sendNearbyToken(data) }
+    }
     let outbound = frameProvider?.collaborationOutputs()
     collabTask = Task { [weak self] in
       await withTaskGroup(of: Void.self) { group in
@@ -306,7 +318,16 @@ final class RealtimeArenaController: ObservableObject {
   }
   func exportSetupLog() throws -> URL {
     guard let frameProvider else {throw DuelFrameFailure.unsupported}
-    return try frameProvider.exportDiagnostics()
+    let frameLog = try frameProvider.exportDiagnostics()
+    if rendezvous.diagnostics.isEmpty {return frameLog}
+    return try rendezvous.exportSetupLog(merging: frameLog)
+  }
+  func retryRendezvous() {Task {await rendezvous.retry()}}
+  var canOpenNearbySettings: Bool {rendezvous.needsSettings}
+  /// NI rendezvous only runs the collaborative Quick Play path (ADR 0012);
+  /// unsupported hardware keeps the ADR 0011 co-view copy unchanged.
+  var usesNearbyRendezvous: Bool {
+    usesCollaborativeFrame && rendezvousPhase != .inactive && rendezvousPhase != .unsupported
   }
   func retryConnection() {setTriggerHeld(false); combat.retryConnection()}
   func beginRound() {
@@ -368,6 +389,17 @@ final class RealtimeArenaController: ObservableObject {
     }
     authorityEpoch = value.authorityEpoch
     configureMapIfNeeded()
+    // Rendezvous starts once the camera and the collaborative frame mode are
+    // both confirmed by the roster snapshot; roster drift keeps sessions in
+    // step for peers that join or leave mid-setup.
+    if usesCollaborativeFrame && cameraReady {
+      let peerIDs = Set(value.players.map(\.playerId)).subtracting([session.playerId])
+      if rendezvousStarted {rendezvous.updatePeers(peerIDs)}
+      else {
+        rendezvousStarted = true
+        Task {await rendezvous.start(peerIDs: peerIDs)}
+      }
+    }
   }
   private func configureMapIfNeeded() {
     guard started, cameraReady, sceneActive, let snapshot, configuredEpoch != snapshot.frameEpoch, let epoch = UInt16(exactly: snapshot.frameEpoch), epoch > 0 else {return}
