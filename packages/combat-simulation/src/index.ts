@@ -1,7 +1,7 @@
-import {LIMITS, type AuthenticatedCommand, type CombatEvent, type CombatPlayerState, type CombatSnapshot, type PhonePose,
+import {LIMITS, type AuthenticatedCommand, type BodyObservation, type CombatEvent, type CombatPlayerState, type CombatSnapshot, type PhonePose,
   type ProjectileState, type RefusalReason} from "@vkz/combat-protocol";
 import {add, distance, dot, finiteVector, length, mul, phoneForward} from "./geometry.js";
-import {bodyMovementValid, colliderPairs, phoneAt, phoneMovementValid} from "./history.js";
+import {anchoredToPhone, bodyMovementValid, colliderPairs, phoneAt, phoneMovementValid, sampleBoundaries} from "./history.js";
 import {integrateFlight, resolveFlights, terminal, timeScaleAt, type FlightPath} from "./flight.js";
 import {clone, parseCheckpoint, validateConfiguration, validObservation, validPhone, type SimulationCheckpoint, type SimulationConfiguration} from "./state.js";
 
@@ -131,8 +131,9 @@ export class CombatSimulation {
     this.cancelFlight(events); this.expireAbilities(events); this.setPhase("paused", reason, events);
   }
   private coverage(fromMs: number, toMs: number, interval = false): boolean {
+    const times = interval ? [fromMs, ...sampleBoundaries(this.state, fromMs, toMs), toMs] : [toMs, toMs];
     return this.state.snapshot.players.every(p => p.connected && p.frameReady && (p.health <= 0 || (
-      phoneAt(this.state, p.playerId, toMs) !== null && colliderPairs(this.state, p.playerId, interval ? fromMs : toMs, toMs) !== null)));
+      phoneAt(this.state, p.playerId, toMs) !== null && times.slice(1).every((end, i) => colliderPairs(this.state, p.playerId, times[i]!, end) !== null))));
   }
   private envelopeRefusal(e: AuthenticatedCommand): RefusalReason | null {
     if (!this.player(e.playerId)) return "unknownPlayer";
@@ -166,6 +167,7 @@ export class CombatSimulation {
       const previous = h?.samples.at(-1);
       if (previous?.capturedAtMs === observation.capturedAtMs && JSON.stringify(previous) === JSON.stringify(observation)) continue;
       if (!bodyMovementValid(previous, observation)) return "poseMismatch";
+      if (this.anchorRefusal(previous, observation) === "poseMismatch") return "poseMismatch";
     }
     if (history) history.samples = [...history.samples, clone(pose)].slice(-16);
     else this.state.phones.push({playerId: e.playerId, samples: [clone(pose)]});
@@ -178,10 +180,19 @@ export class CombatSimulation {
         this.state.bodies = this.state.bodies.filter(b => b !== h); continue;
       }
       if (h?.samples.at(-1)?.capturedAtMs === observation.capturedAtMs) continue;
+      if (this.anchorRefusal(h?.samples.at(-1), observation) === "unanchored") continue;
       if (h) h.samples = [...h.samples, clone(observation)].slice(-16);
       else this.state.bodies.push({observerId: e.playerId, targetId: observation.targetPlayerId, samples: [clone(observation)]});
     }
     return null;
+  }
+  private anchorRefusal(previous: BodyObservation | undefined, observation: BodyObservation): "poseMismatch" | "unanchored" | null {
+    const newTrack = observation.colliders.some(c => !previous?.colliders.some(x => x.id === c.id));
+    if (!newTrack) return null;
+    const anchor = phoneAt(this.state, observation.targetPlayerId, observation.capturedAtMs);
+    if (!anchor) return "unanchored";
+    return observation.colliders.some(c => !previous?.colliders.some(x => x.id === c.id) && !anchoredToPhone(anchor.position, c))
+      ? "poseMismatch" : null;
   }
   private acceptFrame(e: AuthenticatedCommand, events: CombatEvent[]): RefusalReason | null {
     const command = e.command;

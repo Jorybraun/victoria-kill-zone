@@ -141,7 +141,7 @@ struct DuelFrameSnapshot: Equatable, Sendable {
 /// any pre-link buffering stay finite. Larger deltas are dropped; ARKit keeps
 /// emitting, so a dropped delta is retried by the next one.
 enum DuelFrameCollaboration {
-  static let maximumBytes = 288_000
+  static let maximumBytes = 4 * 1024 * 1024
 }
 
 protocol DuelFrameSessionDriving: Sendable {

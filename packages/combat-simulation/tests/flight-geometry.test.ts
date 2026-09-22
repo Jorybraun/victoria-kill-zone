@@ -39,7 +39,7 @@ describe("flight geometry reuse", () => {
   it("keeps historical geometry distinct from current geometry for the same target", () => {
     const f = new Fixture().ready();
     f.body.b = [sphere([3, 0.8, 0])]; f.tick();
-    const result = resolveFlights(f.simulation.checkpoint(), [path("historical", 100), path("current", 150)]);
+    const result = resolveFlights(f.simulation.checkpoint(), [path("historical", 100), path("current", f.now)]);
     expect(terminals(result.events).map(event => [event.projectileId, event.reason, event.targetPlayerId])).toEqual([
       ["historical", "bodyHit", "b"],
     ]);
@@ -61,15 +61,15 @@ describe("flight geometry reuse", () => {
   it("recomputes overflow intervals and preserves distinctive hits beyond the retained budget", () => {
     const f = new Fixture(); f.body.b = [sphere([3, 0.8, 0])]; f.ready();
     f.body.b = [sphere([3, 0, 0])]; f.tick();
-    const checkpoint = f.simulation.checkpoint();
+    const checkpoint = f.simulation.checkpoint(), base = f.now;
     const paths = Array.from({length: 128}, (_, i) => {
-      const p = path(`distinct-${i}`, 100 + i * 0.025), first = p.segments[0]!;
+      const p = path(`distinct-${i}`, base - 50 + i * 0.025), first = p.segments[0]!;
       // The first 64 paths fill 128 unique intervals. Two later shots use
       // the same new interval where the target has moved onto their path.
-      const secondAt = i === 64 || i === 65 ? 150 : 110 + i * 0.025;
-      p.segments = [{...first, fromMs: 150, toMs: 175, end: [2, 0, 0]},
-        {...first, fromMs: 175, toMs: 200, start: [2, 0, 0], geometryFromMs: secondAt, geometryToMs: secondAt}];
-      p.endTimeMs = 200;
+      const secondAt = i === 64 || i === 65 ? base : base - 40 + i * 0.025;
+      p.segments = [{...first, fromMs: base - 50, toMs: base - 25, end: [2, 0, 0]},
+        {...first, fromMs: base - 25, toMs: base, start: [2, 0, 0], geometryFromMs: secondAt, geometryToMs: secondAt}];
+      p.endTimeMs = base;
       return p;
     });
     const together = measured(checkpoint, paths);
@@ -78,6 +78,6 @@ describe("flight geometry reuse", () => {
     ]);
     expect(together.result.survivors).toHaveLength(126);
     // An unbounded cache would reuse the second overflowing hit interval.
-    expect(together.historyReads).toBe(256);
+    expect(together.historyReads).toBe(258);
   });
 });

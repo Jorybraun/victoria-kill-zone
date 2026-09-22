@@ -182,6 +182,14 @@ final class RealtimeCombatSession: ObservableObject {
       switch error {
       case .invalidEndpoint:
         return "The combat connection is not configured correctly. Retry after configuration is restored, or leave the match."
+      case .ticketRejected:
+        return "The combat server rejected this match's access ticket. This is a server configuration problem (lobby and combat server keys don't match), not your connection. Retry after the server is fixed, or leave the match."
+      case .notOnRoster:
+        return "This match's roster no longer includes you. Leave and join again."
+      case .roomStateMismatch:
+        return "The combat room is out of step with the lobby (players or match state changed). Retry to refresh access; if it keeps happening, leave and create a new arena."
+      case .matchFinished:
+        return "This match has already finished. Leave to return to the lobby."
       case .admissionRejected:
         return "Match access could not be verified. Retry to refresh access, or leave and join again."
       case .invalidMessage, .oversizedMessage:
