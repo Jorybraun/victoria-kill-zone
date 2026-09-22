@@ -32,7 +32,7 @@ describe("authoritative fixed-step simulation", () => {
     const f = new Fixture(fast()); f.phone.b = [1, 0.4, 0]; f.body.b = [sphere([1, 0.4, 0])]; f.ready();
     f.tick([f.fire()]); f.body.b = [sphere([1, -0.4, 0])];
     const hit = terminals(f.tick())[0];
-    expect(hit?.reason).toBe("bodyHit"); expect(hit?.atMs).toBeGreaterThan(150); expect(hit?.atMs).toBeLessThan(200);
+    expect(hit?.reason).toBe("bodyHit"); expect(hit?.atMs).toBeGreaterThan(200); expect(hit?.atMs).toBeLessThan(250);
     expect(f.player().health).toBe(66);
   });
   it("lets a player dodge before the projectile arrives", () => {
@@ -173,17 +173,17 @@ describe("oriented phone shields and local slow fields", () => {
     // .5m at 100m/s (5ms), 1m at 25m/s (40ms), .5m at 100m/s (5ms).
     expect(f.simulation.snapshot().projectiles[0]?.position[0]).toBeCloseTo(2, 7);
     const segments = events.filter(e => e.kind === "projectileSegment"); expect(segments.map(e => e.timeScale)).toEqual([0.25, 1]);
-    expect(segments[0]?.atMs).toBeCloseTo(155); expect(segments[1]?.atMs).toBeCloseTo(195);
+    expect(segments[0]?.atMs).toBeCloseTo(205); expect(segments[1]?.atMs).toBeCloseTo(245);
   });
   it("field expiration restores velocity at its exact time, and does not slow reload", () => {
     const f = new Fixture({...fast(100), weapon: {...fast(100).weapon, reloadMs: 50}, slowField: {...DEFAULT_RULES.slowField, radius: 2, durationMs: 75, cooldownMs: 100}}).ready();
     f.tick([f.ability("slowField", "a"), f.fire()]);
-    // Field starts at 150, expires at 225, projectile travels 1.25m by 200.
+    // Field starts at 200, expires at 275, projectile travels 1.25m by 250.
     f.tick([f.envelope("a", {kind: "reload"})]);
-    expect(f.player("a").reloadEndsAtMs).toBe(250);
+    expect(f.player("a").reloadEndsAtMs).toBe(300);
     const events = f.tick(); expect(f.player("a").ammo).toBe(100);
     const segment = events.find(e => e.kind === "projectileSegment" && e.timeScale === 1);
-    expect(segment?.kind === "projectileSegment" && segment.atMs).toBeCloseTo(225);
+    expect(segment?.kind === "projectileSegment" && segment.atMs).toBeCloseTo(275);
   });
 });
 

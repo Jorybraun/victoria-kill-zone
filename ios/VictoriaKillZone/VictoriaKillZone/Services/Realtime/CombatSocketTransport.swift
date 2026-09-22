@@ -10,7 +10,10 @@ struct CombatAccessTicket: Sendable, CustomStringConvertible, CustomDebugStringC
   var debugDescription: String {description}
 }
 
-enum CombatTransportError: Error, Equatable {case invalidEndpoint, admissionRejected, oversizedMessage, invalidMessage, disconnected, consumerTooSlow}
+enum CombatTransportError: Error, Equatable {
+  case invalidEndpoint, ticketRejected, notOnRoster, roomStateMismatch, matchFinished
+  case admissionRejected, oversizedMessage, invalidMessage, disconnected, consumerTooSlow
+}
 
 @MainActor
 protocol CombatSocketConnecting: AnyObject {
@@ -112,7 +115,15 @@ final class CombatSocketTransport: CombatSocketConnecting {
 
   static func safeFailure(_ error: Error, response: URLResponse?) -> CombatTransportError {
     if let status = (response as? HTTPURLResponse)?.statusCode,
-      (400...499).contains(status), ![408, 425, 429].contains(status) {return .admissionRejected}
+      (400...499).contains(status), ![408, 425, 429].contains(status) {
+      switch status {
+      case 401: return .ticketRejected
+      case 403: return .notOnRoster
+      case 409: return .roomStateMismatch
+      case 410: return .matchFinished
+      default: return .admissionRejected
+      }
+    }
     return (error as? CombatTransportError) ?? .disconnected
   }
 

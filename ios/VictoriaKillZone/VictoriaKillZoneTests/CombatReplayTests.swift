@@ -25,7 +25,7 @@ final class CombatReplayTests: XCTestCase {
 
   func testDuplicateHitPacketCannotChangeHealthOrAwardASecondTerminal() throws {
     var session = try makeSession(.hit)
-    try session.advance(to: 550)
+    try session.advance(to: 600)
     let accepted = session.snapshot
     let sequence = session.replica.eventSequence
     let ignored = try session.replayLastPacket()
@@ -40,33 +40,33 @@ final class CombatReplayTests: XCTestCase {
 
   func testRecordedSlowSegmentsUseTheirOwnOriginsAndAuthoritySpeed() throws {
     var session = try makeSession(.slow)
-    try session.advance(to: 300)
+    try session.advance(to: 350)
     XCTAssertEqual(session.snapshot.projectiles.first?.timeScale, 0.25)
     XCTAssertEqual(session.acceptedSegments, 1)
     let slowStart = try point(session)
-    try session.advance(to: 350)
+    try session.advance(to: 400)
     XCTAssertEqual(try point(session).x - slowStart.x, 0.1, accuracy: 0.000001)
-    try session.advance(to: 2150)
+    try session.advance(to: 2200)
     XCTAssertEqual(session.acceptedSegments, 2)
     XCTAssertEqual(session.snapshot.projectiles.first?.timeScale, 1)
     XCTAssertEqual(try point(session).x, 4.75, accuracy: 0.000001)
-    try session.advance(to: 2200)
+    try session.advance(to: 2250)
     XCTAssertEqual(try point(session).x, 5.15, accuracy: 0.000001)
   }
 
   func testStoppedPacketsFreezeThenHideUntilFreshAcceptedEventsResume() throws {
     var session = try makeSession(.miss)
-    try session.advance(to: 150)
+    try session.advance(to: 200)
     let sequence = session.replica.eventSequence
-    try session.advance(to: 250, deliverPackets: false)
+    try session.advance(to: 300, deliverPackets: false)
     let frozen = try point(session)
-    try session.advance(to: 350, deliverPackets: false)
+    try session.advance(to: 400, deliverPackets: false)
     XCTAssertEqual(try point(session), frozen)
     XCTAssertEqual(session.replica.eventSequence, sequence)
-    try session.advance(to: 401, deliverPackets: false)
+    try session.advance(to: 451, deliverPackets: false)
     XCTAssertTrue(session.presentation.projectiles.isEmpty)
-    XCTAssertNil(session.presentation.timing(at: 0.401))
-    try session.advance(to: 450)
+    XCTAssertNil(session.presentation.timing(at: 0.451))
+    try session.advance(to: 500)
     XCTAssertGreaterThan(session.replica.eventSequence, sequence)
     XCTAssertEqual(session.acceptedSpawns, 1)
     XCTAssertEqual(session.presentation.projectiles.count, 1)
@@ -74,10 +74,10 @@ final class CombatReplayTests: XCTestCase {
 
   func testClearBlocksLateFramesAndRestartResetsAllEventIdentities() throws {
     var session = try makeSession(.hit)
-    try session.advance(to: 550)
+    try session.advance(to: 600)
     session.clear()
     let snapshot = session.snapshot
-    try session.advance(to: 900)
+    try session.advance(to: 950)
     XCTAssertEqual(session.snapshot, snapshot)
     XCTAssertTrue(session.presentation.projectiles.isEmpty)
     XCTAssertTrue(session.terminals.isEmpty)
@@ -91,7 +91,7 @@ final class CombatReplayTests: XCTestCase {
     XCTAssertTrue(session.terminals.isEmpty)
     XCTAssertTrue(session.recentEvents.isEmpty)
     XCTAssertTrue(session.snapshot.players.allSatisfy { $0.health == 100 && $0.ammo == 8 })
-    try session.advance(to: 550)
+    try session.advance(to: 600)
     XCTAssertEqual(session.acceptedSpawns, 1)
     XCTAssertEqual(session.terminals.count, 1)
     XCTAssertEqual(session.snapshot.players.first(where: { $0.id == "b" })?.health, 66)
