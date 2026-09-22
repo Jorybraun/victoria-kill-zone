@@ -36,8 +36,36 @@ enum DuelFrameAlignmentMode: String, Equatable, Sendable {
   /// Map installs must witness .relocalizing before accepting normal tracking;
   /// collaborative merges are proven by a peer anchor instead.
   var requiresRelocalizingEvidence: Bool { self != .collaborative }
-  /// A peer participant anchor must be visible before aligning.
+  /// A peer participant anchor must be visible before aligning, unless a UWB
+  /// rendezvous seed already fixes the inter-frame transform (ADR 0012 §4).
   var requiresPeerMerge: Bool { self == .collaborative }
+  /// Only collaborative sessions run the NI rendezvous alongside ARKit.
+  var acceptsNearbySeed: Bool { self == .collaborative }
+}
+
+/// Where the shared frame's alignment evidence came from. A participant
+/// anchor merge arriving after an NI seed upgrades confidence; it is no
+/// longer the gate.
+enum DuelFrameAlignmentEvidence: String, Equatable, Sendable {
+  case none, nearbySeed, peerMerge, nearbySeedAndPeerMerge
+}
+
+/// The solved transform from this device's ARKit world frame into the
+/// elected host frame, produced by `NearbyRendezvousPolicy`. Targeting-local;
+/// the policy checks the epoch before accepting it.
+struct DuelFrameNearbySeed: Equatable, Sendable {
+  let epoch: UInt16
+  let hostPeerID: String
+  let localToHostFrame: NearbyFrameTransform
+  let residual: NearbyAlignmentResidual
+  let agreeingLinks: Int
+  let solvedAt: Date
+
+  var isValid: Bool {
+    epoch > 0 && !hostPeerID.isEmpty && localToHostFrame.isFinite
+      && residual.translationMeters.isFinite && residual.yawDegrees.isFinite
+      && residual.translationMeters >= 0 && residual.yawDegrees >= 0
+  }
 }
 
 /// Targeting-local value, not a transport envelope. The app authenticates the
@@ -124,6 +152,8 @@ struct DuelFrameSnapshot: Equatable, Sendable {
   var failure: DuelFrameFailure?
   var scanFeedback: DuelFrameScanFeedback = .waitingForCamera
   var mode: DuelFrameAlignmentMode = .measured
+  var nearbySeed: DuelFrameNearbySeed?
+  var alignmentEvidence: DuelFrameAlignmentEvidence = .none
 
   /// Read this at the instant of firing; a delayed UI publisher cannot extend
   /// permission after the last pose or independently measured residual expires.
