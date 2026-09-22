@@ -45,6 +45,57 @@ final class RealtimeArenaPresentationTests: XCTestCase {
     }
   }
 
+  func testCollaborativeSetupNamesLinkingWithoutLegacyScanCopy() {
+    for stage in [RealtimeArenaStage.mapping, .relocalizing] {
+      let setup = RealtimeArenaPresentation.CollaborativeSetup(stage: stage,
+        frameStage: .mapping, aligned: 0, total: 2)
+      XCTAssertEqual(setup.title, "Linking play area")
+      XCTAssertFalse(setup.guidance.lowercased().contains("scan"))
+      XCTAssertFalse(setup.guidance.lowercased().contains("share"))
+      XCTAssertFalse(setup.guidance.lowercased().contains("host"))
+      XCTAssertTrue(setup.showsProgress)
+    }
+    let relocalizingFrame = RealtimeArenaPresentation.CollaborativeSetup(stage: .awaitingMembers,
+      frameStage: .relocalizingWorld, aligned: 1, total: 3)
+    XCTAssertEqual(relocalizingFrame.title, "Linking play area")
+
+    let awaiting = RealtimeArenaPresentation.CollaborativeSetup(stage: .awaitingMembers,
+      frameStage: .aligned, aligned: 1, total: 3)
+    XCTAssertEqual(awaiting.title, "Aligned")
+    XCTAssertTrue(awaiting.guidance.contains("(1/3)"))
+    XCTAssertFalse(awaiting.showsProgress)
+
+    let degraded = RealtimeArenaPresentation.CollaborativeSetup(stage: .paused,
+      frameStage: .degraded, aligned: 1, total: 3)
+    XCTAssertEqual(degraded.title, "Re-aligning")
+    XCTAssertEqual(degraded.guidance, "Hold steady — re-aligning")
+    XCTAssertTrue(degraded.showsProgress)
+
+    let lost = RealtimeArenaPresentation.CollaborativeSetup(stage: .paused,
+      frameStage: .lost, aligned: 1, total: 3)
+    XCTAssertEqual(lost.title, "Alignment lost")
+    XCTAssertFalse(lost.guidance.lowercased().contains("host"))
+    XCTAssertFalse(lost.showsProgress)
+
+    let running = RealtimeArenaPresentation.CollaborativeSetup(stage: .running,
+      frameStage: .aligned, aligned: 2, total: 2)
+    XCTAssertEqual(running.title, RealtimeArenaStage.running.title)
+    XCTAssertFalse(running.showsProgress)
+  }
+
+  func testCollaborativeModeHidesScanControls() {
+    XCTAssertFalse(RealtimeArenaPresentation.showsScanControls(isHost: true,
+      usesSavedArena: false, usesCollaborativeFrame: true, stage: .mapping, scanTimedOut: false))
+    XCTAssertFalse(RealtimeArenaPresentation.showsScanControls(isHost: true,
+      usesSavedArena: false, usesCollaborativeFrame: true, stage: .running, scanTimedOut: true))
+    XCTAssertTrue(RealtimeArenaPresentation.showsScanControls(isHost: true,
+      usesSavedArena: false, usesCollaborativeFrame: false, stage: .mapping, scanTimedOut: false))
+    XCTAssertTrue(RealtimeArenaPresentation.showsScanControls(isHost: true,
+      usesSavedArena: false, usesCollaborativeFrame: false, stage: .paused, scanTimedOut: true))
+    XCTAssertFalse(RealtimeArenaPresentation.showsScanControls(isHost: false,
+      usesSavedArena: false, usesCollaborativeFrame: false, stage: .mapping, scanTimedOut: false))
+  }
+
   func testOnlyCurrentLocalFieldOverridesCooldownAndExpiresAtBoundary() {
     let fields = [field(owner: "local", start: 1000, end: 3000), field(owner: "remote", start: 1000, end: 9000)]
     XCTAssertEqual(RealtimeArenaPresentation.slowFieldStatus(fields: fields, localPlayerID: "local", readyAt: 11000, now: 1000), .active(seconds: 2))
