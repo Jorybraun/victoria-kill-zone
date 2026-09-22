@@ -56,6 +56,16 @@ describe("untrusted combat messages", () => {
   it("keeps the 16 KiB bound on every non-collab type", () => {
     expect(parse({type:"ping",nonce:"n",clientSentAtMs:0,pad:"x".repeat(LIMITS.messageBytes)})).toBeNull();
   });
+  it("accepts a strict base64 discovery token under its bounded length", () => {
+    const token = "QUJD".repeat(8);
+    expect(parse({type:"niToken",token})).toEqual({type:"niToken",token});
+    expect(parse({type:"niToken",token:"A".repeat(LIMITS.niTokenBytes)})).not.toBeNull();
+  });
+  it("rejects empty, oversized, non-base64 and extra-keyed discovery tokens", () => {
+    for (const token of ["", "a=b=", "QUJDQQ", "A".repeat(LIMITS.niTokenBytes + 4)])
+      expect(parse({type:"niToken",token})).toBeNull();
+    expect(parse({type:"niToken",token:"AAAA",extra:true})).toBeNull();
+  });
 });
 
 describe("ticket claims", () => {
