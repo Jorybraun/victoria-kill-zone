@@ -30,6 +30,8 @@ final class RealtimeCombatSession: ObservableObject {
   private(set) var latestAccessTicket: CombatAccessTicket?
   /// Opaque ARKit collaboration archives, verbatim from peers. Set by the controller.
   var onCollaboration: ((String, Data) -> Void)?
+  /// Opaque archived NIDiscoveryToken relays, verbatim from peers (ADR 0012).
+  var onNearbyToken: ((String, Data) -> Void)?
   /// Full authority snapshots only; event projection does not advance this.
   /// Kept monotonic across start/stop so observers can distinguish reconciliation.
   private(set) var snapshotRevision = 0
@@ -52,6 +54,8 @@ final class RealtimeCombatSession: ObservableObject {
   private var runner: Task<Void,Never>?
   private var collabBacklog: [Data] = []
   private var collabDropped = 0
+  private var localNearbyToken: Data?
+  private var nearbyTokenAnnouncedForConnection = false
   private var ticker: Task<Void,Never>?
   private var writer: Task<Void,Never>?
   private var writerGeneration = 0
@@ -226,6 +230,19 @@ final class RealtimeCombatSession: ObservableObject {
     } else {queueCollab(data)}
   }
 
+  /// Fire-and-forget opaque relay like `sendCollaboration`, but the payload is
+  /// the local NI discovery token: it must reach peers that connect later and
+  /// sockets that reconnect, so the applied-snapshot path re-announces it once
+  /// per connection when a token is already held.
+  func sendNearbyToken(_ data: Data) async {
+    localNearbyToken = data
+    guard let transport else {return}
+    do {
+      try await transport.send(.niToken(data))
+      nearbyTokenAnnouncedForConnection = true
+    } catch {}
+  }
+
   private func queueCollab(_ data: Data) {
     if collabBacklog.count >= 32 {
       collabBacklog.removeFirst(); collabDropped += 1
@@ -240,7 +257,7 @@ final class RealtimeCombatSession: ObservableObject {
     runner?.cancel(); runner=nil
     disconnectTransport()
     pending.removeAll(); replica=nil; snapshot=nil; events=[]; session=nil
-    latestAccessTicket=nil; onCollaboration=nil
+    latestAccessTicket=nil; onCollaboration=nil; onNearbyToken=nil; localNearbyToken=nil
     collabBacklog.removeAll(); collabDropped=0
     nextSequence=1; refusal=nil; connectionIssue=nil; connectionSuspended=false; state = .disconnected
   }
@@ -249,6 +266,7 @@ final class RealtimeCombatSession: ObservableObject {
     ticker?.cancel(); ticker=nil; writerGeneration += 1; writer?.cancel(); writer=nil
     transport?.close(); transport=nil
     outgoing.removeAll(); pings.removeAll(); receivedSnapshot=false
+    nearbyTokenAnnouncedForConnection=false
     calibrationClockDeadline=nil
     clock.reset(); clockReady=false; clockUncertaintyMs = .infinity
   }
@@ -276,6 +294,7 @@ final class RealtimeCombatSession: ObservableObject {
   private func receive(_ message: CombatWire.ServerMessage) async throws {
     // Relay bytes never depend on replica state and must not throw.
     if case .collab(let playerId,let data)=message {onCollaboration?(playerId,data); return}
+    if case .niToken(let playerId,let data)=message {onNearbyToken?(playerId,data); return}
     guard var replica else {throw CombatReplicaError.invalidSnapshot}
     guard calibrationClockRecoveryIsValid(at: localNow()) else {throw CombatTransportError.disconnected}
     switch message {
@@ -295,6 +314,10 @@ final class RealtimeCombatSession: ObservableObject {
       self.snapshot=replica.snapshot; receivedSnapshot=true; connectionIssue=nil
       state = next.phase == .finished ? .finished : .connected
       startWriter()
+      if !nearbyTokenAnnouncedForConnection, let token = localNearbyToken {
+        nearbyTokenAnnouncedForConnection = true
+        try? await transport?.send(.niToken(token))
+      }
       try await transport?.send(.received(eventSequence:eventSequence))
     case .events(let incoming):
       do {
@@ -340,7 +363,7 @@ final class RealtimeCombatSession: ObservableObject {
         try await transport?.send(.resume(afterEventSequence:replica.eventSequence))
       } else if code == "unauthorized" {throw CombatTransportError.admissionRejected}
       else if code == "unavailable" {throw CombatTransportError.disconnected}
-    case .collab: return // Already handled above the replica guard.
+    case .collab, .niToken: return // Already handled above the replica guard.
     }
     guard calibrationClockRecoveryIsValid(at: localNow()) else {throw CombatTransportError.disconnected}
   }

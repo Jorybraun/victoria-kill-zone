@@ -154,6 +154,7 @@ enum CombatWireValidation {
     case .ack(let id,let clientSequence,_,let eventSequence): return validID(id) && clientSequence > 0 && eventSequence >= 0
     case .pong(let nonce,let sent,let received,let serverSent): return validID(nonce) && time(sent) && time(received) && time(serverSent) && serverSent >= received
     case .collab(let playerId,let data): return validID(playerId) && !data.isEmpty && data.count <= CombatWire.maximumCollabDataBytes
+    case .niToken(let playerId,let data): return validID(playerId) && !data.isEmpty && data.count <= CombatWire.maximumNITokenBytes
     case .error(let code,let id): return code.count <= 64 && (id == nil || validID(id!))
     }
   }
