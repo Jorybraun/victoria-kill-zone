@@ -75,6 +75,8 @@ final class NearbyRendezvousTests: XCTestCase {
 
   func testDerivePhaseIsPure() {
     let now = Date()
+    XCTAssertEqual(NearbyRendezvousCoordinator.derivePhase(peers: [:], startedPointingAt: nil,
+      now: now, retryAfter: 3), .awaitingTokens(received: 0, expected: 0))
     var peers = ["a": NearbyPeerStatus(), "b": NearbyPeerStatus()]
     XCTAssertEqual(NearbyRendezvousCoordinator.derivePhase(peers: peers, startedPointingAt: nil,
       now: now, retryAfter: 3), .awaitingTokens(received: 0, expected: 2))

@@ -203,6 +203,7 @@ final class RealtimeArenaController: ObservableObject {
     guard token == generation else {return}
     cameraReady = true
     configureMapIfNeeded()
+    startRendezvousIfNeeded()
     pumpTask = Task { [weak self] in
       while !Task.isCancelled {
         self?.tick()
@@ -389,16 +390,19 @@ final class RealtimeArenaController: ObservableObject {
     }
     authorityEpoch = value.authorityEpoch
     configureMapIfNeeded()
-    // Rendezvous starts once the camera and the collaborative frame mode are
-    // both confirmed by the roster snapshot; roster drift keeps sessions in
-    // step for peers that join or leave mid-setup.
-    if usesCollaborativeFrame && cameraReady {
-      let peerIDs = Set(value.players.map(\.playerId)).subtracting([session.playerId])
-      if rendezvousStarted {rendezvous.updatePeers(peerIDs)}
-      else {
-        rendezvousStarted = true
-        Task {await rendezvous.start(peerIDs: peerIDs)}
-      }
+    startRendezvousIfNeeded()
+  }
+  /// Rendezvous starts once the camera and the collaborative frame mode are
+  /// both confirmed by the roster snapshot; roster drift keeps sessions in
+  /// step for peers that join or leave mid-setup. Called from both the
+  /// camera-ready and snapshot paths so neither arrival order can strand it.
+  private func startRendezvousIfNeeded() {
+    guard started, usesCollaborativeFrame, cameraReady, let snapshot else {return}
+    let peerIDs = Set(snapshot.players.map(\.playerId)).subtracting([session.playerId])
+    if rendezvousStarted {rendezvous.updatePeers(peerIDs)}
+    else {
+      rendezvousStarted = true
+      Task {await rendezvous.start(peerIDs: peerIDs)}
     }
   }
   private func configureMapIfNeeded() {

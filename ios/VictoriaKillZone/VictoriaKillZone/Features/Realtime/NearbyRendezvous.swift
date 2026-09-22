@@ -119,8 +119,8 @@ final class NearbyRendezvousCoordinator: ObservableObject {
     record("niPermission", "granted"); record("niSession", "start")
     if let token = driver.localDiscoveryToken {onLocalToken?(token)}
     recomputePhase()
+    let stream = driver.events()
     eventsTask = Task { [weak self] in
-      guard let stream = self?.driver.events() else {return}
       for await event in stream {
         guard !Task.isCancelled else {return}
         self?.handle(event)
@@ -174,6 +174,7 @@ final class NearbyRendezvousCoordinator: ObservableObject {
     now: Date, retryAfter: TimeInterval) -> NearbyRendezvousPhase
   {
     let expected = peers.count
+    guard expected > 0 else {return .awaitingTokens(received: 0, expected: 0)}
     let ready = peers.values.filter {$0.sessionState != .awaitingToken}.count
     if ready < expected {return .awaitingTokens(received: ready, expected: expected)}
     let solved = peers.values.filter {$0.solution != nil}.count
@@ -225,8 +226,7 @@ final class NearbyRendezvousCoordinator: ObservableObject {
     case .transformSolved(let solution):
       if peers[solution.playerID] == nil {addPeer(solution.playerID)}
       peers[solution.playerID]?.solution = solution
-      record("niTransform", String(format: "%@ residual=%.2fm %.1fdeg", peerTag(solution.playerID),
-        solution.residualMeters, solution.residualDegrees))
+      record("niTransform", "\(peerTag(solution.playerID)) residual=\(String(format: "%.2f", solution.residualMeters))m \(String(format: "%.1f", solution.residualDegrees))deg")
     case .failed(let failure):
       record("niSession", "failed \(failure.rawValue)")
       setPhase(failure == .unsupported ? .unsupported : .permissionDenied)
