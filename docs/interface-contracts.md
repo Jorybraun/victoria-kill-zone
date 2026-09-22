@@ -346,7 +346,7 @@ For shots:fire only, shooterId is the technical-spec wire name for PlayerSession
 
 Location ranges, accuracy, and finite numbers are validated. Convex records receipt time as locationAt and uses capturedAtClient only for age validation; client time never becomes authoritative. Location is sent through players:heartbeat when meaningfully changed at approximately 2–5 Hz, with a presence-only heartbeat at least every 5 seconds.
 
-A player with no trusted location sample starts with arenaState uncertain and omitted location fields. On an arena-centered match, shots:fire returns LOCATION_STALE until a trusted fresh sample establishes an authoritative arena state. Centerless matches do not apply this gate.
+A player with no trusted location sample starts with arenaState uncertain and omitted arenaPosition. On an arena-centered match, shots:fire returns LOCATION_STALE until a trusted fresh sample establishes an authoritative arena state. Centerless matches do not apply this gate.
 
 For a claimed hit, targetId, zone, and poseConfidence are all required. Head confidence must be at least 0.60; torso and limbs confidence must be at least 0.45. A miss omits those three fields. Damage is never accepted from the client. origin, direction, and impact are optional reduced evidence for the active match only and never enter public snapshots. The shot ledger persists origin, direction, and impact.
 
@@ -354,13 +354,17 @@ For a claimed hit, targetId, zone, and poseConfidence are all required. Head con
 
 ~~~ts
 export interface ArenaSnapshot {
-  latitude: number;
-  longitude: number;
   radiusMeters: number;
 }
 
 export interface Phase0MatchSummary extends MatchSummary {
   winnerPlayerId?: string;
+}
+
+export interface SpectatorArenaPosition {
+  eastMeters: number;
+  northMeters: number;
+  headingDegrees?: number;
 }
 
 export interface Phase0PlayerSnapshot extends PlayerSnapshot {
@@ -376,11 +380,7 @@ export interface Phase0PlayerSnapshot extends PlayerSnapshot {
   lastShotAt?: number;
   reloadEndsAt?: number;
   respawnAt?: number;
-  latitude?: number;
-  longitude?: number;
-  headingDegrees?: number;
-  locationAccuracyMeters?: number;
-  locationAt?: number;
+  arenaPosition?: SpectatorArenaPosition;
 }
 
 export type Phase0EventType =
@@ -411,24 +411,7 @@ export interface Phase0MatchSnapshot {
   events: Phase0EventSnapshot[];
 }
 
-export interface SpectatorArenaPosition {
-  eastMeters: number;
-  northMeters: number;
-  headingDegrees?: number;
-}
-
-export interface Phase0SpectatorPlayerSnapshot
-  extends Omit<
-    Phase0PlayerSnapshot,
-    | "latitude"
-    | "longitude"
-    | "headingDegrees"
-    | "locationAccuracyMeters"
-    | "locationAt"
-    | "lastSeenAt"
-  > {
-  arenaPosition?: SpectatorArenaPosition;
-}
+export type Phase0SpectatorPlayerSnapshot = Omit<Phase0PlayerSnapshot, "lastSeenAt">;
 
 export interface Phase0SpectatorSnapshot {
   serverNow: number;
@@ -439,7 +422,7 @@ export interface Phase0SpectatorSnapshot {
 }
 ~~~
 
-The public spectator projection exposes only arena-relative current position, never latitude, longitude, accuracy, location history, session data, device data, or raw targeting evidence.
+Neither projection exposes latitude, longitude, accuracy, or location history. Both carry only the authoritative per-player arenaState and arena-relative arenaPosition; the arena center itself is never sent to any client. The authenticated phone projection additionally carries lastSeenAt.
 
 ## Phase 0 gameplay invariants
 
@@ -596,11 +579,7 @@ export interface PlayerV2Snapshot {
   lastShotAt?: number;
   reloadEndsAt?: number;
   respawnAt?: number;
-  latitude?: number;
-  longitude?: number;
-  headingDegrees?: number;
-  locationAccuracyMeters?: number;
-  locationAt?: number;
+  arenaPosition?: SpectatorArenaPosition;
 }
 
 export type MatchV2EventType = Phase0EventType | "left";
@@ -619,24 +598,13 @@ export interface MatchV2EventSnapshot {
 export interface MatchV2Snapshot {
   serverNow: number;
   match: MatchV2Summary;
-  arena: ArenaSnapshot;
+  arena: { radiusMeters: number };
   localPlayerId: string;
   players: PlayerV2Snapshot[];
   events: MatchV2EventSnapshot[];
 }
 
-export interface SpectatorV2PlayerSnapshot
-  extends Omit<
-    PlayerV2Snapshot,
-    | "latitude"
-    | "longitude"
-    | "headingDegrees"
-    | "locationAccuracyMeters"
-    | "locationAt"
-    | "lastSeenAt"
-  > {
-  arenaPosition?: SpectatorArenaPosition;
-}
+export type SpectatorV2PlayerSnapshot = Omit<PlayerV2Snapshot, "lastSeenAt">;
 
 export interface SpectatorV2Snapshot {
   serverNow: number;
