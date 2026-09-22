@@ -250,11 +250,17 @@ final class NearbyRendezvousCoordinator: ObservableObject {
 
   /// Direction loss while pointing is time-based, so the retry prompt needs a
   /// deadline even when no new driver event arrives to trigger a recompute.
+  /// The deadline re-arms while the phase remains .pointing so a wake that
+  /// fires before the window has elapsed cannot strand the retry prompt.
   private func schedulePointingDeadline() {
     pointingDeadlineTask?.cancel()
     pointingDeadlineTask = Task { [weak self, retryFacingAfter] in
-      do {try await Task.sleep(for: .seconds(retryFacingAfter))} catch {return}
-      self?.recomputePhase()
+      while !Task.isCancelled {
+        do {try await Task.sleep(for: .seconds(retryFacingAfter))} catch {return}
+        guard let self else {return}
+        self.recomputePhase()
+        guard case .pointing = self.phase else {return}
+      }
     }
   }
 
