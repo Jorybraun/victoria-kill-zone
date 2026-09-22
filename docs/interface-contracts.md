@@ -731,3 +731,72 @@ awaited stop invalidates in-flight work. Recognition is transient and never a
 combat admission result. Neither type converts to SavedArenaBundle/DuelFrameMap,
 contains credentials, nor writes live match state. Existing saves and combat
 readiness are unchanged. No backend or wire protocol is added by this contract.
+
+## Quick Play NI rendezvous (ADR 0012) — 2026-09-22
+
+UWB Nearby Interaction seeds inter-device alignment for Quick Play matches
+(`rules.geometry == "phoneProxy"`, collaborative alignment mode) and keeps live
+peer positions flowing for the life of the match. Collaborative ARKit mapping
+(ADR 0011) remains enabled as a refinement path.
+
+**Token relay (combat socket).** Clients send
+`{"type":"niToken","data":<base64>}` — the archived `NIDiscoveryToken` bytes
+(opaque, ≤4096 B decoded, `CombatWire.maximumNITokenBytes`). The worker relays
+`{"type":"niToken","playerId","data":<base64>}` to the other room members only.
+Like `collab`, it is not a command envelope, expects no ack, and must not depend
+on replica state. The worker relay lands in a parallel PR — until then clients
+tolerate no relay: the rendezvous phase stays `awaitingTokens`. A client
+re-announces its local token once per (re)connected socket after an applied
+snapshot so late joiners and reconnects receive it.
+
+**Rendezvous phases** (`NearbyRendezvousPhase`, integration-owned):
+`inactive`, `unsupported`, `awaitingPermission`, `permissionDenied`,
+`awaitingTokens(received,expected)`, `pointing(solved,expected)`,
+`retryFacing(pending)`, `solved(count)`. Player-facing copy lives only in
+`RealtimeArenaPresentation.RendezvousSetup`; it replaces co-view guidance during
+setup stages and uses no scan/share/host wording.
+
+**Targeting integration point** (`ios/.../Features/Realtime/NearbyRendezvous.swift`,
+implemented inside `ios/**/Targeting/**`): one `NISession` per peer; tokens are
+opaque archived `NIDiscoveryToken` bytes.
+
+```swift
+enum NearbyPeerSessionState: String, Codable, Equatable, Sendable {
+  case idle, awaitingToken, running, suspended, invalidated
+}
+struct NearbyPeerSample: Equatable, Sendable {
+  let playerID: String; let distanceMeters: Double?
+  let hasDirection: Bool; let capturedAt: Date
+}
+struct NearbyTransformSolution: Equatable, Sendable {
+  let playerID: String; let residualMeters: Double
+  let residualDegrees: Double; let solvedAt: Date
+}
+enum NearbyRendezvousFailure: String, Error, Equatable, Sendable {
+  case unsupported, permissionDenied, sessionInvalidated
+}
+enum NearbyRendezvousEvent: Equatable, Sendable {
+  case sessionState(playerID: String, state: NearbyPeerSessionState)
+  case sample(NearbyPeerSample)
+  case transformSolved(NearbyTransformSolution)
+  case failed(NearbyRendezvousFailure)
+}
+@MainActor protocol NearbyRendezvousDriving: AnyObject {
+  var localDiscoveryToken: Data? { get }
+  func events() -> AsyncStream<NearbyRendezvousEvent>
+  func start() async throws
+  func acceptPeerToken(playerID: String, data: Data) throws
+  func removePeer(playerID: String)
+  func stop() async
+}
+```
+
+**Setup log.** `exportSetupLog` appends the rendezvous coordinator's events to
+the PR #99 flat `[DuelFrameDiagnosticEvent]` array. New kinds: `niSession`,
+`niPermission`, `niSamples` (every 10th sample per peer), `niTransform`,
+`niPhase`. Details use a stable join-order peer index (`p1`, `p2`, …) — never
+player IDs — matching the existing sanitization rules. NI events are also
+mirrored to unified logging under subsystem `com.victoriakillzone.nearby`.
+
+**Info.plist.** `NSNearbyInteractionUsageDescription` justifies the one-time
+Nearby Interaction permission prompt.
