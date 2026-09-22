@@ -38,6 +38,9 @@ export class CombatRoom extends DurableObject<Env> {
   private pending: PendingCommand[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
   private readonly cadence = new TickCadence(performance.now());
+  // In-memory only: discovery tokens are per-NISession and worthless after the
+  // process dies; a reconnecting client re-sends its token.
+  private readonly niTokens = new Map<string, string>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -153,6 +156,9 @@ export class CombatRoom extends DurableObject<Env> {
         // Native replicas need a baseline before they can apply any event.
         // The admission events are already covered by this durable snapshot.
         this.sendSnapshot(connection);
+        for (const [peerId, token] of this.niTokens) {
+          if (peerId !== claims.playerId) connection.send({ type: "niToken", playerId: peerId, token });
+        }
         this.broadcast(committed);
         await this.ctx.storage.setAlarm(Date.now() + ALARM_CHECK_MS);
         this.scheduleTick();
@@ -219,6 +225,16 @@ export class CombatRoom extends DurableObject<Env> {
             }
             break;
           }
+          // Reliable, latest-per-player discovery tokens: ordered send to every
+          // other open connection, replayed to later admissions, never echoed.
+          case "niToken": {
+            if (!connection.admitNiToken(Date.now())) { this.error(connection, "rateLimited"); connection.close(4008, "ni-token-rate-exceeded"); break; }
+            this.niTokens.set(connection.playerId, parsed.token);
+            for (const other of this.connections.values()) {
+              if (other !== connection) other.send({ type: "niToken", playerId: connection.playerId, token: parsed.token });
+            }
+            break;
+          }
         }
       });
     } catch (error) {
@@ -257,6 +273,7 @@ export class CombatRoom extends DurableObject<Env> {
       if (this.connections.size === 0 && !projectionPending && Date.now() - saved.last_activity_ms >= IDLE_RETENTION_MS) {
         this.stopTimer();
         await this.ctx.storage.deleteAll();
+        this.niTokens.clear();
         this.simulation = null;
         this.bootstrap = null;
         this.pending = [];
