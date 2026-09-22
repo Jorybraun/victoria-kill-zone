@@ -50,7 +50,9 @@ final class NearbyRendezvousTests: XCTestCase {
     driver.emit(.sessionState(playerID: "p3", state: .running))
     try await until {self.coordinator.phase == .pointing(solved: 0, expected: 2)}
 
-    // The pointing window elapses with p3 still reporting no direction sample.
+    // The pointing window elapses with p3 still reporting no direction sample;
+    // p2 has already ranged with direction, so only p3 is pending.
+    driver.emit(.sample(.init(playerID: "p2", distanceMeters: 2.0, hasDirection: true, capturedAt: clock)))
     clock = clock.addingTimeInterval(1)
     try await until {
       if case .retryFacing(let pending) = self.coordinator.phase {return pending == 1}
