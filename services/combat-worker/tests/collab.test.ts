@@ -96,10 +96,37 @@ describe("opaque collaboration relay", () => {
       third = await connect({ ...ticket, playerId: "third" });
       await receivedAll(third);
       third.messages.length = 0;
-      host.socket.send(collab(bulk));
-      expect(await third.next("collab")).toMatchObject({ playerId: "host", data: bulk });
+      third.socket.send(collab(bulk));
+      expect(await host.next("collab")).toMatchObject({ playerId: "third", data: bulk });
       await receivedAll(guest);
       expect(guest.messages.some(message => message.type === "collab")).toBe(false);
+    } finally { host.close(); guest.close(); third?.close(); }
+  });
+
+  it("silently drops collab from a sender whose ingest budget is exhausted", async () => {
+    const ticket = claims({ roster: trio });
+    await manuallyScheduledRoom(ticket.matchId);
+    const host = await connect(ticket);
+    const guest = await connect({ ...ticket, playerId: "guest" });
+    let third: SocketInbox | undefined;
+    try {
+      await Promise.all([receivedAll(host), receivedAll(guest)]);
+      guest.messages.length = 0;
+      const bulk = "A".repeat(LIMITS.collabBytes);
+      host.socket.send(collab(bulk));
+      host.socket.send(collab(bulk));
+      host.socket.send(collab(bulk));
+      await receivedAll(guest);
+      expect(guest.messages.filter(message => message.type === "collab")).toHaveLength(1);
+
+      third = await connect({ ...ticket, playerId: "third" });
+      await receivedAll(third);
+      third.messages.length = 0;
+      host.socket.send(collab(bulk));
+      await receivedAll(third);
+      expect(third.messages.some(message => message.type === "collab")).toBe(false);
+      await receivedAll(host);
+      expect(host.socket.readyState).toBe(WebSocket.OPEN);
     } finally { host.close(); guest.close(); third?.close(); }
   });
 });
