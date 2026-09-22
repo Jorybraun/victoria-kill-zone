@@ -5,7 +5,7 @@ import type {AuthenticatedCommand, CombatSnapshot, CommandEnvelope, ServerEvent}
 import type {CombatSimulation} from "@vkz/combat-simulation";
 import type {Connection} from "../src/connection.js";
 import type {SerialQueue} from "../src/serial-queue.js";
-import {claims, connect, phoneInput, type SocketInbox} from "./helpers.js";
+import {claims, command, connect, manuallyScheduledRoom, phoneInput, type SocketInbox} from "./helpers.js";
 
 type Room = {
   queue: SerialQueue;
@@ -21,7 +21,39 @@ type Room = {
   admitCommand(connection: Connection, command: CommandEnvelope, receivedAtMs: number): void;
 };
 
+async function receivedAll(socket: SocketInbox): Promise<void> {
+  const nonce = crypto.randomUUID();
+  socket.socket.send(JSON.stringify({type: "ping", nonce, clientSentAtMs: performance.now()}));
+  await socket.next("pong", message => message.nonce === nonce);
+}
+
 afterEach(async () => {vi.restoreAllMocks(); await abortAllDurableObjects();});
+
+it("bounds pending commands per player without closing an over-limit socket", async () => {
+  const ticket = claims();
+  await manuallyScheduledRoom(ticket.matchId);
+  const host = await connect(ticket);
+  const guest = await connect({...ticket, playerId: "guest"});
+  try {
+    const hostSnapshot = await host.next("snapshot");
+    const guestSnapshot = await guest.next("snapshot");
+    await Promise.all([receivedAll(host), receivedAll(guest)]);
+    host.messages.length = 0;
+    guest.messages.length = 0;
+    const hostCommands = Array.from({length: 17}, (_, index) => command(hostSnapshot, index + 1, {
+      kind: "frameReady", ready: true, residualMeters: 0.01, residualDegrees: 0.1, clockUncertaintyMs: 1,
+    }));
+    for (const envelope of hostCommands) host.send(envelope);
+    guest.send(command(guestSnapshot, 1, {
+      kind: "frameReady", ready: true, residualMeters: 0.01, residualDegrees: 0.1, clockUncertaintyMs: 1,
+    }));
+    await Promise.all([receivedAll(host), receivedAll(guest)]);
+    expect(host.messages.some(message => message.type === "error" && message.code === "rateLimited" && message.commandId === hostCommands[16]!.commandId)).toBe(true);
+    expect(host.socket.readyState).toBe(WebSocket.OPEN);
+    expect(guest.messages.some(message => message.type === "error" && message.code === "rateLimited")).toBe(false);
+    expect(guest.socket.readyState).toBe(WebSocket.OPEN);
+  } finally {host.close(); guest.close();}
+});
 
 it("assigns queued poses to their arrival intervals during bounded catch-up", async ({annotate}) => {
   // The timer and monotonic clock follow a deterministic authority schedule. Socket delivery,
