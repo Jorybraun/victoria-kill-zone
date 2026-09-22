@@ -13,6 +13,7 @@ import { QueueFullError, SerialQueue } from "./serial-queue.js";
 import { RoomStore, type ProcessedCommand } from "./store.js";
 import { combatRoute } from "./routes.js";
 import { MapTransfer } from "./maps.js";
+import { ReportQuota, reportHandler } from "./report.js";
 import { ProjectionDelivery } from "./projection-delivery.js";
 import { TickCadence } from "./cadence.js";
 
@@ -29,6 +30,7 @@ export class CombatRoom extends DurableObject<Env> {
   private readonly queue = new SerialQueue();
   private readonly connections = new Map<WebSocket, Connection>();
   private readonly maps: MapTransfer;
+  private readonly reports: ReportQuota;
   private readonly delivery: ProjectionDelivery;
   private simulation: CombatSimulation | null = null;
   private bootstrap: string | null = null;
@@ -41,6 +43,7 @@ export class CombatRoom extends DurableObject<Env> {
     super(ctx, env);
     this.store = new RoomStore(ctx.storage);
     this.maps = new MapTransfer(ctx.storage, this.queue, (claims, frameEpoch, upload) => this.authorizeMap(claims, frameEpoch, upload));
+    this.reports = new ReportQuota(ctx.storage);
     this.delivery = new ProjectionDelivery(env, ctx.storage, this.queue, this.store.projections, () => this.failRoom());
     void ctx.blockConcurrencyWhile(async () => {
       this.store.initialize();
@@ -81,6 +84,10 @@ export class CombatRoom extends DurableObject<Env> {
         if (error instanceof QueueFullError) return new Response(null, { status: 503 });
         this.failRoom();
       }
+    }
+    if (route.kind === "report") {
+      const handler = reportHandler(this.env, this.reports);
+      return handler === null ? new Response(null, { status: 503 }) : handler.fetch(request, claims);
     }
     if (request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response(null, { status: 426 });
     return this.admitSocket(claims);

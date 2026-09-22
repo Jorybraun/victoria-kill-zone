@@ -55,7 +55,7 @@ describe("contract snapshots", () => {
         phase: "running",
         durationMs: GAMEPLAY.matchDurationMs,
       },
-      arena: { latitude: 48.4284, longitude: -123.3656, radiusMeters: 30 },
+      arena: { radiusMeters: 30 },
       localPlayerId: "host",
     });
     expect(snapshot.players.map((entry) => entry.id)).toEqual(["host", "guest"]);
@@ -215,6 +215,7 @@ describe("contract snapshots", () => {
       expect(serialized).not.toMatch(/sessionHash|deviceIdHash|sessionSecret/);
     }
     expect(spectator).not.toMatch(/centerLatitude|centerLongitude|latitude|longitude|lastSeenAt/);
+    expect(phone).not.toMatch(/centerLatitude|centerLongitude|latitude|longitude/);
     expect(phone).toContain("lastSeenAt");
   });
 
@@ -233,20 +234,22 @@ describe("contract snapshots", () => {
         locationAt: now - 500,
       });
 
-    it("projects raw location only on the authenticated phone shape", () => {
+    it("projects sanitized arena-relative location on the authenticated phone shape", () => {
       const snapshot = buildMatchSnapshot(geofenced(), "host", [located(), player("guest")], [], now);
 
       expect(snapshot.players[0]).toMatchObject({
+        arenaPosition: {
+          eastMeters: 10,
+          northMeters: 0,
+          headingDegrees: 90,
+        },
         arenaState: "inside",
-        latitude: 0,
-        longitude: 0.000089932,
-        headingDegrees: 90,
-        locationAccuracyMeters: 5,
-        locationAt: now - 500,
       });
-      // Players with no trusted sample omit every location field.
-      expect(snapshot.players[1]).not.toHaveProperty("latitude");
-      expect(snapshot.players[1]).not.toHaveProperty("locationAt");
+      expect(snapshot.players[0]).toHaveProperty("lastSeenAt");
+      expect(snapshot.players[1]).not.toHaveProperty("arenaPosition");
+      expect(JSON.stringify(snapshot)).not.toMatch(
+        /"latitude"|"longitude"|"locationAccuracyMeters"|"accuracyMeters"|"locationAt"|centerLatitude|centerLongitude/,
+      );
     });
 
     it("exposes only sanitized arena-relative metres on the public spectator projection", () => {

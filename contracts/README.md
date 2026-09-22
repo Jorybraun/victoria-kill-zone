@@ -9,6 +9,8 @@ These fixtures are Integration-owned compatibility inputs for Convex, native iOS
 - fixtures/match.v2.json freezes the multiplayer-first surface authorized by ADR 0003: player sets with capacity 2–4, capability arrays instead of host/guest roles, the left event, N-player fire targeting, and the generalized winner rule.
 - fixtures/geofence.v1.json freezes the production geofence state machine as step-driven vectors (KIL-25): initial uncertainty, trust validation, warning grace, exit hysteresis with two consecutive outside samples, staleness, re-entry, antimeridian distance, and the OUT_OF_ARENA / LOCATION_STALE fire-gate expectations.
 
+Note: since the matchSnapshot privacy revision, `arena.latitude/longitude` and player `latitude/longitude/headingDegrees/locationAccuracyMeters/locationAt` in the authenticated snapshot cases are no longer emitted; consumers must tolerate their absence.
+
 A released fixture is immutable. A breaking change creates a new file and an Integration-owned contract revision; it never edits an old suite in place.
 
 ## Envelope
