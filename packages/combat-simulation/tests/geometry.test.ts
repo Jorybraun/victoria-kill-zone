@@ -30,6 +30,9 @@ describe("continuous collision geometry", () => {
   it("does not match colliders with different track identities", () => {
     expect(sweepCollider([0, 0, 0], [2, 0, 0], sphere([1, 0, 0]), {...sphere([1, 0, 0]), id: "new"}, 0)).toBeNull();
   });
+  it("ignores a missing ending collider", () => {
+    expect(sweepCollider([0, 0, 0], [2, 0, 0], sphere([1, 0, 0]), undefined, 0)).toBeNull();
+  });
   it("blocks only front-to-back oriented shield crossings, including a moving phone", () => {
     expect(sweepShield([0, 0, 0], [2, 0, 0], [1, 0, 0], [1.1, 0, 0], [-1, 0, 0], [-1, 0, 0], 0.4, 0.01)).toBeCloseTo(1 / 1.9);
     expect(sweepShield([2, 0, 0], [0, 0, 0], [1, 0, 0], [1, 0, 0], [-1, 0, 0], [-1, 0, 0], 0.4, 0.01)).toBeNull();

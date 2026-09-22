@@ -52,10 +52,10 @@ describe("phoneProxy cover gate", () => {
     expect(terminals(settle(f)).map(e => e.reason)).toEqual(["shieldBlocked"]);
     expect(f.player("b").shield.energy).toBe(66);
   });
-  it("does not gate trackedBody hits on the shooter's own sighting", () => {
+  it("gates trackedBody hits on the shooter's own sighting", () => {
     const f = new Fixture(quick("trackedBody"), 3); f.blind.add("a"); f.ready();
     f.tick([f.fire()]);
-    expect(terminals(settle(f)).map(e => e.reason)).toEqual(["bodyHit"]);
-    expect(f.player("b").health).toBe(66);
+    expect(terminals(settle(f)).map(e => e.reason)).toEqual(["missExpired"]);
+    expect(f.player("b").health).toBe(100);
   });
 });

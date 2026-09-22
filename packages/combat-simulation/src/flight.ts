@@ -1,6 +1,6 @@
 import {type CombatEvent, type CombatPlayerState, type HitZone, type ProjectileState, type Vec3} from "@vkz/combat-protocol";
 import {add, distance, EPSILON, lerp, mul, normalized, sphereBoundaries, sweepCollider, sweepShield} from "./geometry.js";
-import {colliderPairs, coverObserved, phoneAt, sampleBoundaries} from "./history.js";
+import {BODY_ANCHOR_METERS, colliderPairs, coverObserved, phoneAt, sampleBoundaries} from "./history.js";
 import {clone, type SimulationCheckpoint} from "./state.js";
 
 export interface FlightSegment {fromMs: number; toMs: number; start: Vec3; end: Vec3; scale: number; geometryFromMs?: number; geometryToMs?: number}
@@ -88,6 +88,7 @@ function collisions(state: SimulationCheckpoint, path: FlightPath, geometryAt: R
       const geometry = geometryAt(target.playerId, ga, gb), pairs = geometry.pairs;
       if (!pairs) throw new Error("Missing collision history");
       for (const [a, b] of pairs) {
+        if (!a || !b) continue;
         const u = sweepCollider(segment.start, segment.end, a, b, path.projectile.radius);
         if (u !== null) candidates.push({projectileId: path.projectile.projectileId, shooterId: path.projectile.shooterId,
           targetId: target.playerId, atMs: segment.fromMs + (segment.toMs - segment.fromMs) * u,
@@ -128,7 +129,11 @@ export function resolveFlights(state: SimulationCheckpoint, paths: FlightPath[])
     if (impacts.has(hit.projectileId)) continue;
     const target = state.snapshot.players.find(p => p.playerId === hit.targetId)!;
     if (target.health <= 0 || (target.protectedUntilMs !== null && target.protectedUntilMs > hit.atMs)) continue;
-    if (state.snapshot.rules.geometry === "phoneProxy" && !coverObserved(state, hit.shooterId, hit.targetId, hit.atMs)) continue;
+    if (!coverObserved(state, hit.shooterId, hit.targetId, hit.atMs)) continue;
+    if (!hit.shield && state.snapshot.rules.geometry === "trackedBody") {
+      const phone = phoneAt(state, hit.targetId, hit.atMs);
+      if (!phone || distance(hit.position, phone.position) > BODY_ANCHOR_METERS) continue;
+    }
     const path = paths.find(p => p.projectile.projectileId === hit.projectileId)!;
     const events: CombatEvent[] = [];
     if (hit.shield) {
