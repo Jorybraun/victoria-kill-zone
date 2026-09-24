@@ -54,6 +54,7 @@ enum NearbyRendezvousPhase: Equatable {
   case pointing(solved: Int, expected: Int)
   case retryFacing(pending: Int)
   case solved(count: Int)
+  case sessionLost
 }
 
 struct NearbyPeerStatus: Equatable {
@@ -85,6 +86,7 @@ final class NearbyRendezvousCoordinator: ObservableObject {
 
   private var eventsTask: Task<Void, Never>?
   private var pointingDeadlineTask: Task<Void, Never>?
+  private var generation = 0
   private var startedAt: Date?
   private var pointingSince: Date?
   private var peerIndex: [String: Int] = [:]
@@ -98,6 +100,8 @@ final class NearbyRendezvousCoordinator: ObservableObject {
   var needsSettings: Bool {phase == .permissionDenied}
 
   func start(peerIDs ids: Set<String>) async {
+    generation += 1
+    let gen = generation
     eventsTask?.cancel(); eventsTask = nil
     pointingDeadlineTask?.cancel(); pointingDeadlineTask = nil
     peers = [:]; peerIndex = [:]; nextPeerIndex = 1; sampleTotals = [:]
@@ -108,14 +112,18 @@ final class NearbyRendezvousCoordinator: ObservableObject {
     }
     setPhase(.awaitingPermission); record("niPermission", "prompt")
     do {try await driver.start()} catch {
+      // A stop() or newer start() during the awaited prompt owns the phase
+      // now; nothing from this stale attempt may publish.
+      guard gen == generation else {return}
       let failure = (error as? NearbyRendezvousFailure) ?? .sessionInvalidated
-      if failure == .unsupported {
-        setPhase(.unsupported); record("niSession", "unsupported")
-      } else {
-        setPhase(.permissionDenied); record("niPermission", "denied")
+      switch failure {
+      case .unsupported: setPhase(.unsupported); record("niSession", "unsupported")
+      case .permissionDenied: setPhase(.permissionDenied); record("niPermission", "denied")
+      default: setPhase(.sessionLost); record("niSession", "lost")
       }
       return
     }
+    guard gen == generation else {return}
     record("niPermission", "granted"); record("niSession", "start")
     if let token = driver.localDiscoveryToken {onLocalToken?(token)}
     recomputePhase()
@@ -151,7 +159,7 @@ final class NearbyRendezvousCoordinator: ObservableObject {
 
   func retry() async {
     switch phase {
-    case .permissionDenied:
+    case .permissionDenied, .sessionLost:
       await start(peerIDs: Set(peers.keys))
     case .retryFacing:
       pointingSince = now()
@@ -162,6 +170,7 @@ final class NearbyRendezvousCoordinator: ObservableObject {
   }
 
   func stop() async {
+    generation += 1
     eventsTask?.cancel(); eventsTask = nil
     pointingDeadlineTask?.cancel(); pointingDeadlineTask = nil
     await driver?.stop()
@@ -175,7 +184,7 @@ final class NearbyRendezvousCoordinator: ObservableObject {
   {
     let expected = peers.count
     guard expected > 0 else {return .awaitingTokens(received: 0, expected: 0)}
-    let ready = peers.values.filter {$0.sessionState != .awaitingToken}.count
+    let ready = peers.values.filter {$0.sessionState == .running}.count
     if ready < expected {return .awaitingTokens(received: ready, expected: expected)}
     let solved = peers.values.filter {$0.solution != nil}.count
     if solved == expected {return .solved(count: solved)}
@@ -229,8 +238,11 @@ final class NearbyRendezvousCoordinator: ObservableObject {
       record("niTransform", "\(peerTag(solution.playerID)) residual=\(String(format: "%.2f", solution.residualMeters))m \(String(format: "%.1f", solution.residualDegrees))deg")
     case .failed(let failure):
       record("niSession", "failed \(failure.rawValue)")
-      setPhase(failure == .unsupported ? .unsupported : .permissionDenied)
-      if failure == .permissionDenied {record("niPermission", "denied")}
+      switch failure {
+      case .unsupported: setPhase(.unsupported)
+      case .permissionDenied: setPhase(.permissionDenied); record("niPermission", "denied")
+      default: setPhase(.sessionLost); record("niSession", "lost")
+      }
       return
     }
     recomputePhase()

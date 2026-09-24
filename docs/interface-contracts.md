@@ -753,7 +753,13 @@ applied snapshot so peers that joined earlier also refresh their session.
 **Rendezvous phases** (`NearbyRendezvousPhase`, integration-owned):
 `inactive`, `unsupported`, `awaitingPermission`, `permissionDenied`,
 `awaitingTokens(received,expected)`, `pointing(solved,expected)`,
-`retryFacing(pending)`, `solved(count)`. Player-facing copy lives only in
+`retryFacing(pending)`, `solved(count)`, `sessionLost`. A peer counts toward
+`received` only once its session state is `running` — `idle`, `suspended` and
+`invalidated` do not advance the count. `sessionLost` covers session
+invalidation and other non-permission failures; it offers Retry but never the
+Settings affordance (`needsSettings` stays permission-denied only). A `stop()`
+or newer `start()` invalidates an in-flight `start()` via a generation counter
+so a stale permission await cannot publish phases or tokens. Player-facing copy lives only in
 `RealtimeArenaPresentation.RendezvousSetup`; it replaces co-view guidance during
 setup stages and uses no scan/share/host wording.
 

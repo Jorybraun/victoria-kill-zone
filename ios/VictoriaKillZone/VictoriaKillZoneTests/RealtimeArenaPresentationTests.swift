@@ -151,6 +151,11 @@ final class RealtimeArenaPresentationTests: XCTestCase {
     XCTAssertNil(RealtimeArenaPresentation.rendezvousSetup(phase: .inactive))
     XCTAssertNil(RealtimeArenaPresentation.rendezvousSetup(phase: .unsupported))
     XCTAssertNotNil(RealtimeArenaPresentation.rendezvousSetup(phase: .solved(count: 2)))
+    let lost = RealtimeArenaPresentation.RendezvousSetup(phase: .sessionLost)
+    XCTAssertEqual(lost.title, "Nearby Interaction dropped")
+    XCTAssertTrue(lost.showsRetry); XCTAssertFalse(lost.showsSettings)
+    XCTAssertFalse(lost.guidance.lowercased().contains("scan"))
+    XCTAssertFalse(lost.guidance.lowercased().contains("host"))
   }
 
   private func field(owner: String, start: Double, end: Double) -> CombatWire.SlowField {

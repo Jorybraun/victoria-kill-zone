@@ -50,6 +50,7 @@ final class RealtimeArenaController: ObservableObject {
   private var started = false
   private var cameraReady = false
   private var rendezvousStarted = false
+  private var rendezvousTask: Task<Void, Never>?
   private var sceneActive = true
   private var generation = 0
   private var configuredEpoch: Int?
@@ -218,7 +219,7 @@ final class RealtimeArenaController: ObservableObject {
     setTriggerHeld(false); cameraTask?.cancel(); cameraTask = nil; pumpTask?.cancel(); pumpTask = nil
     referenceTask?.cancel(); referenceTask = nil; collabTask?.cancel(); collabTask = nil
     combat.stop(); configuredEpoch = nil; authorityEpoch = nil; readiness = RealtimeReadinessState()
-    rendezvousStarted = false
+    rendezvousStarted = false; rendezvousTask?.cancel(); rendezvousTask = nil
     associatedBody = nil; confirmedHits = []; lastSubmittedPose = nil; lastPoseDate = nil
     commands = RealtimeCommandState(); actionFeedback = nil; lastLocalFireAtMs = nil
     let pendingStart = startTask
@@ -419,7 +420,7 @@ final class RealtimeArenaController: ObservableObject {
     if rendezvousStarted {rendezvous.updatePeers(peerIDs)}
     else {
       rendezvousStarted = true
-      Task {await rendezvous.start(peerIDs: peerIDs)}
+      rendezvousTask = Task {await rendezvous.start(peerIDs: peerIDs)}
     }
   }
   private func configureMapIfNeeded() {

@@ -72,6 +72,10 @@ enum RealtimeArenaPresentation {
         title = "Nearby Interaction is off"
         guidance = "Pew Pew uses Nearby Interaction to line up the phones. Turn it on in Settings, then retry."
         showsRetry = true; showsSettings = true
+      case .sessionLost:
+        title = "Nearby Interaction dropped"
+        guidance = "The phones lost their Nearby Interaction link. Retry to reconnect."
+        showsRetry = true
       case .awaitingTokens(let received, let expected):
         title = "Finding your squad"
         guidance = "Waiting for the other phones to join (\(received)/\(expected))…"

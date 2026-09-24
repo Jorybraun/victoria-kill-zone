@@ -82,6 +82,12 @@ final class NearbyRendezvousTests: XCTestCase {
     var peers = ["a": NearbyPeerStatus(), "b": NearbyPeerStatus()]
     XCTAssertEqual(NearbyRendezvousCoordinator.derivePhase(peers: peers, startedPointingAt: nil,
       now: now, retryAfter: 3), .awaitingTokens(received: 0, expected: 2))
+    for state in [NearbyPeerSessionState.idle, .suspended, .invalidated] {
+      peers["a"]?.sessionState = state
+      XCTAssertEqual(NearbyRendezvousCoordinator.derivePhase(peers: peers, startedPointingAt: nil,
+        now: now, retryAfter: 3), .awaitingTokens(received: 0, expected: 2),
+        "\(state) must not count toward received")
+    }
     peers["a"]?.sessionState = .running
     XCTAssertEqual(NearbyRendezvousCoordinator.derivePhase(peers: peers, startedPointingAt: nil,
       now: now, retryAfter: 3), .awaitingTokens(received: 1, expected: 2))
@@ -141,6 +147,37 @@ final class NearbyRendezvousTests: XCTestCase {
     XCTAssertThrowsError(try coordinator.exportSetupLog(merging: frameURL))
   }
 
+  func testStaleStartCannotPublishAfterStop() async {
+    driver.suspendStart = true
+    var localToken: Data?
+    coordinator.onLocalToken = {localToken = $0}
+    let startTask = Task {await coordinator.start(peerIDs: ["p2"])}
+    try? await Task.sleep(for: .milliseconds(50))
+    await coordinator.stop()
+    driver.resumeStart()
+    await startTask.value
+    XCTAssertEqual(coordinator.phase, .inactive)
+    XCTAssertNil(localToken)
+    XCTAssertFalse(coordinator.diagnostics.contains {$0.detail == "start"})
+  }
+
+  func testSessionInvalidationSurfacesRetryNotSettings() async throws {
+    await coordinator.start(peerIDs: ["p2"])
+    driver.emit(.failed(.sessionInvalidated))
+    try await until {self.coordinator.phase == .sessionLost}
+    XCTAssertFalse(coordinator.needsSettings)
+    await coordinator.retry()
+    XCTAssertEqual(driver.startCalls, 2)
+    try await until {self.coordinator.phase == .awaitingTokens(received: 0, expected: 1)}
+  }
+
+  func testFailedStartMapsSessionInvalidationToSessionLost() async {
+    driver.startError = NearbyRendezvousFailure.sessionInvalidated
+    await coordinator.start(peerIDs: ["p2"])
+    XCTAssertEqual(coordinator.phase, .sessionLost)
+    XCTAssertFalse(coordinator.needsSettings)
+  }
+
   func testStopClearsSessionButKeepsDiagnostics() async {
     await coordinator.start(peerIDs: ["p2"])
     XCTAssertFalse(coordinator.diagnostics.isEmpty)
@@ -168,6 +205,8 @@ private final class FakeNearbyDriver: NearbyRendezvousDriving {
   var removedPeers: [String] = []
   var startCalls = 0
   var stopCalls = 0
+  var suspendStart = false
+  private var startGate: CheckedContinuation<Void, Never>?
   private var continuation: AsyncStream<NearbyRendezvousEvent>.Continuation?
   private var stream: AsyncStream<NearbyRendezvousEvent>?
 
@@ -179,7 +218,12 @@ private final class FakeNearbyDriver: NearbyRendezvousDriving {
   }
 
   func emit(_ event: NearbyRendezvousEvent) {continuation?.yield(event)}
-  func start() async throws {startCalls += 1; if let startError {throw startError}}
+  func resumeStart() {startGate?.resume(); startGate = nil}
+  func start() async throws {
+    startCalls += 1
+    if suspendStart {await withCheckedContinuation {startGate = $0}}
+    if let startError {throw startError}
+  }
   func acceptPeerToken(playerID: String, data: Data) throws {acceptedTokens.append((playerID, data))}
   func removePeer(playerID: String) {removedPeers.append(playerID)}
   func stop() async {stopCalls += 1}
