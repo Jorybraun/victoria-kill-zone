@@ -96,7 +96,7 @@ final class NearbySessionManager: NSObject {
 
   static func deserialize(_ data: Data) throws -> NIDiscoveryToken {
     guard let token = try NSKeyedUnarchiver.unarchivedObject(ofClass: NIDiscoveryToken.self, from: data)
-    else { throw NearbyRendezvousFailure.invalidToken }
+    else { throw NearbyTargetingFailure.invalidToken }
     return token
   }
 
@@ -104,7 +104,7 @@ final class NearbySessionManager: NSObject {
     arSession: ARSession
   ) throws {
     guard NISession.deviceCapabilities.supportsPreciseDistanceMeasurement else {
-      throw NearbyRendezvousFailure.unsupported
+      throw NearbyTargetingFailure.unsupported
     }
     stop()
     self.arSession = arSession
@@ -123,7 +123,7 @@ final class NearbySessionManager: NSObject {
       let session = NISession()
       session.delegate = self
       session.delegateQueue = .main
-      guard let token = session.discoveryToken else { throw NearbyRendezvousFailure.invalidToken }
+      guard let token = session.discoveryToken else { throw NearbyTargetingFailure.invalidToken }
       sessions[peer] = session
       sessionPeers[ObjectIdentifier(session)] = peer
       localTokens[peer] = try Self.serialize(token)

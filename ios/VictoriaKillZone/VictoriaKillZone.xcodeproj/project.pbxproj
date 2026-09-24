@@ -150,6 +150,11 @@
 		F189CDAC5539E249D935AEBC /* SharedOriginWireMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A37B40F1A27B24B497830328 /* SharedOriginWireMessage.swift */; };
 		029755FBF9B996493595A9FF /* SharedOriginExperimentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00F27B7461ADB133F2B09D32 /* SharedOriginExperimentTests.swift */; };
 		7432E1957B219ECD5C1FB460 /* SharedOriginLinkContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 258A7609550DC30E01AC3CBD /* SharedOriginLinkContractTests.swift */; };
+		C40000000000000000000002 /* NearbyRendezvousModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000001 /* NearbyRendezvousModels.swift */; };
+		C40000000000000000000004 /* NearbyTransformSolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000003 /* NearbyTransformSolver.swift */; };
+		C40000000000000000000006 /* NearbyRendezvousPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000005 /* NearbyRendezvousPolicy.swift */; };
+		C40000000000000000000008 /* NearbySessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000007 /* NearbySessionManager.swift */; };
+		C4000000000000000000000A /* NearbyTargetingRendezvousTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000009 /* NearbyTargetingRendezvousTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -305,6 +310,11 @@
 		A37B40F1A27B24B497830328 /* SharedOriginWireMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Targeting/QuickPlay/SharedOriginWireMessage.swift"; sourceTree = SOURCE_ROOT; };
 		00F27B7461ADB133F2B09D32 /* SharedOriginExperimentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/SharedOriginExperimentTests.swift"; sourceTree = SOURCE_ROOT; };
 		258A7609550DC30E01AC3CBD /* SharedOriginLinkContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/SharedOriginLinkContractTests.swift"; sourceTree = SOURCE_ROOT; };
+		C40000000000000000000001 /* NearbyRendezvousModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Targeting/NearbyInteraction/NearbyRendezvousModels.swift"; sourceTree = SOURCE_ROOT; };
+		C40000000000000000000003 /* NearbyTransformSolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Targeting/NearbyInteraction/NearbyTransformSolver.swift"; sourceTree = SOURCE_ROOT; };
+		C40000000000000000000005 /* NearbyRendezvousPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Targeting/NearbyInteraction/NearbyRendezvousPolicy.swift"; sourceTree = SOURCE_ROOT; };
+		C40000000000000000000007 /* NearbySessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Targeting/NearbyInteraction/NearbySessionManager.swift"; sourceTree = SOURCE_ROOT; };
+		C40000000000000000000009 /* NearbyTargetingRendezvousTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/NearbyTargetingRendezvousTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -421,6 +431,10 @@
 				3C1B0690C993E66A1452B1C6 /* SharedOriginCredentials.swift */,
 				F00100000000000000000006 /* TargetingSession.swift */,
 				F00100000000000000000019 /* BodyTargetingGeometry.swift */,
+				C40000000000000000000001 /* NearbyRendezvousModels.swift */,
+				C40000000000000000000003 /* NearbyTransformSolver.swift */,
+				C40000000000000000000005 /* NearbyRendezvousPolicy.swift */,
+				C40000000000000000000007 /* NearbySessionManager.swift */,
 				G00200000000000000000001 /* SharedArena */,
 			);
 			path = Targeting;
@@ -543,6 +557,7 @@
 				FE0C027C1B545A8ED33F093D /* SkeletonAnatomyTests.swift */,
 				23C6C02A8485BE71A673F1C0 /* SharedArenaFrameTests.swift */,
 				C27C3BB60CA0D4C6E79FC12D /* RealtimeLobbyIntegrationTests.swift */,
+				C40000000000000000000009 /* NearbyTargetingRendezvousTests.swift */,
 				5BB3F4D0FA393C202FB7E5BC /* RealtimeCombatSessionTests.swift */,
 				2CECC6FD17824534AD477D26 /* CollabChunkingTests.swift */,
 				1582FF63E10120492615F7B9 /* RealtimeCombatPresentationTests.swift */,
@@ -706,6 +721,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C40000000000000000000002 /* NearbyRendezvousModels.swift in Sources */,
+				C40000000000000000000004 /* NearbyTransformSolver.swift in Sources */,
+				C40000000000000000000006 /* NearbyRendezvousPolicy.swift in Sources */,
+				C40000000000000000000008 /* NearbySessionManager.swift in Sources */,
 				931CB1D516E546D8432B1663 /* CombatReplayView.swift in Sources */,
 				6464BD69AE39B1E4873C9FAB /* CombatReplaySession.swift in Sources */,
 				1D5A9F2732E2733A12B614D4 /* CombatReplayScene.swift in Sources */,
@@ -804,6 +823,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C4000000000000000000000A /* NearbyTargetingRendezvousTests.swift in Sources */,
 				31C247FE7C23E212B0206672 /* CombatReplayTests.swift in Sources */,
 				02264BA8F956A6BD41F04D1F /* MapLabCaptureRequestTests.swift in Sources */,
 				6C4FEA2F570F577476524B16 /* MapLabStoreTests.swift in Sources */,

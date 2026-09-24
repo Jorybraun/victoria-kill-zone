@@ -229,7 +229,7 @@ enum NearbyRendezvousRetryReason: Equatable, Sendable {
   case awaitingTokens(peerIDs: [String])
 }
 
-enum NearbyRendezvousFailure: String, Error, Equatable, Sendable {
+enum NearbyTargetingFailure: String, Error, Equatable, Sendable {
   case unsupported, permissionDenied, tooManyPeers, unknownPeer, invalidToken
   case invalidSample, sessionLimitExceeded, invalidConfiguration, notConfigured
   case staleEpoch, cameraAssistanceRequiresCollaborationOff
@@ -278,27 +278,27 @@ enum NearbyRelayEnvelope: Equatable, Sendable {
       guard !tokens.isEmpty, tokens.count <= NearbyRendezvousPolicy.maximumPeers,
         tokens.keys.allSatisfy({ !$0.isEmpty && $0.count <= 128 }),
         tokens.values.allSatisfy({ !$0.isEmpty })
-      else { throw NearbyRendezvousFailure.invalidToken }
+      else { throw NearbyTargetingFailure.invalidToken }
       byteCap = Self.maximumTokenBytes
       wire = Wire(v: Self.version, kind: "tokens", epoch: epoch, tokens: tokens, samples: nil)
     case .ranging(let epoch, let samples):
       guard !samples.isEmpty, samples.count <= Self.maximumSamplesPerEnvelope,
         samples.allSatisfy(\.isValid)
-      else { throw NearbyRendezvousFailure.invalidSample }
+      else { throw NearbyTargetingFailure.invalidSample }
       wire = Wire(v: Self.version, kind: "ranging", epoch: epoch, tokens: nil,
         samples: samples.map(WireSample.init))
     }
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
     let data = try encoder.encode(wire)
-    guard data.count <= byteCap else { throw NearbyRendezvousFailure.invalidToken }
+    guard data.count <= byteCap else { throw NearbyTargetingFailure.invalidToken }
     return data
   }
 
   /// The `niToken` lane's outbound string: the encoded JSON as UTF-8.
   func encodedTokenString() throws -> String {
     guard let string = String(data: try encoded(), encoding: .utf8)
-    else { throw NearbyRendezvousFailure.invalidToken }
+    else { throw NearbyTargetingFailure.invalidToken }
     return string
   }
 
@@ -308,27 +308,27 @@ enum NearbyRelayEnvelope: Equatable, Sendable {
   }
 
   static func decode(_ data: Data) throws -> NearbyRelayEnvelope {
-    guard !data.isEmpty, data.count <= maximumBytes else { throw NearbyRendezvousFailure.invalidToken }
+    guard !data.isEmpty, data.count <= maximumBytes else { throw NearbyTargetingFailure.invalidToken }
     let wire: Wire
     do { wire = try JSONDecoder().decode(Wire.self, from: data) } catch {
-      throw NearbyRendezvousFailure.invalidToken
+      throw NearbyTargetingFailure.invalidToken
     }
-    guard wire.v == version, wire.epoch > 0 else { throw NearbyRendezvousFailure.invalidToken }
+    guard wire.v == version, wire.epoch > 0 else { throw NearbyTargetingFailure.invalidToken }
     switch wire.kind {
     case "tokens":
       guard data.count <= maximumTokenBytes, let tokens = wire.tokens, !tokens.isEmpty,
         tokens.count <= NearbyRendezvousPolicy.maximumPeers,
         tokens.keys.allSatisfy({ !$0.isEmpty && $0.count <= 128 }),
         tokens.values.allSatisfy({ !$0.isEmpty })
-      else { throw NearbyRendezvousFailure.invalidToken }
+      else { throw NearbyTargetingFailure.invalidToken }
       return .tokens(epoch: wire.epoch, tokens: tokens)
     case "ranging":
       guard let samples = wire.samples, !samples.isEmpty, samples.count <= maximumSamplesPerEnvelope
-      else { throw NearbyRendezvousFailure.invalidSample }
+      else { throw NearbyTargetingFailure.invalidSample }
       let decoded = try samples.map { try $0.sample() }
       return .ranging(epoch: wire.epoch, samples: decoded)
     default:
-      throw NearbyRendezvousFailure.invalidToken
+      throw NearbyTargetingFailure.invalidToken
     }
   }
 
@@ -358,15 +358,15 @@ enum NearbyRelayEnvelope: Equatable, Sendable {
     func sample() throws -> NearbyRangingSample {
       guard let cameraPose = NearbyRigidPose(columnMajor: pose), observedAt.isFinite,
         !peerID.isEmpty, peerID.count <= 128
-      else { throw NearbyRendezvousFailure.invalidSample }
+      else { throw NearbyTargetingFailure.invalidSample }
       var vector: NearbyVector3?
       if let direction {
-        guard direction.count == 3 else { throw NearbyRendezvousFailure.invalidSample }
+        guard direction.count == 3 else { throw NearbyTargetingFailure.invalidSample }
         vector = NearbyVector3(x: direction[0], y: direction[1], z: direction[2])
       }
       let sample = NearbyRangingSample(peerID: peerID, distanceMeters: distance, direction: vector,
         cameraPose: cameraPose, observedAt: Date(timeIntervalSince1970: observedAt))
-      guard sample.isValid else { throw NearbyRendezvousFailure.invalidSample }
+      guard sample.isValid else { throw NearbyTargetingFailure.invalidSample }
       return sample
     }
   }

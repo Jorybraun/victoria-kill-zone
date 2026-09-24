@@ -23,7 +23,7 @@ enum NearbyBootstrapMode: String, Equatable, Sendable {
   var solvesDistanceOnly: Bool { self == .distanceOnly }
 }
 
-enum NearbyRendezvousPhase: Equatable, Sendable {
+enum NearbyTargetingPhase: Equatable, Sendable {
   case idle
   /// Sessions may run; ARKit collaboration is held off while camera
   /// assistance is on.
@@ -39,12 +39,12 @@ enum NearbyRendezvousStage: Equatable, Sendable {
   case ranging
   case needsRetry(NearbyRendezvousRetryReason)
   case solved
-  case failed(NearbyRendezvousFailure)
+  case failed(NearbyTargetingFailure)
 }
 
 struct NearbyRendezvousSnapshot: Equatable, Sendable {
   var stage: NearbyRendezvousStage = .idle
-  var phase: NearbyRendezvousPhase = .idle
+  var phase: NearbyTargetingPhase = .idle
   var bootstrapMode: NearbyBootstrapMode = .plain
   var epoch: UInt16?
   var hostPeerID: String?
@@ -118,12 +118,12 @@ struct NearbyRendezvousPolicy: Sendable {
   mutating func configure(epoch: UInt16, localPeerID: String, hostPeerID: String,
     roster participants: [String], bootstrap: NearbyBootstrapMode = .plain
   ) throws {
-    guard epoch > 0 else { throw NearbyRendezvousFailure.invalidConfiguration }
-    if let current = snapshot.epoch, epoch <= current { throw NearbyRendezvousFailure.staleEpoch }
+    guard epoch > 0 else { throw NearbyTargetingFailure.invalidConfiguration }
+    if let current = snapshot.epoch, epoch <= current { throw NearbyTargetingFailure.staleEpoch }
     let others = Set(participants).subtracting([localPeerID])
     guard participants.contains(localPeerID), participants.contains(hostPeerID)
-    else { throw NearbyRendezvousFailure.invalidConfiguration }
-    guard others.count <= Self.maximumPeers else { throw NearbyRendezvousFailure.tooManyPeers }
+    else { throw NearbyTargetingFailure.invalidConfiguration }
+    guard others.count <= Self.maximumPeers else { throw NearbyTargetingFailure.tooManyPeers }
     reset()
     roster = Set(participants)
     snapshot = NearbyRendezvousSnapshot(stage: .awaitingTokens, phase: .bootstrap,
@@ -135,7 +135,7 @@ struct NearbyRendezvousPolicy: Sendable {
     snapshot = NearbyRendezvousSnapshot()
   }
 
-  mutating func fail(_ failure: NearbyRendezvousFailure) {
+  mutating func fail(_ failure: NearbyTargetingFailure) {
     snapshot.stage = .failed(failure)
     snapshot.phase = .live
   }
@@ -167,11 +167,11 @@ struct NearbyRendezvousPolicy: Sendable {
   /// envelope for relay. Call `drainOutboundTokens()` to send.
   mutating func recordLocalTokens(_ tokens: [String: Data]) throws {
     guard let epoch = snapshot.epoch, let localPeerID = snapshot.localPeerID
-    else { throw NearbyRendezvousFailure.notConfigured }
+    else { throw NearbyTargetingFailure.notConfigured }
     guard !tokens.isEmpty,
       Set(tokens.keys).isSubset(of: roster.subtracting([localPeerID])),
       tokens.values.allSatisfy({ !$0.isEmpty })
-    else { throw NearbyRendezvousFailure.invalidToken }
+    else { throw NearbyTargetingFailure.invalidToken }
     ownTokens = tokens
     pendingTokenOutbound.append(
       try NearbyRelayEnvelope.tokens(epoch: epoch, tokens: tokens).encoded())
