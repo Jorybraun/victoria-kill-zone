@@ -740,14 +740,15 @@ peer positions flowing for the life of the match. Collaborative ARKit mapping
 (ADR 0011) remains enabled as a refinement path.
 
 **Token relay (combat socket).** Clients send
-`{"type":"niToken","data":<base64>}` — the archived `NIDiscoveryToken` bytes
-(opaque, ≤4096 B decoded, `CombatWire.maximumNITokenBytes`). The worker relays
-`{"type":"niToken","playerId","data":<base64>}` to the other room members only.
-Like `collab`, it is not a command envelope, expects no ack, and must not depend
-on replica state. The worker relay lands in a parallel PR — until then clients
-tolerate no relay: the rendezvous phase stays `awaitingTokens`. A client
-re-announces its local token once per (re)connected socket after an applied
-snapshot so late joiners and reconnects receive it.
+`{"type":"niToken","token":<base64>}` — the archived `NIDiscoveryToken` bytes
+(the worker bounds the base64 string at 4096 characters, i.e. ≤3072 B decoded,
+`CombatWire.maximumNITokenBytes`). The worker relays
+`{"type":"niToken","playerId","token":<base64>}` to the other room members only,
+caches each player's latest token for the room's lifetime, and replays the
+cached set to members who join later (room.ts). Like `collab`, it is not a
+command envelope, expects no ack, and must not depend on replica state. A client
+still re-announces its local token once per (re)connected socket after an
+applied snapshot so peers that joined earlier also refresh their session.
 
 **Rendezvous phases** (`NearbyRendezvousPhase`, integration-owned):
 `inactive`, `unsupported`, `awaitingPermission`, `permissionDenied`,

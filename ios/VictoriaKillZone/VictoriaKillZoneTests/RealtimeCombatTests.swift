@@ -44,17 +44,17 @@ final class RealtimeCombatTests: XCTestCase {
     let data=try JSONEncoder().encode(CombatWire.ClientMessage.niToken(token))
     let root=try XCTUnwrap(JSONSerialization.jsonObject(with:data) as? [String:Any])
     XCTAssertEqual(root["type"] as? String,"niToken")
-    XCTAssertEqual(root["data"] as? String,token.base64EncodedString())
-    XCTAssertNil(root["playerId"]); XCTAssertNil(root["envelope"])
+    XCTAssertEqual(root["token"] as? String,token.base64EncodedString())
+    XCTAssertNil(root["data"]); XCTAssertNil(root["playerId"]); XCTAssertNil(root["envelope"])
   }
 
   func testNITokenServerMessageDecodesAndRejectsBadBase64() throws {
-    let payload="{\"type\":\"niToken\",\"playerId\":\"p2\",\"data\":\"\(Data([9,8]).base64EncodedString())\"}"
+    let payload="{\"type\":\"niToken\",\"playerId\":\"p2\",\"token\":\"\(Data([9,8]).base64EncodedString())\"}"
     let message=try JSONDecoder().decode(CombatWire.ServerMessage.self,from:Data(payload.utf8))
     guard case .niToken(let playerId,let data)=message else {return XCTFail("Expected niToken relay")}
     XCTAssertEqual(playerId,"p2"); XCTAssertEqual(data,Data([9,8]))
     XCTAssertThrowsError(try JSONDecoder().decode(CombatWire.ServerMessage.self,
-      from:Data("{\"type\":\"niToken\",\"playerId\":\"p2\",\"data\":\"!!!\"}".utf8)))
+      from:Data("{\"type\":\"niToken\",\"playerId\":\"p2\",\"token\":\"!!!\"}".utf8)))
   }
 
   func testNITokenValidationBoundsPayloadAndSender() {

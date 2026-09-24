@@ -8,8 +8,9 @@ enum CombatWire {
   static let maximumCollabBytes = 384_000
   static let maximumCollabMessageBytes = 386_000
   static let maximumCollabDataBytes = 288 * 1024
-  /// Archived NIDiscoveryToken payloads are a few hundred bytes (ADR 0012).
-  static let maximumNITokenBytes = 4_096
+  /// The worker bounds the base64 token string at 4,096 characters
+  /// (LIMITS.niTokenBytes), which is 3,072 decoded bytes (ADR 0012).
+  static let maximumNITokenBytes = 3_072
 
   struct Pose: Codable, Equatable, Sendable {
     var sequence: Int
@@ -130,7 +131,7 @@ enum CombatWire {
     case command(Envelope), received(eventSequence: Int), resume(afterEventSequence: Int), ping(nonce: String, clientSentAtMs: Double)
     case collab(Data)
     case niToken(Data)
-    private enum Key: String, CodingKey {case type, envelope, eventSequence, afterEventSequence, nonce, clientSentAtMs, data}
+    private enum Key: String, CodingKey {case type, envelope, eventSequence, afterEventSequence, nonce, clientSentAtMs, data, token}
     func encode(to encoder: Encoder) throws {
       var c=encoder.container(keyedBy:Key.self)
       switch self {
@@ -139,7 +140,7 @@ enum CombatWire {
       case .resume(let sequence): try c.encode("resume",forKey:.type); try c.encode(sequence,forKey:.afterEventSequence)
       case .ping(let nonce,let time): try c.encode("ping",forKey:.type); try c.encode(nonce,forKey:.nonce); try c.encode(time,forKey:.clientSentAtMs)
       case .collab(let data): try c.encode("collab",forKey:.type); try c.encode(data,forKey:.data)
-      case .niToken(let data): try c.encode("niToken",forKey:.type); try c.encode(data,forKey:.data)
+      case .niToken(let data): try c.encode("niToken",forKey:.type); try c.encode(data,forKey:.token)
       }
     }
   }
@@ -185,7 +186,7 @@ enum CombatWire {
     case collab(playerId: String, data: Data)
     case niToken(playerId: String, data: Data)
     case error(code: String, commandId: String?)
-    private enum Key: String, CodingKey {case type, snapshot, eventSequence, clientSequence, events, commandId, replayed, nonce, clientSentAtMs, serverReceivedAtMs, serverSentAtMs, code, playerId, data}
+    private enum Key: String, CodingKey {case type, snapshot, eventSequence, clientSequence, events, commandId, replayed, nonce, clientSentAtMs, serverReceivedAtMs, serverSentAtMs, code, playerId, data, token}
     init(from decoder: Decoder) throws {
       let c=try decoder.container(keyedBy:Key.self)
       switch try c.decode(String.self,forKey:.type) {
@@ -198,8 +199,8 @@ enum CombatWire {
         guard let data=Data(base64Encoded:base64) else {throw DecodingError.dataCorruptedError(forKey:.data,in:c,debugDescription:"Invalid collaboration archive")}
         self = .collab(playerId:try c.decode(String.self,forKey:.playerId),data:data)
       case "niToken":
-        let base64=try c.decode(String.self,forKey:.data)
-        guard let data=Data(base64Encoded:base64) else {throw DecodingError.dataCorruptedError(forKey:.data,in:c,debugDescription:"Invalid NI discovery token")}
+        let base64=try c.decode(String.self,forKey:.token)
+        guard let data=Data(base64Encoded:base64) else {throw DecodingError.dataCorruptedError(forKey:.token,in:c,debugDescription:"Invalid NI discovery token")}
         self = .niToken(playerId:try c.decode(String.self,forKey:.playerId),data:data)
       case "error": self = .error(code:try c.decode(String.self,forKey:.code),commandId:try c.decodeIfPresent(String.self,forKey:.commandId))
       default: throw DecodingError.dataCorruptedError(forKey:.type,in:c,debugDescription:"Unknown combat message version")
