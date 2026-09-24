@@ -129,7 +129,7 @@ struct DuelFramePolicy: Sendable {
       if snapshot.stage == .relocalizingWorld {
         if !snapshot.mode.usesBodyPhase {
           snapshot.stage = .aligned
-          snapshot.localPose = pose
+          snapshot.localPose = Self.hostFramePose(pose, seed: snapshot.nearbySeed)
           phaseDeadline = nil
           sawRelocalizing = false
           return false
@@ -140,7 +140,7 @@ struct DuelFramePolicy: Sendable {
         return true
       }
       snapshot.stage = .awaitingResidual
-      snapshot.localPose = pose
+      snapshot.localPose = Self.hostFramePose(pose, seed: snapshot.nearbySeed)
       phaseDeadline = nil
       return false
     }
@@ -166,7 +166,7 @@ struct DuelFramePolicy: Sendable {
       }
       return false
     }
-    snapshot.localPose = pose
+    snapshot.localPose = Self.hostFramePose(pose, seed: snapshot.nearbySeed)
     if !snapshot.mode.usesBodyPhase && snapshot.stage != .awaitingResidual {
       snapshot.stage = .aligned
       snapshot.failure = nil
@@ -233,6 +233,18 @@ struct DuelFramePolicy: Sendable {
     latestEpoch = 0
     snapshot = DuelFrameSnapshot()
     resetEvidence()
+  }
+
+  /// Observation poses arrive in the local ARKit frame; when an NI seed
+  /// exists, the shared-frame pose is the observation mapped through
+  /// `localToHostFrame`. An ARKit merge does not move the local origin and a
+  /// refinement updates the seed rather than switching frames, so the seed
+  /// applies at every store, not only at alignment time (ADR 0012 §4).
+  static func hostFramePose(_ pose: DuelFramePose, seed: DuelFrameNearbySeed?) -> DuelFramePose {
+    guard let seed else { return pose }
+    return DuelFramePose(
+      columnMajor: seed.localToHostFrame.apply(toColumnMajor: pose.columnMajor),
+      capturedAt: pose.capturedAt, frameTimestamp: pose.frameTimestamp)
   }
 
   static func isFresh(_ date: Date, at now: Date) -> Bool {

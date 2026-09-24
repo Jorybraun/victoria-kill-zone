@@ -32,6 +32,13 @@ struct NearbyVector3: Equatable, Sendable {
   }
 
   func distance(to other: NearbyVector3) -> Double { (self - other).length }
+
+  func dot(_ other: NearbyVector3) -> Double { x * other.x + y * other.y + z * other.z }
+
+  func cross(_ other: NearbyVector3) -> NearbyVector3 {
+    NearbyVector3(x: y * other.z - z * other.y, y: z * other.x - x * other.z,
+      z: x * other.y - y * other.x)
+  }
 }
 
 /// Column-major 4x4 rigid transform, the same layout `DuelFramePose` carries.
@@ -39,8 +46,22 @@ struct NearbyVector3: Equatable, Sendable {
 struct NearbyRigidPose: Equatable, Sendable {
   let columnMajor: [Double]
 
+  /// Rejects anything but a rigid homogeneous transform: orthonormal,
+  /// right-handed rotation columns and a `[0, 0, 0, 1]` last row. Untrusted
+  /// poses (scaled, sheared, reflected) would silently distort the solve.
   init?(columnMajor: [Double]) {
     guard columnMajor.count == 16, columnMajor.allSatisfy(\.isFinite) else { return nil }
+    let columns = (0..<3).map {
+      NearbyVector3(x: columnMajor[$0 * 4], y: columnMajor[$0 * 4 + 1], z: columnMajor[$0 * 4 + 2])
+    }
+    guard columns.allSatisfy({ abs($0.length - 1) <= 0.01 }),
+      abs(columns[0].dot(columns[1])) <= 0.01,
+      abs(columns[0].dot(columns[2])) <= 0.01,
+      abs(columns[1].dot(columns[2])) <= 0.01,
+      columns[0].cross(columns[1]).dot(columns[2]) > 0,
+      abs(columnMajor[3]) <= 1e-6, abs(columnMajor[7]) <= 1e-6,
+      abs(columnMajor[11]) <= 1e-6, abs(columnMajor[15] - 1) <= 1e-6
+    else { return nil }
     self.columnMajor = columnMajor
   }
 
@@ -87,6 +108,21 @@ struct NearbyFrameTransform: Equatable, Sendable {
   }
 
   func apply(_ p: NearbyVector3) -> NearbyVector3 { rotate(p) + translation }
+
+  /// `self.columnMajor × m`, column-major: a pose expressed in `m`'s frame
+  /// re-expressed in the frame this transform maps into.
+  func apply(toColumnMajor m: [Double]) -> [Double] {
+    let a = columnMajor
+    var result = [Double](repeating: 0, count: 16)
+    for column in 0..<4 {
+      for row in 0..<4 {
+        var sum = 0.0
+        for k in 0..<4 { sum += a[k * 4 + row] * m[column * 4 + k] }
+        result[column * 4 + row] = sum
+      }
+    }
+    return result
+  }
 
   var inverse: NearbyFrameTransform {
     let inverseYaw = -yawRadians
@@ -150,6 +186,13 @@ struct NearbyRangingSample: Equatable, Sendable {
 
   var hasDirection: Bool { direction != nil }
 
+  /// The same reading with `observedAt` shifted by `-offset`, used to rebase
+  /// a peer's wall clock onto the local clock.
+  func rebased(by offset: TimeInterval) -> NearbyRangingSample {
+    NearbyRangingSample(peerID: peerID, distanceMeters: distanceMeters, direction: direction,
+      cameraPose: cameraPose, observedAt: observedAt.addingTimeInterval(-offset))
+  }
+
   /// The peer's antenna position in this device's own world frame, when a
   /// direction is available.
   var peerPositionInLocalFrame: NearbyVector3? {
@@ -192,50 +235,76 @@ enum NearbyRendezvousFailure: String, Error, Equatable, Sendable {
   case staleEpoch, cameraAssistanceRequiresCollaborationOff
 }
 
-/// Relay-lane contract for ADR 0012 §1. One opaque per-peer message type
-/// (`niToken`) on the existing match WebSocket carries both the discovery
-/// token and, once ranging, the sender's samples toward each peer — the
-/// worker relays bytes without inspecting them, so the two kinds share a
-/// lane rather than requiring a second relayed message type.
+/// Relay-lane contract for ADR 0012 §1. Two lanes share the match WebSocket:
 ///
-/// Wire shape (JSON inside the opaque `data` field, base64 on the socket):
-///   {"v":1,"kind":"token","epoch":7,"token":"<base64 NIDiscoveryToken>"}
+///   - The merged worker lane (`ClientMessage {type:"niToken", token}` /
+///     `ServerMessage {type:"niToken", playerId, token}`) carries one opaque
+///     string per send, bounded at `maximumTokenBytes`, rate limited to ~1/s.
+///     It transports the `tokens` envelope: this device's serialized
+///     `NIDiscoveryToken` for the per-peer session dedicated to each peer,
+///     keyed by target peer id. Sent rarely — on session (re)build only.
+///   - The proposed `niRanging` lane (Integration handoff) carries `ranging`
+///     envelopes at NI update rates; the token lane cannot absorb them.
+///
+/// Wire shape (JSON; the token lane sends it as the `token` string, the
+/// ranging lane as `data`):
+///   {"v":1,"kind":"tokens","epoch":7,"tokens":{"b":"<base64 token for b>"}}
 ///   {"v":1,"kind":"ranging","epoch":7,"samples":[{"peerID":"p2",
 ///     "distance":2.31,"direction":[0.1,-0.02,-0.99],"pose":[16 doubles],
 ///     "observedAt":1758572400.123}]}
-/// Outbound: `{type:"niToken", data}`; inbound: `{type:"niToken", playerId, data}`.
 enum NearbyRelayEnvelope: Equatable, Sendable {
   static let version = 1
   static let maximumBytes = 8 * 1024
+  /// Worker `niTokenBytes` bound on the token lane.
+  static let maximumTokenBytes = 4 * 1024
   static let maximumSamplesPerEnvelope = 8
 
-  case token(epoch: UInt16, token: Data)
+  /// `tokens` is keyed by the TARGET peer id; each value is the serialized
+  /// `NIDiscoveryToken` of the local `NISession` dedicated to that peer.
+  case tokens(epoch: UInt16, tokens: [String: Data])
   case ranging(epoch: UInt16, samples: [NearbyRangingSample])
 
   var epoch: UInt16 {
     switch self {
-    case .token(let epoch, _), .ranging(let epoch, _): epoch
+    case .tokens(let epoch, _), .ranging(let epoch, _): epoch
     }
   }
 
   func encoded() throws -> Data {
     let wire: Wire
+    var byteCap = Self.maximumBytes
     switch self {
-    case .token(let epoch, let token):
-      guard !token.isEmpty else { throw NearbyRendezvousFailure.invalidToken }
-      wire = Wire(v: Self.version, kind: "token", epoch: epoch, token: token, samples: nil)
+    case .tokens(let epoch, let tokens):
+      guard !tokens.isEmpty, tokens.count <= NearbyRendezvousPolicy.maximumPeers,
+        tokens.keys.allSatisfy({ !$0.isEmpty && $0.count <= 128 }),
+        tokens.values.allSatisfy({ !$0.isEmpty })
+      else { throw NearbyRendezvousFailure.invalidToken }
+      byteCap = Self.maximumTokenBytes
+      wire = Wire(v: Self.version, kind: "tokens", epoch: epoch, tokens: tokens, samples: nil)
     case .ranging(let epoch, let samples):
       guard !samples.isEmpty, samples.count <= Self.maximumSamplesPerEnvelope,
         samples.allSatisfy(\.isValid)
       else { throw NearbyRendezvousFailure.invalidSample }
-      wire = Wire(v: Self.version, kind: "ranging", epoch: epoch, token: nil,
+      wire = Wire(v: Self.version, kind: "ranging", epoch: epoch, tokens: nil,
         samples: samples.map(WireSample.init))
     }
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
     let data = try encoder.encode(wire)
-    guard data.count <= Self.maximumBytes else { throw NearbyRendezvousFailure.invalidSample }
+    guard data.count <= byteCap else { throw NearbyRendezvousFailure.invalidToken }
     return data
+  }
+
+  /// The `niToken` lane's outbound string: the encoded JSON as UTF-8.
+  func encodedTokenString() throws -> String {
+    guard let string = String(data: try encoded(), encoding: .utf8)
+    else { throw NearbyRendezvousFailure.invalidToken }
+    return string
+  }
+
+  /// The `niToken` lane's inbound string decoded back to an envelope.
+  static func decode(tokenString: String) throws -> NearbyRelayEnvelope {
+    try decode(Data(tokenString.utf8))
   }
 
   static func decode(_ data: Data) throws -> NearbyRelayEnvelope {
@@ -246,9 +315,13 @@ enum NearbyRelayEnvelope: Equatable, Sendable {
     }
     guard wire.v == version, wire.epoch > 0 else { throw NearbyRendezvousFailure.invalidToken }
     switch wire.kind {
-    case "token":
-      guard let token = wire.token, !token.isEmpty else { throw NearbyRendezvousFailure.invalidToken }
-      return .token(epoch: wire.epoch, token: token)
+    case "tokens":
+      guard data.count <= maximumTokenBytes, let tokens = wire.tokens, !tokens.isEmpty,
+        tokens.count <= NearbyRendezvousPolicy.maximumPeers,
+        tokens.keys.allSatisfy({ !$0.isEmpty && $0.count <= 128 }),
+        tokens.values.allSatisfy({ !$0.isEmpty })
+      else { throw NearbyRendezvousFailure.invalidToken }
+      return .tokens(epoch: wire.epoch, tokens: tokens)
     case "ranging":
       guard let samples = wire.samples, !samples.isEmpty, samples.count <= maximumSamplesPerEnvelope
       else { throw NearbyRendezvousFailure.invalidSample }
@@ -263,7 +336,7 @@ enum NearbyRelayEnvelope: Equatable, Sendable {
     let v: Int
     let kind: String
     let epoch: UInt16
-    let token: Data?
+    let tokens: [String: Data]?
     let samples: [WireSample]?
   }
 
@@ -300,11 +373,16 @@ enum NearbyRelayEnvelope: Equatable, Sendable {
 }
 
 /// Targeting-side seam for the token/sample relay. The client-flow owner
-/// adapts the combat socket (`niToken` lane) to this protocol outside
-/// `Targeting/`; targeting never touches the socket directly.
+/// adapts the combat socket to this protocol outside `Targeting/`; targeting
+/// never touches the socket directly.
 protocol NearbyRendezvousRelaying: Sendable {
-  /// Sends one encoded `NearbyRelayEnvelope` to every other match participant.
-  func sendNearbyEnvelope(_ data: Data) async
-  /// Encoded envelopes from peers, tagged with the sender's playerId.
-  func nearbyEnvelopes() -> AsyncStream<(peerID: String, data: Data)>
+  /// Existing worker lane: `ClientMessage {type:"niToken", token}`. Rare
+  /// (only on session (re)build) — the worker rate limits it to ~1/s.
+  func sendNearbyToken(_ token: String) async
+  /// `ServerMessage {type:"niToken", playerId, token}`.
+  func nearbyTokens() -> AsyncStream<(peerID: String, token: String)>
+  /// Proposed lane (Integration handoff): `{type:"niRanging", data}` /
+  /// `{type:"niRanging", playerId, data}` for encoded ranging envelopes.
+  func sendNearbyRanging(_ data: Data) async
+  func nearbyRanging() -> AsyncStream<(peerID: String, data: Data)>
 }

@@ -240,8 +240,11 @@ enum NearbyDistanceOnlySolver {
 
   static func solve(_ ranges: [Range]) -> Outcome {
     guard ranges.count >= minimumRanges else { return .insufficientRanges(count: ranges.count) }
-    guard horizontalSpread(ranges.map(\.localPosition)) >= minimumHorizontalSpreadMeters
-      || horizontalSpread(ranges.map(\.remotePosition)) >= minimumHorizontalSpreadMeters
+    // With only distances, a stationary remote leaves yaw unobservable: the
+    // local motion alone produces a single circle of fits. Both sides must
+    // have spread before the transform is trustworthy.
+    guard horizontalSpread(ranges.map(\.localPosition)) >= minimumHorizontalSpreadMeters,
+      horizontalSpread(ranges.map(\.remotePosition)) >= minimumHorizontalSpreadMeters
     else { return .insufficientMotion }
     let localMean = mean(ranges.map(\.localPosition)), remoteMean = mean(ranges.map(\.remotePosition))
     var best: (transform: NearbyFrameTransform, rms: Double)?

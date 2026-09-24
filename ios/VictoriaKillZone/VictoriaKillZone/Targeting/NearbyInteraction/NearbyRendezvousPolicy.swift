@@ -86,18 +86,32 @@ struct NearbyRendezvousPolicy: Sendable {
   private(set) var snapshot = NearbyRendezvousSnapshot()
   private var roster: Set<String> = []
   private var tokens: [String: Data] = [:]
-  private var ownToken: Data?
+  /// Discovery tokens of this device's per-peer sessions, keyed by the peer
+  /// the session is dedicated to (a token identifies its issuing session).
+  private var ownTokens: [String: Data] = [:]
+  /// Bumped whenever a peer's token changes; the manager re-runs the session.
+  private var tokenGenerations: [String: Int] = [:]
+  /// Recent receiver-minus-sender wall clock estimates per peer (window 8);
+  /// the median rebases relayed sample timestamps onto the local clock.
+  private var clockOffsetSamples: [String: [TimeInterval]] = [:]
   /// `localSamples[peer]`: this device toward `peer`.
   private var localSamples: [String: [NearbyRangingSample]] = [:]
   /// `remoteSamples[from]?[to]`: device `from` toward `to`, relayed.
   private var remoteSamples: [String: [String: [NearbyRangingSample]]] = [:]
   private var rangingStartedAt: [String: Date] = [:]
   private var lastSolvedAt: Date?
-  private var pendingOutbound: [Data] = []
+  /// Rare token envelopes for the worker's rate-limited `niToken` lane.
+  private var pendingTokenOutbound: [Data] = []
+  /// Ranging envelopes for the proposed `niRanging` lane.
+  private var pendingRangingOutbound: [Data] = []
   private var pendingSamples: [NearbyRangingSample] = []
 
-  var localToken: Data? { ownToken }
+  static let clockOffsetWindow = 8
+
+  /// The serialized `NIDiscoveryToken` of the session dedicated to `peerID`.
+  func localToken(for peerID: String) -> Data? { ownTokens[peerID] }
   func token(for peerID: String) -> Data? { tokens[peerID] }
+  func tokenGeneration(for peerID: String) -> Int { tokenGenerations[peerID] ?? 0 }
 
   // MARK: Lifecycle
 
@@ -148,41 +162,76 @@ struct NearbyRendezvousPolicy: Sendable {
 
   // MARK: Tokens
 
-  /// Records this device's serialized `NIDiscoveryToken` and queues the token
-  /// envelope for relay. Call `drainOutbound()` to send.
-  mutating func recordLocalToken(_ token: Data) throws {
-    guard let epoch = snapshot.epoch else { throw NearbyRendezvousFailure.notConfigured }
-    guard !token.isEmpty else { throw NearbyRendezvousFailure.invalidToken }
-    ownToken = token
-    pendingOutbound.append(try NearbyRelayEnvelope.token(epoch: epoch, token: token).encoded())
+  /// Records this device's serialized `NIDiscoveryToken`s — one per peer,
+  /// from the session dedicated to that peer — and queues the tokens
+  /// envelope for relay. Call `drainOutboundTokens()` to send.
+  mutating func recordLocalTokens(_ tokens: [String: Data]) throws {
+    guard let epoch = snapshot.epoch, let localPeerID = snapshot.localPeerID
+    else { throw NearbyRendezvousFailure.notConfigured }
+    guard !tokens.isEmpty,
+      Set(tokens.keys).isSubset(of: roster.subtracting([localPeerID])),
+      tokens.values.allSatisfy({ !$0.isEmpty })
+    else { throw NearbyRendezvousFailure.invalidToken }
+    ownTokens = tokens
+    pendingTokenOutbound.append(
+      try NearbyRelayEnvelope.tokens(epoch: epoch, tokens: tokens).encoded())
   }
 
-  /// Applies a relayed envelope from `peerID`. Unknown peers and other epochs
-  /// are ignored, not fatal: the relay is shared with the whole room.
-  mutating func receive(from peerID: String, data: Data, at now: Date) {
-    guard let epoch = snapshot.epoch, roster.contains(peerID), peerID != snapshot.localPeerID,
-      let envelope = try? NearbyRelayEnvelope.decode(data), envelope.epoch == epoch
+  /// Applies a relayed `tokens` envelope from `peerID` (the `niToken` lane).
+  /// Unknown peers, other epochs, and envelopes with no token addressed to
+  /// this device are ignored, not fatal: the relay is shared with the room.
+  mutating func receive(tokens data: Data, from peerID: String, at now: Date) {
+    guard let epoch = snapshot.epoch, let localPeerID = snapshot.localPeerID,
+      roster.contains(peerID), peerID != localPeerID,
+      case .tokens(let envelopeEpoch, let tokens) = try? NearbyRelayEnvelope.decode(data),
+      envelopeEpoch == epoch, let token = tokens[localPeerID], !token.isEmpty
     else { return }
-    switch envelope {
-    case .token(_, let token):
-      guard tokens[peerID] == nil else { return }
-      tokens[peerID] = token
-      snapshot.rangingPeers = tokens.keys.sorted()
-      rangingStartedAt[peerID] = now
-      if case .awaitingTokens = snapshot.stage { snapshot.stage = .ranging }
-    case .ranging(_, let samples):
-      for sample in samples where roster.contains(sample.peerID) && sample.peerID != peerID {
-        var window = remoteSamples[peerID, default: [:]][sample.peerID, default: []]
-        Self.append(sample, to: &window, now: now)
-        remoteSamples[peerID, default: [:]][sample.peerID] = window
+    if self.tokens[peerID] != token {
+      self.tokens[peerID] = token
+      tokenGenerations[peerID, default: 0] += 1
+    }
+    snapshot.rangingPeers = self.tokens.keys.sorted()
+    if rangingStartedAt[peerID] == nil { rangingStartedAt[peerID] = now }
+    if case .awaitingTokens = snapshot.stage { snapshot.stage = .ranging }
+  }
+
+  /// Applies a relayed `ranging` envelope from `peerID` (the `niRanging`
+  /// lane). Sender wall clocks differ from ours, so each envelope's freshest
+  /// stamp feeds a per-peer offset estimate and every sample is rebased by
+  /// the median offset before the staleness checks run.
+  mutating func receive(ranging data: Data, from peerID: String, at now: Date) {
+    guard let epoch = snapshot.epoch, roster.contains(peerID), peerID != snapshot.localPeerID,
+      case .ranging(let envelopeEpoch, let samples) = try? NearbyRelayEnvelope.decode(data),
+      envelopeEpoch == epoch
+    else { return }
+    if let latest = samples.map(\.observedAt).max() {
+      var offsets = clockOffsetSamples[peerID, default: []]
+      offsets.append(latest.timeIntervalSince(now))
+      if offsets.count > Self.clockOffsetWindow {
+        offsets.removeFirst(offsets.count - Self.clockOffsetWindow)
       }
+      clockOffsetSamples[peerID] = offsets
+    }
+    let offset = NearbyConsensus.scalarMedian(clockOffsetSamples[peerID, default: []])
+    guard offset.isFinite else { return }
+    for raw in samples where roster.contains(raw.peerID) && raw.peerID != peerID {
+      let sample = raw.rebased(by: offset)
+      var window = remoteSamples[peerID, default: [:]][raw.peerID, default: []]
+      Self.append(sample, to: &window, now: now)
+      remoteSamples[peerID, default: [:]][raw.peerID] = window
     }
   }
 
-  /// Encoded envelopes ready for the relay, in order. Empties the queue.
-  mutating func drainOutbound() -> [Data] {
-    defer { pendingOutbound.removeAll() }
-    return pendingOutbound
+  /// Encoded `tokens` envelopes ready for the `niToken` lane. Empties the queue.
+  mutating func drainOutboundTokens() -> [Data] {
+    defer { pendingTokenOutbound.removeAll() }
+    return pendingTokenOutbound
+  }
+
+  /// Encoded `ranging` envelopes ready for the `niRanging` lane. Empties the queue.
+  mutating func drainOutboundRanging() -> [Data] {
+    defer { pendingRangingOutbound.removeAll() }
+    return pendingRangingOutbound
   }
 
   // MARK: Samples
@@ -208,7 +257,7 @@ struct NearbyRendezvousPolicy: Sendable {
     let batch = Array(pendingSamples.suffix(NearbyRelayEnvelope.maximumSamplesPerEnvelope))
     pendingSamples.removeAll()
     if let data = try? NearbyRelayEnvelope.ranging(epoch: epoch, samples: batch).encoded() {
-      pendingOutbound.append(data)
+      pendingRangingOutbound.append(data)
     }
   }
 
@@ -267,7 +316,16 @@ struct NearbyRendezvousPolicy: Sendable {
     }
     snapshot.alignments = alignments
 
-    let localSolved = localPeerID == hostPeerID || alignments[localPeerID] != nil
+    // The host's own frame is the target, so it is "solved" only once every
+    // other participant's link into it has resolved — leaving bootstrap early
+    // would start collaboration while some links are still unmeasured.
+    let localSolved: Bool
+    if localPeerID == hostPeerID {
+      let nonHost = participants.filter { $0 != hostPeerID }
+      localSolved = !nonHost.isEmpty && nonHost.allSatisfy { alignments[$0] != nil }
+    } else {
+      localSolved = alignments[localPeerID] != nil
+    }
     if localSolved {
       snapshot.stage = .solved
       if snapshot.phase == .bootstrap { snapshot.phase = .live }
@@ -343,12 +401,15 @@ struct NearbyRendezvousPolicy: Sendable {
   private mutating func reset() {
     roster = []
     tokens = [:]
-    ownToken = nil
+    ownTokens = [:]
+    tokenGenerations = [:]
+    clockOffsetSamples = [:]
     localSamples = [:]
     remoteSamples = [:]
     rangingStartedAt = [:]
     lastSolvedAt = nil
-    pendingOutbound = []
+    pendingTokenOutbound = []
+    pendingRangingOutbound = []
     pendingSamples = []
   }
 }

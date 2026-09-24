@@ -65,9 +65,20 @@ final class NearbySessionManager: NSObject {
   private(set) var collaborationStarted = false
   private var sessions: [String: NISession] = [:]
   private var sessionPeers: [ObjectIdentifier: String] = [:]
+  /// Roster members other than the local peer; one session exists per entry.
+  private var rosterPeers: [String] = []
+  /// The configuration each session was last run with; reused on timeout
+  /// re-runs and after suspension instead of building a fresh plain config.
+  private var configurations: [String: NINearbyPeerConfiguration] = [:]
+  /// The `policy.tokenGeneration(for:)` a session was last run at; a changed
+  /// generation means a new peer token arrived and the session must re-run.
+  private var runningGeneration: [String: Int] = [:]
+  /// Whether the currently built sessions carry `isCameraAssistanceEnabled`.
+  private var sessionsUseCameraAssistance = false
   private var latestCameraPose: NearbyRigidPose?
   private let relay: any NearbyRendezvousRelaying
-  private var inboundTask: Task<Void, Never>?
+  private var tokenInboundTask: Task<Void, Never>?
+  private var rangingInboundTask: Task<Void, Never>?
   private var pumpTask: Task<Void, Never>?
   private var arSession: ARSession?
 
@@ -101,15 +112,33 @@ final class NearbySessionManager: NSObject {
     try policy.configure(epoch: epoch, localPeerID: localPeerID, hostPeerID: hostPeerID,
       roster: roster, bootstrap: bootstrap)
     collaborationStarted = false
-    // One discovery token is shared by every session on this device.
-    let probe = NISession()
-    guard let token = probe.discoveryToken else { throw NearbyRendezvousFailure.invalidToken }
-    probe.invalidate()
-    try policy.recordLocalToken(try Self.serialize(token))
-    inboundTask = Task { [weak self] in
+    rosterPeers = roster.filter { $0 != localPeerID }
+    sessionsUseCameraAssistance = bootstrap.usesCameraAssistance
+      && NISession.deviceCapabilities.supportsCameraAssistance
+    // A discovery token identifies the NISession that issued it, so each
+    // roster peer gets its own session up front; sessions run once the
+    // matching peer token arrives (see reconcileSessions).
+    var localTokens: [String: Data] = [:]
+    for peer in rosterPeers {
+      let session = NISession()
+      session.delegate = self
+      session.delegateQueue = .main
+      guard let token = session.discoveryToken else { throw NearbyRendezvousFailure.invalidToken }
+      sessions[peer] = session
+      sessionPeers[ObjectIdentifier(session)] = peer
+      localTokens[peer] = try Self.serialize(token)
+    }
+    try policy.recordLocalTokens(localTokens)
+    tokenInboundTask = Task { [weak self] in
       guard let self else { return }
-      for await (peerID, data) in relay.nearbyEnvelopes() {
-        await self.receive(from: peerID, data: data)
+      for await (peerID, token) in relay.nearbyTokens() {
+        await self.receiveTokens(from: peerID, token: token)
+      }
+    }
+    rangingInboundTask = Task { [weak self] in
+      guard let self else { return }
+      for await (peerID, data) in relay.nearbyRanging() {
+        await self.receiveRanging(from: peerID, data: data)
       }
     }
     pumpTask = Task { [weak self] in
@@ -122,13 +151,19 @@ final class NearbySessionManager: NSObject {
   }
 
   func stop() {
-    inboundTask?.cancel()
+    tokenInboundTask?.cancel()
+    rangingInboundTask?.cancel()
     pumpTask?.cancel()
-    inboundTask = nil
+    tokenInboundTask = nil
+    rangingInboundTask = nil
     pumpTask = nil
     for session in sessions.values { session.invalidate() }
     sessions = [:]
     sessionPeers = [:]
+    rosterPeers = []
+    configurations = [:]
+    runningGeneration = [:]
+    sessionsUseCameraAssistance = false
     arSession = nil
     policy.stop()
     publish()
@@ -136,9 +171,13 @@ final class NearbySessionManager: NSObject {
 
   /// Called by the DuelFrame provider before it flips
   /// `ARWorldTrackingConfiguration.isCollaborationEnabled` on. Returns false
-  /// while a camera-assisted bootstrap is still running.
+  /// while a camera-assisted bootstrap is still running. Camera assistance
+  /// must be off the sessions before collab starts, so an assisted set is
+  /// rebuilt without it first (the new tokens ride the rate-limited token
+  /// lane — rare enough to fit its ~1/s budget).
   func markCollaborationStarting() -> Bool {
     guard policy.snapshot.collaborationMayStart else { return false }
+    if sessionsUseCameraAssistance { rebuildSessions(cameraAssistance: false) }
     collaborationStarted = true
     policy.endBootstrap()
     publish()
@@ -152,9 +191,14 @@ final class NearbySessionManager: NSObject {
 
   // MARK: Private
 
-  private func receive(from peerID: String, data: Data) async {
-    policy.receive(from: peerID, data: data, at: Date())
+  private func receiveTokens(from peerID: String, token: String) async {
+    policy.receive(tokens: Data(token.utf8), from: peerID, at: Date())
     reconcileSessions()
+    publish()
+  }
+
+  private func receiveRanging(from peerID: String, data: Data) async {
+    policy.receive(ranging: data, from: peerID, at: Date())
     publish()
   }
 
@@ -163,47 +207,72 @@ final class NearbySessionManager: NSObject {
     policy.flushSamples()
     policy.solveIfDue(at: now)
     if policy.directionAppearsUnavailable, !collaborationStarted {
-      if policy.advanceHedge(at: now) != nil { rebuildSessions() }
+      if policy.advanceHedge(at: now) != nil {
+        rebuildSessions(cameraAssistance: policy.snapshot.bootstrapMode.usesCameraAssistance)
+      }
     }
-    for data in policy.drainOutbound() { await relay.sendNearbyEnvelope(data) }
+    for data in policy.drainOutboundTokens() {
+      guard let string = String(data: data, encoding: .utf8) else { continue }
+      await relay.sendNearbyToken(string)
+    }
+    for data in policy.drainOutboundRanging() { await relay.sendNearbyRanging(data) }
     publish()
   }
 
   private func reconcileSessions() {
     let plans: [NearbyPeerSessionPlan]
     do {
-      plans = try NearbySessionPlanner.plans(for: policy.snapshot.rangingPeers,
+      plans = try NearbySessionPlanner.plans(for: rosterPeers,
         tokens: policy.token(for:), mode: policy.snapshot.bootstrapMode,
         collaborationStarted: collaborationStarted)
     } catch {
       policy.fail(.cameraAssistanceRequiresCollaborationOff)
       return
     }
-    for plan in plans where sessions[plan.peerID] == nil { run(plan) }
+    for plan in plans {
+      let generation = policy.tokenGeneration(for: plan.peerID)
+      guard let session = sessions[plan.peerID],
+        runningGeneration[plan.peerID] != generation,
+        let peerToken = try? Self.deserialize(plan.token)
+      else { continue }
+      let configuration = NINearbyPeerConfiguration(peerToken: peerToken)
+      if sessionsUseCameraAssistance, NISession.deviceCapabilities.supportsCameraAssistance {
+        configuration.isCameraAssistanceEnabled = true
+      }
+      if configuration.isCameraAssistanceEnabled, let arSession {
+        session.setARSession(arSession)
+      }
+      configurations[plan.peerID] = configuration
+      session.run(configuration)
+      runningGeneration[plan.peerID] = generation
+    }
   }
 
-  private func rebuildSessions() {
+  /// Invalidates every session, rebuilds one per roster peer (new discovery
+  /// tokens are queued on the token lane), and re-runs any peer whose remote
+  /// token is already in. Used by the ordered hedge and by
+  /// `markCollaborationStarting` to drop camera assistance before collab.
+  private func rebuildSessions(cameraAssistance: Bool) {
     for session in sessions.values { session.invalidate() }
     sessions = [:]
     sessionPeers = [:]
+    configurations = [:]
+    runningGeneration = [:]
+    sessionsUseCameraAssistance = cameraAssistance
+      && NISession.deviceCapabilities.supportsCameraAssistance
+    var localTokens: [String: Data] = [:]
+    for peer in rosterPeers {
+      let session = NISession()
+      session.delegate = self
+      session.delegateQueue = .main
+      sessions[peer] = session
+      sessionPeers[ObjectIdentifier(session)] = peer
+      if let token = session.discoveryToken, let data = try? Self.serialize(token) {
+        localTokens[peer] = data
+      }
+    }
+    try? policy.recordLocalTokens(localTokens)
     reconcileSessions()
-  }
-
-  private func run(_ plan: NearbyPeerSessionPlan) {
-    guard let token = try? Self.deserialize(plan.token) else { return }
-    let configuration = NINearbyPeerConfiguration(peerToken: token)
-    if plan.cameraAssistance, NISession.deviceCapabilities.supportsCameraAssistance {
-      configuration.isCameraAssistanceEnabled = true
-    }
-    let session = NISession()
-    session.delegate = self
-    session.delegateQueue = .main
-    if configuration.isCameraAssistanceEnabled, let arSession {
-      session.setARSession(arSession)
-    }
-    sessions[plan.peerID] = session
-    sessionPeers[ObjectIdentifier(session)] = plan.peerID
-    session.run(configuration)
   }
 
   private func publish() {
@@ -233,12 +302,12 @@ extension NearbySessionManager: NISessionDelegate {
   nonisolated func session(_ session: NISession, didRemove nearbyObjects: [NINearbyObject],
     reason: NINearbyObject.RemovalReason
   ) {
-    // Timeouts re-run the same configuration; the peer token is unchanged.
+    // Timeouts re-run the stored configuration; the peer token is unchanged.
     Task { @MainActor in
       guard reason == .timeout, let peerID = self.sessionPeers[ObjectIdentifier(session)],
-        let token = self.policy.token(for: peerID), let peerToken = try? Self.deserialize(token)
+        let configuration = self.configurations[peerID]
       else { return }
-      session.run(NINearbyPeerConfiguration(peerToken: peerToken))
+      session.run(configuration)
     }
   }
 
@@ -259,11 +328,8 @@ extension NearbySessionManager: NISessionDelegate {
   nonisolated func sessionSuspensionEnded(_ session: NISession) {
     Task { @MainActor in
       guard let peerID = self.sessionPeers[ObjectIdentifier(session)],
-        let token = self.policy.token(for: peerID), let peerToken = try? Self.deserialize(token)
+        let configuration = self.configurations[peerID]
       else { return }
-      let configuration = NINearbyPeerConfiguration(peerToken: peerToken)
-      configuration.isCameraAssistanceEnabled = self.policy.snapshot.bootstrapMode.usesCameraAssistance
-        && !self.collaborationStarted && NISession.deviceCapabilities.supportsCameraAssistance
       session.run(configuration)
     }
   }
