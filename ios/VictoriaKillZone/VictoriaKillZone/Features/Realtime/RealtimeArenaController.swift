@@ -245,16 +245,18 @@ final class RealtimeArenaController: ObservableObject {
     }
   }
   /// ARKit collaboration deltas are transport bytes, not combat commands:
-  /// outbound archives ride the combat socket verbatim; inbound archives apply
-  /// to the AR session in receipt order through a single consumer. Other modes
-  /// get a finished stream and an apply path that fails closed, so the wiring
-  /// needs no mode check.
+  /// outbound archives ride the combat socket verbatim, chunked by
+  /// CollabChunkCodec when they exceed the relay's single-message bound;
+  /// inbound frames reassemble per sender and apply to the AR session in
+  /// receipt order through a single consumer. Other modes get a finished
+  /// stream and an apply path that fails closed, so the wiring needs no
+  /// mode check.
   private func wireCollaboration() {
-    var inbound: AsyncStream<Data>.Continuation!
+    var inbound: AsyncStream<(playerId: String, data: Data)>.Continuation!
     // Deltas must apply in order; a dropping policy can lose the critical map
     // data a merge needs. The worker already bounds the byte rate upstream.
-    let inboundStream = AsyncStream<Data>(bufferingPolicy: .unbounded) { inbound = $0 }
-    combat.onCollaboration = { _, data in inbound.yield(data) }
+    let inboundStream = AsyncStream<(playerId: String, data: Data)>(bufferingPolicy: .unbounded) { inbound = $0 }
+    combat.onCollaboration = { playerId, data in inbound.yield((playerId: playerId, data: data)) }
     combat.onNearbyToken = { [weak self] id, data in
       self?.rendezvous.receivePeerToken(playerID: id, data: data)
     }
@@ -265,16 +267,31 @@ final class RealtimeArenaController: ObservableObject {
     collabTask = Task { [weak self] in
       await withTaskGroup(of: Void.self) { group in
         group.addTask {
-          for await data in inboundStream {
+          var assembler = CollabTransferAssembler()
+          for await element in inboundStream {
             if Task.isCancelled {return}
-            await self?.frameProvider?.applyCollaboration(data)
+            switch assembler.ingest(element.data, from: element.playerId) {
+            case .passthrough(let payload), .completed(let payload):
+              await self?.frameProvider?.applyCollaboration(payload)
+            case .pending, .dropped:
+              continue
+            }
           }
         }
         if let outbound {
           group.addTask {
+            var transferID: UInt32 = 0
             for await data in outbound {
               if Task.isCancelled {return}
-              await self?.combat.sendCollaboration(data)
+              transferID &+= 1
+              let frames = CollabChunkCodec.frames(data, transferID: transferID)
+              for (index, frame) in frames.enumerated() {
+                if Task.isCancelled {return}
+                await self?.combat.sendCollaboration(frame)
+                if frames.count > 1, index < frames.count - 1 {
+                  try? await Task.sleep(for: CollabChunkCodec.interChunkDelay)
+                }
+              }
             }
           }
         }

@@ -61,6 +61,10 @@ const base64 = (x: unknown): x is string =>
   typeof x === "string" && x.length >= 1 && x.length <= LIMITS.collabBytes &&
   x.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(x);
 
+const base64Token = (x: unknown): x is string =>
+  typeof x === "string" && x.length >= 1 && x.length <= LIMITS.niTokenBytes &&
+  x.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(x);
+
 /** Reject malformed, oversized and identity-bearing client input before queueing. */
 export function parseClientMessage(raw: string): ClientMessage | null {
   const bytes = new TextEncoder().encode(raw).length;
@@ -80,6 +84,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   if (x.type === "resume" && keys(x, "type afterEventSequence") && integer(x.afterEventSequence)) return {type:"resume",afterEventSequence:x.afterEventSequence};
   if (x.type === "ping" && keys(x, "type nonce clientSentAtMs") && id(x.nonce) && time(x.clientSentAtMs)) return {type:"ping",nonce:x.nonce,clientSentAtMs:x.clientSentAtMs};
   if (x.type === "collab" && keys(x, "type data") && base64(x.data)) return {type:"collab",data:x.data};
+  if (x.type === "niToken" && keys(x, "type token") && base64Token(x.token)) return {type:"niToken",token:x.token};
   return null;
 }
 

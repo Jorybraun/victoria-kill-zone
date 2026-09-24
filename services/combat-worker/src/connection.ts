@@ -21,6 +21,8 @@ export class Connection {
   private collabRefillAt: number;
   private collabIngestTokens = 512 * 1024;
   private collabIngestRefillAt: number;
+  private niTokens = 4;
+  private niRefillAt: number;
   private unconfirmedCollabBytes = 0;
 
   constructor(readonly socket: WebSocket, readonly playerId: string, eventSequence: number, now: number) {
@@ -32,6 +34,7 @@ export class Connection {
     this.pingRefillAt = now;
     this.collabRefillAt = now;
     this.collabIngestRefillAt = now;
+    this.niRefillAt = now;
   }
 
   admitCommand(now: number): boolean {
@@ -75,6 +78,15 @@ export class Connection {
     this.collabIngestRefillAt = now;
     if (this.collabIngestTokens < bytes) return false;
     this.collabIngestTokens -= bytes;
+    return true;
+  }
+
+  /** Discovery tokens are small but must stay cheap: a few bursts, then one per second. */
+  admitNiToken(now: number): boolean {
+    this.niTokens = Math.min(4, this.niTokens + Math.max(0, now - this.niRefillAt) * 1 / 1000);
+    this.niRefillAt = now;
+    if (this.niTokens < 1) return false;
+    this.niTokens -= 1;
     return true;
   }
 
