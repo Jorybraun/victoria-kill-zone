@@ -78,6 +78,8 @@
 		D2D197558054D5270A7ED55D /* RealtimeArenaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9C7DEF4D5729F12A73E75A0 /* RealtimeArenaView.swift */; };
 		750F8F9F7CDFBC5A444C21CC /* RealtimeBodyAssociation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58CF9FCE4EDB0A5CBCD84D65 /* RealtimeBodyAssociation.swift */; };
 		348AA1BCA2508640D26C53F6 /* RealtimeMapCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4436D26A42A9EB7B9E2685D /* RealtimeMapCoordinator.swift */; };
+		3EA1B2C4D5E6F7A8B9C0D001 /* NearbyRendezvous.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EA1B2C4D5E6F7A8B9C0D002 /* NearbyRendezvous.swift */; };
+		3EA1B2C4D5E6F7A8B9C0D003 /* NearbyRendezvousTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EA1B2C4D5E6F7A8B9C0D004 /* NearbyRendezvousTests.swift */; };
 		5A1E2F3B4C5D6E7F809012A1 /* MatchReportClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E2F3B4C5D6E7F809012A2 /* MatchReportClient.swift */; };
 		5A1E2F3B4C5D6E7F809012B1 /* ReportProblemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1E2F3B4C5D6E7F809012B2 /* ReportProblemView.swift */; };
 		1DB5B4B4D2B49BF70D18B8A3 /* CombatMapClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04C88A00F5B2790C2E623BB4 /* CombatMapClient.swift */; };
@@ -227,6 +229,7 @@
 		F9B798B7EF9951EE79134342 /* SkeletonAnatomyLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Game/SkeletonAnatomyLayout.swift"; sourceTree = SOURCE_ROOT; };
 		75F5CA82F730B995EB944A1E /* SkeletonAnatomyModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Game/SkeletonAnatomyModel.swift"; sourceTree = SOURCE_ROOT; };
 		7DB8AACEB1ED5F0006EAA860 /* RealtimeArenaController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Realtime/RealtimeArenaController.swift"; sourceTree = SOURCE_ROOT; };
+		3EA1B2C4D5E6F7A8B9C0D002 /* NearbyRendezvous.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Realtime/NearbyRendezvous.swift"; sourceTree = SOURCE_ROOT; };
 		28F2C6117B8ADD8A66DBF3A5 /* RealtimeArenaPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Realtime/RealtimeArenaPolicy.swift"; sourceTree = SOURCE_ROOT; };
 		C9C7DEF4D5729F12A73E75A0 /* RealtimeArenaView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Realtime/RealtimeArenaView.swift"; sourceTree = SOURCE_ROOT; };
 		58CF9FCE4EDB0A5CBCD84D65 /* RealtimeBodyAssociation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Realtime/RealtimeBodyAssociation.swift"; sourceTree = SOURCE_ROOT; };
@@ -259,6 +262,7 @@
 		A6C986853F463804D155B20C /* DuelFrameReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Targeting/SharedArena/DuelFrame/DuelFrameReference.swift"; sourceTree = SOURCE_ROOT; };
 		A43F94A905291F911D90EEC2 /* DuelFrameReferenceCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Targeting/SharedArena/DuelFrame/DuelFrameReferenceCapture.swift"; sourceTree = SOURCE_ROOT; };
 		51A328C06B90F5FB34E92C96 /* RealtimeArenaPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/RealtimeArenaPresentationTests.swift"; sourceTree = SOURCE_ROOT; };
+		3EA1B2C4D5E6F7A8B9C0D004 /* NearbyRendezvousTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/NearbyRendezvousTests.swift"; sourceTree = SOURCE_ROOT; };
 		9D85D95F0315DB9AE5CC8BF1 /* RealtimeCommandStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/RealtimeCommandStateTests.swift"; sourceTree = SOURCE_ROOT; };
 		8BAE51F8DB45B928F47CF5C5 /* RealtimeReferencePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZone/Features/Realtime/RealtimeReferencePanel.swift"; sourceTree = SOURCE_ROOT; };
 		14305D579AAE59E0E85DAE0B /* DuelFrameReferenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VictoriaKillZoneTests/DuelFrameReferenceTests.swift"; sourceTree = SOURCE_ROOT; };
@@ -451,6 +455,7 @@
 				AE118898F7AE97FE650FE79F /* GameCreditsView.swift */,
 				04C88A00F5B2790C2E623BB4 /* CombatMapClient.swift */,
 				E4436D26A42A9EB7B9E2685D /* RealtimeMapCoordinator.swift */,
+				3EA1B2C4D5E6F7A8B9C0D002 /* NearbyRendezvous.swift */,
 				58CF9FCE4EDB0A5CBCD84D65 /* RealtimeBodyAssociation.swift */,
 				C9C7DEF4D5729F12A73E75A0 /* RealtimeArenaView.swift */,
 				5A1E2F3B4C5D6E7F809012B2 /* ReportProblemView.swift */,
@@ -530,6 +535,7 @@
 				14305D579AAE59E0E85DAE0B /* DuelFrameReferenceTests.swift */,
 				9D85D95F0315DB9AE5CC8BF1 /* RealtimeCommandStateTests.swift */,
 				51A328C06B90F5FB34E92C96 /* RealtimeArenaPresentationTests.swift */,
+				3EA1B2C4D5E6F7A8B9C0D004 /* NearbyRendezvousTests.swift */,
 				906C91F1A24456B5EF4BE93F /* HitSkeletonRevealTests.swift */,
 				54AC9E7C962E58E48707118D /* RealtimeTargetProjectionTests.swift */,
 				A861BBF8C2EC771D7454002F /* VoiceFireControllerTests.swift */,
@@ -740,6 +746,7 @@
 				D2D197558054D5270A7ED55D /* RealtimeArenaView.swift in Sources */,
 				810E61634284BC98C00CE3C1 /* RealtimeArenaPolicy.swift in Sources */,
 				4DD1C577B38511C0F027B219 /* RealtimeArenaController.swift in Sources */,
+				3EA1B2C4D5E6F7A8B9C0D001 /* NearbyRendezvous.swift in Sources */,
 				E9B93C0EF7644DA11810C646 /* SkeletonAnatomyModel.swift in Sources */,
 				87D85F48E4703E9E9AD23519 /* SkeletonAnatomyLayout.swift in Sources */,
 				5C5DB7C340E880F6A3E05BDF /* RealtimeCombatFX.swift in Sources */,
@@ -812,6 +819,7 @@
 				851830F77AA69868E5AA5AD8 /* SavedArenaStoreTests.swift in Sources */,
 				933A12D847D2BAC0F3EDF2CF /* RealtimeCommandStateTests.swift in Sources */,
 				D64C2EA99F5FA44CC8866631 /* RealtimeArenaPresentationTests.swift in Sources */,
+				3EA1B2C4D5E6F7A8B9C0D003 /* NearbyRendezvousTests.swift in Sources */,
 				DE5CB3FA4C8593E164312224 /* HitSkeletonRevealTests.swift in Sources */,
 				28FBA81B24C9D9A3909398D9 /* RealtimeTargetProjectionTests.swift in Sources */,
 				017A42EB194A7C4B9153B0FC /* VoiceFireControllerTests.swift in Sources */,

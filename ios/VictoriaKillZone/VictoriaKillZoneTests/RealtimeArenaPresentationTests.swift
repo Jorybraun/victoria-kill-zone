@@ -125,6 +125,39 @@ final class RealtimeArenaPresentationTests: XCTestCase {
     XCTAssertEqual(RealtimeArenaPresentation.reloadProgress(until: 2000, duration: 1250, now: .nan), 0)
   }
 
+  func testRendezvousCopyNamesTheRitualWithoutLegacySetupWords() {
+    let phases: [NearbyRendezvousPhase] = [
+      .awaitingTokens(received: 1, expected: 3), .pointing(solved: 0, expected: 3),
+      .retryFacing(pending: 2), .solved(count: 3), .permissionDenied,
+    ]
+    for phase in phases {
+      let setup = RealtimeArenaPresentation.RendezvousSetup(phase: phase)
+      XCTAssertFalse(setup.guidance.lowercased().contains("share"), "\(phase)")
+      XCTAssertFalse(setup.guidance.lowercased().contains("host"), "\(phase)")
+    }
+    for phase in [NearbyRendezvousPhase.pointing(solved: 0, expected: 2), .solved(count: 2),
+      .retryFacing(pending: 1), .awaitingTokens(received: 0, expected: 2)] {
+      let setup = RealtimeArenaPresentation.RendezvousSetup(phase: phase)
+      XCTAssertFalse(setup.guidance.lowercased().contains("scan"), "\(phase)")
+    }
+  }
+
+  func testRendezvousProgressAndRecoveryFlags() {
+    XCTAssertTrue(RealtimeArenaPresentation.RendezvousSetup(phase: .awaitingTokens(received: 1, expected: 2)).showsProgress)
+    XCTAssertTrue(RealtimeArenaPresentation.RendezvousSetup(phase: .pointing(solved: 0, expected: 2)).showsProgress)
+    XCTAssertTrue(RealtimeArenaPresentation.RendezvousSetup(phase: .retryFacing(pending: 1)).showsRetry)
+    let denied = RealtimeArenaPresentation.RendezvousSetup(phase: .permissionDenied)
+    XCTAssertTrue(denied.showsRetry); XCTAssertTrue(denied.showsSettings)
+    XCTAssertNil(RealtimeArenaPresentation.rendezvousSetup(phase: .inactive))
+    XCTAssertNil(RealtimeArenaPresentation.rendezvousSetup(phase: .unsupported))
+    XCTAssertNotNil(RealtimeArenaPresentation.rendezvousSetup(phase: .solved(count: 2)))
+    let lost = RealtimeArenaPresentation.RendezvousSetup(phase: .sessionLost)
+    XCTAssertEqual(lost.title, "Nearby Interaction dropped")
+    XCTAssertTrue(lost.showsRetry); XCTAssertFalse(lost.showsSettings)
+    XCTAssertFalse(lost.guidance.lowercased().contains("scan"))
+    XCTAssertFalse(lost.guidance.lowercased().contains("host"))
+  }
+
   private func field(owner: String, start: Double, end: Double) -> CombatWire.SlowField {
     .init(fieldId: "\(owner)-\(start)", ownerId: owner, center: [0, 0, 0], radius: 2,
       startsAtMs: start, endsAtMs: end, scale: 0.25)

@@ -39,6 +39,33 @@ final class RealtimeCombatTests: XCTestCase {
     XCTAssertNil(command["targetPlayerId"])
   }
 
+  func testNITokenClientMessageEncodesTaggedBase64() throws {
+    let token=Data([1,2,3,4])
+    let data=try JSONEncoder().encode(CombatWire.ClientMessage.niToken(token))
+    let root=try XCTUnwrap(JSONSerialization.jsonObject(with:data) as? [String:Any])
+    XCTAssertEqual(root["type"] as? String,"niToken")
+    XCTAssertEqual(root["token"] as? String,token.base64EncodedString())
+    XCTAssertNil(root["data"]); XCTAssertNil(root["playerId"]); XCTAssertNil(root["envelope"])
+  }
+
+  func testNITokenServerMessageDecodesAndRejectsBadBase64() throws {
+    let payload="{\"type\":\"niToken\",\"playerId\":\"p2\",\"token\":\"\(Data([9,8]).base64EncodedString())\"}"
+    let message=try JSONDecoder().decode(CombatWire.ServerMessage.self,from:Data(payload.utf8))
+    guard case .niToken(let playerId,let data)=message else {return XCTFail("Expected niToken relay")}
+    XCTAssertEqual(playerId,"p2"); XCTAssertEqual(data,Data([9,8]))
+    XCTAssertThrowsError(try JSONDecoder().decode(CombatWire.ServerMessage.self,
+      from:Data("{\"type\":\"niToken\",\"playerId\":\"p2\",\"token\":\"!!!\"}".utf8)))
+  }
+
+  func testNITokenValidationBoundsPayloadAndSender() {
+    XCTAssertTrue(CombatWireValidation.valid(.niToken(playerId:"p2",
+      data:Data(repeating:1,count:CombatWire.maximumNITokenBytes))))
+    XCTAssertFalse(CombatWireValidation.valid(.niToken(playerId:"p2",data:Data())))
+    XCTAssertFalse(CombatWireValidation.valid(.niToken(playerId:"p2",
+      data:Data(repeating:1,count:CombatWire.maximumNITokenBytes + 1))))
+    XCTAssertFalse(CombatWireValidation.valid(.niToken(playerId:"",data:Data([1]))))
+  }
+
   func testEventBatchIsAtomicAndReplayDoesNotRepeatPresentation() throws {
     var replica=CombatReplica(matchID:"match",localPlayerID:"p1")
     try replica.replace(Self.snapshot(),eventSequence:0,clientSequence:0)

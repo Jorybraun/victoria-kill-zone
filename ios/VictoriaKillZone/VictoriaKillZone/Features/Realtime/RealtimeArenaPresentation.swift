@@ -51,6 +51,62 @@ enum RealtimeArenaPresentation {
     }
   }
 
+  /// NI rendezvous (ADR 0012): permission, token exchange and the "point at
+  /// your squad" ritual replace co-view guidance during collaborative setup.
+  struct RendezvousSetup: Equatable {
+    let title: String
+    let guidance: String
+    let showsProgress: Bool
+    let showsRetry: Bool
+    let showsSettings: Bool
+
+    init(phase: NearbyRendezvousPhase) {
+      var title = "", guidance = ""
+      var showsProgress = false, showsRetry = false, showsSettings = false
+      switch phase {
+      case .awaitingPermission:
+        title = "Nearby Interaction"
+        guidance = "Allow Nearby Interaction so the phones can find each other — no scan needed."
+        showsProgress = true
+      case .permissionDenied:
+        title = "Nearby Interaction is off"
+        guidance = "Pew Pew uses Nearby Interaction to line up the phones. Turn it on in Settings, then retry."
+        showsRetry = true; showsSettings = true
+      case .sessionLost:
+        title = "Nearby Interaction dropped"
+        guidance = "The phones lost their Nearby Interaction link. Retry to reconnect."
+        showsRetry = true
+      case .awaitingTokens(let received, let expected):
+        title = "Finding your squad"
+        guidance = "Waiting for the other phones to join (\(received)/\(expected))…"
+        showsProgress = true
+      case .pointing:
+        title = "Point at your squad"
+        guidance = "Stand 1–4 m apart and aim the back of your phone at each other for about 3 seconds."
+        showsProgress = true
+      case .retryFacing(let pending):
+        title = "Turn to face each other"
+        guidance = "Turn to face each other — \(pending) phone(s) still need a clear line of sight. Keep the back cameras pointed at one another."
+        showsRetry = true
+      case .solved(let count):
+        title = "Squad locked"
+        guidance = "Aligned with \(count) player(s). Collaborative mapping keeps refining while you play."
+      case .inactive, .unsupported:
+        break
+      }
+      self.title = title; self.guidance = guidance
+      self.showsProgress = showsProgress; self.showsRetry = showsRetry; self.showsSettings = showsSettings
+    }
+  }
+
+  /// Nil for phases with no player-facing setup surface.
+  static func rendezvousSetup(phase: NearbyRendezvousPhase) -> RendezvousSetup? {
+    switch phase {
+    case .inactive, .unsupported: return nil
+    default: return RendezvousSetup(phase: phase)
+    }
+  }
+
   static func showsScanControls(isHost: Bool, usesSavedArena: Bool, usesCollaborativeFrame: Bool,
     stage: RealtimeArenaStage, scanTimedOut: Bool) -> Bool
   {

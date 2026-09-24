@@ -297,7 +297,9 @@ struct RealtimeArenaView: View {
             .font(.subheadline).foregroundStyle(VKZPalette.textMuted)
           Text(stageTitle).font(.headline)
           if controller.usesQuickPlayFrame {
-            Text(controller.usesCollaborativeFrame ? "Aligned by live peer merge" : "Aligned by shared scan (approximate)")
+            Text(controller.usesCollaborativeFrame
+              ? (controller.usesNearbyRendezvous ? "Aligned by Nearby Interaction + live peer merge" : "Aligned by live peer merge")
+              : "Aligned by shared scan (approximate)")
               .font(.caption).foregroundStyle(VKZPalette.textMuted)
           }
           RealtimeRosterStrip(players: controller.snapshot?.players ?? [], localPlayerID: controller.session.playerId)
@@ -345,7 +347,8 @@ struct RealtimeArenaView: View {
         Spacer(minLength: 0)
         if [.connecting, .waitingForMap, .transferringMap, .relocalizing, .reconnecting].contains(controller.stage)
           || (controller.usesQuickPlayFrame && controller.stage == .paused && controller.frame.stage == .degraded)
-          || (controller.usesCollaborativeFrame && collaborativeSetup?.showsProgress == true) {
+          || (controller.usesCollaborativeFrame && collaborativeSetup?.showsProgress == true)
+          || rendezvousSetup?.showsProgress == true {
           ProgressView().tint(.white)
         }
       }
@@ -387,6 +390,15 @@ struct RealtimeArenaView: View {
       if controller.connectionIssue != nil || controller.stage == .reconnecting {
         Button("Retry connection", action: controller.retryConnection).buttonStyle(VKZSecondaryButtonStyle())
       }
+      if rendezvousSetup?.showsRetry == true {
+        Button("Retry", action: controller.retryRendezvous).buttonStyle(VKZSecondaryButtonStyle())
+      }
+      #if os(iOS)
+      if rendezvousSetup?.showsSettings == true {
+        Button("Open Settings") {if let url = URL(string: UIApplication.openSettingsURLString) {openURL(url)}}
+          .font(.subheadline.bold()).frame(minHeight: 44)
+      }
+      #endif
       if RealtimeArenaPresentation.showsScanControls(isHost: controller.isHost,
         usesSavedArena: controller.savedArenaName != nil,
         usesCollaborativeFrame: controller.usesCollaborativeFrame,
@@ -429,6 +441,7 @@ struct RealtimeArenaView: View {
     if referenceSetup.isVisible && controller.referenceState == .capturing {
       return "Hold still while the reference is measured."
     }
+    if let rendezvousSetup {return rendezvousSetup.guidance}
     if let collaborativeSetup {return collaborativeSetup.guidance}
     if let initialScan {return initialScan.guidance}
     if let name = controller.savedArenaName, [.mapping, .mapReady, .relocalizing].contains(controller.stage) {
@@ -489,6 +502,7 @@ struct RealtimeArenaView: View {
   private var stageTitle: String {
     if controller.connectionIssue != nil {return "Connection needs attention"}
     if referenceSetup.isVisible {return "Set up play area"}
+    if let rendezvousSetup {return rendezvousSetup.title}
     if let collaborativeSetup {return collaborativeSetup.title}
     if controller.usesQuickPlayFrame {
       if controller.stage == .mapping {return "Scan the area"}
@@ -511,6 +525,13 @@ struct RealtimeArenaView: View {
   private var referenceSetup: RealtimeArenaPresentation.ReferenceSetup {
     .init(stage: controller.stage, isHost: controller.isHost, usesSavedArena: controller.savedArenaName != nil,
       usesQuickPlayFrame: controller.usesQuickPlayFrame)
+  }
+  /// The NI rendezvous ritual owns the same setup stages while its phase is
+  /// live; check it before the co-view fallback copy (ADR 0012 §2).
+  private var rendezvousSetup: RealtimeArenaPresentation.RendezvousSetup? {
+    guard controller.usesNearbyRendezvous,
+      [.mapping, .mapReady, .relocalizing, .awaitingMembers].contains(controller.stage) else {return nil}
+    return RealtimeArenaPresentation.rendezvousSetup(phase: controller.rendezvousPhase)
   }
   /// Collaborative Quick Play copy only replaces the setup stages it owns;
   /// live-match and generic pause/reconnect states keep the shared wording.

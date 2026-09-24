@@ -50,6 +50,8 @@
 	<string>Pew Pew connects directly to a nearby player's phone to share the arena frame during a match.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Pew Pew uses the microphone only when you opt in to Voice Fire and listen for the phrase “pew pew.” Audio and transcripts are not stored.</string>
+	<key>NSNearbyInteractionUsageDescription</key>
+	<string>Pew Pew uses Nearby Interaction to measure where the other players' phones are so the arena lines up without scanning the room.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Pew Pew uses speech recognition only when you opt in to Voice Fire and recognize the phrase “pew pew.”</string>
 	<key>UILaunchScreen</key>
