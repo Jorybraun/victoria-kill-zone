@@ -16,8 +16,6 @@ enum ArenaLinkMessage: Equatable, Sendable {
   /// One shot, broadcast once by the shooter; receivers dedup by `shotId`.
   case shotTracer(ArenaShotTracer)
   case shotRetracted(shotId: String)
-  /// Authenticated, local-only measurement protocol; never combat admission.
-  case experiment(Data)
 
   var kind: UInt8 {
     switch self {
@@ -28,7 +26,6 @@ enum ArenaLinkMessage: Equatable, Sendable {
     case .anchorSet: 5
     case .shotTracer: 6
     case .shotRetracted: 7
-    case .experiment: 8
     }
   }
 }
@@ -54,7 +51,6 @@ enum ArenaLinkBodyCodecError: Error, Equatable, Sendable {
 }
 
 enum ArenaLinkBodyCodec {
-  static let experimentBodyLimit = 4096
   static func encode(_ message: ArenaLinkMessage) throws -> (kind: UInt8, body: Data) {
     let payload: Data
     switch message {
@@ -67,11 +63,6 @@ enum ArenaLinkBodyCodec {
         throw ArenaLinkBodyCodecError.malformedPayload
       }
     case .collaboration(let data), .worldMap(let data):
-      payload = data
-    case .experiment(let data):
-      guard !data.isEmpty, data.count <= experimentBodyLimit else {
-        throw ArenaLinkBodyCodecError.malformedPayload
-      }
       payload = data
     case .anchorSet(let anchors):
       payload = try JSONEncoder().encode(anchors)
@@ -134,11 +125,6 @@ enum ArenaLinkBodyCodec {
         throw ArenaLinkBodyCodecError.malformedPayload
       }
       return message
-    case 8:
-      guard !body.isEmpty, body.count <= experimentBodyLimit else {
-        throw ArenaLinkBodyCodecError.malformedPayload
-      }
-      return .experiment(body)
     default:
       throw ArenaLinkBodyCodecError.unknownKind
     }
@@ -212,10 +198,6 @@ enum ArenaLinkCodec {
         $0.loadUnaligned(as: UInt32.self)
       }.littleEndian)
       guard length >= 1, length <= maxPayloadLength else {
-        throw ArenaLinkCodecError.payloadTooLarge
-      }
-      if buffer.count > lengthPrefixBytes, buffer[lengthPrefixBytes] == 8,
-        length > ArenaLinkBodyCodec.experimentBodyLimit + 1 {
         throw ArenaLinkCodecError.payloadTooLarge
       }
       guard buffer.count >= lengthPrefixBytes + length else { break }

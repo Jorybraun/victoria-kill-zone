@@ -119,12 +119,6 @@ struct HomeView: View {
       #endif
 
       #if DEBUG
-      NavigationLink("SHARED ORIGIN EXPERIMENT") {
-        SharedArenaHarnessView()
-      }
-      .font(.caption.weight(.semibold).monospaced())
-      .foregroundStyle(VKZPalette.telemetry)
-
       #if os(iOS) && canImport(SceneKit)
       NavigationLink("PROJECTILE REPLAY · SYNTHETIC") {
         CombatReplayView()
