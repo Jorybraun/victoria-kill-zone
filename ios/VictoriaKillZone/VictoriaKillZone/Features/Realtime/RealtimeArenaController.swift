@@ -461,8 +461,11 @@ final class RealtimeArenaController: ObservableObject {
   /// already gates on host role, every member connected, an unstarted round,
   /// and no pending start command, so a pause/reconnect cannot re-fire once
   /// `roundStartedAtMs` is set.
+  private var lastAutoBegin: Date?
   private func autoBeginIfReady() {
     guard usesSighting, eligibility.begin else {return}
+    if let last = lastAutoBegin, now.timeIntervalSince(last) < 2 {return}
+    lastAutoBegin = now
     beginRound()
   }
   private func tick() {
