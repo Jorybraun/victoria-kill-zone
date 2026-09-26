@@ -217,8 +217,10 @@ struct RealtimeArenaView: View {
       HStack(spacing: 10) {
         abilityButton(title: (player?.shield.activeUntilMs ?? 0) > time ? "Lower shield" : "Shield", icon: "shield.lefthalf.filled",
           detail: shieldDetail(at: time), enabled: eligibility.shield, action: controller.toggleShield)
-        abilityButton(title: "Slow field", icon: "clock.arrow.2.circlepath", detail: fieldStatus.detail,
-          enabled: eligibility.slowField, action: controller.activateSlowField)
+        if !controller.usesSighting {
+          abilityButton(title: "Slow field", icon: "clock.arrow.2.circlepath", detail: fieldStatus.detail,
+            enabled: eligibility.slowField, action: controller.activateSlowField)
+        }
       }
       HStack(alignment: .bottom, spacing: 12) {
         HStack(spacing: 8) {
@@ -311,7 +313,9 @@ struct RealtimeArenaView: View {
           }
           VStack(alignment: .leading, spacing: 6) {
             Label("Shield · \(shieldDetail(at: time))", systemImage: "shield.lefthalf.filled")
-            Label("Slow field · \(fieldStatus.detail)", systemImage: "clock.arrow.2.circlepath")
+            if !controller.usesSighting {
+              Label("Slow field · \(fieldStatus.detail)", systemImage: "clock.arrow.2.circlepath")
+            }
           }
           .font(.subheadline).foregroundStyle(VKZPalette.telemetry)
           if controller.stage != .running {Text(guidance).font(.subheadline).foregroundStyle(VKZPalette.textMuted)}
