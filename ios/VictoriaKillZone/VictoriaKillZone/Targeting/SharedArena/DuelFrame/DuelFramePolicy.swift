@@ -21,6 +21,7 @@ struct DuelFramePolicy: Sendable {
   private var lastObservationAt: Date?
   private var goodResiduals = 0
   private var lastResidualAt: Date?
+  private var sawPeerMerge = false
 
   var operationToken: DuelFrameOperationToken? {
     snapshot.epoch.map { DuelFrameOperationToken(generation: generation, epoch: $0) }
@@ -57,6 +58,20 @@ struct DuelFramePolicy: Sendable {
     snapshot = DuelFrameSnapshot(stage: .relocalizingWorld, epoch: map.epoch, frameID: map.frameID,
       mode: mode)
     phaseDeadline = now.addingTimeInterval(Self.relocalizationTimeout)
+  }
+
+  /// Accepts a UWB rendezvous solve for the current epoch. In collaborative
+  /// mode the seed satisfies the peer-merge gate on its own (ADR 0012 §4);
+  /// a participant anchor arriving later only upgrades the evidence.
+  mutating func recordNearbySeed(_ seed: DuelFrameNearbySeed, at now: Date) throws {
+    guard snapshot.mode.acceptsNearbySeed else { throw DuelFrameFailure.invalidResidual }
+    guard snapshot.epoch == seed.epoch, seed.epoch == latestEpoch else { throw DuelFrameFailure.staleEpoch }
+    guard snapshot.stage != .unaligned, snapshot.stage != .lost else { throw DuelFrameFailure.mapNotReady }
+    guard seed.isValid, seed.solvedAt <= now.addingTimeInterval(1),
+      snapshot.nearbySeed.map({ seed.solvedAt >= $0.solvedAt }) ?? true
+    else { throw DuelFrameFailure.invalidResidual }
+    snapshot.nearbySeed = seed
+    snapshot.alignmentEvidence = Self.evidence(seed: true, merged: sawPeerMerge)
   }
 
   /// Returns true exactly once when the provider must run the body configuration.
@@ -103,7 +118,10 @@ struct DuelFramePolicy: Sendable {
 
     if snapshot.stage == .relocalizingWorld || snapshot.stage == .relocalizingBody {
       if observation.tracking == .relocalizing { sawRelocalizing = true }
+      if observation.mergedPeers > 0 { sawPeerMerge = true }
       let mergeReady = !snapshot.mode.requiresPeerMerge || observation.mergedPeers > 0
+        || snapshot.nearbySeed != nil
+      snapshot.alignmentEvidence = Self.evidence(seed: snapshot.nearbySeed != nil, merged: sawPeerMerge)
       let relocalizationSeen = sawRelocalizing || !snapshot.mode.requiresRelocalizingEvidence
       guard relocalizationSeen, mergeReady, observation.tracking == .normal,
         let pose = observation.pose, pose.isValid, Self.isFresh(pose.capturedAt, at: now)
@@ -111,7 +129,7 @@ struct DuelFramePolicy: Sendable {
       if snapshot.stage == .relocalizingWorld {
         if !snapshot.mode.usesBodyPhase {
           snapshot.stage = .aligned
-          snapshot.localPose = pose
+          snapshot.localPose = Self.hostFramePose(pose, seed: snapshot.nearbySeed)
           phaseDeadline = nil
           sawRelocalizing = false
           return false
@@ -122,11 +140,15 @@ struct DuelFramePolicy: Sendable {
         return true
       }
       snapshot.stage = .awaitingResidual
-      snapshot.localPose = pose
+      snapshot.localPose = Self.hostFramePose(pose, seed: snapshot.nearbySeed)
       phaseDeadline = nil
       return false
     }
 
+    if observation.mergedPeers > 0, !sawPeerMerge {
+      sawPeerMerge = true
+      snapshot.alignmentEvidence = Self.evidence(seed: snapshot.nearbySeed != nil, merged: true)
+    }
     guard observation.tracking == .normal, let pose = observation.pose, pose.isValid,
       Self.isFresh(pose.capturedAt, at: now)
     else {
@@ -144,7 +166,7 @@ struct DuelFramePolicy: Sendable {
       }
       return false
     }
-    snapshot.localPose = pose
+    snapshot.localPose = Self.hostFramePose(pose, seed: snapshot.nearbySeed)
     if !snapshot.mode.usesBodyPhase && snapshot.stage != .awaitingResidual {
       snapshot.stage = .aligned
       snapshot.failure = nil
@@ -213,6 +235,18 @@ struct DuelFramePolicy: Sendable {
     resetEvidence()
   }
 
+  /// Observation poses arrive in the local ARKit frame; when an NI seed
+  /// exists, the shared-frame pose is the observation mapped through
+  /// `localToHostFrame`. An ARKit merge does not move the local origin and a
+  /// refinement updates the seed rather than switching frames, so the seed
+  /// applies at every store, not only at alignment time (ADR 0012 §4).
+  static func hostFramePose(_ pose: DuelFramePose, seed: DuelFrameNearbySeed?) -> DuelFramePose {
+    guard let seed else { return pose }
+    return DuelFramePose(
+      columnMajor: seed.localToHostFrame.apply(toColumnMajor: pose.columnMajor),
+      capturedAt: pose.capturedAt, frameTimestamp: pose.frameTimestamp)
+  }
+
   static func isFresh(_ date: Date, at now: Date) -> Bool {
     let age = now.timeIntervalSince(date)
     return age.isFinite && age >= 0 && age <= maximumSampleAge
@@ -224,6 +258,15 @@ struct DuelFramePolicy: Sendable {
     case .limited: .trackingLimited
     case .relocalizing: .relocalizing
     case .normal: isMapped ? .ready : .mapping
+    }
+  }
+
+  private static func evidence(seed: Bool, merged: Bool) -> DuelFrameAlignmentEvidence {
+    switch (seed, merged) {
+    case (true, true): .nearbySeedAndPeerMerge
+    case (true, false): .nearbySeed
+    case (false, true): .peerMerge
+    case (false, false): .none
     }
   }
 
@@ -248,5 +291,8 @@ struct DuelFramePolicy: Sendable {
     lastObservationAt = nil
     goodResiduals = 0
     lastResidualAt = nil
+    sawPeerMerge = false
+    snapshot.nearbySeed = nil
+    snapshot.alignmentEvidence = .none
   }
 }
