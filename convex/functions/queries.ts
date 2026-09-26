@@ -80,6 +80,8 @@ function snapshotMatch(match: Doc<"matches">): SnapshotMatch {
     ...(match.combatMode === undefined ? {} : {combatMode:match.combatMode,maxPlayers:match.maxPlayers}),
     ...(match.combatPhase === undefined ? {} : {combatPhase:match.combatPhase}),
     ...(match.combatGeometry === undefined ? {} : {combatGeometry:match.combatGeometry}),
+    ...(match.combatProjectionSequence === undefined ? {} : {combatProjectionSequence:match.combatProjectionSequence}),
+    ...(match.combatWorkerVersionTag === undefined ? {} : {combatWorkerVersionTag:match.combatWorkerVersionTag}),
   };
 }
 

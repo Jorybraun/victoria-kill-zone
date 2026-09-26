@@ -15,5 +15,17 @@
     "enabled": true,
     "head_sampling_rate": 0.1,
     "logs": { "invocation_logs": false }
+  },
+  "env": {
+    "staging": {
+      "name": "vkz-combat-staging",
+      "durable_objects": {
+        "bindings": [{ "name": "COMBAT_ROOMS", "class_name": "CombatRoom" }]
+      },
+      "version_metadata": { "binding": "VERSION_METADATA" },
+      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CombatRoom"] }],
+      "vars": { "CONVEX_URL": "" },
+      "secrets": { "required": ["COMBAT_TICKET_SECRET", "COMBAT_PROJECTION_SECRET"] }
+    }
   }
 }
