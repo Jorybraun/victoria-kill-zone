@@ -1,0 +1,260 @@
+{
+  "contract": "combat.v1",
+  "protocolVersion": 1,
+  "envelopes": [
+    {
+      "id": "fire-with-observation",
+      "message": {
+        "type": "command",
+        "envelope": {
+          "v": 1,
+          "commandId": "fixture-fire-observed",
+          "clientSequence": 1,
+          "authorityEpoch": 1,
+          "frameEpoch": 1,
+          "sentAtMs": 1000,
+          "command": {
+            "kind": "fire",
+            "shotId": "fixture-shot-observed",
+            "poseSequence": 3,
+            "origin": [0, 1.4, 0],
+            "direction": [0, 0, -1],
+            "observation": {
+              "targetPlayerId": "p-guest",
+              "capturedAtMs": 995,
+              "associationConfidence": 0.9,
+              "uncertaintyMeters": 0.02,
+              "colliders": [
+                { "id": "head", "kind": "sphere", "zone": "head", "center": [0, 1.6, -2], "radius": 0.12 },
+                { "id": "torso", "kind": "capsule", "zone": "torso", "a": [0, 1.0, -2], "b": [0, 1.5, -2], "radius": 0.2 },
+                { "id": "left-arm", "kind": "capsule", "zone": "limbs", "a": [0.3, 1.4, -2], "b": [0.5, 1.0, -2], "radius": 0.06 }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "fire-without-observation",
+      "message": {
+        "type": "command",
+        "envelope": {
+          "v": 1,
+          "commandId": "fixture-fire-blind",
+          "clientSequence": 2,
+          "authorityEpoch": 1,
+          "frameEpoch": 1,
+          "sentAtMs": 1050,
+          "command": {
+            "kind": "fire",
+            "shotId": "fixture-shot-blind",
+            "poseSequence": 4,
+            "origin": [0, 1.4, 0],
+            "direction": [0, 0, -1]
+          }
+        }
+      }
+    },
+    {
+      "id": "fire-null-observation",
+      "message": {
+        "type": "command",
+        "envelope": {
+          "v": 1,
+          "commandId": "fixture-fire-null-observation",
+          "clientSequence": 3,
+          "authorityEpoch": 1,
+          "frameEpoch": 1,
+          "sentAtMs": 1100,
+          "command": {
+            "kind": "fire",
+            "shotId": "fixture-shot-null",
+            "poseSequence": 5,
+            "origin": [0, 1.4, 0],
+            "direction": [0, 0, -1],
+            "observation": null
+          }
+        }
+      }
+    },
+    {
+      "id": "leave",
+      "message": {
+        "type": "command",
+        "envelope": {
+          "v": 1,
+          "commandId": "fixture-leave",
+          "clientSequence": 4,
+          "authorityEpoch": 1,
+          "frameEpoch": 1,
+          "sentAtMs": 1150,
+          "command": { "kind": "leave" }
+        }
+      }
+    },
+    {
+      "id": "ready",
+      "message": {
+        "type": "command",
+        "envelope": {
+          "v": 1,
+          "commandId": "fixture-ready",
+          "clientSequence": 5,
+          "authorityEpoch": 1,
+          "frameEpoch": 1,
+          "sentAtMs": 1200,
+          "command": {
+            "kind": "frameReady",
+            "ready": true,
+            "residualMeters": 0.01,
+            "residualDegrees": 0.1,
+            "clockUncertaintyMs": 5
+          }
+        }
+      }
+    }
+  ],
+  "rejected": [
+    {
+      "id": "envelope-unknown-key",
+      "message": {
+        "type": "command",
+        "envelope": {
+          "v": 1,
+          "commandId": "fixture-rejected-extra",
+          "clientSequence": 6,
+          "authorityEpoch": 1,
+          "frameEpoch": 1,
+          "sentAtMs": 1250,
+          "command": { "kind": "reload" },
+          "smuggled": true
+        }
+      }
+    },
+    {
+      "id": "envelope-wrong-version",
+      "message": {
+        "type": "command",
+        "envelope": {
+          "v": 99,
+          "commandId": "fixture-rejected-version",
+          "clientSequence": 7,
+          "authorityEpoch": 1,
+          "frameEpoch": 1,
+          "sentAtMs": 1300,
+          "command": { "kind": "reload" }
+        }
+      }
+    }
+  ],
+  "refusalReasons": [
+    "abilityCooldown",
+    "ambiguousTarget",
+    "cooldown",
+    "futureInput",
+    "invalidInput",
+    "invalidRay",
+    "noSighting",
+    "notAlive",
+    "notHost",
+    "notReady",
+    "notRunning",
+    "outOfAmmo",
+    "poseMismatch",
+    "poseStale",
+    "projectileLimit",
+    "protected",
+    "reloading",
+    "shieldActive",
+    "tooLate",
+    "trackingLost",
+    "unknownPlayer"
+  ],
+  "snapshot": {
+    "id": "first-snapshot",
+    "message": {
+      "type": "snapshot",
+      "eventSequence": 0,
+      "clientSequence": 0,
+      "snapshot": {
+        "matchId": "fixture-match",
+        "authorityEpoch": 1,
+        "frameEpoch": 1,
+        "tick": 0,
+        "matchTimeMs": 0,
+        "roundStartedAtMs": null,
+        "phase": "calibrating",
+        "rules": {
+          "durationMs": 180000,
+          "geometry": "sighting",
+          "respawnMs": 5000,
+          "protectionMs": 2000,
+          "weapon": {
+            "id": "pulse",
+            "kind": "projectile",
+            "damage": { "head": 75, "torso": 34, "limbs": 20 },
+            "cooldownMs": 150,
+            "magazine": 8,
+            "reloadMs": 1250,
+            "speed": 8,
+            "projectileRadius": 0.015,
+            "lifetimeMs": 4000,
+            "rangeMeters": 25
+          },
+          "shield": {
+            "radius": 0.4,
+            "offsetMeters": 0.15,
+            "durationMs": 2000,
+            "cooldownMs": 8000,
+            "energy": 100
+          },
+          "slowField": {
+            "radius": 2,
+            "durationMs": 2000,
+            "cooldownMs": 10000,
+            "scale": 0.25
+          }
+        },
+        "players": [
+          {
+            "playerId": "p-host",
+            "displayName": "Host",
+            "role": "host",
+            "health": 100,
+            "ammo": 8,
+            "kills": 0,
+            "deaths": 0,
+            "connected": true,
+            "frameReady": false,
+            "lastFireAtMs": null,
+            "reloadEndsAtMs": null,
+            "respawnAtMs": null,
+            "protectedUntilMs": null,
+            "shield": { "activeUntilMs": null, "cooldownUntilMs": 0, "energy": 100 },
+            "slowFieldReadyAtMs": 0
+          },
+          {
+            "playerId": "p-guest",
+            "displayName": "Guest",
+            "role": "player",
+            "health": 100,
+            "ammo": 8,
+            "kills": 0,
+            "deaths": 0,
+            "connected": true,
+            "frameReady": false,
+            "lastFireAtMs": null,
+            "reloadEndsAtMs": null,
+            "respawnAtMs": null,
+            "protectedUntilMs": null,
+            "shield": { "activeUntilMs": null, "cooldownUntilMs": 0, "energy": 100 },
+            "slowFieldReadyAtMs": 0
+          }
+        ],
+        "phonePoses": [],
+        "projectiles": [],
+        "slowFields": []
+      }
+    }
+  }
+}

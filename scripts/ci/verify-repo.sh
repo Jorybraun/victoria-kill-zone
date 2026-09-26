@@ -18,6 +18,8 @@ required_files=(
   "docs/delivery-pipeline.md"
   "docs/outpost-operations.md"
   "scripts/outpost/start-worker.sh"
+  "release-manifest.json"
+  "contracts/fixtures/combat.v1.json"
 )
 
 for required_file in "${required_files[@]}"; do
@@ -34,6 +36,7 @@ fi
 
 git diff --check
 python3 scripts/ci/check-convex-modules.py
+node scripts/ci/check-release-manifest.mjs
 
 secret_pattern='cog_[A-Za-z0-9]{32,}|gh[pousr]_[A-Za-z0-9]{36,}|-----BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY-----'
 secret_files="$(git ls-files -co --exclude-standard -z \
