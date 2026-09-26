@@ -30,10 +30,54 @@ final class LocalSurfaceTelemetryTests: XCTestCase {
     telemetry.recordFrame(at: base.addingTimeInterval(2),
       planeCount: 4, boundaryVertexTotal: 40, thermalState: "nominal")
     XCTAssertEqual(telemetry.samples.count, 2)
-    XCTAssertEqual(telemetry.samples[0].planeCount, 4)
-    XCTAssertEqual(telemetry.samples[0].boundaryVertexTotal, 40)
+    XCTAssertEqual(telemetry.samples[0].planeCount, 3)
+    XCTAssertEqual(telemetry.samples[0].boundaryVertexTotal, 30)
     XCTAssertEqual(telemetry.samples[1].frames, 7)
     XCTAssertEqual(telemetry.samples[1].elapsedMs, 2_000)
+  }
+
+  func testPreStartFrameIsIgnored() {
+    var telemetry = LocalSurfaceTelemetry(startedAt: base)
+    telemetry.recordFrame(at: base.addingTimeInterval(-0.5), planeCount: 9,
+      boundaryVertexTotal: 90, thermalState: "critical")
+    telemetry.recordFrame(at: base, planeCount: 1, boundaryVertexTotal: 6, thermalState: "nominal")
+    telemetry.recordFrame(at: base.addingTimeInterval(0.5), planeCount: 1,
+      boundaryVertexTotal: 6, thermalState: "nominal")
+    telemetry.recordFrame(at: base.addingTimeInterval(1), planeCount: 1,
+      boundaryVertexTotal: 6, thermalState: "nominal")
+    XCTAssertEqual(telemetry.samples.count, 1)
+    XCTAssertEqual(telemetry.samples[0].frames, 2)
+    XCTAssertEqual(telemetry.samples[0].planeCount, 1)
+    XCTAssertEqual(telemetry.samples[0].thermalState, "nominal")
+  }
+
+  func testRolloverRowCarriesPreRolloverPlaneCount() {
+    var telemetry = LocalSurfaceTelemetry(startedAt: base)
+    telemetry.recordFrame(at: base.addingTimeInterval(0.9), planeCount: 1,
+      boundaryVertexTotal: 6, thermalState: "nominal")
+    telemetry.recordFrame(at: base.addingTimeInterval(1), planeCount: 2,
+      boundaryVertexTotal: 12, thermalState: "fair")
+    XCTAssertEqual(telemetry.samples.count, 1)
+    XCTAssertEqual(telemetry.samples[0].elapsedMs, 1_000)
+    XCTAssertEqual(telemetry.samples[0].planeCount, 1)
+    XCTAssertEqual(telemetry.samples[0].boundaryVertexTotal, 6)
+    XCTAssertEqual(telemetry.samples[0].thermalState, "nominal")
+  }
+
+  func testSixHourGapEmitsSingleBoundaryRow() {
+    var telemetry = LocalSurfaceTelemetry(startedAt: base)
+    telemetry.recordFrame(at: base, planeCount: 1, boundaryVertexTotal: 6, thermalState: "nominal")
+    telemetry.recordFrame(at: base.addingTimeInterval(21_600), planeCount: 2,
+      boundaryVertexTotal: 12, thermalState: "nominal")
+    XCTAssertEqual(telemetry.samples.count, 1)
+    XCTAssertEqual(telemetry.samples[0].frames, 1)
+    telemetry.recordFrame(at: base.addingTimeInterval(21_600.5), planeCount: 2,
+      boundaryVertexTotal: 12, thermalState: "nominal")
+    telemetry.recordFrame(at: base.addingTimeInterval(21_601), planeCount: 3,
+      boundaryVertexTotal: 18, thermalState: "nominal")
+    XCTAssertEqual(telemetry.samples.count, 2)
+    XCTAssertEqual(telemetry.samples[1].frames, 2)
+    XCTAssertEqual(telemetry.samples[1].elapsedMs, 21_601_000)
   }
 
   func testPlaneCountersAndAddRemoveEvents() {

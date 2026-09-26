@@ -52,17 +52,17 @@ struct LocalSurfaceTelemetry: Equatable, Sendable {
   }
 
   mutating func recordFrame(at: Date, planeCount: Int, boundaryVertexTotal: Int, thermalState: String) {
+    guard at >= startedAt else { return }
+    let secondIndex = Int(at.timeIntervalSince(startedAt))
+    if currentSecondIndex < 0 { currentSecondIndex = secondIndex }
+    if secondIndex > currentSecondIndex {
+      appendSample(forSecond: currentSecondIndex)
+      currentSecondIndex = secondIndex
+      framesInCurrentSecond = 0
+    }
     latestPlaneCount = planeCount
     latestBoundaryVertexTotal = boundaryVertexTotal
     latestThermalState = thermalState
-    let secondIndex = Int(at.timeIntervalSince(startedAt))
-    guard secondIndex >= 0 else { return }
-    if currentSecondIndex < 0 { currentSecondIndex = secondIndex }
-    while secondIndex > currentSecondIndex {
-      appendSample(forSecond: currentSecondIndex)
-      currentSecondIndex += 1
-      framesInCurrentSecond = 0
-    }
     framesInCurrentSecond += 1
   }
 

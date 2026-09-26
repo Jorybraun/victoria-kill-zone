@@ -161,6 +161,38 @@ final class LocalSurfaceModelTests: XCTestCase {
       at: base.addingTimeInterval(31)))
   }
 
+  func testUnchangedRefreshesDoNotResetSettle() {
+    var model = LocalSurfaceModel()
+    let id = UUID()
+    model.upsert(plane(id: id, lastUpdatedAt: base))
+    for step in 1...20 {
+      model.update(plane(id: id, lastUpdatedAt: base.addingTimeInterval(Double(step) * 0.5)))
+    }
+    let hit = model.nearestHit(origin: TargetingVector3(x: 0, y: 1.5, z: 0),
+      direction: TargetingVector3(x: 0, y: -1, z: 0), maxDistance: 10,
+      at: base.addingTimeInterval(10))
+    XCTAssertEqual(hit?.anchorID, id)
+    XCTAssertEqual(model.plane(id: id)?.stableSince, base)
+  }
+
+  func testMovedPlaneResetsSettle() {
+    var model = LocalSurfaceModel()
+    let id = UUID()
+    model.upsert(plane(id: id, lastUpdatedAt: base))
+    for step in 1...19 {
+      model.update(plane(id: id, lastUpdatedAt: base.addingTimeInterval(Double(step) * 0.5)))
+    }
+    model.update(plane(id: id, center: TargetingVector3(x: 0.1, y: 0, z: 0),
+      lastUpdatedAt: base.addingTimeInterval(9.5)))
+    XCTAssertEqual(model.plane(id: id)?.stableSince, base.addingTimeInterval(9.5))
+    XCTAssertNil(model.nearestHit(origin: TargetingVector3(x: 0.1, y: 1.5, z: 0),
+      direction: TargetingVector3(x: 0, y: -1, z: 0), maxDistance: 10,
+      at: base.addingTimeInterval(10)))
+    XCTAssertNotNil(model.nearestHit(origin: TargetingVector3(x: 0.1, y: 1.5, z: 0),
+      direction: TargetingVector3(x: 0, y: -1, z: 0), maxDistance: 10,
+      at: base.addingTimeInterval(11.5)))
+  }
+
   func testNearestHitBackFaceCounts() {
     var model = LocalSurfaceModel()
     let id = UUID()

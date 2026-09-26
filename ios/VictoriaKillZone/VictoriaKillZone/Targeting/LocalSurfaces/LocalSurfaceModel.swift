@@ -20,7 +20,29 @@ struct LocalSurfacePlane: Equatable, Sendable {
   var boundaryVertexCount: Int
   let firstObservedAt: Date
   var lastUpdatedAt: Date
+  /// When the geometry last meaningfully changed; the settle gate keys off
+  /// this so unchanged ARKit refreshes do not reset settle.
+  var stableSince: Date
   var updateCount: Int
+
+  init(id: UUID, alignment: LocalSurfaceAlignment, classification: LocalSurfaceClassification,
+    center: TargetingVector3, normal: TargetingVector3, xAxis: TargetingVector3,
+    extentX: Double, extentZ: Double, boundaryVertexCount: Int,
+    firstObservedAt: Date, lastUpdatedAt: Date, stableSince: Date? = nil, updateCount: Int) {
+    self.id = id
+    self.alignment = alignment
+    self.classification = classification
+    self.center = center
+    self.normal = normal
+    self.xAxis = xAxis
+    self.extentX = extentX
+    self.extentZ = extentZ
+    self.boundaryVertexCount = boundaryVertexCount
+    self.firstObservedAt = firstObservedAt
+    self.lastUpdatedAt = lastUpdatedAt
+    self.stableSince = stableSince ?? firstObservedAt
+    self.updateCount = updateCount
+  }
 }
 
 struct LocalSurfaceHit: Equatable, Sendable {
@@ -48,6 +70,9 @@ struct LocalSurfaceModel: Equatable, Sendable {
   static let defaultCapacity = 64
   static let defaultSettleInterval: TimeInterval = 1.5
   static let defaultStaleAfter: TimeInterval = 30
+  static let settleCenterTolerance = 0.03
+  static let settleExtentTolerance = 0.05
+  static let settleNormalCosine = 0.9986
 
   let capacity: Int
   let settleInterval: TimeInterval
@@ -74,7 +99,9 @@ struct LocalSurfaceModel: Equatable, Sendable {
       planes.removeValue(forKey: oldest.id)
       evicted = oldest.id
     }
-    planes[plane.id] = plane
+    var stored = plane
+    stored.stableSince = plane.lastUpdatedAt
+    planes[plane.id] = stored
     return evicted
   }
 
@@ -95,6 +122,8 @@ struct LocalSurfaceModel: Equatable, Sendable {
       boundaryVertexCount: plane.boundaryVertexCount,
       firstObservedAt: existing.firstObservedAt,
       lastUpdatedAt: plane.lastUpdatedAt,
+      stableSince: Self.geometryChanged(plane, vs: existing)
+        ? plane.lastUpdatedAt : existing.stableSince,
       updateCount: existing.updateCount + 1)
   }
 
@@ -123,7 +152,8 @@ struct LocalSurfaceModel: Equatable, Sendable {
     var best: (plane: LocalSurfacePlane, t: Double)?
     for plane in planes.values {
       let age = now.timeIntervalSince(plane.lastUpdatedAt)
-      guard age >= settleInterval, age <= staleAfter else { continue }
+      guard now.timeIntervalSince(plane.stableSince) >= settleInterval,
+        age <= staleAfter else { continue }
       let denominator = plane.normal.dot(unit)
       guard abs(denominator) > 1e-9 else { continue }
       let t = (plane.center - origin).dot(plane.normal) / denominator
@@ -150,6 +180,17 @@ struct LocalSurfaceModel: Equatable, Sendable {
       alignment: plane.alignment,
       classification: plane.classification,
       age: now.timeIntervalSince(plane.lastUpdatedAt))
+  }
+
+  private static func geometryChanged(_ plane: LocalSurfacePlane,
+    vs existing: LocalSurfacePlane) -> Bool {
+    let delta = plane.center - existing.center
+    return delta.dot(delta).squareRoot() > settleCenterTolerance
+      || abs(plane.extentX - existing.extentX) > settleExtentTolerance
+      || abs(plane.extentZ - existing.extentZ) > settleExtentTolerance
+      || plane.normal.dot(existing.normal) < settleNormalCosine
+      || plane.alignment != existing.alignment
+      || plane.classification != existing.classification
   }
 
   private static func lruOrder(_ lhs: LocalSurfacePlane, _ rhs: LocalSurfacePlane) -> Bool {
