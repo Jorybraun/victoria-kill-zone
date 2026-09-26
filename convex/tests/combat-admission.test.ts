@@ -18,9 +18,10 @@ beforeEach(() => {
 });
 afterEach(() => {vi.restoreAllMocks(); vi.unstubAllEnvs();});
 
-function room(combatGeometry?: "trackedBody" | "phoneProxy") {
-  const b=mutationContext(), host=storedPlayer(testIds.host,{ready:true}), guest=storedPlayer(testIds.guest,{ready:true});
+function room(combatGeometry?: "trackedBody" | "phoneProxy" | "sighting", roster = 2) {
+  const b=mutationContext(), host=storedPlayer(testIds.host,{ready:true}), guest=storedPlayer(testIds.guest,{ready:true}), third=storedPlayer(testIds.third,{ready:true});
   b.seed("players",host.doc); b.seed("players",guest.doc);
+  if (roster > 2) b.seed("players",third.doc);
   b.seed("matches",storedMatch({status:"waiting",phase:"lobby",combatMode:"durableObject",maxPlayers:4,...(combatGeometry===undefined?{}:{combatGeometry})}));
   return {...b,host,guest,auth:{matchId:testIds.match,playerId:testIds.host,sessionSecret:host.sessionSecret}};
 }
@@ -48,13 +49,30 @@ describe("realtime room admission", () => {
     const claims: unknown=JSON.parse(new TextDecoder().decode(decode(issued.ticket.split(".")[1] ?? "")));
     expect(validateTicketClaims(claims,Math.floor(Date.now()/1000))).toMatchObject({rules:{geometry:"trackedBody"}});
   });
-  it("serializes a stored phoneProxy selection into the prepared rules and ticket", async () => {
+  it("upgrades a stored phoneProxy selection to sighting for a two-player roster", async () => {
     const b=room("phoneProxy"); await mutationHandler(prepare)(b.ctx,b.auth);
     const patch=b.writes.find(w=>w.kind==="patch" && w.doc.combatRulesJson!==undefined);
-    expect(JSON.parse(String(patch?.doc.combatRulesJson))).toMatchObject({geometry:"phoneProxy"});
+    expect(JSON.parse(String(patch?.doc.combatRulesJson))).toMatchObject({geometry:"sighting"});
     const issued=await mutationHandler(ticket)(b.ctx,b.auth);
     const claims: unknown=JSON.parse(new TextDecoder().decode(decode(issued.ticket.split(".")[1] ?? "")));
-    expect(validateTicketClaims(claims,Math.floor(Date.now()/1000))).toMatchObject({rules:{geometry:"phoneProxy"}});
+    expect(validateTicketClaims(claims,Math.floor(Date.now()/1000))).toMatchObject({rules:{geometry:"sighting"}});
+  });
+  it("keeps phoneProxy for a three-player roster and trackedBody unchanged", async () => {
+    const b=room("phoneProxy",3); await mutationHandler(prepare)(b.ctx,b.auth);
+    const patch=b.writes.find(w=>w.kind==="patch" && w.doc.combatRulesJson!==undefined);
+    expect(JSON.parse(String(patch?.doc.combatRulesJson))).toMatchObject({geometry:"phoneProxy"});
+    const tracked=room("trackedBody"); await mutationHandler(prepare)(tracked.ctx,tracked.auth);
+    const trackedPatch=tracked.writes.find(w=>w.kind==="patch" && w.doc.combatRulesJson!==undefined);
+    expect(JSON.parse(String(trackedPatch?.doc.combatRulesJson))).toMatchObject({geometry:"trackedBody"});
+  });
+  it("accepts sighting at create and falls back to phoneProxy for larger rosters", async () => {
+    const b=mutationContext();
+    await mutationHandler(create)(b.ctx,{displayName:"Host",arenaRadiusMeters:30,combatMode:"durableObject",combatGeometry:"sighting"});
+    const insert=b.writes.find(w=>w.kind==="insert" && w.table==="matches");
+    expect(insert?.doc).toMatchObject({combatMode:"durableObject",combatGeometry:"sighting"});
+    const large=room("sighting",3); await mutationHandler(prepare)(large.ctx,large.auth);
+    const patch=large.writes.find(w=>w.kind==="patch" && w.doc.combatRulesJson!==undefined);
+    expect(JSON.parse(String(patch?.doc.combatRulesJson))).toMatchObject({geometry:"phoneProxy"});
   });
   it("preserves the legacy two-slot match and rejects invalid caps", async () => {
     const b=mutationContext();

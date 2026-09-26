@@ -186,7 +186,7 @@ enum CombatWireValidation {
       time(f.startsAtMs) && time(f.endsAtMs) && f.endsAtMs >= f.startsAtMs && finite(f.scale,0.05,1)
   }
   static func valid(_ r: CombatWire.Rules) -> Bool {
-    finite(r.durationMs,10_000,3_600_000) && ["trackedBody","phoneProxy"].contains(r.geometry) &&
+    finite(r.durationMs,10_000,3_600_000) && ["trackedBody","phoneProxy","sighting"].contains(r.geometry) &&
       finite(r.respawnMs,100,60_000) && finite(r.protectionMs,0,30_000) &&
       ["sidearm","pulse"].contains(r.weapon.id) && ["hitscan","projectile"].contains(r.weapon.kind) &&
       [r.weapon.damage.head,r.weapon.damage.torso,r.weapon.damage.limbs].allSatisfy({(1...100).contains($0)}) &&

@@ -94,13 +94,13 @@ enum CombatWire {
     case pose(Pose, observations: [Observation])
     case frameReady(ready: Bool, residualMeters: Double, residualDegrees: Double, clockUncertaintyMs: Double)
     case start, reload, leave
-    case fire(shotId: String, poseSequence: Int, origin: [Double], direction: [Double])
+    case fire(shotId: String, poseSequence: Int, origin: [Double], direction: [Double], observation: Observation? = nil)
     case shield(active: Bool, poseSequence: Int)
     case slowField(poseSequence: Int)
 
     private enum Key: String, CodingKey {
       case kind, pose, observations, ready, residualMeters, residualDegrees, clockUncertaintyMs
-      case shotId, poseSequence, origin, direction, active
+      case shotId, poseSequence, origin, direction, active, observation
     }
     func encode(to encoder: Encoder) throws {
       var c = encoder.container(keyedBy: Key.self)
@@ -113,9 +113,12 @@ enum CombatWire {
       case .start: try c.encode("start", forKey: .kind)
       case .reload: try c.encode("reload", forKey: .kind)
       case .leave: try c.encode("leave", forKey: .kind)
-      case .fire(let id, let sequence, let origin, let direction):
+      case .fire(let id, let sequence, let origin, let direction, let observation):
         try c.encode("fire", forKey: .kind); try c.encode(id, forKey: .shotId); try c.encode(sequence, forKey: .poseSequence)
         try c.encode(origin, forKey: .origin); try c.encode(direction, forKey: .direction)
+        // The authority's validator is exact-key: the observation key appears
+        // only when a sighting observation is attached (ADR 0013).
+        if let observation {try c.encode(observation, forKey: .observation)}
       case .shield(let active, let sequence):
         try c.encode("shield", forKey: .kind); try c.encode(active, forKey: .active); try c.encode(sequence, forKey: .poseSequence)
       case .slowField(let sequence): try c.encode("slowField", forKey: .kind); try c.encode(sequence, forKey: .poseSequence)

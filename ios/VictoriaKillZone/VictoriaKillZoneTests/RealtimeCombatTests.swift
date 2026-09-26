@@ -39,6 +39,32 @@ final class RealtimeCombatTests: XCTestCase {
     XCTAssertNil(command["targetPlayerId"])
   }
 
+  func testFireCommandEncodesSightingObservationOnlyWhenPresent() throws {
+    let fire: (CombatWire.Command) throws -> [String:Any] = {command in
+      let data=try JSONEncoder().encode(CombatWire.ClientMessage.command(.init(commandId:"c1",clientSequence:1,authorityEpoch:1,frameEpoch:1,sentAtMs:100,command:command)))
+      let root=try XCTUnwrap(JSONSerialization.jsonObject(with:data) as? [String:Any])
+      let envelope=try XCTUnwrap(root["envelope"] as? [String:Any])
+      return try XCTUnwrap(envelope["command"] as? [String:Any])
+    }
+    // Exact-key wire contract: without an observation the key must be absent.
+    let bare=try fire(.fire(shotId:"s1",poseSequence:7,origin:[0,0,0],direction:[0,0,-1]))
+    XCTAssertEqual(bare["kind"] as? String,"fire"); XCTAssertNil(bare["observation"])
+    let observation=CombatWire.Observation(targetPlayerId:"p2",capturedAtMs:100,associationConfidence:0.9,uncertaintyMeters:0.08,
+      colliders:[.init(id:"torso",kind:"capsule",zone:.torso,center:nil,a:[0,0.9,0],b:[0,1.5,0],radius:0.18)])
+    let sighted=try fire(.fire(shotId:"s2",poseSequence:8,origin:[0,0,0],direction:[0,0,-1],observation:observation))
+    let encoded=try XCTUnwrap(sighted["observation"] as? [String:Any])
+    XCTAssertEqual(encoded["targetPlayerId"] as? String,"p2")
+    XCTAssertEqual((encoded["colliders"] as? [Any])?.count,1)
+  }
+
+  func testRulesValidationAcceptsSightingGeometry() {
+    var rules=Self.snapshot().rules; rules.geometry="sighting"
+    var snapshot=Self.snapshot(); snapshot.rules=rules
+    XCTAssertTrue(CombatWireValidation.valid(snapshot))
+    snapshot.rules.geometry="invented"
+    XCTAssertFalse(CombatWireValidation.valid(snapshot))
+  }
+
   func testNITokenClientMessageEncodesTaggedBase64() throws {
     let token=Data([1,2,3,4])
     let data=try JSONEncoder().encode(CombatWire.ClientMessage.niToken(token))

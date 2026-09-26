@@ -5,7 +5,7 @@ import type {BodyHistory, SimulationCheckpoint} from "./state.js";
 /** Plausibility limits reject teleports; they do not authenticate camera truth. */
 const MAX_SPEED = 15;
 const POSITION_SLACK = 0.1;
-const COVER_OBSERVATION_MS = 1_000;
+export const COVER_OBSERVATION_MS = 1_000;
 /** Body colliders must sit within reach of the target's own authenticated phone pose. */
 export const BODY_ANCHOR_METERS = 2;
 const withinSpeed = (a: Vec3, b: Vec3, dtMs: number): boolean => distance(a, b) <= MAX_SPEED * dtMs / 1000 + POSITION_SLACK;
