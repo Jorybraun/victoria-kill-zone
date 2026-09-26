@@ -67,6 +67,8 @@ struct RealtimeCommandState {
     case "abilityCooldown": "That ability is recharging."
     case "projectileLimit": "Too many shots are in flight. Try again shortly."
     case "tooLate", "futureInput": "The action arrived outside the timing window. Try again."
+    case "noSighting": "No target in view."
+    case "ambiguousTarget": "Too many players in view."
     case "notHost": "Only the host can begin the match."
     case "notRunning": "The match must be running before you can act."
     default: "The action was not accepted. Try again when the arena is ready."
