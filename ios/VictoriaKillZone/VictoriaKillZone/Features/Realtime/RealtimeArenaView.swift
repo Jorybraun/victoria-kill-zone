@@ -378,7 +378,7 @@ struct RealtimeArenaView: View {
         Button(action: controller.beginRound) {
           HStack(spacing: 8) {
             if controller.startPending {ProgressView().tint(VKZPalette.background)}
-            Text(controller.startPending ? "Starting match…" : controller.usesQuickPlayFrame ? "PLAY" : "Begin match")
+            Text(controller.startPending ? "Starting match…" : (controller.usesQuickPlayFrame || controller.usesSighting) ? "PLAY" : "Begin match")
           }
         }
         .buttonStyle(VKZPrimaryButtonStyle()).disabled(controller.startPending)
@@ -405,7 +405,7 @@ struct RealtimeArenaView: View {
         stage: controller.stage, scanTimedOut: scanTimedOut) {
         Button(controller.usesQuickPlayFrame && scanTimedOut ? "Scan again" : "Restart scan",
           action: controller.retryAlignment).buttonStyle(VKZSecondaryButtonStyle())
-      } else if controller.stage == .paused || controller.stage == .unavailable {
+      } else if !controller.usesSighting && (controller.stage == .paused || controller.stage == .unavailable) {
         if controller.connectionIssue == nil {
           Button(controller.usesQuickPlayFrame ? "Re-align" : "Retry alignment",
             action: controller.retryAlignment).buttonStyle(VKZSecondaryButtonStyle())
@@ -440,6 +440,14 @@ struct RealtimeArenaView: View {
     if case .failed(let explanation) = controller.mapState {return explanation}
     if referenceSetup.isVisible && controller.referenceState == .capturing {
       return "Hold still while the reference is measured."
+    }
+    if controller.usesSighting {
+      switch controller.stage {
+      case .awaitingMembers: return "Waiting for opponent"
+      case .paused: return RealtimeArenaPresentation.pauseGuidance(clockReady: controller.combat.clockReady,
+        roundHasStarted: controller.snapshot?.roundStartedAtMs != nil)
+      default: break
+      }
     }
     if let rendezvousSetup {return rendezvousSetup.guidance}
     if let collaborativeSetup {return collaborativeSetup.guidance}
@@ -502,6 +510,7 @@ struct RealtimeArenaView: View {
   private var stageTitle: String {
     if controller.connectionIssue != nil {return "Connection needs attention"}
     if referenceSetup.isVisible {return "Set up play area"}
+    if controller.usesSighting && controller.stage == .awaitingMembers {return "Waiting for opponent"}
     if let rendezvousSetup {return rendezvousSetup.title}
     if let collaborativeSetup {return collaborativeSetup.title}
     if controller.usesQuickPlayFrame {

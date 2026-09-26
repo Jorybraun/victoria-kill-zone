@@ -50,6 +50,19 @@ enum RealtimeAssociationPolicy {
       marginMeters: margin, capturedAt: skeleton.capturedAt)
   }
 
+  /// ADR 0013 sighting geometry: with exactly one remote roster member the
+  /// observed body is unambiguous — no phone poses, no shared frame.
+  static func associateSighting(skeleton: TargetingSkeleton?, observationConfidence: Double,
+                                players: [CombatWire.Player], localPlayerID: String,
+                                now: Date) -> RealtimeBodyAssociation? {
+    guard let skeleton, fresh(skeleton.capturedAt, at: now),
+      observationConfidence.isFinite, observationConfidence >= 0.8 else {return nil}
+    let remote = players.filter {$0.playerId != localPlayerID}
+    guard remote.count == 1, let target = remote.first, target.connected else {return nil}
+    return RealtimeBodyAssociation(playerID: target.playerId, confidence: observationConfidence,
+      handDistanceMeters: 0, marginMeters: .infinity, capturedAt: skeleton.capturedAt)
+  }
+
   static func colliders(_ skeleton: TargetingSkeleton) -> [CombatWire.Collider] {
     var result: [CombatWire.Collider] = []
     if let head = skeleton.position(of: "head"), valid(head) {
@@ -92,6 +105,21 @@ enum RealtimeAssociationPolicy {
 }
 
 enum RealtimePoseBuilder {
+  /// Sighting poses come from the local camera ray; the shared frame never
+  /// exists, so only self-consistency against the shooter's own stream matters.
+  static func pose(ray: TargetingCameraRay, sequence: Int, matchTimeMs: Double, now: Date) -> CombatWire.Pose? {
+    guard RealtimeAssociationPolicy.fresh(ray.capturedAt, at: now), matchTimeMs.isFinite else {return nil}
+    let forward = SIMD3<Double>(0, 0, -1)
+    let vector = SIMD3(ray.direction.x, ray.direction.y, ray.direction.z)
+    guard [vector.x, vector.y, vector.z].allSatisfy(\.isFinite), simd_length(vector) > 1e-9 else {return nil}
+    let direction = simd_normalize(vector)
+    let axis = simd_cross(forward, direction)
+    let q = simd_normalize(simd_quaternion(SIMD4(axis.x, axis.y, axis.z, 1 + simd_dot(forward, direction)))).vector
+    let captured = matchTimeMs - now.timeIntervalSince(ray.capturedAt) * 1000
+    guard captured >= 0, [q.x, q.y, q.z, q.w].allSatisfy(\.isFinite) else {return nil}
+    return .init(sequence: sequence, capturedAtMs: captured,
+      position: [ray.origin.x, ray.origin.y, ray.origin.z], orientation: [q.x, q.y, q.z, q.w], tracking: "normal")
+  }
   static func pose(_ sample: DuelFramePose, sequence: Int, matchTimeMs: Double, now: Date) -> CombatWire.Pose? {
     guard sample.isValid, RealtimeAssociationPolicy.fresh(sample.capturedAt, at: now), matchTimeMs.isFinite else {return nil}
     let m = sample.columnMajor
