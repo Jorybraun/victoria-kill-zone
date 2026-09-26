@@ -89,6 +89,34 @@ final class ConvexGameSessionWireTests: XCTestCase {
     XCTAssertFalse(session.sessionSecret.isEmpty)
   }
 
+  func testMatchSummaryDecodesCombatGeometryAndToleratesItsAbsence() throws {
+    let base: [String: Any] = [
+      "id": "match-1", "code": "ABC123", "phase": "lobby",
+      "durationMs": 180_000, "combatMode": "durableObject", "maxPlayers": 2,
+    ]
+    let without = try JSONDecoder().decode(
+      MatchSummaryWire.self, from: JSONSerialization.data(withJSONObject: base)
+    ).domainValue()
+    XCTAssertNil(without.combatGeometry)
+    XCTAssertEqual(without.maxPlayers, 2)
+    let withGeometry = base.merging(["combatGeometry": "sighting"]) { _, new in new }
+    let decoded = try JSONDecoder().decode(
+      MatchSummaryWire.self, from: JSONSerialization.data(withJSONObject: withGeometry)
+    ).domainValue()
+    XCTAssertEqual(decoded.combatGeometry, "sighting")
+  }
+
+  func testQuickDuelFullDecodesAndRendersSharedCopy() throws {
+    XCTAssertEqual(
+      try JSONDecoder().decode(BackendErrorCode.self, from: Data("\"QUICK_DUEL_FULL\"".utf8)),
+      .quickDuelFull
+    )
+    XCTAssertEqual(
+      GameSessionClientError.backend(.quickDuelFull).errorDescription,
+      QuickDuel.rosterFullMessage
+    )
+  }
+
   func testMatchSnapshotDecodesBackendProjectionWithoutAliases() throws {
     let wire = try JSONDecoder().decode(MatchSnapshotWire.self, from: snapshotFixture)
     let snapshot = try wire.domainValue()

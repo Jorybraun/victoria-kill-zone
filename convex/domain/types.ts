@@ -44,6 +44,7 @@ export type RejectReason =
   | "match_not_active"
   | "match_expired"
   | "match_full"
+  | "quick_duel_full"
   | "match_already_started"
   | "not_a_member"
   | "not_host"

@@ -4,23 +4,24 @@ import XCTest
 
 @MainActor
 final class RealtimeLobbyIntegrationTests: XCTestCase {
-  func testRealtimeCreateRequestsFourSlotsWithoutChangingClassicRequest() async {
+  func testRealtimeCreateRequestsTwoSlotsWithoutChangingClassicRequest() async {
     let client = ArenaLobbyClient()
     let store = makeStore(client)
     store.displayName = "Host"
     await store.performCreateDuel(combatMode: .durableObject)
     XCTAssertEqual(client.requests.first?.combatMode, .durableObject)
-    XCTAssertEqual(client.requests.first?.maxPlayers, 4)
+    XCTAssertEqual(client.requests.first?.maxPlayers, QuickDuel.maxPlayers)
     store.leave()
   }
 
-  func testQuickPlaySelectsPhoneProxyWhileSavedArenasAndClassicKeepTheirs() async throws {
+  func testQuickDuelSelectsSightingWhileSavedArenasAndClassicKeepTheirs() async throws {
     let client = ArenaLobbyClient()
     let store = makeStore(client)
     store.displayName = "Host"
     await store.performCreateDuel(combatMode: .durableObject)
-    XCTAssertEqual(client.requests.last?.combatGeometry, "phoneProxy",
-      "Quick Play without a saved arena runs the relocalized frame")
+    XCTAssertEqual(client.requests.last?.combatGeometry, QuickDuel.geometry,
+      "A Quick Duel without a saved arena is exactly two sighting players")
+    XCTAssertEqual(client.requests.last?.maxPlayers, QuickDuel.maxPlayers)
     store.leave()
     try await until { store.route == .home }
 

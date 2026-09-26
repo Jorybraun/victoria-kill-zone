@@ -65,14 +65,21 @@ describe("realtime room admission", () => {
     const trackedPatch=tracked.writes.find(w=>w.kind==="patch" && w.doc.combatRulesJson!==undefined);
     expect(JSON.parse(String(trackedPatch?.doc.combatRulesJson))).toMatchObject({geometry:"trackedBody"});
   });
-  it("accepts sighting at create and falls back to phoneProxy for larger rosters", async () => {
+  it("accepts sighting at create, forces a two-player cap and rejects a third join", async () => {
     const b=mutationContext();
-    await mutationHandler(create)(b.ctx,{displayName:"Host",arenaRadiusMeters:30,combatMode:"durableObject",combatGeometry:"sighting"});
+    const host=await mutationHandler(create)(b.ctx,{displayName:"Host",arenaRadiusMeters:30,combatMode:"durableObject",combatGeometry:"sighting",maxPlayers:4});
     const insert=b.writes.find(w=>w.kind==="insert" && w.table==="matches");
-    expect(insert?.doc).toMatchObject({combatMode:"durableObject",combatGeometry:"sighting"});
-    const large=room("sighting",3); await mutationHandler(prepare)(large.ctx,large.auth);
-    const patch=large.writes.find(w=>w.kind==="patch" && w.doc.combatRulesJson!==undefined);
-    expect(JSON.parse(String(patch?.doc.combatRulesJson))).toMatchObject({geometry:"phoneProxy"});
+    expect(insert?.doc).toMatchObject({combatMode:"durableObject",combatGeometry:"sighting",maxPlayers:2});
+    await mutationHandler(join)(b.ctx,{code:host.code,displayName:"Second"});
+    await expect(mutationHandler(join)(b.ctx,{code:host.code,displayName:"Third"})).rejects.toMatchObject({data:{code:"QUICK_DUEL_FULL"}});
+  });
+  it("keeps an explicit sighting selection and refuses a larger roster at prepare", async () => {
+    const b=room("sighting",3);
+    await expect(mutationHandler(prepare)(b.ctx,b.auth)).rejects.toMatchObject({data:{code:"QUICK_DUEL_FULL"}});
+    expect(b.writes.filter(w=>w.kind==="patch" && w.doc.combatRulesJson!==undefined)).toHaveLength(0);
+    const small=room("sighting"); await mutationHandler(prepare)(small.ctx,small.auth);
+    const patch=small.writes.find(w=>w.kind==="patch" && w.doc.combatRulesJson!==undefined);
+    expect(JSON.parse(String(patch?.doc.combatRulesJson))).toMatchObject({geometry:"sighting"});
   });
   it("preserves the legacy two-slot match and rejects invalid caps", async () => {
     const b=mutationContext();

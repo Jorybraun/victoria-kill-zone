@@ -43,6 +43,7 @@ enum MatchEventType: String, Codable, Equatable, Sendable {
 struct MatchSummary: Codable, Equatable, Sendable {
   var combatMode: CombatMode? = nil
   var combatPhase: CombatWire.Phase? = nil
+  var combatGeometry: String? = nil
   var maxPlayers: Int? = nil
   let id: String
   let code: String
@@ -62,6 +63,7 @@ struct MatchSummary: Codable, Equatable, Sendable {
     winnerPlayerId: String? = nil,
     combatMode: CombatMode? = nil,
     combatPhase: CombatWire.Phase? = nil,
+    combatGeometry: String? = nil,
     maxPlayers: Int? = nil
   ) {
     self.id = id
@@ -73,6 +75,7 @@ struct MatchSummary: Codable, Equatable, Sendable {
     self.winnerPlayerId = winnerPlayerId
     self.combatMode = combatMode
     self.combatPhase = combatPhase
+    self.combatGeometry = combatGeometry
     self.maxPlayers = maxPlayers
   }
 }
@@ -246,6 +249,7 @@ enum BackendErrorCode: String, Codable, Equatable, Sendable {
   case playerNotAlive = "PLAYER_NOT_ALIVE"
   case magazineFull = "MAGAZINE_FULL"
   case alreadyReloading = "ALREADY_RELOADING"
+  case quickDuelFull = "QUICK_DUEL_FULL"
 }
 
 enum GameSessionConnectionState: Equatable, Sendable {

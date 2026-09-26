@@ -198,3 +198,10 @@ extension LobbyTransitionError: LocalizedError {
     }
   }
 }
+
+enum QuickDuel {
+  static let maxPlayers = 2
+  static let geometry = "sighting"
+  /// Single product-decision copy for a blocked third joiner; change here only.
+  static let rosterFullMessage = "Quick Duel is 2 players; use a Saved Arena for 3–4"
+}

@@ -359,14 +359,14 @@ final class LobbyStore: ObservableObject {
     operation = .creating
     errorMessage = nil
     do {
-      // Quick Play (a durableObject duel with no saved arena) runs the
-      // relocalized shared frame and phoneProxy verdicts; saved arenas keep
-      // the measured reference flow and trackedBody geometry.
-      let geometry: String? = combatMode == .durableObject ? (savedArena == nil ? "phoneProxy" : "trackedBody") : nil
+      // A Quick Duel (a durableObject duel with no saved arena) is exactly
+      // two players on sighting verdicts; saved arenas keep the measured
+      // reference flow, trackedBody geometry, and the 2–4 player cap.
+      let geometry: String? = combatMode == .durableObject ? (savedArena == nil ? QuickDuel.geometry : "trackedBody") : nil
       let newSession = try await environment.gameSessionClient.createDuel(
         CreateDuelRequest(displayName: name, arenaRadiusMeters: 30,
           combatMode: combatMode, combatGeometry: geometry,
-          maxPlayers: combatMode == .durableObject ? 4 : nil)
+          maxPlayers: combatMode == .durableObject ? (savedArena == nil ? QuickDuel.maxPlayers : 4) : nil)
       )
       guard !Task.isCancelled else { return }
       beginSession(newSession, savedArena: combatMode == .durableObject ? savedArena : nil)

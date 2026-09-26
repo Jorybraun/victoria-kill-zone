@@ -103,6 +103,20 @@ describe("contract snapshots", () => {
     },
   );
 
+  it("projects combatGeometry additively on both views and omits it when unset", () => {
+    const players = [player("host"), player("guest")];
+    const now = T0 + 10_000;
+    const sighting = snapshotMatch({ combatMode: "durableObject", combatGeometry: "sighting", maxPlayers: 2 });
+    for (const snapshot of [
+      buildMatchSnapshot(sighting, "host", players, [], now),
+      buildSpectatorSnapshot(sighting, players, [], now),
+    ]) {
+      expect(snapshot.match).toMatchObject({ combatMode: "durableObject", combatGeometry: "sighting", maxPlayers: 2 });
+    }
+    const unset = buildMatchSnapshot(snapshotMatch(), "host", players, [], now);
+    expect(unset.match).not.toHaveProperty("combatGeometry");
+  });
+
   it("does not finish a realtime lobby or calibration with no round deadline", () => {
     const players = [player("host"), player("guest")];
     for (const phase of ["lobby", "running"] as const) {

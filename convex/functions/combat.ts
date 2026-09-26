@@ -24,13 +24,17 @@ function configuration(): {secret: string; endpoint: string} {
   return {secret,endpoint:url.origin};
 }
 
+export const QUICK_DUEL_MAX_PLAYERS = 2;
+
 type CombatGeometry = "trackedBody" | "phoneProxy" | "sighting";
-/** ADR 0013: two-player Quick Play defaults to sighting; anything larger keeps
- * the shared-frame geometries until a target-identity rule ships.
+/** A Quick Duel is a durableObject match that requests `sighting`: exactly two
+ * players, and the sighting selection is never downgraded. ADR 0013: a
+ * two-player phoneProxy roster still upgrades to sighting; anything larger
+ * keeps the shared-frame geometries until a target-identity rule ships.
  */
 export function selectCombatGeometry(requested: CombatGeometry | undefined, rosterSize: number): CombatGeometry {
   const geometry = requested ?? DEFAULT_RULES.geometry;
-  if (geometry === "sighting") return rosterSize <= 2 ? "sighting" : "phoneProxy";
+  if (geometry === "sighting") return "sighting";
   if (geometry === "phoneProxy" && rosterSize <= 2) return "sighting";
   return geometry;
 }
@@ -50,6 +54,7 @@ export const prepare = mutation({
     if (match.phase !== "lobby") fail("MATCH_ALREADY_STARTED");
     const players = await listPlayers(ctx, match._id);
     if (players.length < 2 || players.length > LIMITS.players || players.length > match.maxPlayers) fail("PLAYERS_NOT_CONNECTED");
+    if (match.combatGeometry === "sighting" && players.length > QUICK_DUEL_MAX_PLAYERS) fail("QUICK_DUEL_FULL");
     const now = Date.now();
     if (players.some(p => !p.connected || now - p.lastSeenAt > 15_000)) fail("PLAYERS_NOT_CONNECTED");
     if (players.some(p => !p.ready)) fail("PLAYERS_NOT_READY");

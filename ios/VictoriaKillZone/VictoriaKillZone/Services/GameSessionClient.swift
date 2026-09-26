@@ -92,6 +92,8 @@ extension GameSessionClientError: LocalizedError {
       "MAGAZINE FULL"
     case .backend(.alreadyReloading):
       "RELOADING"
+    case .backend(.quickDuelFull):
+      QuickDuel.rosterFullMessage
     case .backend(.hostOnly), .backend(.invalidSession), .invalidSnapshot, .unknown:
       "SOMETHING WENT WRONG"
     case .networkUnavailable:
