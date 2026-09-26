@@ -1,6 +1,6 @@
 # ADR 0013 — Quick Play: sighting-based hits, no shared frame, no alignment gate
 
-Status: **proposed**, 2026-09-26. Integration owns this record and the protocol change; backend owns the simulation/worker/Convex changes; iOS owns the client flow; targeting owns the body-observation seam; design owns the slice update. Nothing in this record is physical-device evidence. This record applies the accepted conclusion of the alignment-without-scanning research (ADR 0012's evidence base, `outputs/alignment-without-scanning.md`); it does not reopen that research.
+Status: **accepted**, 2026-09-26. Owner accepted this record the day it was proposed (tracked in KIL-54, PR #116). Integration owns this record and the protocol change; backend owns the simulation/worker/Convex changes; iOS owns the client flow; targeting owns the body-observation seam; design owns the slice update. Nothing in this record is physical-device evidence. This record applies the accepted conclusion of the alignment-without-scanning research (ADR 0012's evidence base, `outputs/alignment-without-scanning.md`); it does not reopen that research.
 
 ## Context
 
