@@ -2642,8 +2642,9 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
     }
 
     XCTAssertTrue(room(combatGeometry: "sighting", maxPlayers: 2).isQuickDuel)
-    XCTAssertTrue(room(maxPlayers: 2).isQuickDuel,
-      "Older Convex omits combatGeometry; a two-slot durableObject room is a Quick Duel")
+    XCTAssertFalse(room(maxPlayers: 2).isQuickDuel,
+      "Missing combatGeometry is classified conservatively as a Saved Arena")
+    XCTAssertTrue(room(maxPlayers: 2).isSavedArena)
     XCTAssertFalse(room(combatGeometry: "trackedBody", maxPlayers: 4).isQuickDuel)
     XCTAssertTrue(room(combatGeometry: "trackedBody", maxPlayers: 4).isSavedArena)
     XCTAssertFalse(room(combatMode: nil, maxPlayers: 2).isQuickDuel)

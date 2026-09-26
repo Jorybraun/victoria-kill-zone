@@ -77,23 +77,21 @@ struct HomeView: View {
         .accessibilityLabel("Join duel")
         .accessibilityHint("Enter a friend’s duel code.")
 
-        Button(action: onSavedArenas) {
+        Button(action: onUseSavedArena ?? onSavedArenas) {
           Label("SAVED ARENAS", systemImage: "map")
             .frame(minHeight: 44)
         }
         .disabled(store.isBusy)
-        .accessibilityHint("Scan and save a play area for 2–4 player Saved Arena matches. Works offline without a game.")
+        .accessibilityHint("Create a 2–4 player match in a saved arena.")
 
-        if let onUseSavedArena {
-          DisclosureGroup("Saved Arena games") {
-            Button("PLAY A SAVED ARENA", action: onUseSavedArena)
-              .frame(minHeight: 44)
-              .accessibilityHint("Create a 2–4 player match in a saved arena.")
-          }
-          .font(.subheadline)
-          .foregroundStyle(VKZPalette.textMuted)
-          .disabled(store.isBusy)
+        DisclosureGroup("Saved Arena tools") {
+          Button("SCAN & SAVE A PLAY AREA", action: onSavedArenas)
+            .frame(minHeight: 44)
+            .accessibilityHint("Save your surroundings and test recognition later. Works offline without a game.")
         }
+        .font(.subheadline)
+        .foregroundStyle(VKZPalette.textMuted)
+        .disabled(store.isBusy)
       }
 
       #if VKZ_DEBUG_FIRE || DEBUG

@@ -72,8 +72,9 @@ struct WaitingRoom: Equatable, Sendable {
   var combatGeometry: String? = nil
   var maxPlayers: Int = 2
 
-  /// Quick Duel = durableObject match on sighting. Older Convex omits combatGeometry; a two-slot DO room is then treated as a Quick Duel.
-  var isQuickDuel: Bool { combatMode == .durableObject && (combatGeometry ?? (maxPlayers == QuickDuel.maxPlayers ? QuickDuel.geometry : nil)) == QuickDuel.geometry }
+  /// Quick Duel = durableObject match on sighting. Missing geometry is classified
+  /// conservatively as a Saved Arena so alignment guidance is never dropped.
+  var isQuickDuel: Bool { combatMode == .durableObject && combatGeometry == QuickDuel.geometry }
   var isSavedArena: Bool { combatMode == .durableObject && !isQuickDuel }
 
   var localPlayer: LobbyPlayer? {
