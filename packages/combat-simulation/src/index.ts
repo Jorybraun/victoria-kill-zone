@@ -248,6 +248,7 @@ export class CombatSimulation {
       p.reloadEndsAtMs = this.now + rules.weapon.reloadMs; events.push(changed(p)); return null;
     }
     if (command.kind !== "fire" && command.kind !== "shield" && command.kind !== "slowField") return "invalidInput";
+    if (this.sighting && command.kind === "slowField") return "invalidInput";
     const pose = this.firingPose(p.playerId, command.poseSequence);
     if (typeof pose === "string") return pose;
     if (command.kind === "shield") {

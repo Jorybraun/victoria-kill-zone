@@ -90,6 +90,17 @@ describe("sighting geometry", () => {
     expect(f.player("b").health).toBe(100);
     expect(f.player("b").shield.energy).toBe(66);
   });
+  it("refuses slowField as invalidInput without consuming cooldown", () => {
+    const f = started();
+    const readyAtMs = f.player("a").slowFieldReadyAtMs;
+    const events = f.tick([f.ability("slowField", "a")]);
+    expect(refusal(events)).toBe("invalidInput");
+    expect(f.simulation.snapshot().slowFields).toHaveLength(0);
+    expect(f.player("a").slowFieldReadyAtMs).toBe(readyAtMs);
+    const shielded = f.tick([f.ability("shield", "a")]);
+    expect(refusal(shielded)).toBeUndefined();
+    expect(f.player("a").shield.activeUntilMs).not.toBeNull();
+  });
   it("keeps no live projectiles after a sighting fire", () => {
     const f = started();
     f.tick([fire(f, observation(f))]);
