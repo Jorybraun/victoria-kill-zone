@@ -28,7 +28,7 @@ const zone = (x: unknown): boolean => x === "head" || x === "torso" || x === "li
 export function validRules(x: unknown): x is CombatRules {
   if (!object(x) || !object(x.weapon) || !object(x.weapon.damage) || !object(x.shield) || !object(x.slowField)) return false;
   const w = x.weapon, damage = x.weapon.damage, s = x.shield, f = x.slowField;
-  return number(x.durationMs, 50, 3_600_000) && (x.geometry === "trackedBody" || x.geometry === "phoneProxy")
+  return number(x.durationMs, 50, 3_600_000) && (x.geometry === "trackedBody" || x.geometry === "phoneProxy" || x.geometry === "sighting")
     && number(x.respawnMs, 50, 60_000) && number(x.protectionMs, 0, 30_000)
     && (w.id === "sidearm" || w.id === "pulse") && (w.kind === "hitscan" || w.kind === "projectile")
     && [damage.head, damage.torso, damage.limbs].every(v => integer(v, 1) && v <= 100)
