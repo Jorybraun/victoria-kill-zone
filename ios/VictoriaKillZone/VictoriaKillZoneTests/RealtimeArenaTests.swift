@@ -161,6 +161,16 @@ final class RealtimeArenaTests: XCTestCase {
     XCTAssertFalse(waiting.begin); XCTAssertFalse(waiting.fire)
     XCTAssertEqual(waiting.reason, "Waiting for opponent")
   }
+  func testSightingHidesSlowFieldButKeepsFireAndShield() {
+    var snapshot = RealtimeCombatTests.snapshot(); snapshot.rules.geometry = "sighting"
+    snapshot.players[0].frameReady = false; snapshot.players[1].frameReady = false
+    // ADR 0013 owner decision: slow fields are refused server-side under
+    // sighting, so the client never offers the action; fire/shield unaffected.
+    XCTAssertTrue(eligibility(RealtimeCombatTests.snapshot()).slowField, "phoneProxy still offers slow field")
+    let result = eligibility(snapshot, frame: false, sighting: true)
+    XCTAssertFalse(result.slowField)
+    XCTAssertTrue(result.fire); XCTAssertTrue(result.shield)
+  }
   func testSightingAssociationNeedsExactlyOneConnectedRemote() {
     let remote = Array(players().prefix(2))
     let association = RealtimeAssociationPolicy.associateSighting(skeleton: skeleton(), observationConfidence: 0.9,

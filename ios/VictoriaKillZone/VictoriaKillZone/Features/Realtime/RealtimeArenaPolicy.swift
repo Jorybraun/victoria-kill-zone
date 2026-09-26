@@ -60,7 +60,7 @@ struct RealtimeActionEligibility: Equatable {
     return Self(fire: !shielding && !reloading && !cooldown && player.ammo > 0,
       reload: !shielding && !reloading && player.ammo < snapshot.rules.weapon.magazine,
       shield: shielding || (!reloading && player.shield.cooldownUntilMs <= now),
-      slowField: player.slowFieldReadyAtMs <= now,
+      slowField: !sighting && player.slowFieldReadyAtMs <= now,
       reason: shielding ? "Shield raised" : reloading ? "Reloading" : player.ammo == 0 ? "Reload to continue" : cooldown ? "Recharging" : "Ready")
   }
 
