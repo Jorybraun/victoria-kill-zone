@@ -158,6 +158,109 @@ final class RealtimeArenaPresentationTests: XCTestCase {
     XCTAssertFalse(lost.guidance.lowercased().contains("host"))
   }
 
+  func testSightingCopyNeverMentionsSharedFrameCeremony() {
+    let forbidden = ["align", "scan", "share arena", "linking", "relocaliz", "calibrat"]
+    var copies = [
+      RealtimeArenaPresentation.Sighting.startTitle,
+      RealtimeArenaPresentation.Sighting.retryTrackingTitle,
+    ]
+    for stage in RealtimeArenaPresentation.Sighting.allStages {
+      for clockReady in [true, false] {
+        copies.append(RealtimeArenaPresentation.Sighting.title(stage: stage, clockReady: clockReady))
+        for roundHasStarted in [true, false] {
+          copies.append(RealtimeArenaPresentation.Sighting.guidance(
+            stage: stage, clockReady: clockReady, roundHasStarted: roundHasStarted))
+        }
+      }
+    }
+    for connected in [true, false] {
+      for health in [0, 50, 100] {
+        for frameReady in [true, false] {
+          copies.append(RealtimeArenaPresentation.Sighting.rosterStatus(
+            connected: connected, health: health, frameReady: frameReady))
+          copies.append(RealtimeArenaPresentation.Sighting.rosterAccessibilityStatus(
+            connected: connected, frameReady: frameReady))
+        }
+      }
+    }
+    for copy in copies {
+      for term in forbidden {
+        XCTAssertFalse(copy.lowercased().contains(term),
+          "Sighting copy must not contain \(term): \(copy)")
+      }
+    }
+    // Spot-check the settled labels so the audit cannot pass on empty copy.
+    XCTAssertEqual(RealtimeArenaPresentation.Sighting.startTitle, "PLAY")
+    XCTAssertEqual(RealtimeArenaPresentation.Sighting.retryTrackingTitle, "Retry camera")
+    XCTAssertEqual(RealtimeArenaPresentation.Sighting.title(stage: .awaitingMembers, clockReady: true),
+      "Waiting for opponent")
+    XCTAssertEqual(RealtimeArenaPresentation.Sighting.title(stage: .unavailable, clockReady: true),
+      "Body tracking unavailable")
+    XCTAssertEqual(RealtimeArenaPresentation.Sighting.title(stage: .paused, clockReady: false),
+      "Synchronizing match")
+    XCTAssertEqual(RealtimeArenaPresentation.Sighting.guidance(
+      stage: .paused, clockReady: true, roundHasStarted: false),
+      "Point your camera at your opponent. The host can start once both players are ready.")
+    XCTAssertEqual(RealtimeArenaPresentation.Sighting.rosterStatus(
+      connected: true, health: 0, frameReady: true), "Respawning")
+    XCTAssertEqual(RealtimeArenaPresentation.Sighting.rosterStatus(
+      connected: true, health: 66, frameReady: false), "Connecting")
+  }
+
+  func testSightingEligibilityReasonsStayFreeOfSharedFrameCeremony() {
+    var snapshot = RealtimeCombatTests.snapshot()
+    snapshot.phase = .calibrating
+    var reasons: [String] = []
+    for clock in [true, false] {
+      for pose in [true, false] {
+        for connected in [true, false] {
+          snapshot.players[1].connected = connected
+          reasons.append(RealtimeActionEligibility.evaluate(
+            snapshot: snapshot, localPlayerID: "p1", clockReady: clock, frameReady: false,
+            sceneActive: true, canSubmit: true, poseFresh: pose, localFireAtMs: nil,
+            matchTimeMs: 5000, sighting: true).reason)
+        }
+      }
+    }
+    snapshot.players[1].connected = true
+    snapshot.phase = .running
+    reasons.append(RealtimeActionEligibility.evaluate(
+      snapshot: snapshot, localPlayerID: "p1", clockReady: true, frameReady: false,
+      sceneActive: true, canSubmit: true, poseFresh: true, localFireAtMs: nil,
+      matchTimeMs: 5000, sighting: true).reason)
+    let forbidden = ["align", "scan", "share arena", "linking", "relocaliz", "calibrat"]
+    for reason in reasons {
+      for term in forbidden {
+        XCTAssertFalse(reason.lowercased().contains(term),
+          "Sighting eligibility reason must not contain \(term): \(reason)")
+      }
+    }
+  }
+
+  func testQuickDuelFallbackOnlyOffersOnSavedArenaDeadEnds() {
+    XCTAssertTrue(RealtimeArenaPresentation.offersQuickDuelFallback(
+      usesSavedArena: true, stage: .measuringReference, frameStage: .awaitingResidual,
+      frameFailure: .referenceUnavailable, referenceState: .unavailable))
+    XCTAssertTrue(RealtimeArenaPresentation.offersQuickDuelFallback(
+      usesSavedArena: true, stage: .paused, frameStage: .lost,
+      frameFailure: .relocalizationTimedOut, referenceState: .unavailable))
+    XCTAssertTrue(RealtimeArenaPresentation.offersQuickDuelFallback(
+      usesSavedArena: true, stage: .unavailable, frameStage: .unaligned,
+      frameFailure: nil, referenceState: .unavailable))
+    XCTAssertFalse(RealtimeArenaPresentation.offersQuickDuelFallback(
+      usesSavedArena: false, stage: .unavailable, frameStage: .unaligned,
+      frameFailure: nil, referenceState: .unavailable))
+    XCTAssertFalse(RealtimeArenaPresentation.offersQuickDuelFallback(
+      usesSavedArena: true, stage: .paused, frameStage: .lost,
+      frameFailure: .trackingLost, referenceState: .unavailable))
+    XCTAssertFalse(RealtimeArenaPresentation.offersQuickDuelFallback(
+      usesSavedArena: true, stage: .relocalizing, frameStage: .relocalizingWorld,
+      frameFailure: nil, referenceState: .unavailable))
+    XCTAssertFalse(RealtimeArenaPresentation.offersQuickDuelFallback(
+      usesSavedArena: true, stage: .running, frameStage: .aligned,
+      frameFailure: nil, referenceState: .unavailable))
+  }
+
   private func field(owner: String, start: Double, end: Double) -> CombatWire.SlowField {
     .init(fieldId: "\(owner)-\(start)", ownerId: owner, center: [0, 0, 0], radius: 2,
       startsAtMs: start, endsAtMs: end, scale: 0.25)
