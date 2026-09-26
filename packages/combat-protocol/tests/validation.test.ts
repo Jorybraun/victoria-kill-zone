@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {DEFAULT_RULES, LIMITS, parseClientMessage, validateTicketClaims} from "../src/index.js";
+import {DEFAULT_RULES, LIMITS, parseClientMessage, validateCombatRules, validateTicketClaims} from "../src/index.js";
 
 const envelope = (command: unknown) => ({type:"command",envelope:{v:1,commandId:"shot-1",clientSequence:1,authorityEpoch:1,frameEpoch:1,sentAtMs:50,command}});
 const parse = (x: unknown) => parseClientMessage(JSON.stringify(x));
@@ -37,6 +37,17 @@ describe("untrusted combat messages", () => {
     expect(parse(envelope({...p,observations:[o,o]}))).toBeNull();
     expect(parse(envelope({...p,pose:{...p.pose,orientation:[0,0,0,0]}}))).toBeNull();
   });
+  it("accepts an optional sighting observation on fire and rejects malformed ones", () => {
+    const fire = {kind:"fire",shotId:"s1",poseSequence:2,origin:[0,1,0],direction:[0,0,-1]};
+    const observation = {targetPlayerId:"p2",capturedAtMs:50,associationConfidence:.9,uncertaintyMeters:.05,
+      colliders:[{id:"torso",kind:"sphere",zone:"torso",center:[0,1,0],radius:.15}]};
+    expect(parse(envelope({...fire,observation:null}))).not.toBeNull();
+    expect(parse(envelope({...fire,observation}))).not.toBeNull();
+    expect(parse(envelope({...fire,observation:{...observation,colliders:[]}}))).toBeNull();
+    expect(parse(envelope({...fire,observation:{...observation,extra:1}}))).toBeNull();
+    expect(parse(envelope({...fire,observation:42}))).toBeNull();
+    expect(parse(envelope({...fire,extra:true}))).toBeNull();
+  });
   it("accepts bounded reconnect and acknowledgement messages", () => {
     expect(parse({type:"received",eventSequence:5})).toEqual({type:"received",eventSequence:5});
     expect(parse({type:"resume",afterEventSequence:0})).not.toBeNull();
@@ -65,6 +76,18 @@ describe("untrusted combat messages", () => {
     for (const token of ["", "a=b=", "QUJDQQ", "A".repeat(LIMITS.niTokenBytes + 4)])
       expect(parse({type:"niToken",token})).toBeNull();
     expect(parse({type:"niToken",token:"AAAA",extra:true})).toBeNull();
+  });
+});
+
+describe("combat rules", () => {
+  it("accepts every combat geometry including sighting", () => {
+    for (const geometry of ["trackedBody", "phoneProxy", "sighting"] as const) {
+      const rules = structuredClone(DEFAULT_RULES); rules.geometry = geometry;
+      expect(validateCombatRules(rules)).toBe(true);
+    }
+    const rules = structuredClone(DEFAULT_RULES) as {geometry: string};
+    rules.geometry = "other";
+    expect(validateCombatRules(rules)).toBe(false);
   });
 });
 

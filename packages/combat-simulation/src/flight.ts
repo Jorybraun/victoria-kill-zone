@@ -1,4 +1,4 @@
-import {type CombatEvent, type CombatPlayerState, type HitZone, type ProjectileState, type Vec3} from "@vkz/combat-protocol";
+import {type BodyObservation, type CombatEvent, type CombatPlayerState, type HitZone, type ProjectileState, type Vec3} from "@vkz/combat-protocol";
 import {add, distance, EPSILON, lerp, mul, normalized, sphereBoundaries, sweepCollider, sweepShield} from "./geometry.js";
 import {BODY_ANCHOR_METERS, colliderPairs, coverObserved, phoneAt, sampleBoundaries} from "./history.js";
 import {clone, type SimulationCheckpoint} from "./state.js";
@@ -115,6 +115,48 @@ export function terminal(p: ProjectileState, reason: "bodyHit" | "shieldBlocked"
 }
 function changed(player: CombatPlayerState): CombatEvent { return {kind: "playerChanged", player: clone(player)}; }
 
+function applyShieldBlock(state: SimulationCheckpoint, projectile: ProjectileState, atMs: number, position: Vec3,
+  target: CombatPlayerState): CombatEvent[] {
+  target.shield.energy = Math.max(0, target.shield.energy - state.snapshot.rules.weapon.damage.torso);
+  if (target.shield.energy === 0) target.shield.activeUntilMs = null;
+  return [terminal(projectile, "shieldBlocked", atMs, position, target.playerId), changed(target)];
+}
+function applyBodyHit(state: SimulationCheckpoint, projectile: ProjectileState, atMs: number, position: Vec3,
+  target: CombatPlayerState, zone: HitZone): CombatEvent[] {
+  const damage = Math.min(target.health, state.snapshot.rules.weapon.damage[zone]);
+  target.health -= damage;
+  const events: CombatEvent[] = [];
+  if (target.health === 0) {
+    target.deaths++; target.reloadEndsAtMs = null; target.shield.activeUntilMs = null;
+    target.respawnAtMs = atMs + state.snapshot.rules.respawnMs;
+    const shooter = state.snapshot.players.find(p => p.playerId === projectile.shooterId)!;
+    shooter.kills++; events.push(changed(shooter));
+  }
+  events.push(terminal(projectile, "bodyHit", atMs, position, target.playerId, zone, damage), changed(target));
+  return events;
+}
+
+/** ADR 0013: a sighting verdict is the shooter's own observation, resolved
+ * instantly in the shooter's camera space with no shared frame or rewind.
+ */
+export function resolveSighting(state: SimulationCheckpoint, projectile: ProjectileState, target: CombatPlayerState,
+  observation: BodyObservation, atMs: number): CombatEvent[] {
+  const start = projectile.position;
+  const end = add(start, mul(projectile.direction, state.snapshot.rules.weapon.rangeMeters));
+  let best: {u: number; zone: HitZone} | null = null;
+  for (const collider of observation.colliders) {
+    const u = sweepCollider(start, end, collider, collider, projectile.radius);
+    if (u !== null && (best === null || u < best.u)) best = {u, zone: collider.zone};
+  }
+  if (best === null || target.health <= 0 || (target.protectedUntilMs !== null && target.protectedUntilMs > atMs))
+    return [terminal(projectile, "missExpired", atMs, end)];
+  const position = lerp(start, end, best.u);
+  const until = target.shield.activeUntilMs;
+  if (until !== null && until > atMs && until - state.snapshot.rules.shield.durationMs <= atMs && target.shield.energy > 0)
+    return applyShieldBlock(state, projectile, atMs, position, target);
+  return applyBodyHit(state, projectile, atMs, position, target, best.zone);
+}
+
 /** Resolve all shots in global impact-time order, avoiding projectile-array bias
  * when earlier hits break a shield or kill the nearest target.
  */
@@ -139,19 +181,9 @@ export function resolveFlights(state: SimulationCheckpoint, paths: FlightPath[])
     if (hit.shield) {
       const until = target.shield.activeUntilMs;
       if (until === null || until <= hit.atMs || until - state.snapshot.rules.shield.durationMs > hit.atMs || target.shield.energy <= 0) continue;
-      target.shield.energy = Math.max(0, target.shield.energy - state.snapshot.rules.weapon.damage.torso);
-      if (target.shield.energy === 0) target.shield.activeUntilMs = null;
-      events.push(terminal(path.projectile, "shieldBlocked", hit.atMs, hit.position, target.playerId), changed(target));
+      events.push(...applyShieldBlock(state, path.projectile, hit.atMs, hit.position, target));
     } else {
-      const damage = Math.min(target.health, state.snapshot.rules.weapon.damage[hit.zone]);
-      target.health -= damage;
-      if (target.health === 0) {
-        target.deaths++; target.reloadEndsAtMs = null; target.shield.activeUntilMs = null;
-        target.respawnAtMs = hit.atMs + state.snapshot.rules.respawnMs;
-        const shooter = state.snapshot.players.find(p => p.playerId === path.projectile.shooterId)!;
-        shooter.kills++; events.push(changed(shooter));
-      }
-      events.push(terminal(path.projectile, "bodyHit", hit.atMs, hit.position, target.playerId, hit.zone, damage), changed(target));
+      events.push(...applyBodyHit(state, path.projectile, hit.atMs, hit.position, target, hit.zone));
     }
     impacts.set(hit.projectileId, hit); effects.set(hit.projectileId, events);
   }
