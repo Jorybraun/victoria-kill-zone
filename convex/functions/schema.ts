@@ -63,7 +63,7 @@ export default defineSchema({
     combatMode: v.optional(v.literal("durableObject")),
     // Per-match combat geometry selected at create. Absent on legacy matches,
     // which keep the "trackedBody" default baked into their prepared rules.
-    combatGeometry: v.optional(v.union(v.literal("trackedBody"), v.literal("phoneProxy"))),
+    combatGeometry: v.optional(v.union(v.literal("trackedBody"), v.literal("phoneProxy"), v.literal("sighting"))),
     combatFrameEpoch: v.optional(v.number()),
     combatAuthorityEpoch: v.optional(v.number()),
     combatPreparedAt: v.optional(v.number()),

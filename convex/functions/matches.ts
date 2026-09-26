@@ -61,7 +61,7 @@ export const create = mutation({
     combatMode: v.optional(v.literal("durableObject")),
     // Optional verdict geometry for durableObject matches. Absent keeps the
     // "trackedBody" default; "phoneProxy" is the relocalized Quick Play mode.
-    combatGeometry: v.optional(v.union(v.literal("trackedBody"), v.literal("phoneProxy"))),
+    combatGeometry: v.optional(v.union(v.literal("trackedBody"), v.literal("phoneProxy"), v.literal("sighting"))),
     maxPlayers: v.optional(v.number()),
     // phase0.v1 arenaCenter. Optional during the migration window: the smaller
     // G2 create shape stays accepted, but a match created without a valid

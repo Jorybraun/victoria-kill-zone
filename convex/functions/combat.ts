@@ -24,6 +24,17 @@ function configuration(): {secret: string; endpoint: string} {
   return {secret,endpoint:url.origin};
 }
 
+type CombatGeometry = "trackedBody" | "phoneProxy" | "sighting";
+/** ADR 0013: two-player Quick Play defaults to sighting; anything larger keeps
+ * the shared-frame geometries until a target-identity rule ships.
+ */
+export function selectCombatGeometry(requested: CombatGeometry | undefined, rosterSize: number): CombatGeometry {
+  const geometry = requested ?? DEFAULT_RULES.geometry;
+  if (geometry === "sighting") return rosterSize <= 2 ? "sighting" : "phoneProxy";
+  if (geometry === "phoneProxy" && rosterSize <= 2) return "sighting";
+  return geometry;
+}
+
 /** Host freezes membership before issuing any capability; this starts calibration. */
 export const prepare = mutation({
   args: session,
@@ -46,7 +57,7 @@ export const prepare = mutation({
       status:"active",phase:"running",startsAt:null,startedAt:null,endsAt:null,
       combatPreparedAt:now,combatFrameEpoch:1,combatAuthorityEpoch:1,combatProjectionSequence:0,
       combatPhase:"calibrating",updatedAt:now,
-      combatRulesJson:JSON.stringify({...DEFAULT_RULES, geometry:match.combatGeometry ?? DEFAULT_RULES.geometry}),
+      combatRulesJson:JSON.stringify({...DEFAULT_RULES, geometry:selectCombatGeometry(match.combatGeometry, players.length)}),
     });
     return null;
   },
