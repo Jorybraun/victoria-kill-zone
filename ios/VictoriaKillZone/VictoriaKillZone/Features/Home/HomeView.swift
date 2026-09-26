@@ -27,7 +27,7 @@ struct HomeView: View {
         Text("Your world. The arena.")
           .font(.title2.bold())
           .foregroundStyle(VKZPalette.pending)
-        Text("Bring two to four players together. Create an arena or join a friend’s code.")
+        Text("Two players, one room. Start a Quick Duel or join a friend’s code. Saved Arenas are the 2–4 player mode.")
           .font(.body)
           .fixedSize(horizontal: false, vertical: true)
           .foregroundStyle(VKZPalette.textMuted)
@@ -62,33 +62,33 @@ struct HomeView: View {
         } label: {
           HStack(spacing: 10) {
             if store.operation == .creating {ProgressView().tint(VKZPalette.background)}
-            Text(store.operation == .creating ? "CREATING ARENA…" : "CREATE ARENA")
+            Text(store.operation == .creating ? "STARTING QUICK DUEL…" : "QUICK DUEL")
           }
         }
         .buttonStyle(VKZPrimaryButtonStyle())
         .disabled(store.isBusy)
-        .accessibilityLabel("Create arena for two to four players")
+        .accessibilityLabel("Start a Quick Duel for two players")
 
-        Button("JOIN ARENA") {
+        Button("JOIN DUEL") {
           store.showJoin()
         }
         .buttonStyle(VKZSecondaryButtonStyle())
         .disabled(store.isBusy)
-        .accessibilityLabel("Join arena")
-        .accessibilityHint("Enter a friend’s arena or classic duel code.")
+        .accessibilityLabel("Join duel")
+        .accessibilityHint("Enter a friend’s duel code.")
 
         Button(action: onSavedArenas) {
-          Label("SCAN & SAVE", systemImage: "map")
+          Label("SAVED ARENAS", systemImage: "map")
             .frame(minHeight: 44)
         }
         .disabled(store.isBusy)
-        .accessibilityHint("Save your surroundings and test recognition later. Works offline without a game.")
+        .accessibilityHint("Scan and save a play area for 2–4 player Saved Arena matches. Works offline without a game.")
 
         if let onUseSavedArena {
-          DisclosureGroup("Saved arena games") {
+          DisclosureGroup("Saved Arena games") {
             Button("PLAY A SAVED ARENA", action: onUseSavedArena)
               .frame(minHeight: 44)
-              .accessibilityHint("Create a game with an existing calibrated arena.")
+              .accessibilityHint("Create a 2–4 player match in a saved arena.")
           }
           .font(.subheadline)
           .foregroundStyle(VKZPalette.textMuted)
@@ -151,10 +151,10 @@ struct HomeView: View {
   }
 
   @ViewBuilder private var modeFacts: some View {
-    Label("2–4 players", systemImage: "person.2.fill")
+    Label("2 players", systemImage: "person.2.fill")
       .font(.subheadline.weight(.semibold))
       .frame(maxWidth: .infinity, alignment: .leading)
-    Label("Same location", systemImage: "mappin.and.ellipse")
+    Label("Same room", systemImage: "mappin.and.ellipse")
       .font(.subheadline.weight(.semibold))
       .frame(maxWidth: .infinity, alignment: .leading)
   }

@@ -2628,6 +2628,54 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
     }
   }
 
+  func testWaitingRoomQuickDuelClassification() {
+    func room(
+      combatMode: CombatMode? = .durableObject,
+      combatGeometry: String? = nil,
+      maxPlayers: Int = 4
+    ) -> WaitingRoom {
+      WaitingRoom(
+        matchID: "m", code: "ABC123", arenaRadiusMeters: 0,
+        localPlayerID: "p0", hostPlayerID: "p0", players: [],
+        combatMode: combatMode, combatGeometry: combatGeometry, maxPlayers: maxPlayers
+      )
+    }
+
+    XCTAssertTrue(room(combatGeometry: "sighting", maxPlayers: 2).isQuickDuel)
+    XCTAssertTrue(room(maxPlayers: 2).isQuickDuel,
+      "Older Convex omits combatGeometry; a two-slot durableObject room is a Quick Duel")
+    XCTAssertFalse(room(combatGeometry: "trackedBody", maxPlayers: 4).isQuickDuel)
+    XCTAssertTrue(room(combatGeometry: "trackedBody", maxPlayers: 4).isSavedArena)
+    XCTAssertFalse(room(combatMode: nil, maxPlayers: 2).isQuickDuel)
+    XCTAssertFalse(room(combatMode: nil, maxPlayers: 2).isSavedArena)
+    XCTAssertEqual(WaitingRoomCopy.mode(for: room(combatGeometry: "sighting", maxPlayers: 2)), .quickDuel)
+    XCTAssertEqual(WaitingRoomCopy.mode(for: room(combatGeometry: "trackedBody", maxPlayers: 4)), .savedArena)
+    XCTAssertEqual(WaitingRoomCopy.mode(for: room(combatMode: nil, maxPlayers: 2)), .classic)
+  }
+
+  func testQuickDuelAndClassicCopyNeverMentionsArenaCeremony() {
+    let forbidden = ["align", "scan", "share arena", "linking", "relocaliz", "calibrat"]
+    for mode in [WaitingRoomCopy.Mode.quickDuel, .classic] {
+      for copy in [
+        WaitingRoomCopy.matchName(mode),
+        WaitingRoomCopy.hostStartTitle(mode),
+        WaitingRoomCopy.allReadyGuidance(mode),
+        WaitingRoomCopy.waitingForHostGuidance(mode),
+      ] {
+        for term in forbidden {
+          XCTAssertFalse(copy.lowercased().contains(term),
+            "\(mode) copy must not contain \(term): \(copy)")
+        }
+      }
+    }
+    XCTAssertEqual(WaitingRoomCopy.matchName(.quickDuel), "Quick Duel")
+    XCTAssertEqual(WaitingRoomCopy.hostStartTitle(.quickDuel), "Start duel")
+    // The opt-in saved-arena mode keeps its alignment ceremony copy.
+    XCTAssertEqual(WaitingRoomCopy.hostStartTitle(.savedArena), "Align arena")
+    XCTAssertEqual(WaitingRoomCopy.allReadyGuidance(.savedArena),
+      "All players ready. Next, align your shared play area.")
+  }
+
   /// Emits the deterministic authority/client timeline both to stdout (SwiftPM
   /// runs) and as a result-bundle attachment (simulator runs).
   private func printTimeline(_ rig: TwoClientRig, label: String) {
