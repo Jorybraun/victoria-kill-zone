@@ -41,8 +41,8 @@ if (Number.isSafeInteger(manifest.convexMinProtocol) && Number.isSafeInteger(man
 // Every protocol-version literal in the repo must equal manifest.protocolVersion.
 const literalChecks = [
   ['packages/combat-protocol/src/index.ts', /PROTOCOL_VERSION = (\d+) as const/],
-  ['services/combat-worker/src/index.ts', /protocol: (\d+)/],
-  ['ios/VictoriaKillZone/VictoriaKillZone/Services/Realtime/CombatWire.swift', /let v = (\d+)/],
+  ['packages/combat-protocol/src/validation.ts', /e\.v !== (\d+)/],
+  ['convex/functions/combat.ts', /v:(\d+),iss:"vkz-lobby"/],
 ];
 for (const [path, pattern] of literalChecks) {
   const match = read(path).match(pattern);
@@ -63,6 +63,33 @@ for (const [path, pattern] of vLiteralChecks) {
   for (const match of matches) {
     if (Number(match[1]) !== manifest.protocolVersion) failures.push(`${path}: literal ${match[1]} != manifest protocolVersion ${manifest.protocolVersion}`);
   }
+}
+
+// The worker and the iOS client read the manifest, not their own literals.
+const workerIndex = read('services/combat-worker/src/index.ts');
+if (!workerIndex.includes('releaseManifestSummary(')) failures.push('services/combat-worker/src/index.ts: /health must publish releaseManifestSummary()');
+const wire = read('ios/VictoriaKillZone/VictoriaKillZone/Services/Realtime/CombatWire.swift');
+if (!wire.includes('let v = ReleaseManifest.protocolVersion')) failures.push('CombatWire.swift: Envelope.v must read ReleaseManifest.protocolVersion');
+
+// Every mirrored literal in ReleaseManifest.swift must equal the manifest value.
+const swiftManifest = read('ios/VictoriaKillZone/VictoriaKillZone/Services/Realtime/ReleaseManifest.swift');
+const swiftChecks = [
+  ['protocolVersion', 'int', manifest.protocolVersion],
+  ['rulesSchemaHash', 'string', manifest.rulesSchemaHash],
+  ['doClass', 'string', manifest.doClass],
+  ['doMigrationTag', 'string', manifest.doMigrationTag],
+  ['iosMinProtocol', 'int', manifest.iosMinProtocol],
+  ['iosMaxProtocol', 'int', manifest.iosMaxProtocol],
+  ['convexMinProtocol', 'int', manifest.convexMinProtocol],
+  ['workerVersionTag', 'string', manifest.workerVersionTag],
+  ['releaseSha', 'string', manifest.releaseSha],
+];
+for (const [field, kind, expected] of swiftChecks) {
+  const pattern = kind === 'int' ? new RegExp(`static let ${field} = (\\d+)`) : new RegExp(`static let ${field} = "([^"]*)"`);
+  const match = swiftManifest.match(pattern);
+  if (!match) { failures.push(`ReleaseManifest.swift: expected static let ${field} not found`); continue; }
+  const actual = kind === 'int' ? Number(match[1]) : match[1];
+  if (actual !== expected) failures.push(`ReleaseManifest.swift: ${field} ${JSON.stringify(actual)} != manifest ${JSON.stringify(expected)}`);
 }
 const fixture = JSON.parse(read('contracts/fixtures/combat.v1.json'));
 if (fixture.protocolVersion !== manifest.protocolVersion) {

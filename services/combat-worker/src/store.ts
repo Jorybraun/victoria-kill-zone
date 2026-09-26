@@ -1,4 +1,4 @@
-import { LIMITS, type AuthenticatedCommand, type CombatSnapshot, type ServerEvent } from "@vkz/combat-protocol";
+import { LIMITS, type AuthenticatedCommand, type CombatSnapshot, type ServerEvent, type WorkerIdentity } from "@vkz/combat-protocol";
 import { BulletLedger } from "./bullet-ledger.js";
 import { ProjectionStore } from "./projection-store.js";
 
@@ -30,9 +30,9 @@ export interface ProcessedCommand {
 export class RoomStore {
   private readonly ledger: BulletLedger;
   readonly projections: ProjectionStore;
-  constructor(private readonly storage: DurableObjectStorage) {
+  constructor(private readonly storage: DurableObjectStorage, worker: WorkerIdentity | null = null) {
     this.ledger = new BulletLedger(storage.sql);
-    this.projections = new ProjectionStore(storage);
+    this.projections = new ProjectionStore(storage, worker);
   }
 
   initialize(): void {

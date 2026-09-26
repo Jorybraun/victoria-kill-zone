@@ -126,7 +126,7 @@ enum CombatWire {
     }
   }
   struct Envelope: Encodable, Sendable {
-    let v = 1
+    let v = ReleaseManifest.protocolVersion
     var commandId: String; var clientSequence: Int; var authorityEpoch: Int; var frameEpoch: Int; var sentAtMs: Double
     var command: Command
   }
@@ -181,19 +181,31 @@ enum CombatWire {
     var v: Int; var matchId: String; var authorityEpoch: Int; var frameEpoch: Int
     var eventSequence: Int; var tick: Int; var matchTimeMs: Double; var event: Event
   }
+  /// Identity of the code the authority is running; absent on old Workers.
+  struct WorkerIdentity: Codable, Equatable, Sendable {
+    var versionId: String?
+    var versionTag: String?
+    var releaseSha: String
+    var workerVersionTag: String
+    var doMigrationTag: String
+  }
+  struct Release: Codable, Equatable, Sendable {
+    var manifest: ReleaseManifest.Summary
+    var worker: WorkerIdentity
+  }
   enum ServerMessage: Decodable, Sendable {
-    case snapshot(Snapshot, eventSequence: Int, clientSequence: Int)
+    case snapshot(Snapshot, eventSequence: Int, clientSequence: Int, release: Release?)
     case events([ServerEvent])
     case ack(commandId: String, clientSequence: Int, replayed: Bool, eventSequence: Int)
     case pong(nonce: String, clientSentAtMs: Double, serverReceivedAtMs: Double, serverSentAtMs: Double)
     case collab(playerId: String, data: Data)
     case niToken(playerId: String, data: Data)
     case error(code: String, commandId: String?)
-    private enum Key: String, CodingKey {case type, snapshot, eventSequence, clientSequence, events, commandId, replayed, nonce, clientSentAtMs, serverReceivedAtMs, serverSentAtMs, code, playerId, data, token}
+    private enum Key: String, CodingKey {case type, snapshot, eventSequence, clientSequence, release, events, commandId, replayed, nonce, clientSentAtMs, serverReceivedAtMs, serverSentAtMs, code, playerId, data, token}
     init(from decoder: Decoder) throws {
       let c=try decoder.container(keyedBy:Key.self)
       switch try c.decode(String.self,forKey:.type) {
-      case "snapshot": self = .snapshot(try c.decode(Snapshot.self,forKey:.snapshot),eventSequence:try c.decode(Int.self,forKey:.eventSequence),clientSequence:try c.decode(Int.self,forKey:.clientSequence))
+      case "snapshot": self = .snapshot(try c.decode(Snapshot.self,forKey:.snapshot),eventSequence:try c.decode(Int.self,forKey:.eventSequence),clientSequence:try c.decode(Int.self,forKey:.clientSequence),release:try c.decodeIfPresent(Release.self,forKey:.release))
       case "events": self = .events(try c.decode([ServerEvent].self,forKey:.events))
       case "ack": self = .ack(commandId:try c.decode(String.self,forKey:.commandId),clientSequence:try c.decode(Int.self,forKey:.clientSequence),replayed:try c.decode(Bool.self,forKey:.replayed),eventSequence:try c.decode(Int.self,forKey:.eventSequence))
       case "pong": self = .pong(nonce:try c.decode(String.self,forKey:.nonce),clientSentAtMs:try c.decode(Double.self,forKey:.clientSentAtMs),serverReceivedAtMs:try c.decode(Double.self,forKey:.serverReceivedAtMs),serverSentAtMs:try c.decode(Double.self,forKey:.serverSentAtMs))

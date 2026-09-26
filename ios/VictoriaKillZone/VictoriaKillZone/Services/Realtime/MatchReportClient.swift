@@ -10,6 +10,9 @@ struct MatchReport: Encodable, Sendable {
   var device: Device
   var transcript: String
   var log: [DuelFrameDiagnosticEvent]
+  var release: ReleaseManifest.Summary
+  var serverRelease: CombatWire.Release?
+  var authorityEpochs: [AuthorityEpochRecord]
 }
 
 enum MatchReportError: Error, Equatable {

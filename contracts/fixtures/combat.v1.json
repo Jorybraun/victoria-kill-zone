@@ -256,5 +256,112 @@
         "slowFields": []
       }
     }
+  },
+  "snapshotWithRelease": {
+    "id": "first-snapshot-with-release",
+    "message": {
+      "type": "snapshot",
+      "eventSequence": 0,
+      "clientSequence": 0,
+      "release": {
+        "manifest": {
+          "protocolVersion": 1,
+          "rulesSchemaHash": "3d92c5b99943eb6705b2c0fc52e5c13d4841be2d38ee93c346f0834631e9d674",
+          "doClass": "CombatRoom",
+          "doMigrationTag": "v1",
+          "iosMinProtocol": 1,
+          "iosMaxProtocol": 1,
+          "convexMinProtocol": 1,
+          "workerVersionTag": "vkz-combat-2026.09",
+          "releaseSha": "0000000000000000000000000000000000000000"
+        },
+        "worker": {
+          "versionId": null,
+          "versionTag": null,
+          "releaseSha": "0000000000000000000000000000000000000000",
+          "workerVersionTag": "vkz-combat-2026.09",
+          "doMigrationTag": "v1"
+        }
+      },
+      "snapshot": {
+        "matchId": "fixture-match",
+        "authorityEpoch": 1,
+        "frameEpoch": 1,
+        "tick": 0,
+        "matchTimeMs": 0,
+        "roundStartedAtMs": null,
+        "phase": "calibrating",
+        "rules": {
+          "durationMs": 180000,
+          "geometry": "sighting",
+          "respawnMs": 5000,
+          "protectionMs": 2000,
+          "weapon": {
+            "id": "pulse",
+            "kind": "projectile",
+            "damage": { "head": 75, "torso": 34, "limbs": 20 },
+            "cooldownMs": 150,
+            "magazine": 8,
+            "reloadMs": 1250,
+            "speed": 8,
+            "projectileRadius": 0.015,
+            "lifetimeMs": 4000,
+            "rangeMeters": 25
+          },
+          "shield": {
+            "radius": 0.4,
+            "offsetMeters": 0.15,
+            "durationMs": 2000,
+            "cooldownMs": 8000,
+            "energy": 100
+          },
+          "slowField": {
+            "radius": 2,
+            "durationMs": 2000,
+            "cooldownMs": 10000,
+            "scale": 0.25
+          }
+        },
+        "players": [
+          {
+            "playerId": "p-host",
+            "displayName": "Host",
+            "role": "host",
+            "health": 100,
+            "ammo": 8,
+            "kills": 0,
+            "deaths": 0,
+            "connected": true,
+            "frameReady": false,
+            "lastFireAtMs": null,
+            "reloadEndsAtMs": null,
+            "respawnAtMs": null,
+            "protectedUntilMs": null,
+            "shield": { "activeUntilMs": null, "cooldownUntilMs": 0, "energy": 100 },
+            "slowFieldReadyAtMs": 0
+          },
+          {
+            "playerId": "p-guest",
+            "displayName": "Guest",
+            "role": "player",
+            "health": 100,
+            "ammo": 8,
+            "kills": 0,
+            "deaths": 0,
+            "connected": true,
+            "frameReady": false,
+            "lastFireAtMs": null,
+            "reloadEndsAtMs": null,
+            "respawnAtMs": null,
+            "protectedUntilMs": null,
+            "shield": { "activeUntilMs": null, "cooldownUntilMs": 0, "energy": 100 },
+            "slowFieldReadyAtMs": 0
+          }
+        ],
+        "phonePoses": [],
+        "projectiles": [],
+        "slowFields": []
+      }
+    }
   }
 }

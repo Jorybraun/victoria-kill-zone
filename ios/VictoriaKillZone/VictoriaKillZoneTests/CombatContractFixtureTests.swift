@@ -70,7 +70,7 @@ final class CombatContractFixtureTests: XCTestCase {
     let fixture = try JSONSerialization.jsonObject(with: fixtureData()) as! [String: Any]
     let snapshot = try dictionary(fixture["snapshot"] as Any)
     let message = try JSONSerialization.data(withJSONObject: snapshot["message"] as Any)
-    guard case .snapshot(let wire, let eventSequence, let clientSequence) =
+    guard case .snapshot(let wire, let eventSequence, let clientSequence, let release) =
       try JSONDecoder().decode(CombatWire.ServerMessage.self, from: message) else {
       return XCTFail("snapshot message did not decode as .snapshot")
     }
@@ -90,6 +90,21 @@ final class CombatContractFixtureTests: XCTestCase {
     XCTAssertTrue(wire.projectiles.isEmpty)
     XCTAssertTrue(wire.slowFields.isEmpty)
     XCTAssertTrue(wire.phonePoses.isEmpty)
+    XCTAssertNil(release)
+  }
+  func testSnapshotWithReleaseDecodesServerIdentity() throws {
+    let fixture = try JSONSerialization.jsonObject(with: fixtureData()) as! [String: Any]
+    let snapshot = try dictionary(fixture["snapshotWithRelease"] as Any)
+    let message = try JSONSerialization.data(withJSONObject: snapshot["message"] as Any)
+    guard case .snapshot(_, _, _, let release) =
+      try JSONDecoder().decode(CombatWire.ServerMessage.self, from: message) else {
+      return XCTFail("snapshotWithRelease did not decode as .snapshot")
+    }
+    XCTAssertEqual(release?.manifest.protocolVersion, (fixture["protocolVersion"] as? NSNumber)?.intValue)
+    XCTAssertEqual(release?.manifest.workerVersionTag, ReleaseManifest.workerVersionTag)
+    XCTAssertEqual(release?.worker.releaseSha, ReleaseManifest.releaseSha)
+    XCTAssertNil(release?.worker.versionId)
+    XCTAssertNil(release?.worker.versionTag)
   }
   func testCommandEnvelopesEncodeToTheFixtureWireShape() throws {
     let fixture = try JSONSerialization.jsonObject(with: fixtureData()) as! [String: Any]

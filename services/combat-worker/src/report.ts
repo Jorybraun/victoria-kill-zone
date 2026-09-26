@@ -20,6 +20,11 @@ export type MatchReport = {
   device?: { model?: string; ios?: string; build?: string };
   transcript?: string;
   log?: { elapsedMs?: number; kind?: string; detail?: string }[];
+  release?: { protocolVersion?: number; rulesSchemaHash?: string; doClass?: string; doMigrationTag?: string;
+    iosMinProtocol?: number; iosMaxProtocol?: number; convexMinProtocol?: number; workerVersionTag?: string; releaseSha?: string };
+  serverRelease?: { manifest?: MatchReport["release"];
+    worker?: { versionId?: string | null; versionTag?: string | null; releaseSha?: string; workerVersionTag?: string; doMigrationTag?: string } };
+  authorityEpochs?: { authorityEpoch?: number; frameEpoch?: number; eventSequence?: number; observedAtMs?: number }[];
 };
 
 /** Per-match report ledger inside the room's Durable Object storage. */
@@ -166,6 +171,33 @@ function fence(content: string, info = ""): string[] {
   return [`${marker}${info}`, content, marker];
 }
 
+function releaseSection(report: MatchReport): string[] {
+  const section: string[] = [];
+  const manifest = report.release;
+  const worker = report.serverRelease?.worker;
+  if (manifest !== undefined || worker !== undefined) {
+    section.push("### Release (untrusted)", "");
+    if (manifest !== undefined) {
+      const protocol = Number.isSafeInteger(manifest.protocolVersion) ? String(manifest.protocolVersion) : "unknown";
+      section.push(`- Client manifest: protocol ${protocol}, releaseSha \`${text(manifest.releaseSha, 64) || "unknown"}\`, workerTag \`${text(manifest.workerVersionTag, 64) || "unknown"}\``);
+    }
+    if (worker !== undefined) {
+      section.push(`- Server worker: versionId \`${text(worker.versionId, 64) || "unknown"}\`, versionTag \`${text(worker.versionTag, 64) || "unknown"}\`, releaseSha \`${text(worker.releaseSha, 64) || "unknown"}\``);
+    }
+    section.push("");
+  }
+  const epochs = (report.authorityEpochs ?? [])
+    .filter((e) => typeof e === "object" && e !== null)
+    .map((e) => ({ authorityEpoch: Math.max(0, Math.floor(Number(e.authorityEpoch) || 0)), frameEpoch: Math.max(0, Math.floor(Number(e.frameEpoch) || 0)),
+      eventSequence: Math.max(0, Math.floor(Number(e.eventSequence) || 0)), observedAtMs: Math.max(0, Math.floor(Number(e.observedAtMs) || 0)) }))
+    .slice(-32);
+  if (epochs.length > 0) {
+    section.push("### Authority epochs (untrusted)", "", "| authorityEpoch | frameEpoch | eventSequence | observedAtMs |", "| --- | --- | --- | --- |",
+      ...epochs.map((e) => `| ${e.authorityEpoch} | ${e.frameEpoch} | ${e.eventSequence} | ${e.observedAtMs} |`), "");
+  }
+  return section;
+}
+
 function issueTitle(report: MatchReport): string {
   const summary = (text(report.transcript, TRANSCRIPT_CHARS).split("\n")[0] ?? "").trim().slice(0, 72);
   return `[match report] ${summary === "" ? "player report" : summary}`;
@@ -192,6 +224,7 @@ function issueBody(report: MatchReport, matchId: string): string {
     `- Build: ${text(device.build, 32) || "unknown"}`,
     `- Match: \`${matchId.slice(0, 36)}\``,
     "",
+    ...releaseSection(report),
     "### Player description (untrusted)",
     "",
     ...fence(text(report.transcript, TRANSCRIPT_CHARS) || "(none)", "text"),

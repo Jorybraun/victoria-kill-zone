@@ -56,6 +56,31 @@ describe("MatchReportHandler", () => {
     expect(sent?.body).toContain("untrusted input");
   });
 
+  it("renders client/server release identity and authority epochs when present", async () => {
+    let sent: { title: string; body: string } | undefined;
+    const handler = new MatchReportHandler((input) => { sent = input; return Promise.resolve({ number: 9, url: "u" }); });
+    const response = await post(handler, {
+      transcript: "lag spike at start",
+      release: { protocolVersion: 1, releaseSha: "a".repeat(40), workerVersionTag: "vkz-combat-2026.09" },
+      serverRelease: { worker: { versionId: "v-1", versionTag: "deploy-9", releaseSha: "b".repeat(40), workerVersionTag: "vkz-combat-2026.09", doMigrationTag: "v1" } },
+      authorityEpochs: [{ authorityEpoch: 1, frameEpoch: 1, eventSequence: 0, observedAtMs: 1000 }, { authorityEpoch: 2, frameEpoch: 1, eventSequence: 40, observedAtMs: 9000 }],
+    });
+    expect(response.status).toBe(200);
+    expect(sent?.body).toContain("### Release (untrusted)");
+    expect(sent?.body).toContain("protocol 1");
+    expect(sent?.body).toContain("versionId `v-1`");
+    expect(sent?.body).toContain("### Authority epochs (untrusted)");
+    expect(sent?.body).toContain("| 2 | 1 | 40 | 9000 |");
+  });
+
+  it("omits the release section when the client sends no identity", async () => {
+    let sent: { title: string; body: string } | undefined;
+    const handler = new MatchReportHandler((input) => { sent = input; return Promise.resolve({ number: 1, url: "u" }); });
+    expect((await post(handler, { transcript: "plain" })).status).toBe(200);
+    expect(sent?.body).not.toContain("### Release");
+    expect(sent?.body).not.toContain("### Authority epochs");
+  });
+
   it("escapes backtick runs so player text cannot close the fence", async () => {
     let sent: { title: string; body: string } | undefined;
     const handler = new MatchReportHandler((input) => { sent = input; return Promise.resolve({ number: 1, url: "u" }); });
