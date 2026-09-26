@@ -24,16 +24,20 @@ function collider(x: unknown): boolean {
     : x.kind === "capsule" && keys(x, "id kind zone a b radius") && vector(x.a) && vector(x.b);
 }
 
+function observation(x: unknown): boolean {
+  return record(x) && keys(x, "targetPlayerId capturedAtMs associationConfidence uncertaintyMeters colliders") &&
+    id(x.targetPlayerId) && time(x.capturedAtMs) &&
+    number(x.associationConfidence, 0, 1) && number(x.uncertaintyMeters, 0, 10) &&
+    Array.isArray(x.colliders) && x.colliders.length >= 1 && x.colliders.length <= 32 &&
+    x.colliders.every(collider) && new Set(x.colliders.map(c => (c as ObjectValue).id)).size === x.colliders.length;
+}
+
 function observations(x: unknown): boolean {
   if (!Array.isArray(x) || x.length > LIMITS.players - 1) return false;
   const targets = new Set<unknown>();
   for (const item of x) {
-    if (!record(item) || !keys(item, "targetPlayerId capturedAtMs associationConfidence uncertaintyMeters colliders") ||
-      !id(item.targetPlayerId) || targets.has(item.targetPlayerId) || !time(item.capturedAtMs) ||
-      !number(item.associationConfidence, 0, 1) || !number(item.uncertaintyMeters, 0, 10) ||
-      !Array.isArray(item.colliders) || item.colliders.length < 1 || item.colliders.length > 32 ||
-      !item.colliders.every(collider) || new Set(item.colliders.map(c => (c as ObjectValue).id)).size !== item.colliders.length) return false;
-    targets.add(item.targetPlayerId);
+    if (!observation(item) || targets.has((item as ObjectValue).targetPlayerId)) return false;
+    targets.add((item as ObjectValue).targetPlayerId);
   }
   return true;
 }
@@ -50,7 +54,9 @@ function command(x: unknown): x is CombatCommand {
     }
     case "frameReady": return keys(x, "kind ready residualMeters residualDegrees clockUncertaintyMs") &&
       typeof x.ready === "boolean" && number(x.residualMeters, 0, 1000) && number(x.residualDegrees, 0, 180) && number(x.clockUncertaintyMs, 0, 60_000);
-    case "fire": return keys(x, "kind shotId poseSequence origin direction") && id(x.shotId) && integer(x.poseSequence) && vector(x.origin) && unit(x.direction, 3);
+    case "fire": return id(x.shotId) && integer(x.poseSequence) && vector(x.origin) && unit(x.direction, 3) &&
+      (keys(x, "kind shotId poseSequence origin direction") ||
+        (keys(x, "kind shotId poseSequence origin direction observation") && (x.observation === null || observation(x.observation))));
     case "shield": return keys(x, "kind active poseSequence") && typeof x.active === "boolean" && integer(x.poseSequence);
     case "slowField": return keys(x, "kind poseSequence") && integer(x.poseSequence);
     default: return false;
@@ -90,7 +96,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
 
 export function validateCombatRules(x: unknown): x is CombatRules {
   if (!record(x) || !keys(x, "durationMs geometry respawnMs protectionMs weapon shield slowField") ||
-    !integer(x.durationMs, 10_000, 3_600_000) || !["trackedBody", "phoneProxy"].includes(String(x.geometry)) ||
+    !integer(x.durationMs, 10_000, 3_600_000) || !["trackedBody", "phoneProxy", "sighting"].includes(String(x.geometry)) ||
     !integer(x.respawnMs, 100, 60_000) || !integer(x.protectionMs, 0, 30_000)) return false;
   const w = x.weapon, s = x.shield, f = x.slowField;
   return record(w) && keys(w, "id kind damage cooldownMs magazine reloadMs speed projectileRadius lifetimeMs rangeMeters") &&

@@ -44,7 +44,7 @@ export interface WeaponRules {
 }
 export interface CombatRules {
   durationMs: number;
-  geometry: "trackedBody" | "phoneProxy";
+  geometry: "trackedBody" | "phoneProxy" | "sighting";
   respawnMs: number;
   protectionMs: number;
   weapon: WeaponRules;
@@ -62,7 +62,7 @@ export type CombatCommand =
   | {kind: "pose"; pose: PhonePose; observations: readonly BodyObservation[]}
   | {kind: "frameReady"; ready: boolean; residualMeters: number; residualDegrees: number; clockUncertaintyMs: number}
   | {kind: "start"}
-  | {kind: "fire"; shotId: string; poseSequence: number; origin: Vec3; direction: Vec3}
+  | {kind: "fire"; shotId: string; poseSequence: number; origin: Vec3; direction: Vec3; observation?: BodyObservation | null}
   | {kind: "reload"}
   | {kind: "shield"; active: boolean; poseSequence: number}
   | {kind: "slowField"; poseSequence: number}
@@ -99,7 +99,7 @@ export type RefusalReason =
   | "notRunning" | "notReady" | "notAlive" | "protected" | "cooldown" | "reloading"
   | "outOfAmmo" | "trackingLost" | "poseStale" | "poseMismatch" | "invalidRay"
   | "shieldActive" | "abilityCooldown" | "projectileLimit" | "tooLate" | "futureInput"
-  | "notHost" | "unknownPlayer" | "invalidInput";
+  | "notHost" | "unknownPlayer" | "invalidInput" | "noSighting" | "ambiguousTarget";
 export type CombatEvent =
   | {kind: "poseChanged"; playerId: string; pose: PhonePose}
   | {kind: "commandResult"; commandId: string; clientSequence: number; playerId: string; accepted: boolean; reason: RefusalReason | null}
