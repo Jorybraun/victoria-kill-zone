@@ -242,7 +242,7 @@ struct WaitingRoomView: View {
             .frame(maxWidth: 180, maxHeight: 180).padding(8).background(.white)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .accessibilityLabel("QR invitation for \(matchName.lowercased()) code, \(spokenCode)")
-          Text(room.isQuickDuel ? "Show this code on another player’s phone." : "Scan this code on another player’s phone.").font(.subheadline).foregroundStyle(VKZPalette.textMuted)
+          Text("Show this code on another player’s phone.").font(.subheadline).foregroundStyle(VKZPalette.textMuted)
         }
         .frame(maxWidth: .infinity).padding(.top, 12)
       }
