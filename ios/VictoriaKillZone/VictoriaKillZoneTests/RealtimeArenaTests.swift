@@ -148,6 +148,50 @@ final class RealtimeArenaTests: XCTestCase {
     XCTAssertFalse(eligibility(snapshot, localFire: 4900).fire)
     XCTAssertTrue(eligibility(snapshot, localFire: 4850).fire)
   }
+  func testSightingEligibilityAndBeginIgnoreFrameReadiness() {
+    var snapshot = RealtimeCombatTests.snapshot(); snapshot.rules.geometry = "sighting"
+    snapshot.players[0].frameReady = false; snapshot.players[1].frameReady = false
+    // No shared frame exists under sighting: a fresh pose and a connected
+    // roster are the entire fire and begin gates (ADR 0013).
+    XCTAssertTrue(eligibility(snapshot, frame: false, sighting: true).fire)
+    snapshot.phase = .calibrating
+    XCTAssertTrue(eligibility(snapshot, frame: false, sighting: true).begin)
+    snapshot.players[1].connected = false
+    let waiting = eligibility(snapshot, frame: false, sighting: true)
+    XCTAssertFalse(waiting.begin); XCTAssertFalse(waiting.fire)
+    XCTAssertEqual(waiting.reason, "Waiting for opponent")
+  }
+  func testSightingAssociationNeedsExactlyOneConnectedRemote() {
+    let remote = Array(players().prefix(2))
+    let association = RealtimeAssociationPolicy.associateSighting(skeleton: skeleton(), observationConfidence: 0.9,
+      players: remote, localPlayerID: "p1", now: date)
+    XCTAssertEqual(association?.playerID, "p2")
+    XCTAssertEqual(association?.confidence, 0.9)
+    XCTAssertNil(RealtimeAssociationPolicy.associateSighting(skeleton: skeleton(), observationConfidence: 0.79,
+      players: remote, localPlayerID: "p1", now: date))
+    XCTAssertNil(RealtimeAssociationPolicy.associateSighting(skeleton: skeleton(), observationConfidence: 0.9,
+      players: players(), localPlayerID: "p1", now: date), "Two or more remote players are ambiguous")
+    var disconnected = remote; disconnected[1].connected = false
+    XCTAssertNil(RealtimeAssociationPolicy.associateSighting(skeleton: skeleton(), observationConfidence: 0.9,
+      players: disconnected, localPlayerID: "p1", now: date))
+    XCTAssertNil(RealtimeAssociationPolicy.associateSighting(skeleton: skeleton(at: date.addingTimeInterval(-0.101)),
+      observationConfidence: 0.9, players: remote, localPlayerID: "p1", now: date))
+  }
+  func testSightingPoseBuildsFromCameraRay() throws {
+    let ray = TargetingCameraRay(origin: .init(x: 1, y: 2, z: 3), direction: .init(x: 0, y: 0, z: -1),
+      capturedAt: date.addingTimeInterval(-0.05))
+    let pose = try XCTUnwrap(RealtimePoseBuilder.pose(ray: ray, sequence: 3, matchTimeMs: 1000, now: date))
+    XCTAssertEqual(pose.position, [1, 2, 3]); XCTAssertEqual(pose.capturedAtMs, 950, accuracy: 0.001)
+    XCTAssertEqual(pose.tracking, "normal")
+    let x = pose.orientation[0], y = pose.orientation[1], z = pose.orientation[2], w = pose.orientation[3]
+    XCTAssertEqual(x * x + y * y + z * z + w * w, 1, accuracy: 0.001)
+    // The constructed orientation must face along the ray direction.
+    let forward = [-2 * (x * z + w * y), -2 * (y * z - w * x), -(1 - 2 * (x * x + y * y))]
+    XCTAssertEqual(forward[0], 0, accuracy: 0.001); XCTAssertEqual(forward[1], 0, accuracy: 0.001)
+    XCTAssertEqual(forward[2], -1, accuracy: 0.001)
+    XCTAssertNil(RealtimePoseBuilder.pose(ray: ray, sequence: 4, matchTimeMs: 1000, now: date.addingTimeInterval(0.2)))
+  }
+
   func testBeginNeedsHostAndCompleteAlignmentAndRoundClockExcludesCalibration() {
     var snapshot = RealtimeCombatTests.snapshot(); snapshot.phase = .calibrating
     XCTAssertTrue(eligibility(snapshot).begin)
@@ -160,8 +204,8 @@ final class RealtimeArenaTests: XCTestCase {
     XCTAssertFalse(eligibility(snapshot).begin, "A started match resumes automatically when authoritative coverage returns")
   }
 
-  private func eligibility(_ snapshot: CombatWire.Snapshot, clock: Bool = true, frame: Bool = true, scene: Bool = true, pose: Bool = true, capacity: Bool = true, localFire: Double? = nil) -> RealtimeActionEligibility {
-    .evaluate(snapshot: snapshot, localPlayerID: "p1", clockReady: clock, frameReady: frame, sceneActive: scene, canSubmit: capacity, poseFresh: pose, localFireAtMs: localFire, matchTimeMs: 5000)
+  private func eligibility(_ snapshot: CombatWire.Snapshot, clock: Bool = true, frame: Bool = true, scene: Bool = true, pose: Bool = true, capacity: Bool = true, localFire: Double? = nil, sighting: Bool = false) -> RealtimeActionEligibility {
+    .evaluate(snapshot: snapshot, localPlayerID: "p1", clockReady: clock, frameReady: frame, sceneActive: scene, canSubmit: capacity, poseFresh: pose, localFireAtMs: localFire, matchTimeMs: 5000, sighting: sighting)
   }
   private func associate(phones: [CombatWire.PlayerPose], skeleton body: TargetingSkeleton? = nil, ready: Bool = true, confidence: Double = 0.9, roster: [CombatWire.Player]? = nil) -> RealtimeBodyAssociation? {
     RealtimeAssociationPolicy.associate(skeleton: body ?? skeleton(), observationConfidence: confidence, phonePoses: phones,

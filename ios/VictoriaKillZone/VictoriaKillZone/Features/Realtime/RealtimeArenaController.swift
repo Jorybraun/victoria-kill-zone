@@ -116,6 +116,9 @@ final class RealtimeArenaController: ObservableObject {
   /// as a fallback for trials. Saved arenas stay measured. The wire rules are
   /// the single source every client agrees on.
   var usesQuickPlayFrame: Bool {snapshot?.rules.geometry == "phoneProxy"}
+  /// ADR 0013: sighting matches never create a shared frame — no map,
+  /// no rendezvous, no frameReady. Connected + camera is the whole gate.
+  var usesSighting: Bool {snapshot?.rules.geometry == "sighting"}
   var usesCollaborativeFrame: Bool {frameAlignmentMode == .collaborative}
   var frameAlignmentMode: DuelFrameAlignmentMode {
     guard usesQuickPlayFrame else {return .measured}
@@ -127,12 +130,14 @@ final class RealtimeArenaController: ObservableObject {
     return (connected.filter {$0.frameReady}.count, connected.count)
   }
   var matchTimeMs: Double? {combat.matchTimeMs}
-  var worldReady: Bool {sceneActive && connection == .connected && combat.clockReady && frame.permitsSpatialFire(at: Date())}
+  var worldReady: Bool {
+    sceneActive && connection == .connected && combat.clockReady && (usesSighting || frame.permitsSpatialFire(at: Date()))
+  }
   var eligibility: RealtimeActionEligibility {
     let fresh = lastSubmittedPose.map {pose in matchTimeMs.map {$0 >= pose.capturedAtMs && $0 - pose.capturedAtMs <= 100} ?? false} ?? false
     var result = RealtimeActionEligibility.evaluate(snapshot: snapshot, localPlayerID: session.playerId, clockReady: combat.clockReady,
       frameReady: frame.permitsSpatialFire(at: Date()), sceneActive: sceneActive, canSubmit: combat.canSubmitSpatialInput,
-      poseFresh: fresh, localFireAtMs: lastLocalFireAtMs, matchTimeMs: matchTimeMs)
+      poseFresh: fresh, localFireAtMs: lastLocalFireAtMs, matchTimeMs: matchTimeMs, sighting: usesSighting)
     if commands.contains(.reload) || commands.contains(.shield) {
       result.fire = false; result.reload = false; result.shield = false; result.reason = "Confirming action"
     }
@@ -149,19 +154,21 @@ final class RealtimeArenaController: ObservableObject {
     if frameProvider == nil || message != nil || (connectionIssue != nil && connection == .disconnected) {return .unavailable}
     if connection == .retrying {return .reconnecting}
     if connection != .connected {return .connecting}
-    switch mapState {
-    case .waitingForHost: return .waitingForMap
-    case .transferring: return .transferringMap
-    case .failed: return .unavailable
-    default: break
-    }
-    switch frame.stage {
-    case .unaligned, .mapping: return .mapping
-    case .mapReady: return .mapReady
-    case .relocalizingWorld, .relocalizingBody: return .relocalizing
-    case .awaitingResidual: return .measuringReference
-    case .degraded, .lost: return .paused
-    case .aligned: break
+    if !usesSighting {
+      switch mapState {
+      case .waitingForHost: return .waitingForMap
+      case .transferring: return .transferringMap
+      case .failed: return .unavailable
+      default: break
+      }
+      switch frame.stage {
+      case .unaligned, .mapping: return .mapping
+      case .mapReady: return .mapReady
+      case .relocalizingWorld, .relocalizingBody: return .relocalizing
+      case .awaitingResidual: return .measuringReference
+      case .degraded, .lost: return .paused
+      case .aligned: break
+      }
     }
     if !combat.clockReady || !sceneActive {return .paused}
     if localPlayer?.health == 0 {return .respawning}
@@ -369,10 +376,29 @@ final class RealtimeArenaController: ObservableObject {
   }
   func fireOnce() {
     guard eligibility.fire, let pose = lastSubmittedPose, let time = matchTimeMs else {return}
-    let q = pose.orientation, x = q[0], y = q[1], z = q[2], w = q[3]
-    let direction = [-2 * (x * z + w * y), -2 * (y * z - w * x), -(1 - 2 * (x * x + y * y))]
     let shotID = UUID().uuidString
-    guard let id = combat.submit(.fire(shotId: shotID, poseSequence: pose.sequence, origin: pose.position, direction: direction)) else {return}
+    var origin = pose.position, observation: CombatWire.Observation?
+    var direction: [Double]
+    if usesSighting {
+      // The verdict ray and the sighting are both camera-space facts: the
+      // fire command carries the shooter's own body observation (ADR 0013).
+      guard let ray = targetingSnapshot.cameraRay, RealtimeAssociationPolicy.fresh(ray.capturedAt, at: Date()) else {return}
+      origin = [ray.origin.x, ray.origin.y, ray.origin.z]
+      direction = [ray.direction.x, ray.direction.y, ray.direction.z]
+      if let body = associatedBody {
+        let colliders = RealtimeAssociationPolicy.colliders(body.skeleton)
+        let captured = time - Date().timeIntervalSince(body.skeleton.capturedAt) * 1000
+        if !colliders.isEmpty, captured >= 0 {
+          observation = .init(targetPlayerId: body.association.playerID, capturedAtMs: captured,
+            associationConfidence: body.association.confidence, uncertaintyMeters: 0.08, colliders: colliders)
+        }
+      }
+    } else {
+      let q = pose.orientation, x = q[0], y = q[1], z = q[2], w = q[3]
+      direction = [-2 * (x * z + w * y), -2 * (y * z - w * x), -(1 - 2 * (x * x + y * y))]
+    }
+    guard let id = combat.submit(.fire(shotId: shotID, poseSequence: pose.sequence, origin: origin, direction: direction,
+      observation: observation)) else {return}
     commands.queued(.fire, id: id, shotID: shotID)
     lastLocalFireAtMs = time; localShotSequence += 1
   }
@@ -415,7 +441,7 @@ final class RealtimeArenaController: ObservableObject {
   /// step for peers that join or leave mid-setup. Called from both the
   /// camera-ready and snapshot paths so neither arrival order can strand it.
   private func startRendezvousIfNeeded() {
-    guard started, usesCollaborativeFrame, cameraReady, let snapshot else {return}
+    guard started, !usesSighting, usesCollaborativeFrame, cameraReady, let snapshot else {return}
     let peerIDs = Set(snapshot.players.map(\.playerId)).subtracting([session.playerId])
     if rendezvousStarted {rendezvous.updatePeers(peerIDs)}
     else {
@@ -424,7 +450,7 @@ final class RealtimeArenaController: ObservableObject {
     }
   }
   private func configureMapIfNeeded() {
-    guard started, cameraReady, sceneActive, let snapshot, configuredEpoch != snapshot.frameEpoch, let epoch = UInt16(exactly: snapshot.frameEpoch), epoch > 0 else {return}
+    guard started, !usesSighting, cameraReady, sceneActive, let snapshot, configuredEpoch != snapshot.frameEpoch, let epoch = UInt16(exactly: snapshot.frameEpoch), epoch > 0 else {return}
     configuredEpoch = snapshot.frameEpoch
     mapCoordinator?.configure(epoch: epoch, isHost: isHost, mode: frameAlignmentMode)
   }
@@ -434,6 +460,15 @@ final class RealtimeArenaController: ObservableObject {
     commands.tick(at: date); actionFeedback = commands.notice
     refreshAssociation(at: date)
     guard sceneActive, combat.canSubmitSpatialInput, let matchTimeMs else {return}
+    if usesSighting {
+      // Poses stream the local camera ray in the device's own AR frame; the
+      // authority only checks self-consistency and pose freshness (ADR 0013).
+      guard let ray = targetingSnapshot.cameraRay, ray.capturedAt != lastPoseDate,
+        let pose = RealtimePoseBuilder.pose(ray: ray, sequence: poseSequence + 1, matchTimeMs: matchTimeMs, now: date),
+        combat.submit(.pose(pose, observations: [])) != nil else {return}
+      poseSequence = pose.sequence; lastSubmittedPose = pose; lastPoseDate = ray.capturedAt
+      return
+    }
     let ready = frame.permitsSpatialFire(at: date)
     if readiness.shouldSubmit(ready: ready, authoritative: localPlayer?.frameReady ?? false, at: date) {
       let residual = frame.residual
@@ -468,6 +503,14 @@ final class RealtimeArenaController: ObservableObject {
     }
   }
   private func refreshAssociation(at date: Date) {
+    if usesSighting, let snapshot, let skeleton = targetingSnapshot.skeleton,
+      let association = RealtimeAssociationPolicy.associateSighting(skeleton: skeleton,
+        observationConfidence: targetingSnapshot.confidence, players: snapshot.players,
+        localPlayerID: session.playerId, now: date) {
+      associatedBody = .init(association: association, skeleton: skeleton)
+      return
+    }
+    if usesSighting {associatedBody = nil; return}
     guard let snapshot, let time = matchTimeMs, let skeleton = targetingSnapshot.skeleton,
       let alignedSince, skeleton.capturedAt >= alignedSince,
       let association = RealtimeAssociationPolicy.associate(skeleton: skeleton, observationConfidence: targetingSnapshot.confidence,
