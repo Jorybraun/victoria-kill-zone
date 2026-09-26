@@ -781,6 +781,7 @@ enum TargetingSessionFactory {
   import AVFoundation
   import Combine
   import ImageIO
+  import os
   import SceneKit
   import SwiftUI
   import Vision
@@ -816,6 +817,16 @@ enum TargetingSessionFactory {
     private var generation = 0
     private var lifecycleGeneration = 0
     private let duelFrameState = DuelFrameARState()
+    private let localSurfacesEnabled = LocalSurfacesFlag.isEnabled()
+    private var localSurfaces = LocalSurfaceModel()
+    private var localSurfaceTelemetry = LocalSurfaceTelemetry(startedAt: Date())
+    private var localSurfaceCapabilityLogged = false
+    private var lastLocalSurfaceThermalSampleAt = Date.distantPast
+    private var lastLocalSurfacePruneAt = Date.distantPast
+    private var lastLocalSurfaceThermalLabel = "unknown"
+    private var lastLocalSurfacePersistAt = Date.distantPast
+    private static let localSurfaceLogger = Logger(
+      subsystem: "com.victoriakillzone.localSurfaces", category: "planes")
 
     override init() {
       let now = Date()
@@ -906,6 +917,7 @@ enum TargetingSessionFactory {
           arSession.pause()
           isSessionRunning = false
           machine.sessionBecameUnavailable(at: Date())
+          recordLocalSurfaceSummary(at: Date())
           publish(machine.snapshot)
           continuation.resume()
         }
@@ -975,6 +987,7 @@ enum TargetingSessionFactory {
         arSession.pause()
         isSessionRunning = false
         machine.sessionBecameUnavailable(at: Date())
+        recordLocalSurfaceSummary(at: Date())
         publish(machine.snapshot)
       }
     }
@@ -1004,18 +1017,35 @@ enum TargetingSessionFactory {
         let bodyConfiguration = ARBodyTrackingConfiguration()
         bodyConfiguration.worldAlignment = .gravity
         bodyConfiguration.automaticSkeletonScaleEstimationEnabled = true
+        if localSurfacesEnabled {
+          bodyConfiguration.planeDetection = [.horizontal, .vertical]
+        }
         configuration = bodyConfiguration
       } else {
         let worldConfiguration = ARWorldTrackingConfiguration()
         worldConfiguration.worldAlignment = .gravity
+        if localSurfacesEnabled {
+          worldConfiguration.planeDetection = [.horizontal, .vertical]
+        }
         configuration = worldConfiguration
       }
       let options: ARSession.RunOptions =
         resetTracking
         ? [.resetTracking, .removeExistingAnchors]
         : []
+      if localSurfacesEnabled, resetTracking {
+        localSurfaces.removeAll()
+        localSurfaceTelemetry.reset(at: Date())
+        localSurfaceCapabilityLogged = false
+      }
       arSession.run(configuration, options: options)
       isSessionRunning = true
+      if localSurfacesEnabled, !localSurfaceCapabilityLogged {
+        localSurfaceCapabilityLogged = true
+        let report = DeviceCapabilityProbe.probe()
+        localSurfaceTelemetry.recordCapability(report, at: Date())
+        Self.localSurfaceLogger.info("capability \(report.summary, privacy: .public)")
+      }
     }
 
     private func publish(_ nextSnapshot: TargetingSnapshot) {
@@ -1027,6 +1057,28 @@ enum TargetingSessionFactory {
 
     private func process(frame: ARFrame) {
       guard runRequested, isSessionRunning, !isBackgrounded else { return }
+      if localSurfacesEnabled {
+        let now = Date()
+        if now.timeIntervalSince(lastLocalSurfaceThermalSampleAt) >= 1 {
+          lastLocalSurfaceThermalSampleAt = now
+          lastLocalSurfaceThermalLabel = LocalSurfaceThermal.label(
+            ProcessInfo.processInfo.thermalState)
+        }
+        if now.timeIntervalSince(lastLocalSurfacePruneAt) >= 1 {
+          lastLocalSurfacePruneAt = now
+          let pruned = localSurfaces.pruneStale(at: now)
+          if pruned > 0 {
+            localSurfaceTelemetry.recordEvent("surface", "prune n=\(pruned)", at: now)
+          }
+        }
+        localSurfaceTelemetry.recordFrame(at: now, planeCount: localSurfaces.count,
+          boundaryVertexTotal: localSurfaces.boundaryVertexTotal,
+          thermalState: lastLocalSurfaceThermalLabel)
+        if now.timeIntervalSince(lastLocalSurfacePersistAt) >= 5 {
+          lastLocalSurfacePersistAt = now
+          try? localSurfaceTelemetry.persistCSV()
+        }
+      }
       if let configuration = duelFrameState.configuration {
         guard frame.timestamp > duelFrameState.minimumFrameTimestamp,
           frame.timestamp > duelFrameState.lastFrameTimestamp,
@@ -1335,10 +1387,16 @@ enum TargetingSessionFactory {
   extension ARVisionTargetingSession: ARSessionDelegate {
     func session(_ session: ARSession, didAdd anchors: [ARAnchor]) {
       recordDuelReferenceAnchors(anchors)
+      consumeLocalSurfaceAnchors(anchors, added: true)
     }
 
     func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) {
       recordDuelReferenceAnchors(anchors)
+      consumeLocalSurfaceAnchors(anchors, added: false)
+    }
+
+    func session(_ session: ARSession, didRemove anchors: [ARAnchor]) {
+      removeLocalSurfaceAnchors(anchors)
     }
 
     func session(_ session: ARSession, didUpdate frame: ARFrame) {
@@ -1346,6 +1404,7 @@ enum TargetingSessionFactory {
     }
 
     func session(_ session: ARSession, didFailWithError error: Error) {
+      recordLocalSurfaceSummary(at: Date())
       invalidateDuelFrameSession(reason: .cameraUnavailable)
       generation += 1
       visionInFlight = false
@@ -1744,6 +1803,50 @@ enum TargetingSessionFactory {
         phase: configuration.phase, tracking: .unavailable, isMapped: false, pose: nil, observedAt: Date(), failure: reason))
     }
 
+    private func consumeLocalSurfaceAnchors(_ anchors: [ARAnchor], added: Bool) {
+      guard localSurfacesEnabled else { return }
+      let now = Date()
+      for anchor in anchors {
+        guard let planeAnchor = anchor as? ARPlaneAnchor else { continue }
+        if added {
+          let surface = LocalSurfacePlane(anchor: planeAnchor, at: now)
+          if localSurfaces.upsert(surface) != nil {
+            localSurfaceTelemetry.recordEvent("surface", "evict", at: now)
+          }
+          localSurfaceTelemetry.recordPlaneAdded(surface, at: now)
+          Self.localSurfaceLogger.debug(
+            "plane add align=\(surface.alignment.rawValue, privacy: .public) class=\(surface.classification.rawValue, privacy: .public) verts=\(surface.boundaryVertexCount, privacy: .public) n=\(self.localSurfaces.count, privacy: .public)")
+        } else {
+          guard let existing = localSurfaces.plane(id: planeAnchor.identifier) else { continue }
+          let surface = LocalSurfacePlane(anchor: planeAnchor, at: now,
+            firstObservedAt: existing.firstObservedAt, updateCount: existing.updateCount)
+          localSurfaces.update(surface)
+          localSurfaceTelemetry.recordPlaneUpdated(surface, at: now)
+        }
+      }
+    }
+
+    private func removeLocalSurfaceAnchors(_ anchors: [ARAnchor]) {
+      guard localSurfacesEnabled else { return }
+      let now = Date()
+      for anchor in anchors {
+        guard let planeAnchor = anchor as? ARPlaneAnchor,
+          localSurfaces.plane(id: planeAnchor.identifier) != nil else { continue }
+        localSurfaces.remove(id: planeAnchor.identifier)
+        localSurfaceTelemetry.recordPlaneRemoved(id: planeAnchor.identifier, at: now)
+        Self.localSurfaceLogger.debug(
+          "plane remove n=\(self.localSurfaces.count, privacy: .public)")
+      }
+    }
+
+    private func recordLocalSurfaceSummary(at now: Date) {
+      guard localSurfacesEnabled else { return }
+      localSurfaceTelemetry.recordEvent("surface",
+        "summary \(localSurfaceTelemetry.summaryDetail())", at: now)
+      localSurfaceTelemetry.finalize(at: now)
+      try? localSurfaceTelemetry.persistCSV()
+    }
+
     private func publishDuelFrameObservation(frame: ARFrame, configuration: DuelFrameSessionConfiguration) {
       let tracking: DuelFrameTracking
       switch frame.camera.trackingState {
@@ -1900,6 +2003,51 @@ enum TargetingSessionFactory {
       lock.lock()
       continuations[id] = nil
       lock.unlock()
+    }
+  }
+
+  extension ARVisionTargetingSession: LocalSurfaceDiagnosticsProviding {
+    func localSurfaceDiagnosticEvents() -> [DuelFrameDiagnosticEvent] {
+      guard localSurfacesEnabled else { return [] }
+      return sessionQueue.sync { localSurfaceTelemetry.events }
+    }
+
+    func localSurfaceTelemetryCSV() -> String? {
+      guard localSurfacesEnabled else { return nil }
+      return sessionQueue.sync {
+        localSurfaceTelemetry.samples.isEmpty ? nil : localSurfaceTelemetry.csv()
+      }
+    }
+
+    func recordSightingFire(ray: TargetingCameraRay, skeleton: TargetingSkeleton?) {
+      guard localSurfacesEnabled else { return }
+      sessionQueue.async { [self] in
+        let now = Date()
+        let hit = localSurfaces.nearestHit(origin: ray.origin, direction: ray.direction,
+          maxDistance: 30, at: now)
+        var bodyDistance: Double?
+        if let skeleton {
+          var best: (perpendicular: Double, t: Double)?
+          for joint in skeleton.joints {
+            let offset = joint.position - ray.origin
+            let t = offset.dot(ray.direction)
+            guard t > 0 else { continue }
+            let nearest = ray.origin + ray.direction * t
+            let perpendicular = (joint.position - nearest).dot(joint.position - nearest)
+              .squareRoot()
+            if let current = best, perpendicular >= current.perpendicular { continue }
+            best = (perpendicular, t)
+          }
+          bodyDistance = best?.t
+        }
+        let locale = Locale(identifier: "en_US_POSIX")
+        let meters = { (value: Double?) -> String in
+          value.map { String(format: "%.2f", locale: locale, $0) + "m" } ?? "-"
+        }
+        let detail = "body=\(meters(bodyDistance)) surface=\(meters(hit?.distance)) class=\(hit?.classification.rawValue ?? "-") align=\(hit?.alignment.rawValue ?? "-") age=\(hit.map { String(format: "%.1f", locale: locale, $0.age) + "s" } ?? "-") planes=\(localSurfaces.count)"
+        localSurfaceTelemetry.recordEvent("fireQuery", detail, at: now)
+        Self.localSurfaceLogger.info("fireQuery \(detail, privacy: .public)")
+      }
     }
   }
 #endif

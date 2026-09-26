@@ -253,7 +253,15 @@ final class DuelFrameProvider: ObservableObject {
     publish()
   }
 
-  func exportDiagnostics() throws -> URL { try diagnostics.export() }
+  func exportDiagnostics() throws -> URL {
+    let surfaceProvider = targeting as? any LocalSurfaceDiagnosticsProviding
+    var surfaceEvents = surfaceProvider?.localSurfaceDiagnosticEvents() ?? []
+    if let csv = surfaceProvider?.localSurfaceTelemetryCSV() {
+      surfaceEvents.append(DuelFrameDiagnosticEvent(
+        elapsedMs: surfaceEvents.last?.elapsedMs ?? 0, kind: "telemetryCsv", detail: csv))
+    }
+    return try diagnostics.export(merging: surfaceEvents)
+  }
 
   private func publish() {
     let previous = snapshot

@@ -378,11 +378,12 @@ final class RealtimeArenaController: ObservableObject {
     guard eligibility.fire, let pose = lastSubmittedPose, let time = matchTimeMs else {return}
     let shotID = UUID().uuidString
     var origin = pose.position, observation: CombatWire.Observation?
-    var direction: [Double]
+    var direction: [Double], sightingRay: TargetingCameraRay?
     if usesSighting {
       // The verdict ray and the sighting are both camera-space facts: the
       // fire command carries the shooter's own body observation (ADR 0013).
       guard let ray = targetingSnapshot.cameraRay, RealtimeAssociationPolicy.fresh(ray.capturedAt, at: Date()) else {return}
+      sightingRay = ray
       origin = [ray.origin.x, ray.origin.y, ray.origin.z]
       direction = [ray.direction.x, ray.direction.y, ray.direction.z]
       if let body = associatedBody {
@@ -400,6 +401,7 @@ final class RealtimeArenaController: ObservableObject {
     guard let id = combat.submit(.fire(shotId: shotID, poseSequence: pose.sequence, origin: origin, direction: direction,
       observation: observation)) else {return}
     commands.queued(.fire, id: id, shotID: shotID)
+    if let sightingRay {(targeting as? any LocalSurfaceDiagnosticsProviding)?.recordSightingFire(ray: sightingRay, skeleton: associatedBody?.skeleton)}
     lastLocalFireAtMs = time; localShotSequence += 1
   }
   func setTriggerHeld(_ held: Bool) {

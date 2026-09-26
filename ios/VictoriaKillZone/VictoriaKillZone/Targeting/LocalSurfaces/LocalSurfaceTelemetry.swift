@@ -11,9 +11,28 @@ struct LocalSurfaceTelemetrySample: Codable, Equatable, Sendable {
   let thermalState: String
 }
 
+enum LocalSurfaceThermal {
+  static func label(_ state: ProcessInfo.ThermalState) -> String {
+    switch state {
+    case .nominal: return "nominal"
+    case .fair: return "fair"
+    case .serious: return "serious"
+    case .critical: return "critical"
+    @unknown default: return "unknown"
+    }
+  }
+}
+
 /// Bounded per-second telemetry for the local-surfaces debug path. Sanitized:
 /// counts only — no anchor IDs, positions or device identifiers.
 struct LocalSurfaceTelemetry: Equatable, Sendable {
+  /// Survives relaunch so the previous session's telemetry stays exportable;
+  /// overwritten by the next session's first persist.
+  static let persistedURL: URL = {
+    let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    return base.appendingPathComponent("com.victoriakillzone/local-surfaces-telemetry.csv")
+  }()
+
   static let maximumSamples = 20_000
   static let maximumEvents = 256
   static let csvHeader = "elapsed_ms,frames,fps,plane_count,boundary_vertices,plane_adds,plane_updates,plane_removes,thermal_state"
@@ -114,6 +133,23 @@ struct LocalSurfaceTelemetry: Equatable, Sendable {
       ].joined(separator: ","))
     }
     return lines.joined(separator: "\n")
+  }
+
+  /// Flushes the in-progress second as a final sample. Idempotent: a second
+  /// call appends nothing; a later recordFrame resumes counting normally.
+  mutating func finalize(at: Date) {
+    guard currentSecondIndex >= 0, framesInCurrentSecond > 0 else { return }
+    appendSample(forSecond: currentSecondIndex)
+    framesInCurrentSecond = 0
+  }
+
+  func persistCSV() throws {
+    try persistCSV(to: Self.persistedURL)
+  }
+
+  func persistCSV(to url: URL) throws {
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data(csv().utf8).write(to: url, options: .atomic)
   }
 
   func summaryDetail() -> String {

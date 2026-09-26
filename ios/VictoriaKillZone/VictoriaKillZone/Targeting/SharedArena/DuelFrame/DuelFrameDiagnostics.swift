@@ -55,14 +55,19 @@ struct DuelFrameDiagnostics: Sendable {
   }
 
   /// Current session events, or the persisted previous session after relaunch.
-  func export() throws -> URL {
+  func export() throws -> URL { try export(merging: []) }
+
+  /// Current session events plus `extra` events appended (e.g. the flagged
+  /// local-surfaces log), or the persisted previous session when both are
+  /// empty.
+  func export(merging extra: [DuelFrameDiagnosticEvent]) throws -> URL {
     let data: Data
-    if events.isEmpty, let persisted = try? Data(contentsOf: Self.persistedURL) {
+    if events.isEmpty, extra.isEmpty, let persisted = try? Data(contentsOf: Self.persistedURL) {
       data = persisted
     } else {
       let encoder = JSONEncoder()
       encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-      data = try encoder.encode(events)
+      data = try encoder.encode(events + extra)
     }
     let url = FileManager.default.temporaryDirectory
       .appendingPathComponent("duel-frame-setup-\(UUID().uuidString).json")
