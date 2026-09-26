@@ -418,7 +418,7 @@ struct RealtimeArenaView: View {
       }
       #endif
       if RealtimeArenaPresentation.showsScanControls(isHost: controller.isHost,
-        usesSavedArena: controller.savedArenaName != nil,
+        usesSavedArena: controller.snapshot?.rules.geometry == "trackedBody",
         usesCollaborativeFrame: controller.usesCollaborativeFrame,
         stage: controller.stage, scanTimedOut: scanTimedOut) {
         Button(controller.usesQuickPlayFrame && scanTimedOut ? "Scan again" : "Restart scan",
@@ -426,7 +426,8 @@ struct RealtimeArenaView: View {
       } else if controller.usesSighting {
         // retryAlignment under sighting only resets pose/readiness — there is
         // no map or frame ritual to restart (configureMapIfNeeded no-ops).
-        if controller.connectionIssue == nil && controller.stage == .paused && controller.combat.clockReady {
+        if controller.connectionIssue == nil
+          && (controller.stage == .unavailable || (controller.stage == .paused && controller.combat.clockReady)) {
           Button(RealtimeArenaPresentation.Sighting.retryTrackingTitle,
             action: controller.retryAlignment).buttonStyle(VKZSecondaryButtonStyle())
         }
@@ -527,8 +528,9 @@ struct RealtimeArenaView: View {
         default: break
         }
       }
-      if let name = controller.savedArenaName,
-        controller.frame.stage == .lost, controller.frame.failure == .relocalizationTimedOut {
+      if controller.frame.stage == .lost, controller.frame.failure == .relocalizationTimedOut {
+        // Guests never receive the arena bundle, so savedArenaName is host-only.
+        let name = controller.savedArenaName ?? "the saved arena"
         return "Couldn't recognize \(name). Try pointing at the objects you scanned, or play a Quick Duel instead."
       }
       return RealtimeArenaPresentation.pauseGuidance(clockReady: controller.combat.clockReady,
@@ -565,7 +567,7 @@ struct RealtimeArenaView: View {
   }
   private var offersQuickDuel: Bool {
     RealtimeArenaPresentation.offersQuickDuelFallback(
-      usesSavedArena: controller.savedArenaName != nil, stage: controller.stage,
+      usesSavedArena: controller.snapshot?.rules.geometry == "trackedBody", stage: controller.stage,
       frameStage: controller.frame.stage, frameFailure: controller.frame.failure,
       referenceState: controller.referenceState) && onQuickDuel != nil
   }
@@ -652,14 +654,13 @@ private struct RealtimeRosterStrip: View {
           }
           ProgressView(value: Double(player.health), total: 100).tint(player.health <= 34 ? VKZPalette.danger : VKZPalette.ready)
           Text(sighting
-            ? RealtimeArenaPresentation.Sighting.rosterStatus(connected: player.connected, health: player.health,
-              frameReady: player.frameReady)
+            ? RealtimeArenaPresentation.Sighting.rosterStatus(connected: player.connected, health: player.health)
             : !player.connected ? "Disconnected" : player.health == 0 ? "Respawning" : player.frameReady ? "\(player.health) health" : "Aligning")
             .font(.caption2).foregroundStyle(VKZPalette.textMuted)
         }
         .padding(9).background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(player.displayName), \(player.health) health, \(player.kills) kills, \(player.deaths) deaths, \(sighting ? RealtimeArenaPresentation.Sighting.rosterAccessibilityStatus(connected: player.connected, frameReady: player.frameReady) : player.connected ? (player.frameReady ? "aligned" : "aligning") : "disconnected")")
+        .accessibilityLabel("\(player.displayName), \(player.health) health, \(player.kills) kills, \(player.deaths) deaths, \(sighting ? RealtimeArenaPresentation.Sighting.rosterAccessibilityStatus(connected: player.connected) : player.connected ? (player.frameReady ? "aligned" : "aligning") : "disconnected")")
       }
     }
   }

@@ -224,15 +224,16 @@ enum RealtimeArenaPresentation {
       }
     }
 
-    static func rosterStatus(connected: Bool, health: Int, frameReady: Bool) -> String {
+    /// Sighting never sends frameReady (the tick bypasses it), so roster copy
+    /// keys on connection + health only.
+    static func rosterStatus(connected: Bool, health: Int) -> String {
       if !connected { return "Disconnected" }
       if health == 0 { return "Respawning" }
-      return frameReady ? "\(health) health" : "Connecting"
+      return "\(health) health"
     }
 
-    static func rosterAccessibilityStatus(connected: Bool, frameReady: Bool) -> String {
-      if !connected { return "disconnected" }
-      return frameReady ? "connected" : "connecting"
+    static func rosterAccessibilityStatus(connected: Bool) -> String {
+      connected ? "connected" : "disconnected"
     }
 
     static let startTitle = "PLAY"

@@ -175,12 +175,10 @@ final class RealtimeArenaPresentationTests: XCTestCase {
     }
     for connected in [true, false] {
       for health in [0, 50, 100] {
-        for frameReady in [true, false] {
-          copies.append(RealtimeArenaPresentation.Sighting.rosterStatus(
-            connected: connected, health: health, frameReady: frameReady))
-          copies.append(RealtimeArenaPresentation.Sighting.rosterAccessibilityStatus(
-            connected: connected, frameReady: frameReady))
-        }
+        copies.append(RealtimeArenaPresentation.Sighting.rosterStatus(
+          connected: connected, health: health))
+        copies.append(RealtimeArenaPresentation.Sighting.rosterAccessibilityStatus(
+          connected: connected))
       }
     }
     for copy in copies {
@@ -202,9 +200,11 @@ final class RealtimeArenaPresentationTests: XCTestCase {
       stage: .paused, clockReady: true, roundHasStarted: false),
       "Point your camera at your opponent. The host can start once both players are ready.")
     XCTAssertEqual(RealtimeArenaPresentation.Sighting.rosterStatus(
-      connected: true, health: 0, frameReady: true), "Respawning")
+      connected: true, health: 0), "Respawning")
     XCTAssertEqual(RealtimeArenaPresentation.Sighting.rosterStatus(
-      connected: true, health: 66, frameReady: false), "Connecting")
+      connected: true, health: 66), "66 health")
+    XCTAssertEqual(RealtimeArenaPresentation.Sighting.rosterStatus(
+      connected: false, health: 66), "Disconnected")
   }
 
   func testSightingEligibilityReasonsStayFreeOfSharedFrameCeremony() {
