@@ -64,6 +64,20 @@ final class DuelFrameDiagnosticsTests: XCTestCase {
     XCTAssertEqual(decoded, extra)
   }
 
+  func testExportMergingTelemetryCsvEventRoundTrips() throws {
+    let log = DuelFrameDiagnostics(startedAt: base)
+    let csv = "elapsed_ms,frames\n1000,30"
+    let extra = [DuelFrameDiagnosticEvent(elapsedMs: 0, kind: "telemetryCsv", detail: csv)]
+    let url = try log.export(merging: extra)
+    defer { try? FileManager.default.removeItem(at: url) }
+    let decoded = try JSONDecoder().decode([DuelFrameDiagnosticEvent].self,
+      from: Data(contentsOf: url))
+    let event = decoded.first(where: { $0.kind == "telemetryCsv" })
+    XCTAssertNotNil(event)
+    XCTAssertTrue(event?.detail.contains(LocalSurfaceTelemetry.csvHeader.components(separatedBy: ",").first ?? "elapsed_ms") ?? false)
+    XCTAssertTrue(event?.detail.contains("elapsed_ms,frames") ?? false)
+  }
+
   func testExportEmptyStillServesPersistedFallback() throws {
     let prior = [DuelFrameDiagnosticEvent(elapsedMs: 5, kind: "stage", detail: "prior")]
     let persisted = try JSONEncoder().encode(prior)

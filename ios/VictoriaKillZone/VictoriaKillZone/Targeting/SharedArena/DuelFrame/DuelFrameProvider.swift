@@ -255,12 +255,10 @@ final class DuelFrameProvider: ObservableObject {
 
   func exportDiagnostics() throws -> URL {
     let surfaceProvider = targeting as? any LocalSurfaceDiagnosticsProviding
-    let surfaceEvents = surfaceProvider?.localSurfaceDiagnosticEvents() ?? []
+    var surfaceEvents = surfaceProvider?.localSurfaceDiagnosticEvents() ?? []
     if let csv = surfaceProvider?.localSurfaceTelemetryCSV() {
-      let url = FileManager.default.temporaryDirectory
-        .appendingPathComponent("local-surfaces-telemetry-\(UUID().uuidString).csv")
-      try? Data(csv.utf8).write(to: url, options: .atomic)
-      try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+      surfaceEvents.append(DuelFrameDiagnosticEvent(
+        elapsedMs: surfaceEvents.last?.elapsedMs ?? 0, kind: "telemetryCsv", detail: csv))
     }
     return try diagnostics.export(merging: surfaceEvents)
   }

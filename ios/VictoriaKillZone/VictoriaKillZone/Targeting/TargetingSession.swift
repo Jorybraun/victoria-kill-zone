@@ -1843,6 +1843,7 @@ enum TargetingSessionFactory {
       guard localSurfacesEnabled else { return }
       localSurfaceTelemetry.recordEvent("surface",
         "summary \(localSurfaceTelemetry.summaryDetail())", at: now)
+      localSurfaceTelemetry.finalize(at: now)
       try? localSurfaceTelemetry.persistCSV()
     }
 
@@ -2018,15 +2019,10 @@ enum TargetingSessionFactory {
       }
     }
 
-    func recordSightingFire(skeleton: TargetingSkeleton?) {
+    func recordSightingFire(ray: TargetingCameraRay, skeleton: TargetingSkeleton?) {
       guard localSurfacesEnabled else { return }
       sessionQueue.async { [self] in
         let now = Date()
-        guard let ray = machine.snapshot.cameraRay else {
-          localSurfaceTelemetry.recordEvent("fireQuery", "noRay", at: now)
-          Self.localSurfaceLogger.info("fireQuery noRay")
-          return
-        }
         let hit = localSurfaces.nearestHit(origin: ray.origin, direction: ray.direction,
           maxDistance: 30, at: now)
         var bodyDistance: Double?

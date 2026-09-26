@@ -10,6 +10,7 @@ protocol LocalSurfaceDiagnosticsProviding: Sendable {
   /// recorded.
   func localSurfaceTelemetryCSV() -> String?
   /// Called on each sighting fire; logs the local surface query against the
-  /// body observation. Never affects the fire command.
-  func recordSightingFire(skeleton: TargetingSkeleton?)
+  /// body observation. Never affects the fire command; `ray` is the exact ray
+  /// the fire command carried.
+  func recordSightingFire(ray: TargetingCameraRay, skeleton: TargetingSkeleton?)
 }

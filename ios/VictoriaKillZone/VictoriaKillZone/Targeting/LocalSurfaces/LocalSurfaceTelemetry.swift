@@ -135,6 +135,14 @@ struct LocalSurfaceTelemetry: Equatable, Sendable {
     return lines.joined(separator: "\n")
   }
 
+  /// Flushes the in-progress second as a final sample. Idempotent: a second
+  /// call appends nothing; a later recordFrame resumes counting normally.
+  mutating func finalize(at: Date) {
+    guard currentSecondIndex >= 0, framesInCurrentSecond > 0 else { return }
+    appendSample(forSecond: currentSecondIndex)
+    framesInCurrentSecond = 0
+  }
+
   func persistCSV() throws {
     try persistCSV(to: Self.persistedURL)
   }
