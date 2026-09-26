@@ -253,7 +253,17 @@ final class DuelFrameProvider: ObservableObject {
     publish()
   }
 
-  func exportDiagnostics() throws -> URL { try diagnostics.export() }
+  func exportDiagnostics() throws -> URL {
+    let surfaceProvider = targeting as? any LocalSurfaceDiagnosticsProviding
+    let surfaceEvents = surfaceProvider?.localSurfaceDiagnosticEvents() ?? []
+    if let csv = surfaceProvider?.localSurfaceTelemetryCSV() {
+      let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("local-surfaces-telemetry-\(UUID().uuidString).csv")
+      try? Data(csv.utf8).write(to: url, options: .atomic)
+      try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
+    return try diagnostics.export(merging: surfaceEvents)
+  }
 
   private func publish() {
     let previous = snapshot

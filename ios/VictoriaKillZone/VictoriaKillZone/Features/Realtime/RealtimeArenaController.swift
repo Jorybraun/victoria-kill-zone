@@ -400,6 +400,7 @@ final class RealtimeArenaController: ObservableObject {
     guard let id = combat.submit(.fire(shotId: shotID, poseSequence: pose.sequence, origin: origin, direction: direction,
       observation: observation)) else {return}
     commands.queued(.fire, id: id, shotID: shotID)
+    if usesSighting {(targeting as? any LocalSurfaceDiagnosticsProviding)?.recordSightingFire(skeleton: associatedBody?.skeleton)}
     lastLocalFireAtMs = time; localShotSequence += 1
   }
   func setTriggerHeld(_ held: Bool) {

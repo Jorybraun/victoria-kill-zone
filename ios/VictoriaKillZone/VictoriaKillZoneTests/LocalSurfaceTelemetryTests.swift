@@ -115,6 +115,27 @@ final class LocalSurfaceTelemetryTests: XCTestCase {
     }
   }
 
+  func testPersistCSVRoundTripsToTempURL() throws {
+    var telemetry = LocalSurfaceTelemetry(startedAt: base)
+    telemetry.recordFrame(at: base, planeCount: 1, boundaryVertexTotal: 6, thermalState: "nominal")
+    telemetry.recordFrame(at: base.addingTimeInterval(1), planeCount: 1, boundaryVertexTotal: 6,
+      thermalState: "fair")
+    let url = FileManager.default.temporaryDirectory
+      .appendingPathComponent("telemetry-test-\(UUID().uuidString).csv")
+    defer { try? FileManager.default.removeItem(at: url) }
+    try telemetry.persistCSV(to: url)
+    let contents = try String(contentsOf: url, encoding: .utf8)
+    XCTAssertEqual(contents, telemetry.csv())
+    XCTAssertTrue(contents.hasPrefix(LocalSurfaceTelemetry.csvHeader))
+  }
+
+  func testThermalLabels() {
+    XCTAssertEqual(LocalSurfaceThermal.label(.nominal), "nominal")
+    XCTAssertEqual(LocalSurfaceThermal.label(.fair), "fair")
+    XCTAssertEqual(LocalSurfaceThermal.label(.serious), "serious")
+    XCTAssertEqual(LocalSurfaceThermal.label(.critical), "critical")
+  }
+
   func testSummaryDetailFormat() {
     var telemetry = LocalSurfaceTelemetry(startedAt: base)
     telemetry.recordPlaneAdded(plane(), at: base.addingTimeInterval(1))

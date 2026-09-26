@@ -39,6 +39,46 @@ final class DuelFrameDiagnosticsTests: XCTestCase {
     let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
     XCTAssertEqual(attributes[.posixPermissions] as? Int, 0o600)
   }
+
+  func testExportMergingAppendsExtraEvents() throws {
+    var log = DuelFrameDiagnostics(startedAt: base)
+    log.record("stage", "unaligned -> mapping", at: base.addingTimeInterval(0.5))
+    let extra = [
+      DuelFrameDiagnosticEvent(elapsedMs: 800, kind: "capability", detail: "model=x ios=1"),
+      DuelFrameDiagnosticEvent(elapsedMs: 900, kind: "surface", detail: "add align=horizontal class=floor verts=6"),
+    ]
+    let url = try log.export(merging: extra)
+    defer { try? FileManager.default.removeItem(at: url) }
+    let decoded = try JSONDecoder().decode([DuelFrameDiagnosticEvent].self,
+      from: Data(contentsOf: url))
+    XCTAssertEqual(decoded, log.events + extra)
+  }
+
+  func testExportMergingExtraAloneDoesNotFallBackToPersisted() throws {
+    let log = DuelFrameDiagnostics(startedAt: base)
+    let extra = [DuelFrameDiagnosticEvent(elapsedMs: 10, kind: "surface", detail: "remove")]
+    let url = try log.export(merging: extra)
+    defer { try? FileManager.default.removeItem(at: url) }
+    let decoded = try JSONDecoder().decode([DuelFrameDiagnosticEvent].self,
+      from: Data(contentsOf: url))
+    XCTAssertEqual(decoded, extra)
+  }
+
+  func testExportEmptyStillServesPersistedFallback() throws {
+    let prior = [DuelFrameDiagnosticEvent(elapsedMs: 5, kind: "stage", detail: "prior")]
+    let persisted = try JSONEncoder().encode(prior)
+    try FileManager.default.createDirectory(
+      at: DuelFrameDiagnostics.persistedURL.deletingLastPathComponent(),
+      withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: DuelFrameDiagnostics.persistedURL) }
+    try persisted.write(to: DuelFrameDiagnostics.persistedURL, options: .atomic)
+    let log = DuelFrameDiagnostics(startedAt: base)
+    let url = try log.export()
+    defer { try? FileManager.default.removeItem(at: url) }
+    let decoded = try JSONDecoder().decode([DuelFrameDiagnosticEvent].self,
+      from: Data(contentsOf: url))
+    XCTAssertEqual(decoded, prior)
+  }
 }
 
 @MainActor
