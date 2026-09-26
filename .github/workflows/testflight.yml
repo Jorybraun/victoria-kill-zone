@@ -9,6 +9,15 @@ on:
     types:
       - completed
   workflow_dispatch:
+    inputs:
+      combat_worker_override:
+        description: "Promote without combat Worker admission evidence for this SHA"
+        type: boolean
+        default: false
+      combat_worker_override_reason:
+        description: "Reason recorded in the promotion decision when overriding"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -81,6 +90,11 @@ jobs:
           VKZ_DEPLOY_RUN_ID: ${{ github.event.workflow_run.id }}
           VKZ_DEPLOY_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
           VKZ_CANDIDATE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          # Set by an operator after a green combat-deploy --deploy/--verify run
+          # for the exact candidate SHA. Overrides are manual-dispatch only.
+          VKZ_COMBAT_WORKER_VERIFIED_SHA: ${{ vars.VKZ_COMBAT_WORKER_VERIFIED_SHA }}
+          VKZ_COMBAT_WORKER_OVERRIDE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.combat_worker_override || '' }}
+          VKZ_COMBAT_WORKER_OVERRIDE_REASON: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.combat_worker_override_reason || '' }}
         run: node scripts/release/promotion-gate.mjs
 
       - name: Verify the promotion lane self-tests

@@ -130,6 +130,8 @@ On every merge, automation must:
 
 If verification, build, deploy, or smoke fails, `main` is red: stop subsequent promotions, fix forward or revert the offending PR, and restore the last known-green deployment. Do not conceal a failed deployment with a manual unrecorded deploy.
 
+The combat Worker stays a manual deploy, but its presence is now gated evidence: the Deploy workflow runs `scripts/release/check-worker-health.mjs` against `VKZ_COMBAT_WORKER_URL` after the Convex deploy (an unset URL warns rather than blocks) and records a sanitized `combatWorker` record in release evidence. Separately, the TestFlight promotion gate requires `VKZ_COMBAT_WORKER_VERIFIED_SHA` to equal the candidate SHA — an operator sets that repository variable only after a green `combat-deploy.mjs --deploy` or `--verify` admission probe for that exact revision — or a manual-dispatch override (`combat_worker_override` + recorded reason).
+
 ### 5. Mac Outpost device-promotion gate
 
 Use Cloud agents for parallel backend/spectator work and the Mac Outpost for Xcode, simulator, signing, and physical-device evidence. A promotion is dispatched only after the same SHA passes the green-main gate. Promotion tasks are read-only; any required source change returns through a new branch and draft PR.

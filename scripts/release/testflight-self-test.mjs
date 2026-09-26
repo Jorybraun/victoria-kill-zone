@@ -27,6 +27,7 @@ const greenRun = {
   deployConclusion: "success",
   ciVerifiedForSha: true,
   deployVerifiedForSha: true,
+  combatWorkerVerifiedForSha: true,
   headBranch: "main",
   headRepository: REPOSITORY,
   repository: REPOSITORY,
@@ -85,13 +86,37 @@ const manualDispatch = {
 };
 assert.equal(decidePromotion(manualDispatch).reasonKey, "ciNotVerifiedForSha");
 assert.equal(
-  decidePromotion({ ...manualDispatch, ciVerifiedForSha: true, deployVerifiedForSha: true }).reasonKey,
+  decidePromotion({ ...manualDispatch, ciVerifiedForSha: true, deployVerifiedForSha: true,
+    combatWorkerVerifiedForSha: true }).reasonKey,
   "promote",
 );
 assert.equal(decidePromotion({ ...greenRun, ciVerifiedForSha: false }).reasonKey, "ciNotVerifiedForSha");
 
 assert.equal(decidePromotion({ ...greenRun, deployVerifiedForSha: false }).reasonKey, "deployNotVerifiedForSha");
 assert.equal(decidePromotion({ ...manualDispatch, ciVerifiedForSha: true }).reasonKey, "deployNotVerifiedForSha");
+
+// Gate: a build talks to the combat Worker, so admission evidence for this
+// exact revision (or an operator override with a recorded reason) is required.
+for (const missing of [undefined, false]) {
+  assert.equal(decidePromotion({ ...greenRun, combatWorkerVerifiedForSha: missing }).reasonKey,
+    "combatNotVerifiedForSha");
+}
+{
+  const overridden = decidePromotion({ ...greenRun, combatWorkerVerifiedForSha: false,
+    combatWorkerOverride: true, combatWorkerOverrideReason: "reissuing ticket key parity" });
+  assert.equal(overridden.promote, true);
+  assert.deepEqual(overridden.overrides, ["combatWorker"]);
+  const normal = decidePromotion(greenRun);
+  assert.equal("overrides" in normal, false);
+}
+for (const reason of [undefined, "", "two\nlines", "x".repeat(201)]) {
+  assert.equal(decidePromotion({ ...greenRun, combatWorkerVerifiedForSha: false,
+    combatWorkerOverride: true, combatWorkerOverrideReason: reason }).reasonKey,
+    "combatNotVerifiedForSha");
+}
+assert.equal(decidePromotion({ ...greenRun, combatWorkerVerifiedForSha: false,
+  combatWorkerOverride: "true", combatWorkerOverrideReason: "reason" }).reasonKey,
+  "combatNotVerifiedForSha");
 const verifiedPrerequisites = { verifyDeployment: async () => true };
 
 // Gate: currency, CI and deployment success come from the remote, not the payload.
@@ -100,6 +125,7 @@ const remoteEnvironment = {
   VKZ_EVENT_NAME: "workflow_dispatch",
   VKZ_REPOSITORY: REPOSITORY,
   VKZ_CANDIDATE_SHA: CURRENT_SHA,
+  VKZ_COMBAT_WORKER_VERIFIED_SHA: CURRENT_SHA,
 };
 assert.equal(
   (
@@ -120,6 +146,36 @@ assert.equal(
     })
   ).reasonKey,
   "ciNotVerifiedForSha",
+);
+// The combat Worker SHA variable is wired exactly: a different or absent
+// value fails closed even with otherwise-green remote facts.
+for (const override of [
+  { VKZ_COMBAT_WORKER_VERIFIED_SHA: undefined },
+  { VKZ_COMBAT_WORKER_VERIFIED_SHA: STALE_SHA },
+  { VKZ_COMBAT_WORKER_VERIFIED_SHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+  { VKZ_COMBAT_WORKER_VERIFIED_SHA: "not-a-sha" },
+]) {
+  assert.equal(
+    (
+      await decideWithRemoteFacts({ ...remoteEnvironment, ...override }, {
+        ...verifiedPrerequisites,
+        fetchCurrentMain: async () => CURRENT_SHA,
+        verifyCi: async () => true,
+      })
+    ).reasonKey,
+    "combatNotVerifiedForSha",
+  );
+}
+assert.equal(
+  (
+    await decideWithRemoteFacts({ ...remoteEnvironment, VKZ_COMBAT_WORKER_VERIFIED_SHA: STALE_SHA,
+      VKZ_COMBAT_WORKER_OVERRIDE: "true", VKZ_COMBAT_WORKER_OVERRIDE_REASON: "key parity reissued" }, {
+      ...verifiedPrerequisites,
+      fetchCurrentMain: async () => CURRENT_SHA,
+      verifyCi: async () => true,
+    })
+  ).reasonKey,
+  "promote",
 );
 assert.equal(
   (

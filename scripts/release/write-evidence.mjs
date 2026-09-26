@@ -56,6 +56,37 @@ export function createEvidence(environment, now = new Date()) {
     "Pages artifact ID",
   );
 
+  let combatWorker = null;
+  const combatWorkerJson = environment.VKZ_COMBAT_WORKER_VERSION;
+  if (combatWorkerJson !== undefined && combatWorkerJson !== "") {
+    let parsed;
+    try { parsed = JSON.parse(combatWorkerJson); } catch { throw new Error("Invalid combat worker evidence"); }
+    if (parsed?.status === "not-configured") {
+      combatWorker = { status: "not-configured" };
+    } else {
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("Invalid combat worker evidence");
+      }
+      const nullableText = (value) => (value === null ||
+        (typeof value === "string" && value.length > 0 && value.length <= 128 &&
+         !/[\r\n\u0000-\u001f\u007f]/u.test(value)) ? value : undefined);
+      if (!Number.isSafeInteger(parsed.protocolVersion) || parsed.protocolVersion < 1 ||
+          nullableText(parsed.versionId) === undefined || nullableText(parsed.versionTag) === undefined ||
+          nullableText(parsed.workerVersionTag) === undefined || nullableText(parsed.releaseSha) === undefined ||
+          nullableText(parsed.doMigrationTag) === undefined) {
+        throw new Error("Invalid combat worker evidence");
+      }
+      combatWorker = {
+        versionId: parsed.versionId,
+        versionTag: parsed.versionTag,
+        workerVersionTag: parsed.workerVersionTag,
+        releaseSha: parsed.releaseSha,
+        protocolVersion: parsed.protocolVersion,
+        doMigrationTag: parsed.doMigrationTag,
+      };
+    }
+  }
+
   if (Number.isNaN(now.getTime())) {
     throw new Error("Invalid evidence time");
   }
@@ -87,6 +118,7 @@ export function createEvidence(environment, now = new Date()) {
       pagesArtifactId,
       pagesEnvironment: "github-pages",
     },
+    combatWorker,
     smokeResults: {
       convexSpectatorSnapshotUnknownCode: {
         status: "passed",

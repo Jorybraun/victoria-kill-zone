@@ -21,6 +21,7 @@ export const PROMOTION_DECISIONS = Object.freeze({
   notDeployEvent: "the deployment run was not an authorized deployment event",
   ciNotVerifiedForSha: "no successful CI push run is recorded for this revision",
   deployNotVerifiedForSha: "the latest deployment attempt has no successful deployment and smoke evidence for this revision",
+  combatNotVerifiedForSha: "no combat Worker admission probe evidence is recorded for this revision",
   invalidCandidate: "the candidate revision is not a full commit SHA",
   invalidCurrent: "the current main revision is not a full commit SHA",
   notMain: "the deployment run was not on main",
@@ -44,6 +45,9 @@ export function decidePromotion(input) {
     deployConclusion,
     ciVerifiedForSha,
     deployVerifiedForSha,
+    combatWorkerVerifiedForSha,
+    combatWorkerOverride,
+    combatWorkerOverrideReason,
     headBranch,
     headRepository,
     repository,
@@ -54,11 +58,16 @@ export function decidePromotion(input) {
   const candidate = normalizeSha(candidateSha);
   const current = normalizeSha(currentMainSha);
 
+  const combatOverride = combatWorkerOverride === true &&
+    typeof combatWorkerOverrideReason === "string" &&
+    combatWorkerOverrideReason.length > 0 && combatWorkerOverrideReason.length <= 200 &&
+    !/[\r\n\u0000-\u001f\u007f]/u.test(combatWorkerOverrideReason);
   const decide = (reasonKey) => ({
     promote: reasonKey === "promote",
     reasonKey,
     reason: PROMOTION_DECISIONS[reasonKey],
     sha: reasonKey === "promote" ? candidate : null,
+    ...(combatOverride && reasonKey === "promote" ? { overrides: ["combatWorker"] } : {}),
   });
 
   if (enabled !== true) {
@@ -99,6 +108,11 @@ export function decidePromotion(input) {
   if (deployVerifiedForSha !== true) {
     return decide("deployNotVerifiedForSha");
   }
+  // A promoted build talks to the combat Worker; admission evidence for this
+  // exact revision is required unless an operator override is recorded.
+  if (combatWorkerVerifiedForSha !== true && !combatOverride) {
+    return decide("combatNotVerifiedForSha");
+  }
   if (candidate !== current) {
     return decide("staleSha");
   }
@@ -115,6 +129,10 @@ export function decideFromEnvironment(environment = process.env) {
     deployConclusion: environment.VKZ_DEPLOY_CONCLUSION,
     ciVerifiedForSha: environment.VKZ_CI_VERIFIED_FOR_SHA === "true",
     deployVerifiedForSha: environment.VKZ_DEPLOY_VERIFIED_FOR_SHA === "true",
+    combatWorkerVerifiedForSha: SHA_PATTERN.test(normalizeSha(environment.VKZ_COMBAT_WORKER_VERIFIED_SHA)) &&
+      normalizeSha(environment.VKZ_COMBAT_WORKER_VERIFIED_SHA) === normalizeSha(environment.VKZ_CANDIDATE_SHA),
+    combatWorkerOverride: environment.VKZ_COMBAT_WORKER_OVERRIDE === "true",
+    combatWorkerOverrideReason: environment.VKZ_COMBAT_WORKER_OVERRIDE_REASON,
     headBranch: environment.VKZ_DEPLOY_HEAD_BRANCH,
     headRepository: environment.VKZ_DEPLOY_HEAD_REPOSITORY,
     repository: environment.VKZ_REPOSITORY,
@@ -175,6 +193,12 @@ export async function decideWithRemoteFacts(environment = process.env, deps = {}
     deployConclusion: environment.VKZ_DEPLOY_CONCLUSION,
     ciVerifiedForSha,
     deployVerifiedForSha,
+    // The operator sets this repo variable after a green admission probe for
+    // the exact candidate SHA; anything else fails closed.
+    combatWorkerVerifiedForSha: SHA_PATTERN.test(normalizeSha(environment.VKZ_COMBAT_WORKER_VERIFIED_SHA)) &&
+      normalizeSha(environment.VKZ_COMBAT_WORKER_VERIFIED_SHA) === normalizeSha(candidateSha),
+    combatWorkerOverride: environment.VKZ_COMBAT_WORKER_OVERRIDE === "true",
+    combatWorkerOverrideReason: environment.VKZ_COMBAT_WORKER_OVERRIDE_REASON,
     headBranch: environment.VKZ_DEPLOY_HEAD_BRANCH,
     headRepository: environment.VKZ_DEPLOY_HEAD_REPOSITORY,
     repository,
