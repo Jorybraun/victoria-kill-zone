@@ -381,14 +381,17 @@ struct RealtimeArenaView: View {
           .accessibilityHint("Sends the scan so the other phones can align with this play area")
       }
       if controller.eligibility.begin || controller.startPending {
+        // Under sighting the host auto-begins — show the starting state instead
+        // of a second-tap PLAY button while the request is queued.
+        let pending = controller.startPending || controller.usesSighting
         Button(action: controller.beginRound) {
           HStack(spacing: 8) {
-            if controller.startPending {ProgressView().tint(VKZPalette.background)}
-            Text(controller.startPending ? "Starting match…" : (controller.usesQuickPlayFrame || controller.usesSighting) ? RealtimeArenaPresentation.Sighting.startTitle : "Begin match")
+            if pending {ProgressView().tint(VKZPalette.background)}
+            Text(pending ? "Starting match…" : controller.usesQuickPlayFrame ? RealtimeArenaPresentation.Sighting.startTitle : "Begin match")
           }
         }
-        .buttonStyle(VKZPrimaryButtonStyle()).disabled(controller.startPending)
-        .accessibilityLabel(controller.startPending ? "Starting match" : controller.usesSighting ? "Play" : "Begin match")
+        .buttonStyle(VKZPrimaryButtonStyle()).disabled(pending)
+        .accessibilityLabel(pending ? "Starting match" : controller.usesSighting ? "Play" : "Begin match")
       }
       if offersQuickDuel, let onQuickDuel {
         Button("Play Quick Duel instead") {
