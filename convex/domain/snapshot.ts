@@ -19,6 +19,8 @@ export interface MatchSummarySnapshot {
   combatMode?: "durableObject";
   combatPhase?: "calibrating" | "running" | "paused" | "finished";
   combatGeometry?: "trackedBody" | "phoneProxy" | "sighting";
+  combatProjectionSequence?: number;
+  combatWorkerVersionTag?: string | null;
   maxPlayers?: number;
   id: string;
   code: string;
@@ -92,6 +94,8 @@ export interface SnapshotMatch extends MatchState {
   combatMode?: "durableObject";
   combatPhase?: "calibrating" | "running" | "paused" | "finished";
   combatGeometry?: "trackedBody" | "phoneProxy" | "sighting";
+  combatProjectionSequence?: number;
+  combatWorkerVersionTag?: string | null;
   maxPlayers?: number;
   id: string;
   code: string;
@@ -160,6 +164,8 @@ function projectMatch(match: SnapshotMatch, now: number): MatchSummarySnapshot {
     ...(match.combatMode === undefined ? {} : {combatMode:match.combatMode}),
     ...(match.combatPhase === undefined ? {} : {combatPhase:match.combatPhase}),
     ...(match.combatGeometry === undefined ? {} : {combatGeometry:match.combatGeometry}),
+    ...(match.combatProjectionSequence === undefined ? {} : {combatProjectionSequence:match.combatProjectionSequence}),
+    ...(match.combatWorkerVersionTag === undefined ? {} : {combatWorkerVersionTag:match.combatWorkerVersionTag}),
     ...(match.maxPlayers === undefined ? {} : {maxPlayers:match.maxPlayers}),
     ...(match.startsAt === null ? {} : { startsAt: match.startsAt }),
     ...(match.endsAt === null ? {} : { endsAt: match.endsAt }),
