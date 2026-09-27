@@ -315,6 +315,7 @@ struct MatchSnapshotWire: Decodable {
 struct MatchSummaryWire: Decodable {
   let combatMode: CombatMode?
   let combatPhase: CombatWire.Phase?
+  let combatGeometry: String?
   @OptionalConvexFloat var maxPlayers: Double?
   let id: String
   let code: String
@@ -335,6 +336,7 @@ struct MatchSummaryWire: Decodable {
       winnerPlayerId: winnerPlayerId,
       combatMode: combatMode,
       combatPhase: combatPhase,
+      combatGeometry: combatGeometry,
       maxPlayers: try maxPlayers.map(exactInteger)
     )
   }

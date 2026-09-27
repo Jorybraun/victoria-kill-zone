@@ -86,6 +86,7 @@ export type BackendErrorCode =
   | "INVALID_CODE"
   | "MATCH_NOT_FOUND"
   | "MATCH_FULL"
+  | "QUICK_DUEL_FULL"
   | "MATCH_ALREADY_STARTED"
   | "INVALID_SESSION"
   | "PLAYERS_NOT_READY"
@@ -113,6 +114,7 @@ const ERROR_BY_REJECT_REASON: Record<RejectReason, BackendErrorCode> = {
   match_not_active: "MATCH_NOT_RUNNING",
   match_expired: "MATCH_NOT_RUNNING",
   match_full: "MATCH_FULL",
+  quick_duel_full: "QUICK_DUEL_FULL",
   match_already_started: "MATCH_ALREADY_STARTED",
   not_a_member: "INVALID_SESSION",
   not_host: "HOST_ONLY",

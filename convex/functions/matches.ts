@@ -20,6 +20,7 @@ import {
 } from "../domain/match.js";
 import { resolveWinner } from "../domain/lifecycle.js";
 import { hashSecret, sessionSecretFromBytes } from "../domain/session.js";
+import { QUICK_DUEL_MAX_PLAYERS } from "./combat.js";
 import { internalMutation, mutation, type Id, type MutationCtx } from "./lib/server.js";
 import {
   appendEvent,
@@ -94,7 +95,8 @@ export const create = mutation({
 
     const matchId = await ctx.db.insert("matches", {
       ...plan.match,
-      ...(args.combatMode === "durableObject" ? {combatMode: args.combatMode, maxPlayers: args.maxPlayers ?? 4} : {}),
+      ...(args.combatMode === "durableObject" ? {combatMode: args.combatMode,
+        maxPlayers: args.combatGeometry === "sighting" ? QUICK_DUEL_MAX_PLAYERS : args.maxPlayers ?? 4} : {}),
       ...(args.combatGeometry !== undefined ? {combatGeometry: args.combatGeometry} : {}),
       startedAt: null,
       hostPlayerId: null,
@@ -144,6 +146,9 @@ export const join = mutation({
 
     const now = Date.now();
     const players = await listPlayers(ctx, match._id);
+    if (match.combatGeometry === "sighting" && players.length >= QUICK_DUEL_MAX_PLAYERS) {
+      fail("QUICK_DUEL_FULL");
+    }
     const plan = planJoinMatch(match, players.length, {
       displayName,
       hasArenaCenter: match.arenaCenterAt !== undefined && match.arenaCenterAt !== null,
