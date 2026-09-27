@@ -17,39 +17,6 @@ enum RealtimeAssociationPolicy {
   static let maximumHandDistance = 0.45
   static let minimumMargin = 0.35
 
-  static func associate(skeleton: TargetingSkeleton?, observationConfidence: Double,
-                        phonePoses: [CombatWire.PlayerPose], players: [CombatWire.Player],
-                        localPlayerID: String, matchTimeMs: Double, now: Date,
-                        frameReady: Bool) -> RealtimeBodyAssociation? {
-    guard frameReady, let skeleton, fresh(skeleton.capturedAt, at: now),
-      observationConfidence.isFinite, observationConfidence >= 0.8, matchTimeMs.isFinite else {return nil}
-    let hands = ["leftHand", "rightHand"].compactMap {skeleton.position(of: $0)}.filter(valid)
-    guard !hands.isEmpty else {return nil}
-    let remote = players.filter {$0.playerId != localPlayerID}
-    guard !remote.isEmpty, remote.allSatisfy({$0.connected && $0.frameReady}) else {return nil}
-    let eligible = Set(remote.map(\.playerId))
-    let candidates = phonePoses.compactMap {sample -> (id: String, distance: Double)? in
-      let age = matchTimeMs - sample.pose.capturedAtMs
-      guard eligible.contains(sample.playerId), sample.pose.tracking == "normal", age.isFinite, age >= 0, age <= 100,
-        sample.pose.position.count == 3, sample.pose.position.allSatisfy(\.isFinite) else {return nil}
-      let phone = TargetingVector3(x: sample.pose.position[0], y: sample.pose.position[1], z: sample.pose.position[2])
-      guard let nearest = hands.map({distance($0, phone)}).min() else {return nil}
-      return (sample.playerId, nearest)
-    }.sorted {$0.distance == $1.distance ? $0.id < $1.id : $0.distance < $1.distance}
-    // A missing/stale competitor cannot be treated as infinitely far away.
-    // Include eliminated members in the comparison: their physical body remains
-    // in the arena even while their gameplay hit volumes are disabled.
-    guard candidates.count == eligible.count, Set(candidates.map(\.id)) == eligible,
-      let first = candidates.first, first.distance <= maximumHandDistance,
-      remote.first(where: {$0.playerId == first.id})?.health ?? 0 > 0 else {return nil}
-    let margin = candidates.dropFirst().first.map {$0.distance - first.distance} ?? 1
-    guard margin >= minimumMargin else {return nil}
-    let confidence = min(observationConfidence, 1 - 0.15 * first.distance / maximumHandDistance)
-    guard confidence >= 0.8 else {return nil}
-    return RealtimeBodyAssociation(playerID: first.id, confidence: confidence, handDistanceMeters: first.distance,
-      marginMeters: margin, capturedAt: skeleton.capturedAt)
-  }
-
   /// ADR 0013 sighting geometry: with exactly one remote roster member the
   /// observed body is unambiguous — no phone poses, no shared frame.
   static func associateSighting(skeleton: TargetingSkeleton?, observationConfidence: Double,
@@ -119,14 +86,5 @@ enum RealtimePoseBuilder {
     guard captured >= 0, [q.x, q.y, q.z, q.w].allSatisfy(\.isFinite) else {return nil}
     return .init(sequence: sequence, capturedAtMs: captured,
       position: [ray.origin.x, ray.origin.y, ray.origin.z], orientation: [q.x, q.y, q.z, q.w], tracking: "normal")
-  }
-  static func pose(_ sample: DuelFramePose, sequence: Int, matchTimeMs: Double, now: Date) -> CombatWire.Pose? {
-    guard sample.isValid, RealtimeAssociationPolicy.fresh(sample.capturedAt, at: now), matchTimeMs.isFinite else {return nil}
-    let m = sample.columnMajor
-    let rotation = simd_double3x3(columns: (SIMD3(m[0], m[1], m[2]), SIMD3(m[4], m[5], m[6]), SIMD3(m[8], m[9], m[10])))
-    let q = simd_normalize(simd_quatd(rotation)).vector
-    let captured = matchTimeMs - now.timeIntervalSince(sample.capturedAt) * 1000
-    guard captured >= 0, [q.x, q.y, q.z, q.w].allSatisfy(\.isFinite) else {return nil}
-    return .init(sequence: sequence, capturedAtMs: captured, position: [m[12], m[13], m[14]], orientation: [q.x, q.y, q.z, q.w], tracking: "normal")
   }
 }

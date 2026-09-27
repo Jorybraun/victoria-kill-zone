@@ -2664,19 +2664,15 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
     }
 
     XCTAssertTrue(room(combatGeometry: "sighting", maxPlayers: 2).isQuickDuel)
-    XCTAssertTrue(room(combatGeometry: "phoneProxy", maxPlayers: 4, players: roster(2)).isQuickDuel,
-      "A two-player phoneProxy roster is upgraded to sighting by the authority")
-    XCTAssertFalse(room(combatGeometry: "phoneProxy", maxPlayers: 4, players: roster(3)).isQuickDuel,
-      "A three-player phoneProxy roster keeps the shared-frame path")
-    XCTAssertFalse(room(maxPlayers: 2).isQuickDuel,
-      "Missing combatGeometry is classified conservatively as a Saved Arena")
-    XCTAssertTrue(room(maxPlayers: 2).isSavedArena)
+    XCTAssertFalse(room(combatGeometry: "phoneProxy", maxPlayers: 4, players: roster(2)).isQuickDuel)
+    XCTAssertFalse(room(combatGeometry: "phoneProxy", maxPlayers: 4, players: roster(3)).isQuickDuel)
+    XCTAssertFalse(room(maxPlayers: 2).isQuickDuel)
     XCTAssertFalse(room(combatGeometry: "trackedBody", maxPlayers: 4).isQuickDuel)
-    XCTAssertTrue(room(combatGeometry: "trackedBody", maxPlayers: 4).isSavedArena)
     XCTAssertFalse(room(combatMode: nil, maxPlayers: 2).isQuickDuel)
-    XCTAssertFalse(room(combatMode: nil, maxPlayers: 2).isSavedArena)
     XCTAssertEqual(WaitingRoomCopy.mode(for: room(combatGeometry: "sighting", maxPlayers: 2)), .quickDuel)
-    XCTAssertEqual(WaitingRoomCopy.mode(for: room(combatGeometry: "trackedBody", maxPlayers: 4)), .savedArena)
+    XCTAssertEqual(WaitingRoomCopy.mode(for: room(combatGeometry: "phoneProxy", maxPlayers: 4)), .quickDuel)
+    XCTAssertEqual(WaitingRoomCopy.mode(for: room(combatGeometry: "trackedBody", maxPlayers: 4)), .quickDuel)
+    XCTAssertEqual(WaitingRoomCopy.mode(for: room(maxPlayers: 2)), .quickDuel)
     XCTAssertEqual(WaitingRoomCopy.mode(for: room(combatMode: nil, maxPlayers: 2)), .classic)
   }
 
@@ -2697,10 +2693,6 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
     }
     XCTAssertEqual(WaitingRoomCopy.matchName(.quickDuel), "Quick Duel")
     XCTAssertEqual(WaitingRoomCopy.hostStartTitle(.quickDuel), "Start duel")
-    // The opt-in saved-arena mode keeps its alignment ceremony copy.
-    XCTAssertEqual(WaitingRoomCopy.hostStartTitle(.savedArena), "Align arena")
-    XCTAssertEqual(WaitingRoomCopy.allReadyGuidance(.savedArena),
-      "All players ready. Next, align your shared play area.")
   }
 
   /// Emits the deterministic authority/client timeline both to stdout (SwiftPM

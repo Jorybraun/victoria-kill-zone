@@ -1,25 +1,18 @@
 import Foundation
 
 enum RealtimeArenaStage: Equatable {
-  case connecting, mapping, mapReady, waitingForMap, transferringMap, relocalizing
-  case measuringReference, awaitingMembers, running, paused, reconnecting, respawning, finished, unavailable
+  case connecting, awaitingMembers, running, paused, reconnecting, respawning, finished, unavailable
 
   var title: String {
     switch self {
     case .connecting: "Connecting to match"
-    case .mapping: "Scan the play area"
-    case .mapReady: "Arena scan ready"
-    case .waitingForMap: "Waiting for the host’s scan"
-    case .transferringMap: "Sharing the arena"
-    case .relocalizing: "Find the same area"
-    case .measuringReference: "Align the arena"
-    case .awaitingMembers: "Waiting for players to align"
+    case .awaitingMembers: "Waiting for opponent"
     case .running: "Live match"
     case .paused: "Tracking paused"
     case .reconnecting: "Reconnecting"
     case .respawning: "Eliminated"
     case .finished: "Match complete"
-    case .unavailable: "Arena unavailable"
+    case .unavailable: "Body tracking unavailable"
     }
   }
 }
@@ -35,20 +28,15 @@ struct RealtimeActionEligibility: Equatable {
   /// ADR 0013: under sighting there is no shared frame to wait on — connected
   /// with a fresh local pose is the entire readiness gate.
   static func evaluate(snapshot: CombatWire.Snapshot?, localPlayerID: String, clockReady: Bool,
-                       frameReady: Bool, sceneActive: Bool, canSubmit: Bool, poseFresh: Bool,
-                       localFireAtMs: Double?, matchTimeMs: Double?, sighting: Bool = false) -> Self {
+                       sceneActive: Bool, canSubmit: Bool, poseFresh: Bool,
+                       localFireAtMs: Double?, matchTimeMs: Double?) -> Self {
     guard let snapshot, let now = matchTimeMs, now.isFinite, let player = snapshot.players.first(where: {$0.playerId == localPlayerID}) else {return Self()}
     guard sceneActive, clockReady, canSubmit else {return Self(reason: "Synchronizing")}
-    if sighting {
-      guard player.connected else {return Self(reason: "Waiting for opponent")}
-      guard poseFresh else {return Self(reason: "Camera tracking unavailable")}
-    } else {
-      guard frameReady, poseFresh, player.connected, player.frameReady else {return Self(reason: "Align the arena")}
-    }
+    guard player.connected else {return Self(reason: "Waiting for opponent")}
+    guard poseFresh else {return Self(reason: "Camera tracking unavailable")}
     if snapshot.phase == .calibrating || snapshot.phase == .paused {
       return Self(begin: snapshot.roundStartedAtMs == nil && player.role == "host"
-        && snapshot.players.allSatisfy {sighting ? $0.connected : $0.connected && $0.frameReady},
-        reason: sighting ? "Waiting for opponent" : "Waiting for players")
+        && snapshot.players.allSatisfy(\.connected), reason: "Waiting for opponent")
     }
     guard snapshot.phase == .running else {return Self(reason: "Match complete")}
     guard player.health > 0 else {return Self(reason: "Respawning")}
@@ -60,7 +48,7 @@ struct RealtimeActionEligibility: Equatable {
     return Self(fire: !shielding && !reloading && !cooldown && player.ammo > 0,
       reload: !shielding && !reloading && player.ammo < snapshot.rules.weapon.magazine,
       shield: shielding || (!reloading && player.shield.cooldownUntilMs <= now),
-      slowField: !sighting && player.slowFieldReadyAtMs <= now,
+      slowField: false,
       reason: shielding ? "Shield raised" : reloading ? "Reloading" : player.ammo == 0 ? "Reload to continue" : cooldown ? "Recharging" : "Ready")
   }
 

@@ -5,7 +5,6 @@ enum CombatWire {
   static let maximumServerBytes = 131_072
   static let maximumClientBytes = 16_384
   /// Opaque ARKit collaboration archives ride a larger, deliberately droppable lane.
-  static let maximumCollabBytes = 384_000
   static let maximumCollabMessageBytes = 386_000
   static let maximumCollabDataBytes = 288 * 1024
   /// The worker bounds the base64 token string at 4,096 characters
@@ -92,24 +91,19 @@ enum CombatWire {
 
   enum Command: Encodable, Sendable {
     case pose(Pose, observations: [Observation])
-    case frameReady(ready: Bool, residualMeters: Double, residualDegrees: Double, clockUncertaintyMs: Double)
     case start, reload, leave
     case fire(shotId: String, poseSequence: Int, origin: [Double], direction: [Double], observation: Observation? = nil)
     case shield(active: Bool, poseSequence: Int)
     case slowField(poseSequence: Int)
 
     private enum Key: String, CodingKey {
-      case kind, pose, observations, ready, residualMeters, residualDegrees, clockUncertaintyMs
-      case shotId, poseSequence, origin, direction, active, observation
+      case kind, pose, observations, shotId, poseSequence, origin, direction, active, observation
     }
     func encode(to encoder: Encoder) throws {
       var c = encoder.container(keyedBy: Key.self)
       switch self {
       case .pose(let pose, let observations):
         try c.encode("pose", forKey: .kind); try c.encode(pose, forKey: .pose); try c.encode(observations, forKey: .observations)
-      case .frameReady(let ready, let metres, let degrees, let uncertainty):
-        try c.encode("frameReady", forKey: .kind); try c.encode(ready, forKey: .ready)
-        try c.encode(metres, forKey: .residualMeters); try c.encode(degrees, forKey: .residualDegrees); try c.encode(uncertainty, forKey: .clockUncertaintyMs)
       case .start: try c.encode("start", forKey: .kind)
       case .reload: try c.encode("reload", forKey: .kind)
       case .leave: try c.encode("leave", forKey: .kind)
@@ -132,9 +126,7 @@ enum CombatWire {
   }
   enum ClientMessage: Encodable, Sendable {
     case command(Envelope), received(eventSequence: Int), resume(afterEventSequence: Int), ping(nonce: String, clientSentAtMs: Double)
-    case collab(Data)
-    case niToken(Data)
-    private enum Key: String, CodingKey {case type, envelope, eventSequence, afterEventSequence, nonce, clientSentAtMs, data, token}
+    private enum Key: String, CodingKey {case type, envelope, eventSequence, afterEventSequence, nonce, clientSentAtMs}
     func encode(to encoder: Encoder) throws {
       var c=encoder.container(keyedBy:Key.self)
       switch self {
@@ -142,8 +134,6 @@ enum CombatWire {
       case .received(let sequence): try c.encode("received",forKey:.type); try c.encode(sequence,forKey:.eventSequence)
       case .resume(let sequence): try c.encode("resume",forKey:.type); try c.encode(sequence,forKey:.afterEventSequence)
       case .ping(let nonce,let time): try c.encode("ping",forKey:.type); try c.encode(nonce,forKey:.nonce); try c.encode(time,forKey:.clientSentAtMs)
-      case .collab(let data): try c.encode("collab",forKey:.type); try c.encode(data,forKey:.data)
-      case .niToken(let data): try c.encode("niToken",forKey:.type); try c.encode(data,forKey:.token)
       }
     }
   }

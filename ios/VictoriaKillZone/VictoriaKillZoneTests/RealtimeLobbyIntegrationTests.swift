@@ -14,7 +14,7 @@ final class RealtimeLobbyIntegrationTests: XCTestCase {
     store.leave()
   }
 
-  func testQuickDuelSelectsSightingWhileSavedArenasAndClassicKeepTheirs() async throws {
+  func testQuickDuelSelectsSightingWhileClassicKeepsItsGeometry() async throws {
     let client = ArenaLobbyClient()
     let store = makeStore(client)
     store.displayName = "Host"
@@ -22,13 +22,6 @@ final class RealtimeLobbyIntegrationTests: XCTestCase {
     XCTAssertEqual(client.requests.last?.combatGeometry, QuickDuel.geometry,
       "A Quick Duel without a saved arena is exactly two sighting players")
     XCTAssertEqual(client.requests.last?.maxPlayers, QuickDuel.maxPlayers)
-    store.leave()
-    try await until { store.route == .home }
-
-    let saved = try SavedArenaMatchTests.arena()
-    await store.performCreateDuel(combatMode: .durableObject, savedArena: saved)
-    XCTAssertEqual(client.requests.last?.combatGeometry, "trackedBody",
-      "Saved arenas keep the measured reference flow and body colliders")
     store.leave()
     try await until { store.route == .home }
 
@@ -63,45 +56,6 @@ final class RealtimeLobbyIntegrationTests: XCTestCase {
     XCTAssertEqual(store.route, .home)
     XCTAssertNil(store.realtimeArena)
     store.leave()
-  }
-
-  func testSwitchToQuickDuelLeavesSavedArenaAndRequestsSightingMatch() async throws {
-    let client = ArenaLobbyClient()
-    let store = makeStore(client)
-    let saved = try SavedArenaMatchTests.arena()
-    await store.performCreateDuel(combatMode: .durableObject, savedArena: saved)
-    client.emit(Self.snapshot(count: 2, phase: .running))
-    try await until { store.realtimeArena != nil }
-
-    store.switchToQuickDuel()
-
-    try await until { client.requests.count == 2 }
-    XCTAssertEqual(client.requests.last?.combatMode, .durableObject)
-    XCTAssertEqual(client.requests.last?.combatGeometry, QuickDuel.geometry)
-    XCTAssertEqual(client.requests.last?.maxPlayers, QuickDuel.maxPlayers)
-    XCTAssertNil(store.realtimeArena, "The saved arena must be fully torn down before the Quick Duel creates")
-    store.leave()
-  }
-
-  func testSavedSelectionBelongsOnlyToCreatedHostSession() async throws {
-    let client = ArenaLobbyClient()
-    let store = makeStore(client)
-    let saved = try SavedArenaMatchTests.arena()
-    await store.performCreateDuel(combatMode: .durableObject, savedArena: saved)
-    client.emit(Self.snapshot(count: 2, phase: .running))
-    try await until { store.realtimeArena != nil }
-    XCTAssertEqual(store.realtimeArena?.savedArenaName, "Living room")
-    store.leave()
-    try await until { store.route == .home }
-
-    // Joining cannot inherit the previously created host's private selection.
-    store.joinCode = "ABC123"
-    await store.performJoinDuel()
-    client.emit(Self.snapshot(count: 2, phase: .running))
-    try await until { store.realtimeArena != nil }
-    XCTAssertNil(store.realtimeArena?.savedArenaName)
-    store.leave()
-    try await until { store.route == .home }
   }
 
   func testProjectionKeepsOneCombatControllerAndLeaveClearsIt() async throws {
@@ -143,7 +97,7 @@ final class RealtimeLobbyIntegrationTests: XCTestCase {
 
     let nextArena = RealtimeArenaController(
       session: .init(matchId: "next-match", code: "DEF456", playerId: "p0", sessionSecret: UUID().uuidString),
-      client: client, targeting: camera, mode: .quickDuel)
+      client: client, targeting: camera)
     await nextArena.start()
     // Drain any old unstructured cleanup task before inspecting the new camera.
     for _ in 0..<10 {await Task.yield()}
@@ -178,49 +132,47 @@ final class RealtimeLobbyIntegrationTests: XCTestCase {
     await camera.stop()
   }
 
-  func testQuickDuelMatchBuildsQuickDuelController() async throws {
+  func testQuickDuelMatchBuildsRealtimeController() async throws {
     let client = ArenaLobbyClient()
     let store = makeStore(client)
     await store.performCreateDuel(combatMode: .durableObject)
     client.emit(Self.snapshot(count: 2, phase: .running, geometry: QuickDuel.geometry))
     try await until {store.realtimeArena != nil}
-    XCTAssertEqual(store.realtimeArena?.mode, .quickDuel)
-    XCTAssertNil(store.realtimeArena?.frameProvider, "Quick Duel never constructs shared-frame services")
+    XCTAssertNotNil(store.realtimeArena)
+    XCTAssertNil(store.duel.session)
     store.leave()
   }
 
-  func testTwoPlayerPhoneProxyMatchBuildsQuickDuelController() async throws {
+  func testLegacyPhoneProxyRoomStillUsesRealtimeController() async throws {
     let client = ArenaLobbyClient()
     let store = makeStore(client)
     await store.performCreateDuel(combatMode: .durableObject)
     client.emit(Self.snapshot(count: 2, phase: .running, geometry: "phoneProxy"))
     try await until {store.realtimeArena != nil}
-    XCTAssertEqual(store.realtimeArena?.mode, .quickDuel,
-      "Convex upgrades a two-player phoneProxy roster to sighting")
+    XCTAssertNotNil(store.realtimeArena)
+    XCTAssertNil(store.duel.session)
     store.leave()
   }
 
-  func testThreePlayerPhoneProxyMatchBuildsSavedArenaController() async throws {
+  func testThreePlayerPhoneProxyRoomUsesOnlyRealtimeController() async throws {
     let client = ArenaLobbyClient()
     let store = makeStore(client)
     await store.performCreateDuel(combatMode: .durableObject)
     client.emit(Self.snapshot(count: 3, phase: .running, geometry: "phoneProxy"))
     try await until {store.realtimeArena != nil}
-    guard case .savedArena = store.realtimeArena?.mode else {
-      return XCTFail("A three-player phoneProxy roster keeps the shared-frame path")
-    }
+    XCTAssertNotNil(store.realtimeArena)
+    XCTAssertNil(store.duel.session)
     store.leave()
   }
 
-  func testMissingGeometryBuildsSavedArenaController() async throws {
+  func testMissingGeometryRoomUsesOnlyRealtimeController() async throws {
     let client = ArenaLobbyClient()
     let store = makeStore(client)
     await store.performCreateDuel(combatMode: .durableObject)
     client.emit(Self.snapshot(count: 2, phase: .running))
     try await until {store.realtimeArena != nil}
-    guard case .savedArena = store.realtimeArena?.mode else {
-      return XCTFail("Missing geometry must stay on the saved-arena path")
-    }
+    XCTAssertNotNil(store.realtimeArena)
+    XCTAssertNil(store.duel.session)
     store.leave()
   }
 

@@ -55,82 +55,91 @@ final class RealtimeArenaTests: XCTestCase {
   }
 
   @MainActor
-  func testQuickDuelNeverBuildsFrameProviderEvenWhenTargetingSupportsIt() {
-    let controller = RealtimeArenaController(
-      session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
-      client: UnavailableGameSessionClient(), targeting: ArenaModeFrameCamera(), mode: .quickDuel)
-    XCTAssertNil(controller.frameProvider)
-    XCTAssertTrue(controller.usesSighting)
-    XCTAssertEqual(controller.stage, .connecting,
-      "Quick Duel reaches the connected-only gate without any frame service")
+  func testNonSightingRulesAreRejectedAndStopCombat() async throws {
+    for geometry in ["trackedBody", "phoneProxy"] {
+      let socket = ArenaModeSocket()
+      let camera = ArenaSightingCamera()
+      var snapshot = RealtimeCombatTests.snapshot()
+      snapshot.rules.geometry = geometry
+      socket.initialSnapshot = snapshot
+      let controller = RealtimeArenaController(
+        session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
+        client: ArenaTestTicketClient(), targeting: camera,
+        makeTransport: {socket})
+      await controller.start()
+      try await waitFor {controller.message == RealtimeArenaPresentation.Sighting.incompatibleServerMessage}
+      XCTAssertTrue(controller.incompatibleRules, geometry)
+      XCTAssertEqual(controller.stage, .unavailable, geometry)
+      try await waitFor {socket.closeCount > 0}
+      try await Task.sleep(for: .milliseconds(20))
+      XCTAssertEqual(socket.connectCount, 1, "An incompatible server must not be retried")
+      await controller.stop()
+    }
   }
+
   @MainActor
-  func testSavedArenaStillBuildsFrameProvider() {
-    let controller = RealtimeArenaController(
-      session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
-      client: UnavailableGameSessionClient(), targeting: ArenaModeFrameCamera(), mode: .savedArena(nil))
-    XCTAssertNotNil(controller.frameProvider)
-    XCTAssertFalse(controller.usesSighting)
-  }
-  @MainActor
-  func testQuickDuelRejectsNonSightingRules() async throws {
+  func testFinishedNonSightingSnapshotStillShowsMismatch() async throws {
     let socket = ArenaModeSocket()
-    var snapshot = RealtimeCombatTests.snapshot(); snapshot.rules.geometry = "phoneProxy"
+    let camera = ArenaSightingCamera()
+    var snapshot = RealtimeCombatTests.snapshot(); snapshot.rules.geometry = "trackedBody"; snapshot.phase = .finished
     socket.initialSnapshot = snapshot
     let controller = RealtimeArenaController(
       session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
-      client: ArenaModeTicketClient(), targeting: ArenaLifecycleCamera(), mode: .quickDuel,
-      makeTransport: {socket})
+      client: ArenaTestTicketClient(), targeting: camera, makeTransport: {socket})
     await controller.start()
     try await waitFor {controller.message == RealtimeArenaPresentation.Sighting.incompatibleServerMessage}
     XCTAssertTrue(controller.incompatibleRules)
-    XCTAssertEqual(controller.stage, .unavailable)
-    try await waitFor {socket.closeCount > 0}
-    try await Task.sleep(for: .milliseconds(50))
-    XCTAssertEqual(socket.connectCount, 1, "An incompatible server must not be retried")
-    // Incompatibility is terminal: retry controls cannot reopen the match.
-    controller.retryAlignment()
-    XCTAssertEqual(controller.message, RealtimeArenaPresentation.Sighting.incompatibleServerMessage)
-    XCTAssertEqual(controller.stage, .unavailable)
-  }
-
-  @MainActor
-  func testSavedArenaRejectsSightingRules() async throws {
-    let socket = ArenaModeSocket()
-    var snapshot = RealtimeCombatTests.snapshot(); snapshot.rules.geometry = "sighting"
-    socket.initialSnapshot = snapshot
-    let controller = RealtimeArenaController(
-      session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
-      client: ArenaModeTicketClient(), targeting: ArenaModeFrameCamera(), mode: .savedArena(nil),
-      makeTransport: {socket})
-    await controller.start()
-    try await waitFor {controller.message == RealtimeArenaPresentation.incompatibleRulesMessage}
-    XCTAssertTrue(controller.incompatibleRules)
-    XCTAssertEqual(controller.stage, .unavailable)
-    try await waitFor {socket.closeCount > 0}
-    try await Task.sleep(for: .milliseconds(50))
-    XCTAssertEqual(socket.connectCount, 1, "An incompatible server must not be retried")
-  }
-
-  @MainActor
-  func testSavedArenaFinishedSnapshotStillShowsMismatch() async throws {
-    let socket = ArenaModeSocket()
-    var snapshot = RealtimeCombatTests.snapshot(); snapshot.rules.geometry = "sighting"; snapshot.phase = .finished
-    socket.initialSnapshot = snapshot
-    let controller = RealtimeArenaController(
-      session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
-      client: ArenaModeTicketClient(), targeting: ArenaModeFrameCamera(), mode: .savedArena(nil),
-      makeTransport: {socket})
-    await controller.start()
-    try await waitFor {controller.message == RealtimeArenaPresentation.incompatibleRulesMessage}
-    XCTAssertTrue(controller.incompatibleRules)
     XCTAssertEqual(controller.stage, .unavailable, "A finished mismatched match shows the mismatch, not results")
+    await controller.stop()
+  }
+
+  @MainActor
+  func testSightingMatchStartsRunsAndFiresWithoutSharedFrameTraffic() async throws {
+    let socket = ArenaSightingSocket()
+    let camera = ArenaSightingCamera()
+    let controller = RealtimeArenaController(
+      session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
+      client: ArenaTestTicketClient(), targeting: camera,
+      makeTransport: {socket}, localNow: {1000})
+    defer {Task {await controller.stop()}}
+    await controller.start()
+    try await waitFor {controller.stage == .running}
+    try await waitFor {controller.eligibility.fire}
+    controller.fireOnce()
+    try await waitFor {
+      socket.sentMessages.contains {
+        guard case .command(let envelope) = $0 else {return false}
+        if case .fire = envelope.command {return true}
+        return false
+      }
+    }
+
+    let encoded = try socket.sentMessages.map {try JSONEncoder().encode($0)}
+    let objects = try encoded.map {try XCTUnwrap(JSONSerialization.jsonObject(with: $0) as? [String: Any])}
+    let types = objects.compactMap {$0["type"] as? String}
+    XCTAssertTrue(types.allSatisfy {["command", "ping", "received", "resume"].contains($0)})
+    XCTAssertFalse(types.contains("collab"))
+    XCTAssertFalse(types.contains("niToken"))
+    XCTAssertFalse(types.contains("map"))
+    XCTAssertFalse(encoded.contains {String(decoding: $0, as: UTF8.self).contains("frameReady")})
+    let commands = objects.compactMap {object -> String? in
+      guard let envelope = object["envelope"] as? [String: Any],
+        let command = envelope["command"] as? [String: Any] else {return nil}
+      return command["kind"] as? String
+    }
+    XCTAssertTrue(commands.contains("start"))
+    XCTAssertTrue(commands.contains("pose"))
+    XCTAssertTrue(commands.contains("fire"))
+    XCTAssertFalse(commands.contains("frameReady"))
+    XCTAssertFalse(commands.contains("collab"))
+    XCTAssertFalse(commands.contains("niToken"))
+    XCTAssertEqual(camera.frameServiceCallCount, 0)
   }
 
   @MainActor
   private func makeController(_ camera: ArenaLifecycleCamera) -> RealtimeArenaController {
     .init(session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
-      client: UnavailableGameSessionClient(), targeting: camera, mode: .quickDuel)
+      client: UnavailableGameSessionClient(), targeting: camera)
   }
   @MainActor
   private func waitFor(_ condition: () async -> Bool) async throws {
@@ -139,41 +148,6 @@ final class RealtimeArenaTests: XCTestCase {
     let fulfilled = await condition(); XCTAssertTrue(fulfilled)
   }
 
-  func testAssociationSelectsObservedHandMatchAcrossFourPlayers() throws {
-    let association = try XCTUnwrap(associate(phones: [phone("p2", x: 0.1), phone("p3", x: 1), phone("p4", x: 2)]))
-    XCTAssertEqual(association.playerID, "p2")
-    XCTAssertGreaterThanOrEqual(association.confidence, 0.8)
-    XCTAssertEqual(association.marginMeters, 0.9, accuracy: 0.001)
-  }
-  func testAmbiguousNearbyPhonesDoNotPickRosterOrder() {
-    let phones = [phone("p2", x: 0.1), phone("p3", x: 0.2), phone("p4", x: 2)]
-    XCTAssertNil(associate(phones: phones)); XCTAssertNil(associate(phones: phones.reversed()))
-  }
-  func testMissingOrStaleCompetitorDoesNotCreateFalseIdentityMargin() {
-    XCTAssertNil(associate(phones: [phone("p2", x: 0.1)], roster: players()))
-    XCTAssertNil(associate(phones: [phone("p2", x: 0.1), phone("p3", x: 0.11, at: 899), phone("p4", x: 2)], roster: players()))
-  }
-  func testEliminatedBodyCannotBeReassignedToNearbyLivingPlayer() {
-    var roster = players(); roster[1].health = 0
-    XCTAssertNil(associate(phones: [phone("p2", x: 0), phone("p3", x: 0.4), phone("p4", x: 2)], roster: roster))
-  }
-  func testOneRemoteMemberStillRequiresActualHandGeometry() {
-    XCTAssertNil(associate(phones: [phone("p2", x: 2)]))
-    XCTAssertNil(associate(phones: [phone("p2", x: 0.1)], skeleton: skeleton(includeHand: false)))
-  }
-  func testStaleFutureUnalignedAndLowConfidenceInputsFailClosed() {
-    XCTAssertNil(associate(phones: [phone("p2", x: 0.1, at: 899)]))
-    XCTAssertNil(associate(phones: [phone("p2", x: 0.1, at: 1001)]))
-    XCTAssertNil(associate(phones: [phone("p2", x: 0.1)], skeleton: skeleton(at: date.addingTimeInterval(-0.101))))
-    XCTAssertNil(associate(phones: [phone("p2", x: 0.1)], ready: false))
-    XCTAssertNil(associate(phones: [phone("p2", x: 0.1)], confidence: 0.79))
-  }
-  func testDisconnectedOrUnreadyPlayersCannotOwnObservedBody() {
-    var roster = players(); roster[1].connected = false
-    XCTAssertNil(associate(phones: [phone("p2", x: 0.1)], roster: roster))
-    roster[1].connected = true; roster[1].frameReady = false
-    XCTAssertNil(associate(phones: [phone("p2", x: 0.1)], roster: roster))
-  }
   func testCollidersUseOnlyObservedJointsWithStableIdentity() {
     let body = skeleton(includeHand: false)
     let colliders = RealtimeAssociationPolicy.colliders(body)
@@ -183,24 +157,19 @@ final class RealtimeArenaTests: XCTestCase {
     XCTAssertEqual(RealtimeAssociationPolicy.colliders(noHead).map(\.id), ["torso"], "Neck must not fabricate an unobserved head")
   }
   func testConfirmedHitNeverFlashesAnotherPersonsSkeleton() throws {
-    let association = try XCTUnwrap(associate(phones: [phone("p2", x: 0.1)])), body = skeleton()
+    let association = try XCTUnwrap(RealtimeAssociationPolicy.associateSighting(
+      skeleton: skeleton(), observationConfidence: 0.9, players: Array(players().prefix(2)),
+      localPlayerID: "p1", now: date))
+    let body = skeleton()
     XCTAssertNotNil(RealtimeAssociationPolicy.hitSkeleton(targetPlayerID: "p2", association: association, skeleton: body, now: date))
     XCTAssertNil(RealtimeAssociationPolicy.hitSkeleton(targetPlayerID: "p3", association: association, skeleton: body, now: date))
     XCTAssertNil(RealtimeAssociationPolicy.hitSkeleton(targetPlayerID: "p2", association: association, skeleton: body, now: date.addingTimeInterval(0.101)))
     XCTAssertNil(RealtimeAssociationPolicy.hitSkeleton(targetPlayerID: nil, association: association, skeleton: body, now: date))
   }
-  func testCameraPoseUsesMeasuredCaptureTimeAndRigidOrientation() throws {
-    var matrix = ArenaRigidTransform.identityStorage; matrix[12] = 2; matrix[13] = 1; matrix[14] = -3
-    let sample = DuelFramePose(columnMajor: matrix, capturedAt: date.addingTimeInterval(-0.05), frameTimestamp: 10)
-    let pose = try XCTUnwrap(RealtimePoseBuilder.pose(sample, sequence: 7, matchTimeMs: 1000, now: date))
-    XCTAssertEqual(pose.position, [2, 1, -3]); XCTAssertEqual(pose.orientation, [0, 0, 0, 1]); XCTAssertEqual(pose.sequence, 7)
-    XCTAssertEqual(pose.capturedAtMs, 950, accuracy: 0.001)
-    XCTAssertNil(RealtimePoseBuilder.pose(sample, sequence: 8, matchTimeMs: 1100, now: date.addingTimeInterval(0.1)))
-  }
   func testDisconnectedBackgroundAndClockLossDisableAllGameplay() {
     let snapshot = RealtimeCombatTests.snapshot()
     XCTAssertTrue(eligibility(snapshot).fire)
-    for result in [eligibility(snapshot, clock: false), eligibility(snapshot, scene: false), eligibility(snapshot, frame: false), eligibility(snapshot, pose: false), eligibility(snapshot, capacity: false)] {
+    for result in [eligibility(snapshot, clock: false), eligibility(snapshot, scene: false), eligibility(snapshot, pose: false), eligibility(snapshot, capacity: false)] {
       XCTAssertFalse(result.fire); XCTAssertFalse(result.reload); XCTAssertFalse(result.shield); XCTAssertFalse(result.slowField); XCTAssertFalse(result.begin)
     }
   }
@@ -226,21 +195,18 @@ final class RealtimeArenaTests: XCTestCase {
     snapshot.players[0].frameReady = false; snapshot.players[1].frameReady = false
     // No shared frame exists under sighting: a fresh pose and a connected
     // roster are the entire fire and begin gates (ADR 0013).
-    XCTAssertTrue(eligibility(snapshot, frame: false, sighting: true).fire)
+    XCTAssertTrue(eligibility(snapshot).fire)
     snapshot.phase = .calibrating
-    XCTAssertTrue(eligibility(snapshot, frame: false, sighting: true).begin)
+    XCTAssertTrue(eligibility(snapshot).begin)
     snapshot.players[1].connected = false
-    let waiting = eligibility(snapshot, frame: false, sighting: true)
+    let waiting = eligibility(snapshot)
     XCTAssertFalse(waiting.begin); XCTAssertFalse(waiting.fire)
     XCTAssertEqual(waiting.reason, "Waiting for opponent")
   }
-  func testSightingHidesSlowFieldButKeepsFireAndShield() {
+  func testSlowFieldIsUnavailableWhileFireAndShieldRemain() {
     var snapshot = RealtimeCombatTests.snapshot(); snapshot.rules.geometry = "sighting"
     snapshot.players[0].frameReady = false; snapshot.players[1].frameReady = false
-    // ADR 0013 owner decision: slow fields are refused server-side under
-    // sighting, so the client never offers the action; fire/shield unaffected.
-    XCTAssertTrue(eligibility(RealtimeCombatTests.snapshot()).slowField, "phoneProxy still offers slow field")
-    let result = eligibility(snapshot, frame: false, sighting: true)
+    let result = eligibility(snapshot)
     XCTAssertFalse(result.slowField)
     XCTAssertTrue(result.fire); XCTAssertTrue(result.shield)
   }
@@ -275,11 +241,11 @@ final class RealtimeArenaTests: XCTestCase {
     XCTAssertNil(RealtimePoseBuilder.pose(ray: ray, sequence: 4, matchTimeMs: 1000, now: date.addingTimeInterval(0.2)))
   }
 
-  func testBeginNeedsHostAndCompleteAlignmentAndRoundClockExcludesCalibration() {
+  func testBeginNeedsHostAndConnectedOpponentAndRoundClockExcludesCalibration() {
     var snapshot = RealtimeCombatTests.snapshot(); snapshot.phase = .calibrating
     XCTAssertTrue(eligibility(snapshot).begin)
-    snapshot.players[1].frameReady = false; XCTAssertFalse(eligibility(snapshot).begin)
-    snapshot.players[1].frameReady = true; snapshot.players[0].role = "player"; XCTAssertFalse(eligibility(snapshot).begin)
+    snapshot.players[1].connected = false; XCTAssertFalse(eligibility(snapshot).begin)
+    snapshot.players[1].connected = true; snapshot.players[0].role = "player"; XCTAssertFalse(eligibility(snapshot).begin)
     XCTAssertNil(RealtimeActionEligibility.remainingRoundMs(snapshot: snapshot, now: 12_000))
     snapshot.roundStartedAtMs = 10_000
     XCTAssertEqual(RealtimeActionEligibility.remainingRoundMs(snapshot: snapshot, now: 12_000), 178_000)
@@ -287,16 +253,8 @@ final class RealtimeArenaTests: XCTestCase {
     XCTAssertFalse(eligibility(snapshot).begin, "A started match resumes automatically when authoritative coverage returns")
   }
 
-  private func eligibility(_ snapshot: CombatWire.Snapshot, clock: Bool = true, frame: Bool = true, scene: Bool = true, pose: Bool = true, capacity: Bool = true, localFire: Double? = nil, sighting: Bool = false) -> RealtimeActionEligibility {
-    .evaluate(snapshot: snapshot, localPlayerID: "p1", clockReady: clock, frameReady: frame, sceneActive: scene, canSubmit: capacity, poseFresh: pose, localFireAtMs: localFire, matchTimeMs: 5000, sighting: sighting)
-  }
-  private func associate(phones: [CombatWire.PlayerPose], skeleton body: TargetingSkeleton? = nil, ready: Bool = true, confidence: Double = 0.9, roster: [CombatWire.Player]? = nil) -> RealtimeBodyAssociation? {
-    RealtimeAssociationPolicy.associate(skeleton: body ?? skeleton(), observationConfidence: confidence, phonePoses: phones,
-      players: roster ?? (phones.count == 1 ? Array(players().prefix(2)) : players()),
-      localPlayerID: "p1", matchTimeMs: 1000, now: date, frameReady: ready)
-  }
-  private func phone(_ id: String, x: Double, at: Double = 1000) -> CombatWire.PlayerPose {
-    .init(playerId: id, pose: .init(sequence: 1, capturedAtMs: at, position: [x, 1, 0], orientation: [0, 0, 0, 1], tracking: "normal"))
+  private func eligibility(_ snapshot: CombatWire.Snapshot, clock: Bool = true, scene: Bool = true, pose: Bool = true, capacity: Bool = true, localFire: Double? = nil) -> RealtimeActionEligibility {
+    .evaluate(snapshot: snapshot, localPlayerID: "p1", clockReady: clock, sceneActive: scene, canSubmit: capacity, poseFresh: pose, localFireAtMs: localFire, matchTimeMs: 5000)
   }
   private func skeleton(includeHand: Bool = true, at: Date? = nil) -> TargetingSkeleton {
     var joints: [TargetingSkeletonJoint] = [.init(name: "head", position: .init(x: 0, y: 1.7, z: 0)),
@@ -338,20 +296,57 @@ private actor ArenaLifecycleCamera: TargetingSession {
   func disableStopGate() {gateStop = false; releaseStop()}
 }
 
-/// A targeting double that supports the shared-frame protocol — used to prove
-/// Quick Duel still refuses to construct frame services.
-private actor ArenaModeFrameCamera: TargetingSession, DuelFrameSessionDriving {
+private actor ArenaSightingCamera: TargetingSession, DuelFrameSessionDriving {
   nonisolated let availability = TargetingAvailability.available
   nonisolated let currentSnapshot = TargetingSnapshot.unavailable()
-  nonisolated func snapshots() -> AsyncStream<TargetingSnapshot> {AsyncStream {$0.finish()}}
-  func start() async throws {}
-  func stop() async {}
-  nonisolated func duelFrameObservations() -> AsyncStream<DuelFrameObservation> {AsyncStream {$0.finish()}}
-  nonisolated func applyFrameCollaboration(_ data: Data) async throws {}
-  func beginFrameMapping(epoch: UInt16, mode: DuelFrameAlignmentMode) async throws {}
-  func captureFrameMap(epoch: UInt16) async throws -> Data {Data()}
-  func installFrameMap(_ map: DuelFrameMap, phase: DuelFrameSessionPhase) async throws {}
-  func endFrameMapping() async {}
+  private nonisolated let streamPair = AsyncStream<TargetingSnapshot>.makeStream()
+  private nonisolated let frameServiceCalls = FrameServiceCallCounter()
+  private var cameraTask: Task<Void, Never>?
+
+  nonisolated func snapshots() -> AsyncStream<TargetingSnapshot> {streamPair.stream}
+  nonisolated var frameServiceCallCount: Int {frameServiceCalls.count}
+  nonisolated func duelFrameObservations() -> AsyncStream<DuelFrameObservation> {
+    frameServiceCalls.record()
+    return AsyncStream {$0.finish()}
+  }
+  nonisolated func duelFrameCollaboration() -> AsyncStream<Data> {
+    frameServiceCalls.record()
+    return AsyncStream {$0.finish()}
+  }
+  nonisolated func applyFrameCollaboration(_ data: Data) async throws {frameServiceCalls.record()}
+  func start() async throws {
+    let continuation = streamPair.continuation
+    cameraTask = Task {
+      while !Task.isCancelled {
+        let now = Date()
+        let ray = TargetingCameraRay(origin: .init(x: 0, y: 0, z: 0),
+          direction: .init(x: 0, y: 0, z: -1), capturedAt: now)
+        continuation.yield(TargetingSnapshot(state: .searching, bodyDetected: false,
+          torsoDetected: false, confidence: 0, observedAt: now, poseObservedAt: nil,
+          bodyBounds: nil, torsoBounds: nil, headRegion: nil, torsoRegion: nil,
+          aimClaim: nil, cameraRay: ray, poseStaleAfter: 0.2))
+        do {try await Task.sleep(for: .milliseconds(20))} catch {return}
+      }
+    }
+  }
+  func stop() async {
+    cameraTask?.cancel(); cameraTask = nil
+    streamPair.continuation.finish()
+  }
+  func beginFrameMapping(epoch: UInt16, mode: DuelFrameAlignmentMode) async throws {frameServiceCalls.record()}
+  func captureFrameMap(epoch: UInt16) async throws -> Data {
+    frameServiceCalls.record()
+    return Data()
+  }
+  func installFrameMap(_ map: DuelFrameMap, phase: DuelFrameSessionPhase) async throws {frameServiceCalls.record()}
+  func endFrameMapping() async {frameServiceCalls.record()}
+}
+
+private final class FrameServiceCallCounter: @unchecked Sendable {
+  private let lock = NSLock()
+  private var storedCount = 0
+  var count: Int {lock.withLock {storedCount}}
+  func record() {lock.withLock {storedCount += 1}}
 }
 
 @MainActor
@@ -371,7 +366,56 @@ private final class ArenaModeSocket: CombatSocketConnecting {
   func close() {closeCount += 1; output?.finish(); output = nil}
 }
 
-private struct ArenaModeTicketClient: GameSessionClient {
+@MainActor
+private final class ArenaSightingSocket: CombatSocketConnecting {
+  var output: AsyncThrowingStream<CombatWire.ServerMessage, Error>.Continuation?
+  var sentMessages: [CombatWire.ClientMessage] = []
+  var initialSnapshot = RealtimeCombatTests.snapshot()
+  var eventSequence = 0
+  let serverTime = 5000.0
+
+  init() {
+    initialSnapshot.rules.geometry = "sighting"
+    initialSnapshot.matchTimeMs = serverTime
+    initialSnapshot.phase = .calibrating
+    initialSnapshot.roundStartedAtMs = nil
+    for index in initialSnapshot.players.indices {initialSnapshot.players[index].frameReady = false}
+  }
+
+  func connect(ticket: CombatAccessTicket) throws -> AsyncThrowingStream<CombatWire.ServerMessage, Error> {
+    let pair = AsyncThrowingStream<CombatWire.ServerMessage, Error>.makeStream()
+    output = pair.continuation
+    output?.yield(.snapshot(initialSnapshot, eventSequence: 0, clientSequence: 0, release: nil))
+    return pair.stream
+  }
+
+  func send(_ message: CombatWire.ClientMessage) async throws {
+    sentMessages.append(message)
+    switch message {
+    case .ping(let nonce, let sent):
+      output?.yield(.pong(nonce: nonce, clientSentAtMs: sent,
+        serverReceivedAtMs: serverTime, serverSentAtMs: serverTime))
+    case .command(let envelope):
+      if case .start = envelope.command {
+        var running = initialSnapshot
+        running.phase = .running
+        running.roundStartedAtMs = serverTime
+        eventSequence += 1
+        output?.yield(.snapshot(running, eventSequence: eventSequence,
+          clientSequence: envelope.clientSequence, release: nil))
+      } else {
+        output?.yield(.ack(commandId: envelope.commandId, clientSequence: envelope.clientSequence,
+          replayed: false, eventSequence: eventSequence))
+      }
+    default:
+      break
+    }
+  }
+
+  func close() {output?.finish(); output = nil}
+}
+
+private struct ArenaTestTicketClient: GameSessionClient {
   let availability = GameSessionAvailability.available
   func combatTicket(session: PlayerSession) async throws -> CombatAccessTicket {
     try CombatAccessTicket(endpoint: XCTUnwrap(URL(string: "https://combat.example.test/v1/matches/match/connect")),
