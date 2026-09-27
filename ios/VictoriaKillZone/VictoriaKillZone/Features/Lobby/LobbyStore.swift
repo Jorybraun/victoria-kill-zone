@@ -290,6 +290,16 @@ final class LobbyStore: ObservableObject {
   }
 
   func leave() {
+    performLeave()
+  }
+
+  /// Saved-arena dead-ends can fall back to a two-player Quick Duel: tear the
+  /// arena down completely, then create a fresh sighting match from home.
+  func switchToQuickDuel() {
+    performLeave(then: { store in store.createRealtimeArena() })
+  }
+
+  private func performLeave(then followUp: (@MainActor (LobbyStore) -> Void)? = nil) {
     guard operation != .leaving else { return }
     if let realtimeArena {
       actionTask?.cancel()
@@ -303,10 +313,12 @@ final class LobbyStore: ObservableObject {
         guard let self else { return }
         self.realtimeArena = nil
         self.resetLobby(stopTargeting: false)
+        followUp?(self)
       }
       return
     }
     resetLobby()
+    followUp?(self)
   }
 
   private func resetLobby(stopTargeting: Bool = true) {

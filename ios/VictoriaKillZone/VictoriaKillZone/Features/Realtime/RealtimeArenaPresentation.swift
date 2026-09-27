@@ -165,6 +165,86 @@ enum RealtimeArenaPresentation {
     return min(1, max(0, 1 - (end - now) / duration))
   }
 
+  /// Whether the saved-arena dead-ends offer switching into a two-player
+  /// Quick Duel instead of sending the player home.
+  static func offersQuickDuelFallback(
+    usesSavedArena: Bool,
+    stage: RealtimeArenaStage,
+    frameStage: DuelFrameStage,
+    frameFailure: DuelFrameFailure?,
+    referenceState: DuelFrameReferenceState
+  ) -> Bool {
+    guard usesSavedArena else { return false }
+    if stage == .measuringReference && referenceState == .unavailable { return true }
+    if stage == .paused && frameStage == .lost && frameFailure == .relocalizationTimedOut { return true }
+    return stage == .unavailable
+  }
+
+  /// Copy for ADR 0013 sighting (Quick Duel): no shared frame exists, so nothing here may mention alignment/scanning.
+  enum Sighting {
+    static func title(stage: RealtimeArenaStage, clockReady: Bool) -> String {
+      switch stage {
+      case .connecting: "Connecting to match"
+      case .awaitingMembers: "Waiting for opponent"
+      case .running: "Live match"
+      case .paused: clockReady ? "Tracking paused" : "Synchronizing match"
+      case .reconnecting: "Reconnecting"
+      case .respawning: "Eliminated"
+      case .finished: "Match complete"
+      case .unavailable: "Body tracking unavailable"
+      // Map/frame stages are unreachable under sighting; keep neutral copy so
+      // the audit can still sweep every case.
+      case .mapping, .mapReady, .waitingForMap, .transferringMap, .relocalizing,
+        .measuringReference: "Getting ready"
+      }
+    }
+
+    static func guidance(stage: RealtimeArenaStage, clockReady: Bool, roundHasStarted: Bool) -> String {
+      switch stage {
+      case .awaitingMembers:
+        return "Waiting for opponent"
+      case .paused:
+        if !clockReady {
+          return "Synchronizing match timing. Keep this screen open; controls return when the connection is stable."
+        }
+        if roundHasStarted {
+          return "Keep your opponent in view. The match resumes automatically when camera tracking recovers."
+        }
+        return "Point your camera at your opponent. The host can start once both players are ready."
+      case .running:
+        return ""
+      case .reconnecting:
+        return "Your score is retained. Reconnecting before input resumes."
+      case .respawning:
+        return "Health and ammunition restore automatically. You can keep looking and moving."
+      case .unavailable:
+        return "Body tracking is unavailable on this device or configuration."
+      default:
+        return "Connecting to the match and synchronizing the clock."
+      }
+    }
+
+    /// Sighting never sends frameReady (the tick bypasses it), so roster copy
+    /// keys on connection + health only.
+    static func rosterStatus(connected: Bool, health: Int) -> String {
+      if !connected { return "Disconnected" }
+      if health == 0 { return "Respawning" }
+      return "\(health) health"
+    }
+
+    static func rosterAccessibilityStatus(connected: Bool) -> String {
+      connected ? "connected" : "disconnected"
+    }
+
+    static let startTitle = "PLAY"
+    static let retryTrackingTitle = "Retry camera"
+    static let allStages: [RealtimeArenaStage] = [
+      .connecting, .mapping, .mapReady, .waitingForMap, .transferringMap, .relocalizing,
+      .measuringReference, .awaitingMembers, .running, .paused, .reconnecting,
+      .respawning, .finished, .unavailable,
+    ]
+  }
+
   static func pauseGuidance(clockReady: Bool, roundHasStarted: Bool) -> String {
     if !clockReady {
       return "Synchronizing match timing. Keep this screen open; controls return when the connection is stable."

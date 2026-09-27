@@ -456,11 +456,24 @@ final class RealtimeArenaController: ObservableObject {
     configuredEpoch = snapshot.frameEpoch
     mapCoordinator?.configure(epoch: epoch, isHost: isHost, mode: frameAlignmentMode)
   }
+  /// ADR 0013 zero-step Quick Duel: the host starts the round the moment the
+  /// sighting gate opens — no second tap after the lobby start. `eligibility`
+  /// already gates on host role, every member connected, an unstarted round,
+  /// and no pending start command, so a pause/reconnect cannot re-fire once
+  /// `roundStartedAtMs` is set.
+  private var lastAutoBegin: Date?
+  private func autoBeginIfReady() {
+    guard usesSighting, eligibility.begin else {return}
+    if let last = lastAutoBegin, now.timeIntervalSince(last) < 2 {return}
+    lastAutoBegin = now
+    beginRound()
+  }
   private func tick() {
     guard started else {return}
     let date = Date(); now = date
     commands.tick(at: date); actionFeedback = commands.notice
     refreshAssociation(at: date)
+    autoBeginIfReady()
     guard sceneActive, combat.canSubmitSpatialInput, let matchTimeMs else {return}
     if usesSighting {
       // Poses stream the local camera ray in the device's own AR frame; the

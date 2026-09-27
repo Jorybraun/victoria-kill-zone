@@ -65,6 +65,24 @@ final class RealtimeLobbyIntegrationTests: XCTestCase {
     store.leave()
   }
 
+  func testSwitchToQuickDuelLeavesSavedArenaAndRequestsSightingMatch() async throws {
+    let client = ArenaLobbyClient()
+    let store = makeStore(client)
+    let saved = try SavedArenaMatchTests.arena()
+    await store.performCreateDuel(combatMode: .durableObject, savedArena: saved)
+    client.emit(Self.snapshot(count: 2, phase: .running))
+    try await until { store.realtimeArena != nil }
+
+    store.switchToQuickDuel()
+
+    try await until { client.requests.count == 2 }
+    XCTAssertEqual(client.requests.last?.combatMode, .durableObject)
+    XCTAssertEqual(client.requests.last?.combatGeometry, QuickDuel.geometry)
+    XCTAssertEqual(client.requests.last?.maxPlayers, QuickDuel.maxPlayers)
+    XCTAssertNil(store.realtimeArena, "The saved arena must be fully torn down before the Quick Duel creates")
+    store.leave()
+  }
+
   func testSavedSelectionBelongsOnlyToCreatedHostSession() async throws {
     let client = ArenaLobbyClient()
     let store = makeStore(client)
