@@ -153,7 +153,9 @@ export const join = mutation({
       displayName,
       hasArenaCenter: match.arenaCenterAt !== undefined && match.arenaCenterAt !== null,
       now,
-    }, match.combatMode === "durableObject" ? match.maxPlayers : undefined);
+    // Legacy durableObject rows may carry a larger stored cap; every prepared
+    // match is issued sighting rules, so joins are bounded to the duel roster.
+    }, match.combatMode === "durableObject" ? Math.min(match.maxPlayers, QUICK_DUEL_MAX_PLAYERS) : undefined);
     if (!plan.ok) {
       fail(plan.reason);
     }

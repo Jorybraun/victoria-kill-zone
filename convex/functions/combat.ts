@@ -52,7 +52,9 @@ export const prepare = mutation({
     if (match.phase !== "lobby") fail("MATCH_ALREADY_STARTED");
     const players = await listPlayers(ctx, match._id);
     if (players.length < 2 || players.length > LIMITS.players || players.length > match.maxPlayers) fail("PLAYERS_NOT_CONNECTED");
-    if (match.combatGeometry === "sighting" && players.length > QUICK_DUEL_MAX_PLAYERS) fail("QUICK_DUEL_FULL");
+    // Every prepared match is issued sighting rules, so the two-player cap
+    // applies regardless of the geometry stored on a legacy row.
+    if (players.length > QUICK_DUEL_MAX_PLAYERS) fail("QUICK_DUEL_FULL");
     const now = Date.now();
     if (players.some(p => !p.connected || now - p.lastSeenAt > 15_000)) fail("PLAYERS_NOT_CONNECTED");
     if (players.some(p => !p.ready)) fail("PLAYERS_NOT_READY");

@@ -18,11 +18,11 @@ beforeEach(() => {
 });
 afterEach(() => {vi.restoreAllMocks(); vi.unstubAllEnvs();});
 
-function room(combatGeometry?: "sighting", roster = 2) {
+function room(combatGeometry?: "trackedBody" | "sighting", roster = 2, maxPlayers = 4) {
   const b=mutationContext(), host=storedPlayer(testIds.host,{ready:true}), guest=storedPlayer(testIds.guest,{ready:true}), third=storedPlayer(testIds.third,{ready:true});
   b.seed("players",host.doc); b.seed("players",guest.doc);
   if (roster > 2) b.seed("players",third.doc);
-  b.seed("matches",storedMatch({status:"waiting",phase:"lobby",combatMode:"durableObject",maxPlayers:4,...(combatGeometry===undefined?{}:{combatGeometry})}));
+  b.seed("matches",storedMatch({status:"waiting",phase:"lobby",combatMode:"durableObject",maxPlayers,...(combatGeometry===undefined?{}:{combatGeometry})}));
   return {...b,host,guest,auth:{matchId:testIds.match,playerId:testIds.host,sessionSecret:host.sessionSecret}};
 }
 
@@ -65,6 +65,18 @@ describe("realtime room admission", () => {
     expect(insert?.doc).toMatchObject({combatMode:"durableObject",combatGeometry:"sighting",maxPlayers:2});
     await mutationHandler(join)(b.ctx,{code:host.code,displayName:"Second"});
     await expect(mutationHandler(join)(b.ctx,{code:host.code,displayName:"Third"})).rejects.toMatchObject({data:{code:"QUICK_DUEL_FULL"}});
+  });
+  it("refuses prepare for a stored trackedBody row over the two-player sighting cap", async () => {
+    const b=room("trackedBody",3,4);
+    await expect(mutationHandler(prepare)(b.ctx,b.auth)).rejects.toMatchObject({data:{code:"QUICK_DUEL_FULL"}});
+    expect(b.writes.filter(w=>w.kind==="patch" && w.doc.combatRulesJson!==undefined)).toHaveLength(0);
+  });
+  it("refuses a third join on a legacy four-slot durableObject row", async () => {
+    const b=mutationContext();
+    b.seed("matches",storedMatch({status:"waiting",phase:"lobby",combatMode:"durableObject",maxPlayers:4,combatGeometry:"trackedBody"}));
+    b.seed("players",storedPlayer(testIds.host,{ready:true}).doc);
+    b.seed("players",storedPlayer(testIds.guest,{ready:true}).doc);
+    await expect(mutationHandler(join)(b.ctx,{code:"ABCDEF",displayName:"Third"})).rejects.toMatchObject({data:{code:"MATCH_FULL"}});
   });
   it("keeps an explicit sighting selection and refuses a larger roster at prepare", async () => {
     const b=room("sighting",3);
