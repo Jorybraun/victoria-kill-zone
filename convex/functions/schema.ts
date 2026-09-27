@@ -70,6 +70,13 @@ export default defineSchema({
     combatRulesJson: v.optional(v.string()),
     combatProjectionSequence: v.optional(v.number()),
     combatProjectionDigest: v.optional(v.string()),
+    // Last worker identity observed through an accepted combat projection.
+    combatWorkerVersionId: v.optional(v.union(v.string(), v.null())),
+    combatWorkerVersionTag: v.optional(v.union(v.string(), v.null())),
+    combatWorkerReleaseSha: v.optional(v.string()),
+    combatWorkerTag: v.optional(v.string()),
+    combatWorkerDoMigrationTag: v.optional(v.string()),
+    combatWorkerObservedAt: v.optional(v.number()),
     combatPhase: v.optional(v.union(v.literal("calibrating"), v.literal("running"), v.literal("paused"), v.literal("finished"))),
     durationMs: v.number(),
     startsAt: v.optional(nullableNumber),

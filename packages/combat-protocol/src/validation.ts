@@ -1,4 +1,4 @@
-import {LIMITS, type ClientMessage, type CombatCommand, type CombatRules, type CombatTicketClaims, type Member, type CombatPlayerState, type CombatProjection, type CombatEvent} from "./index.js";
+import {LIMITS, type ClientMessage, type CombatCommand, type CombatRules, type CombatTicketClaims, type Member, type CombatPlayerState, type CombatProjection, type CombatEvent, type ReleaseManifestSummary, type WorkerIdentity} from "./index.js";
 
 type ObjectValue = Record<string, unknown>;
 const record = (x: unknown): x is ObjectValue => typeof x === "object" && x !== null && !Array.isArray(x);
@@ -6,6 +6,12 @@ const keys = (x: ObjectValue, expected: string): boolean => {
   const names = expected.split(" ");
   return Object.keys(x).length === names.length && names.every(name => Object.hasOwn(x, name));
 };
+const keysOptional = (x: ObjectValue, required: string, optional: string): boolean => {
+  const requiredNames = required.split(" ");
+  const allowed = new Set([...requiredNames, ...optional.split(" ")]);
+  return Object.keys(x).every(name => allowed.has(name)) && requiredNames.every(name => Object.hasOwn(x, name));
+};
+const shortString = (x: unknown): x is string => typeof x === "string" && x.length >= 1 && x.length <= 128;
 const number = (x: unknown, min: number, max: number): x is number =>
   typeof x === "number" && Number.isFinite(x) && x >= min && x <= max;
 const integer = (x: unknown, min = 0, max = Number.MAX_SAFE_INTEGER): x is number => number(x, min, max) && Number.isSafeInteger(x);
@@ -151,9 +157,26 @@ function projectedTerminal(x: unknown): x is Extract<CombatEvent,{kind:"projecti
     (x.reason === "shieldBlocked" ? x.targetPlayerId !== null : x.targetPlayerId === null);
 }
 
+export function validateWorkerIdentity(x: unknown): WorkerIdentity | null {
+  if (!record(x) || !keys(x, "versionId versionTag releaseSha workerVersionTag doMigrationTag")) return null;
+  if (!(x.versionId === null || shortString(x.versionId)) || !(x.versionTag === null || shortString(x.versionTag)) ||
+    !shortString(x.releaseSha) || !shortString(x.workerVersionTag) || !shortString(x.doMigrationTag)) return null;
+  return {versionId: x.versionId, versionTag: x.versionTag, releaseSha: x.releaseSha, workerVersionTag: x.workerVersionTag, doMigrationTag: x.doMigrationTag};
+}
+
+export function validateReleaseManifestSummary(x: unknown): ReleaseManifestSummary | null {
+  if (!record(x) || !keys(x, "protocolVersion rulesSchemaHash doClass doMigrationTag iosMinProtocol iosMaxProtocol convexMinProtocol workerVersionTag releaseSha") ||
+    !integer(x.protocolVersion, 1) || !integer(x.iosMinProtocol, 1) || !integer(x.iosMaxProtocol, 1) || !integer(x.convexMinProtocol, 1) ||
+    !shortString(x.rulesSchemaHash) || !shortString(x.doClass) || !shortString(x.doMigrationTag) ||
+    !shortString(x.workerVersionTag) || !shortString(x.releaseSha)) return null;
+  return {protocolVersion: x.protocolVersion, rulesSchemaHash: x.rulesSchemaHash, doClass: x.doClass, doMigrationTag: x.doMigrationTag,
+    iosMinProtocol: x.iosMinProtocol, iosMaxProtocol: x.iosMaxProtocol, convexMinProtocol: x.convexMinProtocol,
+    workerVersionTag: x.workerVersionTag, releaseSha: x.releaseSha};
+}
+
 /** Validation is independent of the authority HMAC check at the lobby boundary. */
 export function validateCombatProjection(x: unknown): CombatProjection | null {
-  if (!record(x) || !keys(x,"v matchId authorityEpoch frameEpoch fromEventSequence throughEventSequence matchTimeMs roundStartedAtMs phase players terminals") ||
+  if (!record(x) || !keysOptional(x,"v matchId authorityEpoch frameEpoch fromEventSequence throughEventSequence matchTimeMs roundStartedAtMs phase players terminals","worker") ||
     x.v !== 1 || !id(x.matchId) || !integer(x.authorityEpoch,1) || !integer(x.frameEpoch,1) || !integer(x.fromEventSequence,1) ||
     !integer(x.throughEventSequence,x.fromEventSequence) || !time(x.matchTimeMs) ||
     !(x.roundStartedAtMs === null || (time(x.roundStartedAtMs) && x.roundStartedAtMs <= x.matchTimeMs)) ||
@@ -172,6 +195,13 @@ export function validateCombatProjection(x: unknown): CombatProjection | null {
     previous=terminal.eventSequence;
     terminals.push({eventSequence:terminal.eventSequence,event:terminal.event});
   }
+  let worker: WorkerIdentity | undefined;
+  if (Object.hasOwn(x, "worker")) {
+    const parsed = validateWorkerIdentity(x.worker);
+    if (parsed === null) return null;
+    worker = parsed;
+  }
   return {v:1,matchId:x.matchId,authorityEpoch:x.authorityEpoch,frameEpoch:x.frameEpoch,fromEventSequence:x.fromEventSequence,
-    throughEventSequence:x.throughEventSequence,matchTimeMs:x.matchTimeMs,roundStartedAtMs:x.roundStartedAtMs,phase:x.phase,players,terminals};
+    throughEventSequence:x.throughEventSequence,matchTimeMs:x.matchTimeMs,roundStartedAtMs:x.roundStartedAtMs,phase:x.phase,players,terminals,
+    ...(worker === undefined ? {} : {worker})};
 }

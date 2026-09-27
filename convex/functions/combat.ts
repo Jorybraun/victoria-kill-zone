@@ -163,7 +163,10 @@ export const publishProjection = mutation({
       status:projection.phase === "finished" ? "ended" : "active",phase:projection.phase === "finished" ? "finished" : "running",
       startedAt:projection.roundStartedAtMs === null ? null : now - (projection.matchTimeMs - projection.roundStartedAtMs),
       endsAt:projection.roundStartedAtMs === null ? null : deadline(projection.roundStartedAtMs + match.durationMs),
-      ...(projection.phase === "finished" ? {winnerPlayerId:winnerPlayer?._id ?? null,endReason:"duration_elapsed" as const} : {})});
+      ...(projection.phase === "finished" ? {winnerPlayerId:winnerPlayer?._id ?? null,endReason:"duration_elapsed" as const} : {}),
+      ...(projection.worker === undefined ? {} : {combatWorkerVersionId:projection.worker.versionId,combatWorkerVersionTag:projection.worker.versionTag,
+        combatWorkerReleaseSha:projection.worker.releaseSha,combatWorkerTag:projection.worker.workerVersionTag,
+        combatWorkerDoMigrationTag:projection.worker.doMigrationTag,combatWorkerObservedAt:now})});
     if (projection.phase === "finished" && match.combatPhase !== "finished") await appendEvent(ctx,{matchId,type:"finished",actorPlayerId:winnerPlayer?._id ?? null,
       targetPlayerId:null,zone:null,damage:null,message:winnerPlayer === null || winnerPlayer === undefined ? "MATCH DRAW" : `${winnerPlayer.displayName} WINS`,createdAt:now});
     return {eventSequence:projection.throughEventSequence,replayed:false};

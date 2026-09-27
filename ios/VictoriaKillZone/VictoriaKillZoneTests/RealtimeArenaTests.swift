@@ -326,7 +326,7 @@ private final class ArenaModeSocket: CombatSocketConnecting {
     connectCount += 1
     let pair = AsyncThrowingStream<CombatWire.ServerMessage, Error>.makeStream()
     output = pair.continuation
-    output?.yield(.snapshot(initialSnapshot, eventSequence: 0, clientSequence: 0))
+    output?.yield(.snapshot(initialSnapshot, eventSequence: 0, clientSequence: 0, release: nil))
     return pair.stream
   }
   func send(_ message: CombatWire.ClientMessage) async throws {}

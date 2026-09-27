@@ -15,6 +15,7 @@ import { combatRoute } from "./routes.js";
 import { MapTransfer } from "./maps.js";
 import { ReportQuota, reportHandler } from "./report.js";
 import { ProjectionDelivery } from "./projection-delivery.js";
+import { releaseManifestSummary, workerIdentity } from "./manifest.js";
 import { TickCadence } from "./cadence.js";
 
 const INPUT_SILENCE_MS = 15_000;
@@ -44,7 +45,7 @@ export class CombatRoom extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    this.store = new RoomStore(ctx.storage);
+    this.store = new RoomStore(ctx.storage, workerIdentity(env));
     this.maps = new MapTransfer(ctx.storage, this.queue, (claims, frameEpoch, upload) => this.authorizeMap(claims, frameEpoch, upload));
     this.reports = new ReportQuota(ctx.storage);
     this.delivery = new ProjectionDelivery(env, ctx.storage, this.queue, this.store.projections, () => this.failRoom());
@@ -437,7 +438,8 @@ export class CombatRoom extends DurableObject<Env> {
 
   private sendSnapshot(connection: Connection): void {
     if (this.simulation === null) return;
-    connection.send({ type: "snapshot", snapshot: this.simulation.snapshot(), eventSequence: this.eventSequence, clientSequence: this.store.sequence(connection.playerId) }, this.eventSequence);
+    connection.send({ type: "snapshot", snapshot: this.simulation.snapshot(), eventSequence: this.eventSequence, clientSequence: this.store.sequence(connection.playerId),
+      release: { manifest: releaseManifestSummary(), worker: workerIdentity(this.env) } }, this.eventSequence);
   }
 
   private broadcast(events: readonly ServerEvent[]): void {

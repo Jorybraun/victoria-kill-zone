@@ -147,7 +147,8 @@ export type ClientMessage =
   | {type: "collab"; data: string}
   | {type: "niToken"; token: string};
 export type ServerMessage =
-  | {type: "snapshot"; snapshot: CombatSnapshot; eventSequence: number; clientSequence: number}
+  | {type: "snapshot"; snapshot: CombatSnapshot; eventSequence: number; clientSequence: number;
+    release?: {manifest: ReleaseManifestSummary; worker: WorkerIdentity}}
   | {type: "events"; events: readonly ServerEvent[]}
   | {type: "ack"; commandId: string; clientSequence: number; replayed: boolean; eventSequence: number}
   | {type: "pong"; nonce: string; clientSentAtMs: number; serverReceivedAtMs: number; serverSentAtMs: number}
@@ -169,5 +170,17 @@ export interface CombatProjection {
   matchTimeMs: number; roundStartedAtMs: number | null; phase: CombatPhase;
   players: readonly CombatPlayerState[];
   terminals: readonly {eventSequence: number; event: Extract<CombatEvent, {kind: "projectileTerminal"}>}[];
+  worker?: WorkerIdentity;
 }
-export {parseClientMessage, validateCombatRules, validateTicketClaims, validateCombatProjection} from "./validation.js";
+/** release-manifest.json minus its envelope metadata; what clients and reports see. */
+export interface ReleaseManifestSummary {
+  protocolVersion: number; rulesSchemaHash: string; doClass: string; doMigrationTag: string;
+  iosMinProtocol: number; iosMaxProtocol: number; convexMinProtocol: number; workerVersionTag: string;
+  releaseSha: string;
+}
+/** Identity the combat worker reports about the code it is actually running. */
+export interface WorkerIdentity {
+  versionId: string | null; versionTag: string | null; releaseSha: string; workerVersionTag: string; doMigrationTag: string;
+}
+export {parseClientMessage, validateCombatRules, validateTicketClaims, validateCombatProjection,
+  validateReleaseManifestSummary, validateWorkerIdentity} from "./validation.js";

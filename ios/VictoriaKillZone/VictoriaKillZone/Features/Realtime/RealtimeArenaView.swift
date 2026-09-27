@@ -52,6 +52,9 @@ struct RealtimeArenaView: View {
           try JSONDecoder().decode([DuelFrameDiagnosticEvent].self,
             from: Data(contentsOf: controller.exportSetupLog()))
         },
+        serverRelease: {controller.combat.serverRelease},
+        firstServerRelease: {controller.combat.firstServerRelease},
+        authorityEpochs: {controller.combat.authorityEpochHistory},
         onDismiss: {reportPresented = false})
     }
     .onChange(of: menuPresented) {_, _ in controller.setTriggerHeld(false)}
