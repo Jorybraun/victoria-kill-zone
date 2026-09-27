@@ -19,6 +19,7 @@ const text = (value) => (typeof value === "string" && value.length > 0 && value.
 export function evaluateWorkerHealth(health, manifest) {
   const mismatches = [];
   if (health?.service !== "vkz-combat") mismatches.push("service");
+  if (health?.projection?.configured !== true) mismatches.push("projection");
   const remote = health?.manifest;
   if (remote === undefined || remote === null || typeof remote !== "object") {
     mismatches.push("manifest");

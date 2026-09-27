@@ -106,8 +106,10 @@ for (const missing of [undefined, false]) {
     combatWorkerOverride: true, combatWorkerOverrideReason: "reissuing ticket key parity" });
   assert.equal(overridden.promote, true);
   assert.deepEqual(overridden.overrides, ["combatWorker"]);
+  assert.equal(overridden.overrideReason, "reissuing ticket key parity");
   const normal = decidePromotion(greenRun);
   assert.equal("overrides" in normal, false);
+  assert.equal("overrideReason" in normal, false);
 }
 for (const reason of [undefined, "", "two\nlines", "x".repeat(201)]) {
   assert.equal(decidePromotion({ ...greenRun, combatWorkerVerifiedForSha: false,
@@ -1081,15 +1083,33 @@ for (const prerequisites of [
   assert.equal(result.state, "failed");
   assert.deepEqual(outpostRecorder.posted.map(status => status.state), ["queued", "failed"]);
 }
-assert.equal(await revalidatePromotion(deploymentRequest, {
+assert.equal(await revalidatePromotion({ ...deploymentRequest, combatWorkerVerifiedSha: CURRENT_SHA }, {
   fetchCurrentMain: async () => CURRENT_SHA,
   verifyCi: async () => true, verifyDeployment: async () => true,
 }), CURRENT_SHA);
-assert.equal(await revalidatePromotion(deploymentRequest, {
+assert.equal(await revalidatePromotion({ ...deploymentRequest, combatWorkerVerifiedSha: CURRENT_SHA }, {
   fetchCurrentMain: async () => STALE_SHA,
   verifyCi: async () => { throw new Error("superseded candidate checked CI"); },
   verifyDeployment: async () => { throw new Error("superseded candidate checked deployment"); },
 }), STALE_SHA);
+
+// The Outpost re-check applies the same combat admission rule as the gate: a
+// withdrawn repo variable fails closed, a valid override still promotes.
+const verifiedDeps = {
+  fetchCurrentMain: async () => CURRENT_SHA,
+  verifyCi: async () => true, verifyDeployment: async () => true,
+};
+for (const withdrawn of [undefined, "", STALE_SHA]) {
+  await assert.rejects(
+    revalidatePromotion({ ...deploymentRequest, combatWorkerVerifiedSha: withdrawn }, verifiedDeps),
+    /no longer has verified combat Worker admission evidence/u);
+}
+await assert.rejects(
+  revalidatePromotion({ ...deploymentRequest, combatWorkerVerifiedSha: "",
+    combatWorkerOverride: true, combatWorkerOverrideReason: "" }, verifiedDeps),
+  /no longer has verified combat Worker admission evidence/u);
+assert.equal(await revalidatePromotion({ ...deploymentRequest, combatWorkerVerifiedSha: "",
+  combatWorkerOverride: true, combatWorkerOverrideReason: "emergency reissue" }, verifiedDeps), CURRENT_SHA);
 
 // Orchestration: an unrecorded promotion is not a success, and evidence
 // failure never rewrites the promotion's own state.
@@ -1165,5 +1185,22 @@ assert.equal(evidence.release.sha, CURRENT_SHA);
 assert.equal(evidence.result.succeeded, false);
 assert.ok(!JSON.stringify(evidence).includes("/Users/"));
 assert.throws(() => createEvidence({ sha: "short", state: "failed", recordedAtUtc: "now" }));
+
+// Evidence records the gate's exercised overrides, sanitized to identifiers
+// and a single bounded line.
+{
+  const overridden = createEvidence({
+    sha: CURRENT_SHA, state: "ready-for-testing", version: "0.1.0",
+    overrides: ["combatWorker", "not an override!", ""],
+    overrideReason: `manual override\nsecond line ${"x".repeat(300)}`,
+    recordedAtUtc: "2026-08-25T12:00:00.000Z",
+  });
+  assert.deepEqual(overridden.release.overrides, ["combatWorker"]);
+  assert.equal(overridden.release.overrideReason.length <= 200, true);
+  assert.equal(overridden.release.overrideReason.includes("\n"), false);
+  const clean = createEvidence({ sha: CURRENT_SHA, state: "failed", recordedAtUtc: "now" });
+  assert.deepEqual(clean.release.overrides, []);
+  assert.equal(clean.release.overrideReason, null);
+}
 
 process.stdout.write("TestFlight promotion lane self-tests: PASS\n");

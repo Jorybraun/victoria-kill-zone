@@ -67,7 +67,9 @@ export function decidePromotion(input) {
     reasonKey,
     reason: PROMOTION_DECISIONS[reasonKey],
     sha: reasonKey === "promote" ? candidate : null,
-    ...(combatOverride && reasonKey === "promote" ? { overrides: ["combatWorker"] } : {}),
+    ...(combatOverride && reasonKey === "promote"
+      ? { overrides: ["combatWorker"], overrideReason: combatWorkerOverrideReason }
+      : {}),
   });
 
   if (enabled !== true) {
@@ -209,7 +211,8 @@ export async function decideWithRemoteFacts(environment = process.env, deps = {}
 
 // Recheck the same prerequisites on the Outpost immediately before archiving.
 // Return a changed SHA so the existing stale-candidate path can skip cleanly.
-export async function revalidatePromotion({ repository, sha, token }, deps = {}) {
+export async function revalidatePromotion({ repository, sha, token,
+  combatWorkerVerifiedSha, combatWorkerOverride, combatWorkerOverrideReason }, deps = {}) {
   const { fetchCurrentMain = fetchCurrentMainSha, verifyCi = hasSuccessfulCiPushRun,
     verifyDeployment = hasSuccessfulDeployment } = deps;
   const current = await fetchCurrentMain({ repository, token });
@@ -219,6 +222,15 @@ export async function revalidatePromotion({ repository, sha, token }, deps = {})
   ]);
   if (ci !== true || deployed !== true) {
     throw new Error("The candidate no longer has verified CI, deployment and smoke evidence");
+  }
+  // The combat admission gate is re-checked on the Outpost with a fresh
+  // repo-variable read, the same rule decidePromotion applied on the hosted gate.
+  const overrideValid = combatWorkerOverride === true &&
+    typeof combatWorkerOverrideReason === "string" &&
+    combatWorkerOverrideReason.length > 0 && combatWorkerOverrideReason.length <= 200 &&
+    !/[\r\n\u0000-\u001f\u007f]/u.test(combatWorkerOverrideReason);
+  if (normalizeSha(combatWorkerVerifiedSha) !== normalizeSha(sha) && !overrideValid) {
+    throw new Error("The candidate no longer has verified combat Worker admission evidence");
   }
   return current;
 }
@@ -233,7 +245,8 @@ if (isMainModule()) {
   if (outputPath) {
     await appendFile(
       outputPath,
-      `promote=${decision.promote}\nreason_key=${decision.reasonKey}\nsha=${decision.sha ?? ""}\n`,
+      `promote=${decision.promote}\nreason_key=${decision.reasonKey}\nsha=${decision.sha ?? ""}\n` +
+      `overrides=${(decision.overrides ?? []).join(",")}\noverride_reason=${decision.overrideReason ?? ""}\n`,
       "utf8",
     );
   }

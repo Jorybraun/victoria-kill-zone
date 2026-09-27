@@ -33,11 +33,22 @@ export function createEvidence({
   runId,
   poll,
   detail,
+  overrides = [],
+  overrideReason = null,
   recordedAtUtc,
 }) {
   if (!SHA_PATTERN.test(String(sha ?? ""))) {
     throw new Error("The promoted revision is not a full commit SHA");
   }
+
+  // Gate-provided overrides are plain identifiers; the reason is free text but
+  // stays a single bounded line, matching the gate's own validation.
+  const recordedOverrides = (Array.isArray(overrides) ? overrides : [])
+    .filter((name) => typeof name === "string" && /^[A-Za-z0-9._-]{1,32}$/u.test(name));
+  const recordedReason =
+    typeof overrideReason === "string" && overrideReason.length > 0
+      ? sanitizeText(overrideReason, 200)
+      : null;
 
   return {
     schemaVersion: 1,
@@ -47,6 +58,8 @@ export function createEvidence({
       recordedAtUtc,
       runId: runId ? sanitizeText(runId, 32) : null,
       lane: "mac-outpost-self-hosted",
+      overrides: recordedOverrides,
+      overrideReason: recordedReason,
     },
     result: {
       state,
@@ -161,7 +174,7 @@ export async function runPromotion({ config, deps }) {
     now = () => new Date(),
   } = deps;
 
-  const { sha, version: configuredVersion, runId = null } = config;
+  const { sha, version: configuredVersion, runId = null, overrides = [], overrideReason = null } = config;
   let version = configuredVersion;
   const statuses = [];
 
@@ -185,6 +198,8 @@ export async function runPromotion({ config, deps }) {
       runId,
       poll: pollResult,
       detail,
+      overrides,
+      overrideReason,
       recordedAtUtc: now().toISOString(),
     });
 
@@ -324,8 +339,15 @@ async function main() {
   // Connect. The run number is monotonic per repository.
   const buildNumber = process.env.VKZ_BUILD_NUMBER ?? process.env.GITHUB_RUN_NUMBER ?? "";
 
+  // The hosted gate records which overrides it exercised; the Outpost echoes
+  // them into evidence and re-applies the combat admission rule itself.
+  const gateOverrides = String(process.env.VKZ_PROMOTION_OVERRIDES ?? "")
+    .split(",").map((name) => name.trim()).filter(Boolean);
+  const gateOverrideReason = process.env.VKZ_PROMOTION_OVERRIDE_REASON ?? "";
+
   const result = await runPromotion({
-    config: { sha, version, runId: process.env.GITHUB_RUN_ID ?? null },
+    config: { sha, version, runId: process.env.GITHUB_RUN_ID ?? null,
+      overrides: gateOverrides, overrideReason: gateOverrideReason },
     deps: {
       archiveAndUpload: async () => {
         const run = await runCommand("bash", ["scripts/release/testflight-upload.sh"], {
@@ -341,7 +363,12 @@ async function main() {
       },
       // Recheck current main and successful deployment evidence after waiting
       // for the Mac; manual dispatch and retries cannot bypass this gate.
-      revalidate: () => revalidatePromotion({ repository, sha, token: githubToken }),
+      revalidate: () => revalidatePromotion({ repository, sha, token: githubToken,
+        // A fresh repo-variable read at Outpost time, plus the gate's recorded
+        // override: the variable can be withdrawn between gate and archive.
+        combatWorkerVerifiedSha: process.env.VKZ_COMBAT_WORKER_VERIFIED_SHA ?? "",
+        combatWorkerOverride: gateOverrides.includes("combatWorker"),
+        combatWorkerOverrideReason: gateOverrideReason }),
       poll: async ({ uploadedAfter, version: archivedVersion, buildNumber: uploadedBuildNumber }) => {
         // Polling can outlive one 15-minute App Store Connect token.
         const tokenProvider = createTokenProvider({

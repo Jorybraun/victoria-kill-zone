@@ -10,6 +10,7 @@ const manifest = JSON.parse(readFileSync(join(ROOT, "release-manifest.json"), "u
 
 const health = {
   service: "vkz-combat",
+  projection: { configured: true },
   manifest: { ...manifest },
   worker: { versionId: "2c8c3a6a-1f0a-4e4f-9e0b-2b5f7d2a1c3d", versionTag: "tag-1",
     workerVersionTag: "vkz-combat-2026.09", releaseSha: manifest.releaseSha, doMigrationTag: manifest.doMigrationTag },
@@ -32,6 +33,8 @@ for (const invalid of [
   { ...health, service: "other" },
   { ...health, manifest: undefined },
   { ...health, manifest: null },
+  { ...health, projection: { configured: false } },
+  { ...health, projection: undefined },
   { ...health, manifest: { ...manifest, protocolVersion: manifest.protocolVersion + 1 } },
   { ...health, manifest: { ...manifest, convexMinProtocol: manifest.protocolVersion + 1 } },
   { ...health, manifest: { ...manifest, doMigrationTag: "v2" } },
@@ -50,7 +53,8 @@ for (const probe of [
 }
 // Unsafe values are sanitized to null, never echoed.
 const dirty = evaluateWorkerHealth({
-  service: "vkz-combat", manifest, worker: { versionId: "x".repeat(300), versionTag: "a\nb" },
+  service: "vkz-combat", projection: { configured: true }, manifest,
+  worker: { versionId: "x".repeat(300), versionTag: "a\nb" },
 }, manifest);
 assert.equal(dirty.versionId, null);
 assert.equal(dirty.versionTag, null);
