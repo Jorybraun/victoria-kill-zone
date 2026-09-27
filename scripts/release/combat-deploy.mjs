@@ -8,6 +8,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { fetchCurrentMainSha, hasSuccessfulCiPushRun } from "./github-api.mjs";
+import { parseJsonc } from "../lib/jsonc.mjs";
 
 const execute = promisify(execFile);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -34,6 +35,12 @@ export function probeConfig(env, target = "production") {
   const staging = target === "staging";
   const convexUrl = httpsOrigin(staging ? env.VKZ_CONVEX_STAGING_URL : env.VKZ_CONVEX_URL);
   const workerUrl = httpsOrigin(staging ? env.VKZ_COMBAT_STAGING_WORKER_URL : env.VKZ_COMBAT_WORKER_URL);
+  // Staging must be a distinct deployment; silently pointing it at production
+  // would run destructive probes against the live worker.
+  if (staging) {
+    if (env.VKZ_CONVEX_URL !== undefined && httpsOrigin(env.VKZ_CONVEX_URL) === convexUrl) fail("staging-origins-match-production");
+    if (env.VKZ_COMBAT_WORKER_URL !== undefined && httpsOrigin(env.VKZ_COMBAT_WORKER_URL) === workerUrl) fail("staging-origins-match-production");
+  }
   const workerPattern = staging ? /^https:\/\/vkz-combat-staging\.[a-z0-9-]+\.workers\.dev$/
     : /^https:\/\/vkz-combat\.[a-z0-9-]+\.workers\.dev$/;
   if (!/^https:\/\/[a-z0-9-]+\.convex\.cloud$/.test(convexUrl) ||
@@ -107,10 +114,9 @@ export function deploymentResult(raw, workerUrl, workerName = "vkz-combat", stra
 // The last DO migration tag decides the deploy strategy: a matching tag means
 // rooms are compatible, so a versioned rollout replaces a disruptive deploy.
 export function readLocalMigrationTag(config) {
-  const raw = readFileSync(join(ROOT, "services/combat-worker/wrangler.jsonc"), "utf8")
-    .replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  const raw = readFileSync(join(ROOT, "services/combat-worker/wrangler.jsonc"), "utf8");
   let parsed;
-  try { parsed = JSON.parse(raw); } catch { fail("migration-tag-missing"); }
+  try { parsed = parseJsonc(raw); } catch { fail("migration-tag-missing"); }
   const scope = config.wranglerEnv === undefined ? parsed : parsed.env?.[config.wranglerEnv];
   const migrations = scope?.migrations;
   if (!Array.isArray(migrations) || migrations.length === 0) fail("migration-tag-missing");
@@ -129,11 +135,16 @@ export async function runAdmissionProbe({ config }, deps) {
     projectionReceipt: "not-tested", physicalCalibration: "not-tested" };
   const probe = { matchCreated: false, snapshotProtocolVersion: null, worker: null, durationsMs: {} };
   const errors = [];
-  const sensitive = new Set();
-  const sanitize = (error) => {
-    let text = error instanceof Error ? error.message : String(error);
-    for (const secret of sensitive) text = text.split(secret).join("[redacted]");
-    return text.replace(/\s+/g, " ").slice(0, 160);
+  // Evidence records fixed error codes only; raw error text can embed session
+  // secrets, tickets, or URLs and never reaches the evidence file.
+  const classify = (error) => {
+    const text = error instanceof Error ? error.message : String(error);
+    if (error instanceof Error && error.name === "TimeoutError") return "timeout";
+    const statusMatch = text.match(/^(convex-http|websocket-rejected)-(\d+)$/);
+    if (statusMatch) return `${statusMatch[1]}-${statusMatch[2]}`;
+    if (text === "websocket-rejected") return "network";
+    if (["timeout", "probe-session-invalid", "endpointMismatch", "snapshot-invalid", "network"].includes(text)) return text;
+    return "unknown";
   };
   const mark = (label, start) => { probe.durationsMs[label] = Math.max(0, Math.round(deps.now() - start)); };
   const probeStart = deps.now();
@@ -145,7 +156,6 @@ export async function runAdmissionProbe({ config }, deps) {
     const guest = await deps.convexMutation("matches:join", { displayName: "vkz-probe-guest", code: host.code });
     for (const member of [host, guest]) {
       if (typeof member?.sessionSecret !== "string" || member.sessionSecret.length === 0) fail("probe-session-invalid");
-      sensitive.add(member.sessionSecret);
     }
     probe.matchCreated = true;
     mark("lobby", lobbyStart);
@@ -157,19 +167,18 @@ export async function runAdmissionProbe({ config }, deps) {
     }
     await deps.convexMutation("combat:prepare", sessionArgs(host));
     let issued;
+    // A failed ticket mutation is a probe error, not key-parity evidence; only
+    // a WebSocket handshake rejection proves ticket/secret mismatch.
     try { issued = await deps.convexMutation("combat:ticket", sessionArgs(host)); }
-    catch (error) { acceptance.ticketKeyParity = "failed"; errors.push(sanitize(error)); }
+    catch (error) { errors.push(classify(error)); }
     mark("ready", readyStart);
     if (issued !== undefined) {
       if (typeof issued?.ticket !== "string" || issued.ticket.length === 0) {
-        acceptance.ticketKeyParity = "failed";
-        errors.push("ticketMissing");
+        errors.push("probe-session-invalid");
       } else {
-        sensitive.add(issued.ticket);
         let endpoint;
         try { endpoint = new URL(issued.endpoint); } catch { endpoint = null; }
         if (endpoint === null || endpoint.origin !== config.workerUrl) {
-          acceptance.ticketKeyParity = "failed";
           errors.push("endpointMismatch");
         } else {
           const socketStart = deps.now();
@@ -178,7 +187,7 @@ export async function runAdmissionProbe({ config }, deps) {
           catch (error) {
             acceptance.ticketKeyParity = "failed";
             acceptance.authenticatedWebSocket = "failed";
-            errors.push(sanitize(error));
+            errors.push(classify(error));
           }
           if (socket !== undefined) {
             try {
@@ -194,11 +203,11 @@ export async function runAdmissionProbe({ config }, deps) {
               mark("snapshot", socketStart);
               if (snapshot === null) {
                 acceptance.authenticatedWebSocket = "failed";
-                errors.push("snapshotTimeout");
+                errors.push("timeout");
               } else if (snapshot.release?.manifest?.protocolVersion !== RELEASE_MANIFEST.protocolVersion) {
                 acceptance.ticketKeyParity = "passed";
                 acceptance.authenticatedWebSocket = "passed";
-                errors.push("protocolMismatch");
+                errors.push("snapshot-invalid");
               } else {
                 acceptance.ticketKeyParity = "passed";
                 acceptance.authenticatedWebSocket = "passed";
@@ -238,7 +247,7 @@ export async function runAdmissionProbe({ config }, deps) {
       mark("receipt", receiptStart);
     }
   } catch (error) {
-    errors.push(sanitize(error));
+    errors.push(classify(error));
   }
   mark("total", probeStart);
   const status = errors.length === 0 && acceptance.ticketKeyParity === "passed" &&
@@ -278,15 +287,24 @@ export async function runCombatDeploy({ config, secrets, deploy = false }, deps)
   const strategy = deployedTag !== null && deployedTag === localTag ? "versions" : "deploy";
   const result = deploymentResult(await deps.deployWorker(config, secrets, strategy),
     config.workerUrl, config.workerName, strategy);
-  validateHealth(await deps.health(config));
+  // Rollout is gradual: poll until the version the receipt names is actually
+  // serving, then require the probe to observe that same version.
+  for (let attempt = 0;; attempt++) {
+    const health = await deps.health(config);
+    validateHealth(health);
+    if (health.worker?.versionId === result.versionId) break;
+    if (attempt >= 11) fail("deployed-version-not-serving");
+    await deps.sleep(5000);
+  }
   const probe = await deps.probe(config);
   if (probe.status !== "verify-passed") fail("verify-failed");
+  if (probe.probe?.worker?.versionId !== result.versionId) fail("deployed-version-not-serving");
   const evidence = {
     schemaVersion: 1, evidenceScope: "combat-worker-deployment-and-config-shape",
     release: { sha: config.sha, recordedAtUtc: new Date().toISOString() },
     worker: { name: config.workerName, versionId: result.versionId },
     deployment: { target: config.target, deployStrategy: strategy, activeMatchDisruptionAcknowledged: true,
-      migrationTags: { local: localTag, deployed: deployedTag } },
+      migrationTags: { local: localTag, deployed: deployedTag }, servingVersionId: result.versionId },
     prerequisites: { sameShaCiAndConvexSpectatorDeployment: "passed", canonicalCheckout: "passed",
       convexConfiguration: "operator-confirmed-not-probed" },
     health: { service: "vkz-combat", protocol: RELEASE_MANIFEST.protocolVersion, projectionConfigured: true },
@@ -505,6 +523,7 @@ export async function main(args = process.argv.slice(2), env = process.env) {
         return readFile(outputFile, "utf8");
       },
       health: async () => fetchHealth(config.workerUrl),
+      sleep: (ms) => new Promise(resolvePromise => setTimeout(resolvePromise, ms)),
       probe: async (cfg) => runAdmissionProbe({ config: cfg }, probeDependencies(cfg)),
       writeEvidence: writeEvidenceFile,
     });

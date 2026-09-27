@@ -90,7 +90,7 @@ const probePass = () => ({
   acceptance: { ticketKeyParity: "passed", authenticatedWebSocket: "passed",
     projectionReceipt: "passed", physicalCalibration: "not-tested" },
   probe: { matchCreated: true, snapshotProtocolVersion: 1,
-    worker: { versionId: null, versionTag: null, workerVersionTag: "vkz-combat-2026.09",
+    worker: { versionId, versionTag: null, workerVersionTag: "vkz-combat-2026.09",
       releaseSha: "0".repeat(40), doMigrationTag: "v1" },
     durationsMs: { lobby: 1, ready: 2, snapshot: 3, receipt: 4, total: 10 } },
   errors: [],
@@ -109,7 +109,8 @@ function fixture(overrides = {}) {
     localMigrationTag: async () => "v1",
     deployWorker: async (_config, _secrets, strategy = "deploy") =>
       strategy === "versions" ? versionsReceipt() : receipt(),
-    health: async () => health(),
+    health: async () => ({ ...health(), worker: { versionId } }),
+    sleep: async () => undefined,
     probe: async () => probePass(),
     writeEvidence: async (_config, evidence) => { written.push(evidence); },
   };
@@ -208,6 +209,7 @@ assert.equal(result.evidence.prerequisites.convexConfiguration, "operator-confir
 assert.equal(result.evidence.deployment.deployStrategy, "deploy");
 assert.equal(result.evidence.deployment.activeMatchDisruptionAcknowledged, true);
 assert.deepEqual(result.evidence.deployment.migrationTags, { local: "v1", deployed: null });
+assert.equal(result.evidence.deployment.servingVersionId, versionId);
 assert.equal(result.evidence.acceptance.physicalCalibration, "not-tested");
 assert.equal(result.evidence.acceptance.ticketKeyParity, "passed");
 assert.equal(result.evidence.probe.worker.workerVersionTag, "vkz-combat-2026.09");
@@ -241,6 +243,28 @@ for (const prior of ["v2", null]) {
   assert.equal(outcome.evidence.deployment.deployStrategy, "deploy");
 }
 
+// The serving version must match the deployment receipt before the probe runs
+// and the probe must observe that same version.
+{
+  let polls = 0;
+  const f = fixture({ health: async () => ({ ...health(), worker: { versionId: polls++ === 0 ? randomUUID() : versionId } }) });
+  const outcome = await run(f);
+  assert.equal(outcome.evidence.deployment.servingVersionId, versionId);
+  assert.ok(f.calls.includes("sleep"));
+}
+{
+  const f = fixture({ health: async () => ({ ...health(), worker: { versionId: randomUUID() } }) });
+  await assert.rejects(run(f), /deployed-version-not-serving/u);
+  assert.equal(f.written.length, 0);
+  assert.equal(f.calls.includes("probe"), false);
+}
+{
+  const f = fixture({ probe: async () => ({ ...probePass(),
+    probe: { ...probePass().probe, worker: { ...probePass().probe.worker, versionId: randomUUID() } } }) });
+  await assert.rejects(run(f), /deployed-version-not-serving/u);
+  assert.equal(f.written.length, 0);
+}
+
 // A failing admission probe blocks evidence and exits failed.
 {
   const f = fixture({ probe: async () => ({ ...probePass(), status: "verify-failed",
@@ -260,8 +284,14 @@ const stagingEnvironment = {
   assert.equal(staging.workerName, "vkz-combat-staging");
   assert.equal(staging.wranglerEnv, "staging");
   assert.equal(staging.target, "staging");
-  assert.throws(() => probeConfig({ ...stagingEnvironment, VKZ_COMBAT_STAGING_WORKER_URL: "https://vkz-combat.release-test.workers.dev" }, "staging"), /unexpected-deployment-origin/u);
+  assert.throws(() => probeConfig({ ...stagingEnvironment, VKZ_COMBAT_WORKER_URL: "https://vkz-combat.other.workers.dev",
+    VKZ_COMBAT_STAGING_WORKER_URL: "https://vkz-combat.release-test.workers.dev" }, "staging"), /unexpected-deployment-origin/u);
   assert.throws(() => deploymentConfig(stagingEnvironment, "staging2"), /invalid-arguments/u);
+  // Staging origins must never alias the production deployment.
+  assert.throws(() => probeConfig({ ...stagingEnvironment, VKZ_CONVEX_STAGING_URL: environment.VKZ_CONVEX_URL }, "staging"), /staging-origins-match-production/u);
+  assert.throws(() => probeConfig({ ...stagingEnvironment, VKZ_COMBAT_STAGING_WORKER_URL: environment.VKZ_COMBAT_WORKER_URL }, "staging"), /staging-origins-match-production/u);
+  assert.doesNotThrow(() => probeConfig({ VKZ_CONVEX_STAGING_URL: stagingEnvironment.VKZ_CONVEX_STAGING_URL,
+    VKZ_COMBAT_STAGING_WORKER_URL: stagingEnvironment.VKZ_COMBAT_STAGING_WORKER_URL }, "staging"));
 }
 
 // --verify rejects any secret argument without touching the network.
@@ -321,16 +351,19 @@ function probeFixture(overrides = {}) {
     assert.equal(encodedProbe.includes(secret), false);
   }
 }
-// Ticket mint failure fails key parity; websocket rejection fails both keys.
+// A failed ticket mutation is a probe error, not key-parity evidence; only a
+// websocket handshake rejection fails key parity.
 {
   const f = probeFixture({ convexMutation: async (path) => {
-    if (path === "combat:ticket") throw new Error("AUTH_KEY_MISMATCH");
+    if (path === "combat:ticket") throw new Error("AUTH_KEY_MISMATCH raw text must not persist");
     return { matchId: "m", code: "ABCD", playerId: "p", sessionSecret: `s-${randomUUID()}` };
   } });
   const result = await runAdmissionProbe({ config }, f.deps);
   assert.equal(result.status, "verify-failed");
-  assert.equal(result.acceptance.ticketKeyParity, "failed");
+  assert.equal(result.acceptance.ticketKeyParity, "not-tested");
   assert.equal(result.acceptance.authenticatedWebSocket, "not-tested");
+  assert.equal(JSON.stringify(result).includes("AUTH_KEY_MISMATCH"), false);
+  assert.ok(result.errors.every(code => /^(convex-http-\d+|websocket-rejected-\d+|timeout|probe-session-invalid|endpointMismatch|snapshot-invalid|network|unknown)$/u.test(code)));
 }
 {
   const f = probeFixture({ openWebSocket: async () => { throw new Error("websocket-rejected-401"); } });
@@ -338,6 +371,7 @@ function probeFixture(overrides = {}) {
   assert.equal(result.status, "verify-failed");
   assert.equal(result.acceptance.ticketKeyParity, "failed");
   assert.equal(result.acceptance.authenticatedWebSocket, "failed");
+  assert.ok(result.errors.includes("websocket-rejected-401"));
 }
 // A projection that never lands fails the receipt check on timeout.
 {
@@ -357,6 +391,6 @@ function probeFixture(overrides = {}) {
   const result = await runAdmissionProbe({ config }, wrong.deps);
   assert.equal(result.status, "verify-failed");
   assert.equal(result.acceptance.authenticatedWebSocket, "passed");
-  assert.ok(result.errors.includes("protocolMismatch"));
+  assert.ok(result.errors.includes("snapshot-invalid"));
 }
 process.stdout.write("Combat deployment self-tests passed.\n");
