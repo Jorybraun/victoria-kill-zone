@@ -165,7 +165,8 @@ final class LobbyStoreTests: XCTestCase {
     store.displayName = "Host"
     await store.performCreateDuel()
     client.send(snapshot(phase: .running, hostAmmo: 8, guestHealth: 100))
-    await settle()
+    let debugFireReady = await wait { store.duel.canDebugFire }
+    XCTAssertTrue(debugFireReady)
 
     client.debugResults = [
       .failure(GameSessionClientError.networkUnavailable),
@@ -185,11 +186,13 @@ final class LobbyStoreTests: XCTestCase {
     ]
 
     await store.duel.performDebugFire()
-    XCTAssertEqual(store.duel.debugShotState, .failed)
+    let firstShotFailed = await wait { store.duel.debugShotState == .failed }
+    XCTAssertTrue(firstShotFailed)
     await store.duel.performDebugFire()
 
+    let secondShotPending = await wait { store.duel.debugShotState == .pending }
+    XCTAssertTrue(secondShotPending)
     XCTAssertEqual(client.debugShotIDs, ["stable-shot-id", "stable-shot-id"])
-    XCTAssertEqual(store.duel.debugShotState, .pending)
     await store.duel.performDebugFire()
     XCTAssertEqual(
       client.debugShotIDs,
@@ -210,9 +213,9 @@ final class LobbyStoreTests: XCTestCase {
         events: [hitEvent]
       )
     )
-    await settle()
 
-    XCTAssertEqual(store.duel.debugShotState, .confirmed(damage: 34))
+    let shotConfirmed = await wait { store.duel.debugShotState == .confirmed(damage: 34) }
+    XCTAssertTrue(shotConfirmed)
     XCTAssertTrue(store.duel.canDebugFire, "A confirmed fallback shot must allow the next shot")
     guard case .active(let reconciledDuel) = store.route else {
       return XCTFail("Expected active duel")
@@ -273,7 +276,8 @@ final class LobbyStoreTests: XCTestCase {
     store.displayName = "Host"
     await store.performCreateDuel()
     client.send(snapshot(phase: .running, hostAmmo: 8, guestHealth: 100))
-    await settle()
+    let debugFireReady = await wait { store.duel.canDebugFire }
+    XCTAssertTrue(debugFireReady)
 
     client.debugResults = [
       .success(
@@ -305,6 +309,8 @@ final class LobbyStoreTests: XCTestCase {
     ]
 
     await store.duel.performDebugFire()
+    let firstShotPending = await wait { store.duel.debugShotState == .pending }
+    XCTAssertTrue(firstShotPending)
     client.send(
       snapshot(
         phase: .running,
@@ -313,13 +319,14 @@ final class LobbyStoreTests: XCTestCase {
         events: [hitEvent]
       )
     )
-    await settle()
-    XCTAssertEqual(store.duel.debugShotState, .confirmed(damage: 34))
+    let firstShotConfirmed = await wait { store.duel.debugShotState == .confirmed(damage: 34) }
+    XCTAssertTrue(firstShotConfirmed)
 
     await store.duel.performDebugFire()
+    let secondShotPending = await wait { store.duel.debugShotState == .pending }
+    XCTAssertTrue(secondShotPending)
 
     XCTAssertEqual(client.debugShotIDs, ["first-shot-id", "second-shot-id"])
-    XCTAssertEqual(store.duel.debugShotState, .pending)
   }
 
   func testDebugFireAfterDefinitiveRejectionUsesNewClientShotID() async throws {
@@ -1254,6 +1261,17 @@ final class LobbyStoreTests: XCTestCase {
 
   private func settle() async {
     for _ in 0..<10 { await Task.yield() }
+  }
+
+  @discardableResult
+  private func wait(until condition: () -> Bool, timeout: TimeInterval = 5) async -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+      if condition() { return true }
+      await settle()
+      try? await Task.sleep(for: .milliseconds(20))
+    }
+    return condition()
   }
 }
 

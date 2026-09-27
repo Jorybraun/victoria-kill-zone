@@ -1,0 +1,12 @@
+{
+  "manifestVersion": 1,
+  "releaseSha": "0000000000000000000000000000000000000000",
+  "protocolVersion": 1,
+  "rulesSchemaHash": "3d92c5b99943eb6705b2c0fc52e5c13d4841be2d38ee93c346f0834631e9d674",
+  "doClass": "CombatRoom",
+  "doMigrationTag": "v1",
+  "iosMinProtocol": 1,
+  "iosMaxProtocol": 1,
+  "convexMinProtocol": 1,
+  "workerVersionTag": "vkz-combat-2026.09"
+}
