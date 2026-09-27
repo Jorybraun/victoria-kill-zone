@@ -27,6 +27,27 @@ final class MatchDiagnosticsTests: XCTestCase {
     XCTAssertEqual(log.events.first?.elapsedMs, 1_000)
   }
 
+  func testBoundedTelemetryCSVLeavesShortCSVUnchanged() {
+    let csv = "elapsed_ms,frames\n1000,30\n"
+
+    XCTAssertEqual(MatchDiagnostics.boundedTelemetryCSV(csv), csv)
+  }
+
+  func testBoundedTelemetryCSVKeepsHeaderAndNewestWholeRows() {
+    let header = "elapsed_ms,frames"
+    let rows = (0..<100).map {"\($0),\(String(repeating: "x", count: 16))"}
+    let csv = ([header] + rows).joined(separator: "\n")
+
+    let bounded = MatchDiagnostics.boundedTelemetryCSV(csv)
+    let lines = bounded.components(separatedBy: "\n")
+
+    XCTAssertLessThanOrEqual(bounded.count, 512)
+    XCTAssertEqual(lines.first, header)
+    XCTAssertEqual(lines.last, rows.last)
+    XCTAssertEqual(Array(lines.dropFirst()), Array(rows.suffix(lines.count - 1)))
+    XCTAssertEqual(MatchDiagnostics.boundedTelemetryCSV(csv, limit: header.count), header)
+  }
+
   func testExportWritesDecodableJSONWithOwnerOnlyPermissions() throws {
     var log = MatchDiagnostics(startedAt: base)
     log.record("stage", "connecting", at: base.addingTimeInterval(0.5))

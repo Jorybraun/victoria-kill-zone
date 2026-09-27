@@ -165,7 +165,7 @@ final class RealtimeArenaController: ObservableObject {
     if let stopTask {await stopTask.value; return}
     guard started else {return}; started = false; cameraReady = false; generation += 1
     setTriggerHeld(false); cameraTask?.cancel(); cameraTask = nil; pumpTask?.cancel(); pumpTask = nil
-    combat.stop(); authorityEpoch = nil
+    combat.stop(); diagnostics.flush(); authorityEpoch = nil
     associatedBody = nil; confirmedHits = []; lastSubmittedPose = nil; lastPoseDate = nil
     commands = RealtimeCommandState(); actionFeedback = nil; lastLocalFireAtMs = nil
     let pendingStart = startTask
@@ -204,7 +204,8 @@ final class RealtimeArenaController: ObservableObject {
     var events = diagnostics.events + surfaceEvents
     if let csv = surfaces?.localSurfaceTelemetryCSV() {
       events.append(MatchDiagnosticEvent(
-        elapsedMs: surfaceEvents.last?.elapsedMs ?? 0, kind: "telemetryCsv", detail: csv))
+        elapsedMs: surfaceEvents.last?.elapsedMs ?? 0, kind: "telemetryCsv",
+        detail: MatchDiagnostics.boundedTelemetryCSV(csv)))
     }
     return events
   }

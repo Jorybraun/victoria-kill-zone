@@ -12,6 +12,23 @@ struct MatchDiagnosticEvent: Codable, Equatable, Sendable {
 /// cable (or wireless debugging) streams live trials in Console.app.
 struct MatchDiagnostics: Sendable {
   static let capacity = 256
+  static func boundedTelemetryCSV(_ csv: String, limit: Int = 512) -> String {
+    guard limit > 0 else {return ""}
+    guard csv.count > limit else {return csv}
+    let lines = csv.components(separatedBy: "\n")
+    guard let header = lines.first, header.count <= limit else {return ""}
+    var retainedRows: [String] = []
+    var length = header.count
+    for row in lines.dropFirst().reversed() {
+      guard !row.isEmpty else {continue}
+      let nextLength = length + 1 + row.count
+      guard nextLength <= limit else {break}
+      retainedRows.append(row)
+      length = nextLength
+    }
+    return ([header] + Array(retainedRows.reversed())).joined(separator: "\n")
+  }
+
   private static let logger = Logger(subsystem: "com.victoriakillzone.match", category: "match")
   /// Survives relaunch and crash so the previous session's log stays
   /// exportable; overwritten by the next session's first record.
