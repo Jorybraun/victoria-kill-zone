@@ -69,7 +69,13 @@ struct WaitingRoom: Equatable, Sendable {
   let hostPlayerID: String
   var players: [LobbyPlayer]
   var combatMode: CombatMode? = nil
+  var combatGeometry: String? = nil
   var maxPlayers: Int = 2
+
+  /// Quick Duel = durableObject match on sighting. Missing geometry is classified
+  /// conservatively as a Saved Arena so alignment guidance is never dropped.
+  var isQuickDuel: Bool { combatMode == .durableObject && combatGeometry == QuickDuel.geometry }
+  var isSavedArena: Bool { combatMode == .durableObject && !isQuickDuel }
 
   var localPlayer: LobbyPlayer? {
     players.first { $0.id == localPlayerID }
@@ -195,6 +201,44 @@ extension LobbyTransitionError: LocalizedError {
       "Only the host can start this duel."
     case .playersNotReady:
       "Both players must be ready before the duel starts."
+    }
+  }
+}
+
+enum WaitingRoomCopy {
+  enum Mode { case classic, quickDuel, savedArena }
+
+  static func mode(for room: WaitingRoom) -> Mode {
+    guard room.combatMode == .durableObject else { return .classic }
+    return room.isQuickDuel ? .quickDuel : .savedArena
+  }
+
+  static func matchName(_ mode: Mode) -> String {
+    switch mode {
+    case .classic: "Classic duel"
+    case .quickDuel: "Quick Duel"
+    case .savedArena: "Arena"
+    }
+  }
+
+  static func hostStartTitle(_ mode: Mode) -> String {
+    switch mode {
+    case .savedArena: "Align arena"
+    case .classic, .quickDuel: "Start duel"
+    }
+  }
+
+  static func allReadyGuidance(_ mode: Mode) -> String {
+    switch mode {
+    case .savedArena: "All players ready. Next, align your shared play area."
+    case .classic, .quickDuel: "Both players ready. Start when you are."
+    }
+  }
+
+  static func waitingForHostGuidance(_ mode: Mode) -> String {
+    switch mode {
+    case .savedArena: "You’re ready. Waiting for the host to begin alignment."
+    case .classic, .quickDuel: "You’re ready. Waiting for the host to start."
     }
   }
 }

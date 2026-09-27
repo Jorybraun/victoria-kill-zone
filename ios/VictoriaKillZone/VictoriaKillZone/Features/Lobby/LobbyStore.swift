@@ -707,6 +707,7 @@ final class LobbyStore: ObservableObject {
           hostPlayerID: hostPlayerID,
           players: players,
           combatMode: snapshot.match.combatMode,
+          combatGeometry: snapshot.match.combatGeometry,
           maxPlayers: snapshot.match.maxPlayers ?? (snapshot.match.combatMode == .durableObject ? 4 : 2)
         )
       )

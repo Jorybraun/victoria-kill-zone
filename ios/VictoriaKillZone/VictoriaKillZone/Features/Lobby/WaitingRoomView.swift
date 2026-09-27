@@ -13,8 +13,8 @@ struct WaitingRoomView: View {
 
   private var localPlayer: LobbyPlayer? {room.localPlayer}
   private var opponent: LobbyPlayer? {room.players.first {$0.id != room.localPlayerID}}
-  private var isArena: Bool {room.combatMode == .durableObject}
-  private var matchName: String {isArena ? "Arena" : "Classic duel"}
+  private var mode: WaitingRoomCopy.Mode {WaitingRoomCopy.mode(for: room)}
+  private var matchName: String {WaitingRoomCopy.matchName(mode)}
   private var spokenCode: String {room.code.map(String.init).joined(separator: " ")}
   private var allowsShellStart: Bool {
     #if DEBUG
@@ -45,7 +45,7 @@ struct WaitingRoomView: View {
         }
 
         #if canImport(UIKit) && canImport(Network)
-        if store.isLiveNetworking && !isArena {
+        if store.isLiveNetworking && room.combatMode != .durableObject {
           Label("Allow Local Network access when prompted so nearby players can connect.", systemImage: "wifi")
             .font(.footnote).foregroundStyle(VKZPalette.textMuted)
             .fixedSize(horizontal: false, vertical: true)
@@ -78,7 +78,7 @@ struct WaitingRoomView: View {
     }
     .onAppear {
       #if canImport(Network)
-      if store.isLiveNetworking && !isArena {
+      if store.isLiveNetworking && room.combatMode != .durableObject {
         ArenaPeerLink.primeLocalNetworkPermission()
       }
       #endif
@@ -87,7 +87,7 @@ struct WaitingRoomView: View {
 
   private var rulesSummary: some View {
     VStack(alignment: .leading, spacing: 4) {
-      Text(isArena ? "\(room.maxPlayers == 2 ? "2" : "2–\(room.maxPlayers)") players · Shared play area" : "\(room.maxPlayers) players · Classic mode")
+      Text(mode == .savedArena ? "\(room.maxPlayers == 2 ? "2" : "2–\(room.maxPlayers)") players · Shared play area" : mode == .quickDuel ? "\(room.maxPlayers) players · Quick Duel" : "\(room.maxPlayers) players · Classic mode")
       if let duration = store.lobbyRoundDurationMs {
         let seconds = max(0, duration / 1000)
         Text(String(format: "%d:%02d per round", seconds / 60, seconds % 60))
@@ -176,7 +176,7 @@ struct WaitingRoomView: View {
         Button {store.startDuel(as: room.localRole ?? .guest)} label: {
           HStack(spacing: 8) {
             if store.operation == .starting {ProgressView().tint(VKZPalette.background)}
-            Text(store.operation == .starting ? "Preparing…" : room.localRole == .host ? (isArena ? "Align arena" : "Start duel") : "Simulate host start")
+            Text(store.operation == .starting ? "Preparing…" : room.localRole == .host ? WaitingRoomCopy.hostStartTitle(mode) : "Simulate host start")
           }
         }
         .buttonStyle(VKZPrimaryButtonStyle())
@@ -197,9 +197,9 @@ struct WaitingRoomView: View {
         : "\(waiting.count) \(waiting.count == 1 ? "player still needs" : "players still need") to ready up."
     }
     if room.localRole == .host {
-      return isArena ? "All players ready. Next, align your shared play area." : "Both players ready. Start when you are."
+      return WaitingRoomCopy.allReadyGuidance(mode)
     }
-    return isArena ? "You’re ready. Waiting for the host to begin alignment." : "You’re ready. Waiting for the host to start."
+    return WaitingRoomCopy.waitingForHostGuidance(mode)
   }
 
   private func playerRow(_ player: LobbyPlayer) -> some View {
@@ -242,7 +242,7 @@ struct WaitingRoomView: View {
             .frame(maxWidth: 180, maxHeight: 180).padding(8).background(.white)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .accessibilityLabel("QR invitation for \(matchName.lowercased()) code, \(spokenCode)")
-          Text("Scan this code on another player’s phone.").font(.subheadline).foregroundStyle(VKZPalette.textMuted)
+          Text("Show this code on another player’s phone.").font(.subheadline).foregroundStyle(VKZPalette.textMuted)
         }
         .frame(maxWidth: .infinity).padding(.top, 12)
       }
