@@ -1,6 +1,6 @@
 # ADR 0011 — Quick Play: continuous collaborative mapping instead of one-shot map share
 
-Status: **accepted**, 2026-09-17. Owner accepted this record; the cover mechanic (point 8) was decided during review. Integration owns this record, the transport wiring and the client flow; targeting owns the session/policy changes; design owns the slice update. Nothing in this record is physical-device evidence beyond the cited trial observation.
+Status: **Superseded by [ADR 0014](0014-quick-duel-only.md)** (2026-09-27): the shared frame is removed and Quick Duel camera sighting is the only mode. Original status: **accepted**, 2026-09-17. Owner accepted this record; the cover mechanic (point 8) was decided during review. Integration owns this record, the transport wiring and the client flow; targeting owns the session/policy changes; design owns the slice update. Nothing in this record is physical-device evidence beyond the cited trial observation.
 
 ## Context
 
