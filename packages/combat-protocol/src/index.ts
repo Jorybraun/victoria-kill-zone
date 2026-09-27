@@ -1,10 +1,10 @@
 export const PROTOCOL_VERSION = 1 as const;
 export const LIMITS = Object.freeze({
   players: 4, tickMs: 50, poseAgeMs: 100, rewindMs: 250, clockUncertaintyMs: 25,
-  messageBytes: 16_384, serverMessageBytes: 131_072, collabBytes: 384_000, collabMessageBytes: 386_000,
+  messageBytes: 16_384, serverMessageBytes: 131_072,
   commandsPerSecond: 60, commandsPerTick: 64,
   commandHistory: 512, eventHistory: 1024, projectiles: 128,
-  mapBytes: 8 * 1024 * 1024, ticketLifetimeSeconds: 120, niTokenBytes: 4_096,
+  ticketLifetimeSeconds: 120,
 });
 export type Vec3 = readonly [number, number, number];
 /** Quaternion in x,y,z,w order. */
@@ -143,17 +143,13 @@ export type ClientMessage =
   | {type: "command"; envelope: CommandEnvelope}
   | {type: "received"; eventSequence: number}
   | {type: "resume"; afterEventSequence: number}
-  | {type: "ping"; nonce: string; clientSentAtMs: number}
-  | {type: "collab"; data: string}
-  | {type: "niToken"; token: string};
+  | {type: "ping"; nonce: string; clientSentAtMs: number};
 export type ServerMessage =
   | {type: "snapshot"; snapshot: CombatSnapshot; eventSequence: number; clientSequence: number;
     release?: {manifest: ReleaseManifestSummary; worker: WorkerIdentity}}
   | {type: "events"; events: readonly ServerEvent[]}
   | {type: "ack"; commandId: string; clientSequence: number; replayed: boolean; eventSequence: number}
   | {type: "pong"; nonce: string; clientSentAtMs: number; serverReceivedAtMs: number; serverSentAtMs: number}
-  | {type: "collab"; playerId: string; data: string}
-  | {type: "niToken"; playerId: string; token: string}
   | {type: "error"; code: "invalidMessage" | "unauthorized" | "rateLimited" | "epochMismatch" | "sequenceConflict" | "idempotencyConflict" | "replayExpired" | "roomFull" | "unavailable"; commandId?: string};
 /** Signed by trusted lobby action, never accepted from an unauthenticated client. */
 export interface CombatTicketClaims {

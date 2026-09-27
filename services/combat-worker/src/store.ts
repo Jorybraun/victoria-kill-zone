@@ -37,9 +37,18 @@ export class RoomStore {
 
   initialize(): void {
     this.storage.transactionSync(() => {
+      this.storage.sql.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY)");
+      const stored = this.storage.sql.exec<{ version: number | null }>("SELECT MAX(version) AS version FROM schema_migrations").one().version;
+      if (stored === 1) {
+        // v1 → v2: the AR map transfer tables are gone for good.
+        this.storage.sql.exec("DROP TABLE IF EXISTS shared_maps; DROP TABLE IF EXISTS map_chunks;");
+        this.storage.sql.exec("INSERT OR IGNORE INTO schema_migrations(version) VALUES (2)");
+      } else if (stored === null) {
+        this.storage.sql.exec("INSERT OR IGNORE INTO schema_migrations(version) VALUES (2)");
+      } else if (stored !== 2) {
+        throw new Error("Unsupported room storage version");
+      }
       this.storage.sql.exec(`
-        CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY);
-        INSERT OR IGNORE INTO schema_migrations(version) VALUES (1);
         CREATE TABLE IF NOT EXISTS room (
           singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
           match_id TEXT NOT NULL, authority_epoch INTEGER NOT NULL, frame_epoch INTEGER NOT NULL,
@@ -55,16 +64,7 @@ export class RoomStore {
           PRIMARY KEY(player_id, client_sequence), UNIQUE(player_id, command_id)
         );
         CREATE TABLE IF NOT EXISTS events (sequence INTEGER PRIMARY KEY, payload TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS shared_maps (
-          frame_epoch INTEGER PRIMARY KEY, frame_id TEXT NOT NULL, byte_length INTEGER NOT NULL, chunks INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS map_chunks (
-          frame_epoch INTEGER NOT NULL, chunk_index INTEGER NOT NULL, payload BLOB NOT NULL,
-          PRIMARY KEY(frame_epoch, chunk_index)
-        );
       `);
-      const version = this.storage.sql.exec<{ version: number }>("SELECT MAX(version) AS version FROM schema_migrations").one();
-      if (version.version !== 1) throw new Error("Unsupported room storage version");
       this.ledger.initialize();
       this.projections.initialize();
     });

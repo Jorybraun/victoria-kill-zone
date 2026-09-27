@@ -15,7 +15,7 @@ export default {
     }
     const route = combatRoute(url);
     if (route === null) return new Response(null, { status: 404 });
-    const allowed = route.kind === "connect" ? ["GET"] : route.kind === "report" ? ["POST"] : ["GET", "PUT"];
+    const allowed = route.kind === "connect" ? ["GET"] : ["POST"];
     if (!allowed.includes(request.method)) return new Response(null, { status: 405, headers: { Allow: allowed.join(", ") } });
     if (route.kind === "connect" && request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response(null, { status: 426 });
     const claims = await verifyBearerTicket(request, env.COMBAT_TICKET_SECRET, Math.floor(Date.now() / 1000));

@@ -12,7 +12,6 @@ import { Connection } from "./connection.js";
 import { QueueFullError, SerialQueue } from "./serial-queue.js";
 import { RoomStore, type ProcessedCommand } from "./store.js";
 import { combatRoute } from "./routes.js";
-import { MapTransfer } from "./maps.js";
 import { ReportQuota, reportHandler } from "./report.js";
 import { ProjectionDelivery } from "./projection-delivery.js";
 import { releaseManifestSummary, workerIdentity } from "./manifest.js";
@@ -30,7 +29,6 @@ export class CombatRoom extends DurableObject<Env> {
   private readonly store: RoomStore;
   private readonly queue = new SerialQueue();
   private readonly connections = new Map<WebSocket, Connection>();
-  private readonly maps: MapTransfer;
   private readonly reports: ReportQuota;
   private readonly delivery: ProjectionDelivery;
   private simulation: CombatSimulation | null = null;
@@ -39,14 +37,10 @@ export class CombatRoom extends DurableObject<Env> {
   private pending: PendingCommand[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
   private readonly cadence = new TickCadence(performance.now());
-  // In-memory only: discovery tokens are per-NISession and worthless after the
-  // process dies; a reconnecting client re-sends its token.
-  private readonly niTokens = new Map<string, string>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.store = new RoomStore(ctx.storage, workerIdentity(env));
-    this.maps = new MapTransfer(ctx.storage, this.queue, (claims, frameEpoch, upload) => this.authorizeMap(claims, frameEpoch, upload));
     this.reports = new ReportQuota(ctx.storage);
     this.delivery = new ProjectionDelivery(env, ctx.storage, this.queue, this.store.projections, () => this.failRoom());
     void ctx.blockConcurrencyWhile(async () => {
@@ -82,31 +76,12 @@ export class CombatRoom extends DurableObject<Env> {
     const claims = await verifyBearerTicket(request, this.env.COMBAT_TICKET_SECRET, Math.floor(Date.now() / 1000));
     if (claims === null || route.matchId !== claims.matchId) return new Response(null, { status: 401 });
     if (this.ctx.id.name !== undefined && this.ctx.id.name !== claims.matchId) return new Response(null, { status: 401 });
-    if (route.kind === "map") {
-      try { return await this.maps.fetch(request, claims, route.frameEpoch); }
-      catch (error) {
-        if (error instanceof QueueFullError) return new Response(null, { status: 503 });
-        this.failRoom();
-      }
-    }
     if (route.kind === "report") {
       const handler = reportHandler(this.env, this.reports);
       return handler === null ? new Response(null, { status: 503 }) : handler.fetch(request, claims);
     }
     if (request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response(null, { status: 426 });
     return this.admitSocket(claims);
-  }
-
-  private authorizeMap(claims: CombatTicketClaims, frameEpoch: number, upload: boolean): Response | null {
-    if (validateTicketClaims(claims, Math.floor(Date.now() / 1000)) === null) return new Response(null, { status: 401 });
-    if (this.simulation === null) return new Response(null, { status: 404 });
-    const snapshot = this.simulation.snapshot();
-    const bootstrap = canonicalJson({ roster: [...claims.roster].sort((a, b) => a.playerId.localeCompare(b.playerId)), rules: claims.rules });
-    if (claims.matchId !== snapshot.matchId || bootstrap !== this.bootstrap || claims.frameEpoch !== snapshot.frameEpoch || frameEpoch !== snapshot.frameEpoch || claims.authorityEpoch > snapshot.authorityEpoch) return new Response(null, { status: 409 });
-    const member = snapshot.players.find((player) => player.playerId === claims.playerId);
-    if (member === undefined || (upload && member.role !== "host")) return new Response(null, { status: 403 });
-    this.ctx.storage.sql.exec("UPDATE room SET last_activity_ms = ? WHERE singleton = 1", Date.now());
-    return null;
   }
 
   /** Revalidates the signed ticket; no public identity header is trusted. */
@@ -157,9 +132,6 @@ export class CombatRoom extends DurableObject<Env> {
         // Native replicas need a baseline before they can apply any event.
         // The admission events are already covered by this durable snapshot.
         this.sendSnapshot(connection);
-        for (const [peerId, token] of this.niTokens) {
-          if (peerId !== claims.playerId) connection.send({ type: "niToken", playerId: peerId, token });
-        }
         this.broadcast(committed);
         await this.ctx.storage.setAlarm(Date.now() + ALARM_CHECK_MS);
         this.scheduleTick();
@@ -182,7 +154,7 @@ export class CombatRoom extends DurableObject<Env> {
           return;
         }
         const bytes = encoder.encode(message).byteLength;
-        if (message.length > LIMITS.collabMessageBytes || bytes > LIMITS.collabMessageBytes) {
+        if (message.length > LIMITS.messageBytes || bytes > LIMITS.messageBytes) {
           connection.close(1009, "message-too-large-or-binary");
           return;
         }
@@ -193,8 +165,6 @@ export class CombatRoom extends DurableObject<Env> {
           connection.close(4008, "input-rate-exceeded");
           return;
         }
-        const large = bytes > LIMITS.messageBytes;
-        if (large && !connection.admitCollabIngest(Date.now(), bytes)) return;
         const parsed = parseClientMessage(message);
         if (parsed === null) {
           connection.send({ type: "error", code: "invalidMessage" });
@@ -213,27 +183,6 @@ export class CombatRoom extends DurableObject<Env> {
             if (!connection.admitPing(Date.now())) { this.error(connection, "rateLimited"); connection.close(4008, "ping-rate-exceeded"); break; }
             const now = this.logicalNow();
             connection.send({ type: "pong", nonce: parsed.nonce, clientSentAtMs: parsed.clientSentAtMs, serverReceivedAtMs: now, serverSentAtMs: this.logicalNow() });
-            break;
-          }
-          // Opaque, droppable ARKit relay bytes: verbatim, unordered, never to the sender.
-          case "collab": {
-            const now = Date.now();
-            if (!large && !connection.admitCollabIngest(now, bytes)) break;
-            const encoded = JSON.stringify({ type: "collab", playerId: connection.playerId, data: parsed.data });
-            const relayBytes = encoder.encode(encoded).byteLength;
-            for (const other of this.connections.values()) {
-              if (other !== connection && other.admitCollab(now, relayBytes)) other.sendCollab(encoded, relayBytes);
-            }
-            break;
-          }
-          // Reliable, latest-per-player discovery tokens: ordered send to every
-          // other open connection, replayed to later admissions, never echoed.
-          case "niToken": {
-            if (!connection.admitNiToken(Date.now())) { this.error(connection, "rateLimited"); connection.close(4008, "ni-token-rate-exceeded"); break; }
-            this.niTokens.set(connection.playerId, parsed.token);
-            for (const other of this.connections.values()) {
-              if (other !== connection) other.send({ type: "niToken", playerId: connection.playerId, token: parsed.token });
-            }
             break;
           }
         }
@@ -274,7 +223,6 @@ export class CombatRoom extends DurableObject<Env> {
       if (this.connections.size === 0 && !projectionPending && Date.now() - saved.last_activity_ms >= IDLE_RETENTION_MS) {
         this.stopTimer();
         await this.ctx.storage.deleteAll();
-        this.niTokens.clear();
         this.simulation = null;
         this.bootstrap = null;
         this.pending = [];
