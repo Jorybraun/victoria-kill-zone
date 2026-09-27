@@ -19,6 +19,10 @@ if (parsed.vars.CONVEX_URL !== 'https://example.convex.cloud' || parsed.note !==
 if (!stripJsonComments('"a\\"//b"').includes('"a\\"//b"')) {
   throw new Error('stripJsonComments mishandled an escaped quote');
 }
+const commas = parseJsonc('{\n  "a": 1, // trailing in object\n  "list": [1, 2,],\n  "keep": "x,//" , "keep2": "a,}",\n}');
+if (commas.a !== 1 || commas.list.length !== 2 || commas.keep !== 'x,//' || commas.keep2 !== 'a,}') {
+  throw new Error('parseJsonc must drop trailing commas but keep // and ,} inside strings');
+}
 
 // --- Checked-site copy ---
 const requiredPaths = [
