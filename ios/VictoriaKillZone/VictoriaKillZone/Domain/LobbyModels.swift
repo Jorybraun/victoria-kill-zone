@@ -76,6 +76,9 @@ struct WaitingRoom: Equatable, Sendable {
     combatMode == .durableObject
       && QuickDuel.startsAsSighting(geometry: combatGeometry, rosterSize: players.count)
   }
+  var effectiveMaxPlayers: Int {
+    isQuickDuel ? min(maxPlayers, QuickDuel.maxPlayers) : maxPlayers
+  }
   var needsMatchUpdate: Bool {
     combatMode == .durableObject
       && !QuickDuel.startsAsSighting(geometry: combatGeometry, rosterSize: players.count)

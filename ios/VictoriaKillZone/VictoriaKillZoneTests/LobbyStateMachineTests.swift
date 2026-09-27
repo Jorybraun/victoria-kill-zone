@@ -2833,6 +2833,21 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
     XCTAssertEqual(WaitingRoomCopy.mode(for: room(combatMode: nil, maxPlayers: 2)), .classic)
   }
 
+  func testTwoPlayerPhoneProxyRoomUsesQuickDuelEffectiveCapacity() {
+    let room = WaitingRoom(
+      matchID: "m", code: "ABC123", arenaRadiusMeters: 0,
+      localPlayerID: "p0", hostPlayerID: "p0",
+      players: [
+        LobbyPlayer(id: "p0", displayName: "Host", role: .host, isReady: true),
+        LobbyPlayer(id: "p1", displayName: "Guest", role: .guest, isReady: true),
+      ],
+      combatMode: .durableObject, combatGeometry: "phoneProxy", maxPlayers: 4
+    )
+
+    XCTAssertTrue(room.isQuickDuel)
+    XCTAssertEqual(room.effectiveMaxPlayers, 2)
+  }
+
   func testQuickDuelAndClassicCopyNeverMentionsArenaCeremony() {
     let forbidden = ["align", "scan", "share arena", "linking", "relocaliz", "calibrat"]
     for mode in [WaitingRoomCopy.Mode.quickDuel, .classic] {

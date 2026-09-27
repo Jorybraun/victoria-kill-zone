@@ -48,6 +48,50 @@ final class MatchDiagnosticsTests: XCTestCase {
     XCTAssertEqual(MatchDiagnostics.boundedTelemetryCSV(csv, limit: header.count), header)
   }
 
+  func testReportWindowSplitsEvenlyWithCSVSlot() {
+    let match = (0..<256).map {
+      MatchDiagnosticEvent(elapsedMs: Int64($0), kind: "match", detail: "m\($0)")
+    }
+    let surface = (0..<256).map {
+      MatchDiagnosticEvent(elapsedMs: Int64($0), kind: "surface", detail: "s\($0)")
+    }
+    let csv = MatchDiagnosticEvent(elapsedMs: 0, kind: "telemetryCsv", detail: "csv")
+
+    let events = MatchDiagnostics.reportWindow(match: match, surface: surface, csv: csv)
+
+    XCTAssertEqual(events.count, 256)
+    XCTAssertEqual(Array(events.prefix(128)), Array(match.suffix(128)))
+    XCTAssertEqual(Array(events.dropFirst(128).dropLast()), Array(surface.suffix(127)))
+    XCTAssertEqual(events.last, csv)
+  }
+
+  func testReportWindowRedistributesUnusedSlots() {
+    let match = (0..<10).map {
+      MatchDiagnosticEvent(elapsedMs: Int64($0), kind: "match", detail: "m\($0)")
+    }
+    let surface = (0..<400).map {
+      MatchDiagnosticEvent(elapsedMs: Int64($0), kind: "surface", detail: "s\($0)")
+    }
+    let csv = MatchDiagnosticEvent(elapsedMs: 0, kind: "telemetryCsv", detail: "csv")
+
+    let events = MatchDiagnostics.reportWindow(match: match, surface: surface, csv: csv)
+
+    XCTAssertEqual(events.count, 256)
+    XCTAssertEqual(Array(events.prefix(10)), match)
+    XCTAssertEqual(Array(events.dropFirst(10).dropLast()), Array(surface.suffix(245)))
+    XCTAssertEqual(events.last, csv)
+  }
+
+  func testReportWindowLeavesUnderLimitInputUnchanged() {
+    let match = [MatchDiagnosticEvent(elapsedMs: 1, kind: "match", detail: "match")]
+    let surface = [MatchDiagnosticEvent(elapsedMs: 2, kind: "surface", detail: "surface")]
+    let csv = MatchDiagnosticEvent(elapsedMs: 3, kind: "telemetryCsv", detail: "csv")
+
+    XCTAssertEqual(
+      MatchDiagnostics.reportWindow(match: match, surface: surface, csv: csv),
+      match + surface + [csv])
+  }
+
   func testExportWritesDecodableJSONWithOwnerOnlyPermissions() throws {
     var log = MatchDiagnostics(startedAt: base)
     log.record("stage", "connecting", at: base.addingTimeInterval(0.5))

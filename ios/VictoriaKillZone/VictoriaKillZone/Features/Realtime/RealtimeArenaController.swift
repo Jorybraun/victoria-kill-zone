@@ -201,13 +201,13 @@ final class RealtimeArenaController: ObservableObject {
   func diagnosticEvents() -> [MatchDiagnosticEvent] {
     let surfaces = targeting as? any LocalSurfaceDiagnosticsProviding
     let surfaceEvents = surfaces?.localSurfaceDiagnosticEvents() ?? []
-    var events = diagnostics.events + surfaceEvents
-    if let csv = surfaces?.localSurfaceTelemetryCSV() {
-      events.append(MatchDiagnosticEvent(
+    let csvEvent = surfaces?.localSurfaceTelemetryCSV().map {csv in
+      MatchDiagnosticEvent(
         elapsedMs: surfaceEvents.last?.elapsedMs ?? 0, kind: "telemetryCsv",
-        detail: MatchDiagnostics.boundedTelemetryCSV(csv)))
+        detail: MatchDiagnostics.boundedTelemetryCSV(csv))
     }
-    return events
+    return MatchDiagnostics.reportWindow(
+      match: diagnostics.events, surface: surfaceEvents, csv: csvEvent)
   }
   func beginRound() {
     guard eligibility.begin, let id = combat.submit(.start) else {return}

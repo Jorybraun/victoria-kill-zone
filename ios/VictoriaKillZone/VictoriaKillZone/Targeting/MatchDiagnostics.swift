@@ -12,6 +12,23 @@ struct MatchDiagnosticEvent: Codable, Equatable, Sendable {
 /// cable (or wireless debugging) streams live trials in Console.app.
 struct MatchDiagnostics: Sendable {
   static let capacity = 256
+  static func reportWindow(
+    match: [MatchDiagnosticEvent],
+    surface: [MatchDiagnosticEvent],
+    csv: MatchDiagnosticEvent?,
+    limit: Int = 256
+  ) -> [MatchDiagnosticEvent] {
+    guard limit > 0 else {return []}
+    let slots = max(0, limit - (csv == nil ? 0 : 1))
+    let matchQuota = slots / 2 + slots % 2
+    let surfaceQuota = slots / 2
+    let matchCount = min(match.count, matchQuota + max(0, surfaceQuota - surface.count))
+    let surfaceCount = min(surface.count, surfaceQuota + max(0, matchQuota - match.count))
+    return Array(match.suffix(matchCount))
+      + Array(surface.suffix(surfaceCount))
+      + (csv.map {[$0]} ?? [])
+  }
+
   static func boundedTelemetryCSV(_ csv: String, limit: Int = 512) -> String {
     guard limit > 0 else {return ""}
     guard csv.count > limit else {return csv}
