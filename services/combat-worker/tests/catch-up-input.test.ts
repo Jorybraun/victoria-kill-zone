@@ -110,8 +110,9 @@ it("assigns queued poses to their arrival intervals during bounded catch-up", as
     const fire = inputs[0]!.send({kind: "fire", shotId: "catch-up-fixture", poseSequence: inputs[0]!.poseSequence,
       origin: [0, 0, 0], direction: [0, 0, -1]});
     await admitted(); now = 100;
-    expect((await tick()).projectiles).toHaveLength(1);
-    expect((await sockets[0]!.result(fire)).event.accepted).toBe(true);
+    expect((await tick()).projectiles).toHaveLength(0);
+    // ADR 0013 sighting only admits exactly one opponent; a four-player roster refuses.
+    expect((await sockets[0]!.result(fire)).event).toMatchObject({accepted: false, reason: "ambiguousTarget"});
 
     const pending: CommandEnvelope[] = [];
     await runInDurableObject(stub, async instance => {
@@ -177,7 +178,7 @@ it("assigns queued poses to their arrival intervals during bounded catch-up", as
     expect(durable.commands).toHaveLength(12);
     expect(outcomes.map(item => item.reason)).toEqual(Array.from({length: 12}, () => null));
     expect(ticks.map(item => item.pending)).toEqual([8, 4, 0]);
-    expect(ticks.every(item => item.phase === "running" && item.projectiles === 1)).toBe(true);
+    expect(ticks.every(item => item.phase === "running" && item.projectiles === 0)).toBe(true);
     expect(durable.terminals).toEqual([]);
   } finally {for (const socket of sockets) socket.close();}
 });

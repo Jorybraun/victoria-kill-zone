@@ -17,7 +17,7 @@ export async function runLoadScenario(scenario: typeof loadScenarios[number], LO
   const issuedAt = Math.floor(Date.now() / 1000);
   const ticket: CombatTicketClaims = {v: 1, iss: "vkz-lobby", aud: "vkz-combat", matchId: crypto.randomUUID(),
     playerId: roster[0]!.playerId, roster, authorityEpoch: 1, frameEpoch: 1, iat: issuedAt, exp: issuedAt + 120, nonce: crypto.randomUUID(),
-    rules: {...structuredClone(DEFAULT_RULES), durationMs: LOAD_MS + 15_000, geometry: "trackedBody"}};
+    rules: {...structuredClone(DEFAULT_RULES), durationMs: LOAD_MS + 15_000, geometry: "sighting"}};
   const clients: LoadClient[] = [];
   const pumpLateness: number[] = [];
   let pumping = true, shoot = false, missedPumpSlots = 0;

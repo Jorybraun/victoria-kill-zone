@@ -141,7 +141,7 @@ describe("full-match SQLite bullet ledger", () => {
   it("retains legal alternating kills when respawn resets a longer weapon cooldown", async () => {
     const stub = env.COMBAT_ROOMS.getByName(crypto.randomUUID());
     await runInDurableObject(stub, (_instance, state) => {
-      const rules = structuredClone(DEFAULT_RULES); rules.geometry = "phoneProxy"; rules.durationMs = 1000;
+      const rules = structuredClone(DEFAULT_RULES); rules.durationMs = 1000;
       rules.respawnMs = 100; rules.protectionMs = 0; rules.weapon.kind = "hitscan"; rules.weapon.cooldownMs = 5000;
       rules.weapon.damage = {head: 100, torso: 100, limbs: 100};
       const current = simulation(rules), store = setup(state.storage, current);
@@ -166,8 +166,10 @@ describe("full-match SQLite bullet ledger", () => {
       for (let shot = 0; shot < 6; shot++) {
         if (shot > 0) tick();
         const host = shot % 2 === 0;
-        tick([input(host ? "host" : "guest", {kind: "fire", shotId: `respawn-shot-${shot}`, poseSequence: (current.snapshot().matchTimeMs + 50) / 50,
-          origin: host ? [0, 0, 0] : [0, 0, -1], direction: host ? [0, 0, -1] : [0, 0, 1]})]);
+        const at = current.snapshot().matchTimeMs + 50;
+        tick([input(host ? "host" : "guest", {kind: "fire", shotId: `respawn-shot-${shot}`, poseSequence: at / 50,
+          origin: host ? [0, 0, 0] : [0, 0, -1], direction: host ? [0, 0, -1] : [0, 0, 1],
+          observation: sighting(host ? "guest" : "host", host ? [0, 0, -1] : [0, 0, 0], at)})]);
       }
       // All six were accepted by the real engine; a cooldown-only bound allowed four.
       expect(state.storage.sql.exec<{shots: number}>("SELECT shots FROM bullet_totals").one().shots).toBe(6);

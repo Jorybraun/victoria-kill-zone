@@ -53,41 +53,20 @@ describe("untrusted combat messages", () => {
     expect(parse({type:"resume",afterEventSequence:0})).not.toBeNull();
     expect(parse({type:"received",eventSequence:-1})).toBeNull();
   });
-  it("accepts strict base64 collab archives under the raised inbound bound", () => {
-    const data = "QUJD".repeat(3);
-    expect(parse({type:"collab",data})).toEqual({type:"collab",data});
-    expect(parse({type:"collab",data:"A".repeat(LIMITS.collabBytes)})).not.toBeNull();
-  });
-  it("rejects malformed archives, extra keys and oversize", () => {
-    for (const data of ["", "a=b=", "QUJDQQ", "A".repeat(LIMITS.collabBytes + 4)])
-      expect(parse({type:"collab",data})).toBeNull();
-    expect(parse({type:"collab",data:"AAAA",extra:true})).toBeNull();
-    expect(parseClientMessage(JSON.stringify({type:"collab",data:"A".repeat(LIMITS.collabMessageBytes)}))).toBeNull();
-  });
-  it("keeps the 16 KiB bound on every non-collab type", () => {
-    expect(parse({type:"ping",nonce:"n",clientSentAtMs:0,pad:"x".repeat(LIMITS.messageBytes)})).toBeNull();
-  });
-  it("accepts a strict base64 discovery token under its bounded length", () => {
-    const token = "QUJD".repeat(8);
-    expect(parse({type:"niToken",token})).toEqual({type:"niToken",token});
-    expect(parse({type:"niToken",token:"A".repeat(LIMITS.niTokenBytes)})).not.toBeNull();
-  });
-  it("rejects empty, oversized, non-base64 and extra-keyed discovery tokens", () => {
-    for (const token of ["", "a=b=", "QUJDQQ", "A".repeat(LIMITS.niTokenBytes + 4)])
-      expect(parse({type:"niToken",token})).toBeNull();
-    expect(parse({type:"niToken",token:"AAAA",extra:true})).toBeNull();
+  it("refuses removed collab and niToken relay types as unknown messages", () => {
+    expect(parse({type:"collab",data:"QUJD"})).toBeFalsy();
+    expect(parse({type:"niToken",token:"QUJD"})).toBeFalsy();
   });
 });
 
 describe("combat rules", () => {
-  it("accepts every combat geometry including sighting", () => {
-    for (const geometry of ["trackedBody", "phoneProxy", "sighting"] as const) {
-      const rules = structuredClone(DEFAULT_RULES); rules.geometry = geometry;
-      expect(validateCombatRules(rules)).toBe(true);
-    }
+  it("accepts only the sighting combat geometry", () => {
+    expect(validateCombatRules(structuredClone(DEFAULT_RULES))).toBe(true);
     const rules = structuredClone(DEFAULT_RULES) as {geometry: string};
-    rules.geometry = "other";
-    expect(validateCombatRules(rules)).toBe(false);
+    for (const geometry of ["trackedBody", "phoneProxy", "other"]) {
+      rules.geometry = geometry;
+      expect(validateCombatRules(rules)).toBe(false);
+    }
   });
 });
 

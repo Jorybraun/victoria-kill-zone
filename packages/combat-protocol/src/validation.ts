@@ -69,23 +69,13 @@ function command(x: unknown): x is CombatCommand {
   }
 }
 
-const base64 = (x: unknown): x is string =>
-  typeof x === "string" && x.length >= 1 && x.length <= LIMITS.collabBytes &&
-  x.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(x);
-
-const base64Token = (x: unknown): x is string =>
-  typeof x === "string" && x.length >= 1 && x.length <= LIMITS.niTokenBytes &&
-  x.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(x);
-
 /** Reject malformed, oversized and identity-bearing client input before queueing. */
 export function parseClientMessage(raw: string): ClientMessage | null {
   const bytes = new TextEncoder().encode(raw).length;
-  if (raw.length > LIMITS.collabMessageBytes || bytes > LIMITS.collabMessageBytes) return null;
+  if (raw.length > LIMITS.messageBytes || bytes > LIMITS.messageBytes) return null;
   let x: unknown;
   try { x = JSON.parse(raw); } catch { return null; }
   if (!record(x)) return null;
-  // Opaque collab relays claim the raised bound; every other type keeps 16 KiB.
-  if (x.type !== "collab" && (raw.length > LIMITS.messageBytes || bytes > LIMITS.messageBytes)) return null;
   if (x.type === "command") {
     const e = x.envelope;
     if (!keys(x, "type envelope") || !record(e) || !keys(e, "v commandId clientSequence authorityEpoch frameEpoch sentAtMs command") ||
@@ -95,14 +85,12 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   if (x.type === "received" && keys(x, "type eventSequence") && integer(x.eventSequence)) return {type:"received",eventSequence:x.eventSequence};
   if (x.type === "resume" && keys(x, "type afterEventSequence") && integer(x.afterEventSequence)) return {type:"resume",afterEventSequence:x.afterEventSequence};
   if (x.type === "ping" && keys(x, "type nonce clientSentAtMs") && id(x.nonce) && time(x.clientSentAtMs)) return {type:"ping",nonce:x.nonce,clientSentAtMs:x.clientSentAtMs};
-  if (x.type === "collab" && keys(x, "type data") && base64(x.data)) return {type:"collab",data:x.data};
-  if (x.type === "niToken" && keys(x, "type token") && base64Token(x.token)) return {type:"niToken",token:x.token};
   return null;
 }
 
 export function validateCombatRules(x: unknown): x is CombatRules {
   if (!record(x) || !keys(x, "durationMs geometry respawnMs protectionMs weapon shield slowField") ||
-    !integer(x.durationMs, 10_000, 3_600_000) || !["trackedBody", "phoneProxy", "sighting"].includes(String(x.geometry)) ||
+    !integer(x.durationMs, 10_000, 3_600_000) || x.geometry !== "sighting" ||
     !integer(x.respawnMs, 100, 60_000) || !integer(x.protectionMs, 0, 30_000)) return false;
   const w = x.weapon, s = x.shield, f = x.slowField;
   return record(w) && keys(w, "id kind damage cooldownMs magazine reloadMs speed projectileRadius lifetimeMs rangeMeters") &&

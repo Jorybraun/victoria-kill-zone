@@ -60,9 +60,9 @@ export const create = mutation({
     displayName: v.string(),
     arenaRadiusMeters: v.number(),
     combatMode: v.optional(v.literal("durableObject")),
-    // Optional verdict geometry for durableObject matches. Absent keeps the
-    // "trackedBody" default; "phoneProxy" is the relocalized Quick Play mode.
-    combatGeometry: v.optional(v.union(v.literal("trackedBody"), v.literal("phoneProxy"), v.literal("sighting"))),
+    // Verdict geometry for durableObject matches. Kept as an optional literal
+    // for one release (O11); every selection is sighting.
+    combatGeometry: v.optional(v.literal("sighting")),
     maxPlayers: v.optional(v.number()),
     // phase0.v1 arenaCenter. Optional during the migration window: the smaller
     // G2 create shape stays accepted, but a match created without a valid
@@ -96,7 +96,7 @@ export const create = mutation({
     const matchId = await ctx.db.insert("matches", {
       ...plan.match,
       ...(args.combatMode === "durableObject" ? {combatMode: args.combatMode,
-        maxPlayers: args.combatGeometry === "sighting" ? QUICK_DUEL_MAX_PLAYERS : args.maxPlayers ?? 4} : {}),
+        maxPlayers: QUICK_DUEL_MAX_PLAYERS} : {}),
       ...(args.combatGeometry !== undefined ? {combatGeometry: args.combatGeometry} : {}),
       startedAt: null,
       hostPlayerId: null,
@@ -153,7 +153,9 @@ export const join = mutation({
       displayName,
       hasArenaCenter: match.arenaCenterAt !== undefined && match.arenaCenterAt !== null,
       now,
-    }, match.combatMode === "durableObject" ? match.maxPlayers : undefined);
+    // Legacy durableObject rows may carry a larger stored cap; every prepared
+    // match is issued sighting rules, so joins are bounded to the duel roster.
+    }, match.combatMode === "durableObject" ? Math.min(match.maxPlayers, QUICK_DUEL_MAX_PLAYERS) : undefined);
     if (!plan.ok) {
       fail(plan.reason);
     }
