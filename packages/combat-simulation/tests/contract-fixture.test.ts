@@ -23,13 +23,16 @@ describe("combat.v1 contract fixture", () => {
     rules: snapshot.rules,
     players: snapshot.players.map(p => ({playerId: p.playerId, displayName: p.displayName, role: p.role})),
   });
-  it("produces the snapshot key set the wire contract declares", () => {
-    expect(Object.keys(simulation().snapshot()).sort()).toEqual(Object.keys(snapshot).sort());
+  it("matches the first admission snapshot the simulation emits", () => {
+    const sim = simulation();
+    sim.setConnected("p-host", true);
+    expect(sim.snapshot()).toEqual(snapshot);
   });
   it("refuses a fixture fire command before the match starts with a contract reason", () => {
     const sim = simulation();
     const entry = fixture.envelopes.find(e => e.id === "fire-with-observation");
-    const envelope = {...entry!.message.envelope, playerId: snapshot.players[0]!.playerId};
+    const host = snapshot.players.find(p => p.role === "host");
+    const envelope = {...entry!.message.envelope, playerId: host!.playerId};
     const events = sim.advance([envelope as never]);
     const reasons = events.flatMap(e => "reason" in e && typeof e.reason === "string" ? [e.reason] : []);
     expect(reasons.length).toBeGreaterThan(0);

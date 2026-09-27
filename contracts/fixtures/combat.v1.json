@@ -217,14 +217,14 @@
         },
         "players": [
           {
-            "playerId": "p-host",
-            "displayName": "Host",
-            "role": "host",
+            "playerId": "p-guest",
+            "displayName": "Guest",
+            "role": "player",
             "health": 100,
             "ammo": 8,
             "kills": 0,
             "deaths": 0,
-            "connected": true,
+            "connected": false,
             "frameReady": false,
             "lastFireAtMs": null,
             "reloadEndsAtMs": null,
@@ -234,9 +234,9 @@
             "slowFieldReadyAtMs": 0
           },
           {
-            "playerId": "p-guest",
-            "displayName": "Guest",
-            "role": "player",
+            "playerId": "p-host",
+            "displayName": "Host",
+            "role": "host",
             "health": 100,
             "ammo": 8,
             "kills": 0,
