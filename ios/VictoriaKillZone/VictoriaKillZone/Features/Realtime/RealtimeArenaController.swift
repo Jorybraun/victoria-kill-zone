@@ -14,11 +14,30 @@ struct RealtimeHitFeedback: Identifiable {
   let skeleton: TargetingSkeleton?
 }
 
+/// Decided in the lobby from Convex's match record, before the combat socket exists.
+enum RealtimeArenaMode: Equatable {
+  case quickDuel                       // ADR 0013 sighting: no shared frame, ever
+  case savedArena(SavedArenaBundle?)   // measured/collaborative frame path (host has bundle; guests nil)
+
+  /// The combat authority's rules must agree with the lobby's decision: a
+  /// Quick Duel only ever runs sighting rules. Anything else means the match
+  /// was prepared by a server that predates ADR 0013.
+  var expectsSighting: Bool {self == .quickDuel}
+
+  /// Quick Duel = durableObject match on sighting (same rule as
+  /// `WaitingRoom.isQuickDuel`). Missing geometry is conservative: the match
+  /// keeps the saved-arena path so alignment guidance is never dropped.
+  static func select(combatGeometry: String?, savedArena: SavedArenaBundle?) -> Self {
+    combatGeometry == QuickDuel.geometry ? .quickDuel : .savedArena(savedArena)
+  }
+}
+
 @MainActor
 final class RealtimeArenaController: ObservableObject {
   let session: PlayerSession
   let targeting: any TargetingSession
   let combat: RealtimeCombatSession
+  let mode: RealtimeArenaMode
   let frameProvider: DuelFrameProvider?
   let savedArenaName: String?
   let rendezvous: NearbyRendezvousCoordinator
@@ -67,16 +86,23 @@ final class RealtimeArenaController: ObservableObject {
   private var alignedSince: Date?
 
   init(session: PlayerSession, client: any GameSessionClient, targeting: any TargetingSession,
-       savedArena: SavedArenaBundle? = nil, nearby: (any NearbyRendezvousDriving)? = nil) {
-    self.session = session; self.targeting = targeting
-    savedArenaName = savedArena?.summary.name
-    let combat = RealtimeCombatSession(gameClient: client); self.combat = combat
+       mode: RealtimeArenaMode, nearby: (any NearbyRendezvousDriving)? = nil,
+       makeTransport: @escaping @MainActor () -> any CombatSocketConnecting = {CombatSocketTransport()},
+       localNow: @escaping @Sendable () -> Double = {ProcessInfo.processInfo.systemUptime * 1000}) {
+    self.session = session; self.targeting = targeting; self.mode = mode
+    var bundle: SavedArenaBundle?
+    if case .savedArena(let saved) = mode {bundle = saved}
+    savedArenaName = bundle?.summary.name
+    let combat = RealtimeCombatSession(gameClient: client, makeTransport: makeTransport, localNow: localNow)
+    self.combat = combat
     self.rendezvous = NearbyRendezvousCoordinator(driver: nearby)
-    if let driver = targeting as? any DuelFrameSessionDriving {
+    // Shared-frame services exist only for the saved-arena path. Quick Duel
+    // never constructs them, so no scan/align/relocalize code can run there.
+    if case .savedArena = mode, let driver = targeting as? any DuelFrameSessionDriving {
       let provider = DuelFrameProvider(targeting: driver)
       frameProvider = provider
       mapCoordinator = RealtimeMapCoordinator(session: session, client: client, combat: combat, frame: provider,
-        savedArena: savedArena)
+        savedArena: bundle)
     } else {frameProvider = nil; mapCoordinator = nil}
     combat.$connectionIssue.sink { [weak self] in self?.connectionIssue = $0 }.store(in: &subscriptions)
     combat.$snapshot.sink { [weak self] in self?.receiveSnapshot($0) }.store(in: &subscriptions)
@@ -111,14 +137,16 @@ final class RealtimeArenaController: ObservableObject {
   var canOpenCameraSettings: Bool {message != nil && !cameraReady}
   var localPlayer: CombatWire.Player? {snapshot?.players.first {$0.playerId == session.playerId}}
   var isHost: Bool {localPlayer?.role == "host"}
-  /// Quick Play matches share one live frame: ARKit collaboration merges
+  /// Quick Play saved arenas share one live frame: ARKit collaboration merges
   /// peers continuously (ADR 0011), with the frozen-map relocalized flow kept
-  /// as a fallback for trials. Saved arenas stay measured. The wire rules are
-  /// the single source every client agrees on.
-  var usesQuickPlayFrame: Bool {snapshot?.rules.geometry == "phoneProxy"}
-  /// ADR 0013: sighting matches never create a shared frame — no map,
+  /// as a fallback for trials. Saved arenas stay measured. Quick Duel never
+  /// takes this path regardless of what the snapshot claims.
+  var usesQuickPlayFrame: Bool {
+    mode != .quickDuel && snapshot?.rules.geometry == "phoneProxy"
+  }
+  /// ADR 0013: Quick Duel never creates a shared frame — no map,
   /// no rendezvous, no frameReady. Connected + camera is the whole gate.
-  var usesSighting: Bool {snapshot?.rules.geometry == "sighting"}
+  var usesSighting: Bool {mode == .quickDuel}
   var usesCollaborativeFrame: Bool {frameAlignmentMode == .collaborative}
   var frameAlignmentMode: DuelFrameAlignmentMode {
     guard usesQuickPlayFrame else {return .measured}
@@ -151,10 +179,11 @@ final class RealtimeArenaController: ObservableObject {
   }
   var stage: RealtimeArenaStage {
     if snapshot?.phase == .finished || connection == .finished {return .finished}
-    if frameProvider == nil || message != nil || (connectionIssue != nil && connection == .disconnected) {return .unavailable}
+    if case .savedArena = mode, frameProvider == nil {return .unavailable}
+    if message != nil || (connectionIssue != nil && connection == .disconnected) {return .unavailable}
     if connection == .retrying {return .reconnecting}
     if connection != .connected {return .connecting}
-    if !usesSighting {
+    if case .savedArena = mode {
       switch mapState {
       case .waitingForHost: return .waitingForMap
       case .transferring: return .transferringMap
@@ -194,8 +223,8 @@ final class RealtimeArenaController: ObservableObject {
   private func performStart(token: Int) async {
     guard started, generation == token else {return}
     combat.start(session: session)
-    wireCollaboration()
     if !sceneActive {combat.suspendConnection()}
+    if case .savedArena = mode {wireCollaboration()}
     let stream = targeting.snapshots()
     cameraTask = Task { [weak self] in
       for await value in stream {
@@ -249,7 +278,7 @@ final class RealtimeArenaController: ObservableObject {
       combat.suspendConnection()
     } else if started {
       if combat.connectionSuspended {combat.retryConnection()}
-      if frame.stage == .lost {retryAlignment()}
+      if case .savedArena = mode, frame.stage == .lost {retryAlignment()}
     }
   }
   /// ARKit collaboration deltas are transport bytes, not combat commands:
@@ -336,7 +365,7 @@ final class RealtimeArenaController: ObservableObject {
       return
     }
     setTriggerHeld(false); message = nil; configuredEpoch = nil; readiness = RealtimeReadinessState(); lastSubmittedPose = nil; lastPoseDate = nil
-    configureMapIfNeeded()
+    if case .savedArena = mode {configureMapIfNeeded()}
   }
   func recordResidual(frameID: String, epoch: UInt16, translationMeters: Double, yawDegrees: Double, observedAt: Date) throws {
     guard let frameProvider else {throw DuelFrameFailure.unsupported}
@@ -423,6 +452,14 @@ final class RealtimeArenaController: ObservableObject {
   private func receiveSnapshot(_ value: CombatWire.Snapshot?) {
     snapshot = value
     guard let value else {return}
+    if mode.expectsSighting, value.rules.geometry != "sighting" {
+      // The lobby chose Quick Duel but the authority prepared another geometry:
+      // the match cannot run this mode, so stop instead of silently taking a
+      // shared-frame path (or looping a reconnect that would say the same).
+      message = RealtimeArenaPresentation.Sighting.incompatibleServerMessage
+      combat.stop()
+      return
+    }
     if reconciledSnapshotRevision != combat.snapshotRevision {
       commands.reconcile(pendingIDs: combat.pendingCommandIDs)
       reconciledSnapshotRevision = combat.snapshotRevision
@@ -443,7 +480,8 @@ final class RealtimeArenaController: ObservableObject {
   /// step for peers that join or leave mid-setup. Called from both the
   /// camera-ready and snapshot paths so neither arrival order can strand it.
   private func startRendezvousIfNeeded() {
-    guard started, !usesSighting, usesCollaborativeFrame, cameraReady, let snapshot else {return}
+    guard case .savedArena = mode else {return}
+    guard started, usesCollaborativeFrame, cameraReady, let snapshot else {return}
     let peerIDs = Set(snapshot.players.map(\.playerId)).subtracting([session.playerId])
     if rendezvousStarted {rendezvous.updatePeers(peerIDs)}
     else {
@@ -452,7 +490,8 @@ final class RealtimeArenaController: ObservableObject {
     }
   }
   private func configureMapIfNeeded() {
-    guard started, !usesSighting, cameraReady, sceneActive, let snapshot, configuredEpoch != snapshot.frameEpoch, let epoch = UInt16(exactly: snapshot.frameEpoch), epoch > 0 else {return}
+    guard case .savedArena = mode else {return}
+    guard started, cameraReady, sceneActive, let snapshot, configuredEpoch != snapshot.frameEpoch, let epoch = UInt16(exactly: snapshot.frameEpoch), epoch > 0 else {return}
     configuredEpoch = snapshot.frameEpoch
     mapCoordinator?.configure(epoch: epoch, isHost: isHost, mode: frameAlignmentMode)
   }
@@ -463,7 +502,7 @@ final class RealtimeArenaController: ObservableObject {
   /// `roundStartedAtMs` is set.
   private var lastAutoBegin: Date?
   private func autoBeginIfReady() {
-    guard usesSighting, eligibility.begin else {return}
+    guard mode == .quickDuel, eligibility.begin else {return}
     if let last = lastAutoBegin, now.timeIntervalSince(last) < 2 {return}
     lastAutoBegin = now
     beginRound()

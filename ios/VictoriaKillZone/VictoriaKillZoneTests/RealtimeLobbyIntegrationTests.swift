@@ -143,7 +143,7 @@ final class RealtimeLobbyIntegrationTests: XCTestCase {
 
     let nextArena = RealtimeArenaController(
       session: .init(matchId: "next-match", code: "DEF456", playerId: "p0", sessionSecret: UUID().uuidString),
-      client: client, targeting: camera)
+      client: client, targeting: camera, mode: .quickDuel)
     await nextArena.start()
     // Drain any old unstructured cleanup task before inspecting the new camera.
     for _ in 0..<10 {await Task.yield()}
@@ -178,6 +178,29 @@ final class RealtimeLobbyIntegrationTests: XCTestCase {
     await camera.stop()
   }
 
+  func testQuickDuelMatchBuildsQuickDuelController() async throws {
+    let client = ArenaLobbyClient()
+    let store = makeStore(client)
+    await store.performCreateDuel(combatMode: .durableObject)
+    client.emit(Self.snapshot(count: 2, phase: .running, geometry: QuickDuel.geometry))
+    try await until {store.realtimeArena != nil}
+    XCTAssertEqual(store.realtimeArena?.mode, .quickDuel)
+    XCTAssertNil(store.realtimeArena?.frameProvider, "Quick Duel never constructs shared-frame services")
+    store.leave()
+  }
+
+  func testMissingGeometryBuildsSavedArenaController() async throws {
+    let client = ArenaLobbyClient()
+    let store = makeStore(client)
+    await store.performCreateDuel(combatMode: .durableObject)
+    client.emit(Self.snapshot(count: 2, phase: .running))
+    try await until {store.realtimeArena != nil}
+    guard case .savedArena = store.realtimeArena?.mode else {
+      return XCTFail("Missing geometry must stay on the saved-arena path")
+    }
+    store.leave()
+  }
+
   private func makeStore(_ client: ArenaLobbyClient) -> LobbyStore {
     LobbyStore(environment: .init(gameSessionClient: client, targetingSession: UnavailableTargetingSession()))
   }
@@ -186,10 +209,11 @@ final class RealtimeLobbyIntegrationTests: XCTestCase {
     while !predicate(), Date() < deadline {try await Task.sleep(for: .milliseconds(5))}
     XCTAssertTrue(predicate())
   }
-  private static func snapshot(count: Int, phase: MatchPhase = .lobby, serverNow: Double = 100) -> MatchSnapshot {
+  private static func snapshot(count: Int, phase: MatchPhase = .lobby, serverNow: Double = 100, geometry: String? = nil) -> MatchSnapshot {
     .init(serverNow: serverNow,
       match: .init(id: "match", code: "ABC123", phase: phase, durationMs: 180_000, startsAt: nil, endsAt: nil,
-        combatMode: .durableObject, combatPhase: phase == .running ? .calibrating : nil, maxPlayers: 4),
+        combatMode: .durableObject, combatPhase: phase == .running ? .calibrating : nil, combatGeometry: geometry,
+        maxPlayers: 4),
       localPlayerId: "p0", players: (0..<count).map {
         .init(id: "p\($0)", displayName: "Player \($0)", role: $0 == 0 ? .host : .guest,
           ready: true, connected: true, health: 100, ammo: 8)

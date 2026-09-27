@@ -322,12 +322,14 @@ struct RealtimeArenaView: View {
           .font(.subheadline).foregroundStyle(VKZPalette.telemetry)
           if controller.stage != .running {Text(guidance).font(.subheadline).foregroundStyle(VKZPalette.textMuted)}
           VStack(alignment: .leading, spacing: 6) {
-            if let setupLogURL {
-              ShareLink("Share setup log", item: setupLogURL).frame(minHeight: 44)
+            if case .savedArena = controller.mode {
+              if let setupLogURL {
+                ShareLink("Share setup log", item: setupLogURL).frame(minHeight: 44)
+              }
+              Button("Export setup log") {
+                do {setupLogURL = try controller.exportSetupLog()} catch {setupLogFailed = true}
+              }.frame(minHeight: 44)
             }
-            Button("Export setup log") {
-              do {setupLogURL = try controller.exportSetupLog()} catch {setupLogFailed = true}
-            }.frame(minHeight: 44)
             Button("Report a problem") {reportPresented = true}.frame(minHeight: 44)
           }
           .alert("Export unavailable", isPresented: $setupLogFailed) {
@@ -417,7 +419,8 @@ struct RealtimeArenaView: View {
           .font(.subheadline.bold()).frame(minHeight: 44)
       }
       #endif
-      if RealtimeArenaPresentation.showsScanControls(isHost: controller.isHost,
+      if case .savedArena = controller.mode,
+        RealtimeArenaPresentation.showsScanControls(isHost: controller.isHost,
         usesSavedArena: controller.snapshot?.rules.geometry == "trackedBody",
         usesCollaborativeFrame: controller.usesCollaborativeFrame,
         stage: controller.stage, scanTimedOut: scanTimedOut) {
