@@ -2650,16 +2650,24 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
     func room(
       combatMode: CombatMode? = .durableObject,
       combatGeometry: String? = nil,
-      maxPlayers: Int = 4
+      maxPlayers: Int = 4,
+      players: [LobbyPlayer] = []
     ) -> WaitingRoom {
       WaitingRoom(
         matchID: "m", code: "ABC123", arenaRadiusMeters: 0,
-        localPlayerID: "p0", hostPlayerID: "p0", players: [],
+        localPlayerID: "p0", hostPlayerID: "p0", players: players,
         combatMode: combatMode, combatGeometry: combatGeometry, maxPlayers: maxPlayers
       )
     }
+    func roster(_ count: Int) -> [LobbyPlayer] {
+      (0..<count).map {LobbyPlayer(id: "p\($0)", displayName: "P\($0)", role: $0 == 0 ? .host : .guest, isReady: true)}
+    }
 
     XCTAssertTrue(room(combatGeometry: "sighting", maxPlayers: 2).isQuickDuel)
+    XCTAssertTrue(room(combatGeometry: "phoneProxy", maxPlayers: 4, players: roster(2)).isQuickDuel,
+      "A two-player phoneProxy roster is upgraded to sighting by the authority")
+    XCTAssertFalse(room(combatGeometry: "phoneProxy", maxPlayers: 4, players: roster(3)).isQuickDuel,
+      "A three-player phoneProxy roster keeps the shared-frame path")
     XCTAssertFalse(room(maxPlayers: 2).isQuickDuel,
       "Missing combatGeometry is classified conservatively as a Saved Arena")
     XCTAssertTrue(room(maxPlayers: 2).isSavedArena)

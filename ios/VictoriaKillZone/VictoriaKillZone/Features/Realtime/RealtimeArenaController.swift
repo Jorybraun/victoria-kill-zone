@@ -24,14 +24,10 @@ enum RealtimeArenaMode: Equatable {
   /// was prepared by a server that predates ADR 0013.
   var expectsSighting: Bool {self == .quickDuel}
 
-  /// Quick Duel = durableObject match on sighting — mirrors Convex's
-  /// `selectCombatGeometry` normalization (sighting, or a two-player
-  /// phoneProxy roster the authority will upgrade). Missing geometry is
-  /// conservative: the match keeps the saved-arena path so alignment guidance
-  /// is never dropped.
+  /// Quick Duel = durableObject match on sighting — decided by the same
+  /// classifier as `WaitingRoom.isQuickDuel` (`QuickDuel.isQuickDuelGeometry`).
   static func select(combatGeometry: String?, rosterSize: Int, savedArena: SavedArenaBundle?) -> Self {
-    combatGeometry == QuickDuel.geometry
-      || (combatGeometry == "phoneProxy" && rosterSize <= 2) ? .quickDuel : .savedArena(savedArena)
+    QuickDuel.isQuickDuelGeometry(combatGeometry, rosterSize: rosterSize) ? .quickDuel : .savedArena(savedArena)
   }
 }
 
@@ -184,8 +180,8 @@ final class RealtimeArenaController: ObservableObject {
     return result
   }
   var stage: RealtimeArenaStage {
-    if snapshot?.phase == .finished || connection == .finished {return .finished}
     if incompatibleRules {return .unavailable}
+    if snapshot?.phase == .finished || connection == .finished {return .finished}
     if case .savedArena = mode, frameProvider == nil {return .unavailable}
     if message != nil || (connectionIssue != nil && connection == .disconnected) {return .unavailable}
     if connection == .retrying {return .reconnecting}

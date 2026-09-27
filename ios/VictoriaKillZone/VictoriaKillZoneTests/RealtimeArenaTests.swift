@@ -113,6 +113,21 @@ final class RealtimeArenaTests: XCTestCase {
   }
 
   @MainActor
+  func testSavedArenaFinishedSnapshotStillShowsMismatch() async throws {
+    let socket = ArenaModeSocket()
+    var snapshot = RealtimeCombatTests.snapshot(); snapshot.rules.geometry = "sighting"; snapshot.phase = .finished
+    socket.initialSnapshot = snapshot
+    let controller = RealtimeArenaController(
+      session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
+      client: ArenaModeTicketClient(), targeting: ArenaModeFrameCamera(), mode: .savedArena(nil),
+      makeTransport: {socket})
+    await controller.start()
+    try await waitFor {controller.message == RealtimeArenaPresentation.incompatibleRulesMessage}
+    XCTAssertTrue(controller.incompatibleRules)
+    XCTAssertEqual(controller.stage, .unavailable, "A finished mismatched match shows the mismatch, not results")
+  }
+
+  @MainActor
   private func makeController(_ camera: ArenaLifecycleCamera) -> RealtimeArenaController {
     .init(session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
       client: UnavailableGameSessionClient(), targeting: camera, mode: .quickDuel)
