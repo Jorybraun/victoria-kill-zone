@@ -105,24 +105,21 @@ final class RealtimeCombatSessionTests: XCTestCase {
     XCTAssertEqual((object["authorityEpochs"] as? [[String:Any]])?.count,1)
   }
 
-  func testMapTransferPathNeverCarriesCredentialsAndRejectsWrongEpoch() throws {
-    let ticket=try TicketOnlyClient.access()
-    let request=try CombatMapClient.request(ticket:ticket,epoch:1)
-    XCTAssertEqual(request.url?.path,"/v1/matches/match/frames/1/map")
-    XCTAssertNil(request.url?.query)
-    XCTAssertThrowsError(try CombatMapClient.request(ticket:ticket,epoch:2))
-  }
-
-  func testClockDiscontinuityClosesAuthorityConnectionBeforeFurtherInput() async throws {
+  func testClockDiscontinuityRecoversWithoutFrameReadiness() async throws {
     let socket = ScriptedCombatSocket()
+    for index in socket.initialSnapshot.players.indices {socket.initialSnapshot.players[index].frameReady = false}
     let game = RealtimeCombatSession(gameClient: TicketOnlyClient(), makeTransport: {socket}, localNow: {1000})
     defer {game.stop()}
     game.start(session: Self.playerSession())
     try await until {game.clockReady}
     socket.serverTime = 1000
-    try await until {socket.closeCount > 0}
+    try await until {!game.clockReady}
     XCTAssertFalse(game.clockReady)
+    XCTAssertEqual(socket.closeCount, 0)
     XCTAssertNil(game.submit(.reload))
+    try await until {game.clockReady}
+    XCTAssertEqual(socket.connectCount, 1)
+    XCTAssertEqual(socket.closeCount, 0)
   }
 
   func testUnarmedCalibrationRecoversFreshClockSamplesWithoutReconnect() async throws {
@@ -138,7 +135,6 @@ final class RealtimeCombatSessionTests: XCTestCase {
     XCTAssertNil(game.submit(.reload), "An expired cached ready flag cannot authorize a command")
     try await until { !game.clockReady }
     XCTAssertEqual(socket.closeCount, 0, "Unarmed scanning can resynchronize on the same healthy socket")
-    XCTAssertNil(game.submit(.frameReady(ready: true, residualMeters: 0.01, residualDegrees: 0.1, clockUncertaintyMs: 1)))
     XCTAssertEqual(game.snapshotRevision, revision)
     XCTAssertTrue(socket.commands.isEmpty)
 
@@ -199,6 +195,7 @@ final class RealtimeCombatSessionTests: XCTestCase {
   func testSightingRecoversClockWithoutReconnectingDuringGameplay() async throws {
     let socket = ScriptedCombatSocket(), now = ControlledCombatTime()
     socket.initialSnapshot.rules.geometry = "sighting"
+    for index in socket.initialSnapshot.players.indices {socket.initialSnapshot.players[index].frameReady = false}
     let game = RealtimeCombatSession(gameClient: TicketOnlyClient(), makeTransport: {socket}, localNow: {now.read()})
     defer {game.stop()}
     game.start(session: Self.playerSession())
@@ -220,31 +217,48 @@ final class RealtimeCombatSessionTests: XCTestCase {
     XCTAssertEqual(game.state, .connected)
   }
 
-  func testArmedOrPendingCalibrationStillClosesOnClockLoss() async throws {
-    for scenario in ["armed", "queuedReady", "start", "gameplay"] {
+  func testLegacyCollaborationAndNITokenMessagesAreIgnoredWithoutDisconnecting() async throws {
+    let socket = ScriptedCombatSocket()
+    let game = RealtimeCombatSession(gameClient: TicketOnlyClient(), makeTransport: {socket}, localNow: {1000})
+    defer {game.stop()}
+    game.start(session: Self.playerSession())
+    try await until {game.clockReady}
+
+    socket.output?.yield(.collab(playerId: "p2", data: Data([1, 2, 3])))
+    socket.output?.yield(.niToken(playerId: "p2", data: Data([4, 5, 6])))
+    try await Task.sleep(for: .milliseconds(50))
+
+    XCTAssertEqual(game.state, .connected)
+    XCTAssertNil(game.connectionIssue)
+    XCTAssertEqual(socket.connectCount, 1)
+    XCTAssertEqual(socket.closeCount, 0)
+  }
+
+  func testConnectedCalibrationAndGameplayRecoverClockWithoutFrameReadiness() async throws {
+    for scenario in ["calibrating", "running"] {
       let socket = Self.scanningSocket(), now = ControlledCombatTime()
-      if scenario == "armed" {socket.initialSnapshot.players[0].frameReady = true}
+      socket.initialSnapshot.phase = scenario == "running" ? .running : .calibrating
       let game = RealtimeCombatSession(gameClient: TicketOnlyClient(), makeTransport: {socket}, localNow: {now.read()})
       defer {game.stop()}
       game.start(session: Self.playerSession())
       try await until(context: "\(scenario): initial clock readiness") {game.clockReady}
       try await drainClockReplies(socket, game: game, context: scenario)
-      if scenario != "armed" {
-        let command: CombatWire.Command = scenario == "queuedReady"
-          ? .frameReady(ready: true, residualMeters: 0.01, residualDegrees: 0.1, clockUncertaintyMs: 1)
-          : scenario == "start" ? .start : .reload
-        XCTAssertNotNil(game.submit(command), scenario)
+      if scenario == "running" {
+        XCTAssertNotNil(game.submit(.reload), scenario)
         try await until(context: "\(scenario): command sent") {socket.commands.count == 1}
       }
       now.advance(by: 3100)
-      try await until(context: "\(scenario): stale clock closes socket") {socket.closeCount > 0}
-      XCTAssertFalse(game.clockReady, scenario)
-      XCTAssertNil(game.submit(.reload), scenario)
+      try await until(context: "\(scenario): stale clock disables input") {!game.clockReady}
+      XCTAssertEqual(socket.closeCount, 0, scenario)
+      XCTAssertEqual(game.state, .connected, scenario)
+      socket.automaticallyRepliesToPings = true
+      try await until(context: "\(scenario): clock recovered") {game.clockReady}
+      XCTAssertEqual(socket.closeCount, 0, scenario)
     }
   }
 
-  func testCalibrationRecoveryCannotContinueAfterAuthorityOrReadinessChanges() async throws {
-    for scenario in ["epoch", "armed", "running", "transport"] {
+  func testAuthorityChangeOrTransportLossClosesClockRecovery() async throws {
+    for scenario in ["epoch", "transport"] {
       let socket = Self.scanningSocket(), now = ControlledCombatTime()
       let game = RealtimeCombatSession(gameClient: TicketOnlyClient(), makeTransport: {socket}, localNow: {now.read()})
       defer {game.stop()}
@@ -257,9 +271,7 @@ final class RealtimeCombatSessionTests: XCTestCase {
       if scenario == "transport" {socket.output?.finish(throwing: CombatTransportError.disconnected)}
       else {
         var changed = socket.initialSnapshot
-        if scenario == "epoch" {changed.authorityEpoch = 2}
-        if scenario == "armed" {changed.players[0].frameReady = true}
-        if scenario == "running" {changed.phase = .running}
+        changed.authorityEpoch = 2
         socket.output?.yield(.snapshot(changed, eventSequence: 1, clientSequence: 0, release: nil))
       }
       try await until(context: "\(scenario): changed authority closes socket") {socket.closeCount > 0}
@@ -269,6 +281,7 @@ final class RealtimeCombatSessionTests: XCTestCase {
 
   private static func scanningSocket() -> ScriptedCombatSocket {
     let socket = ScriptedCombatSocket()
+    socket.initialSnapshot.rules.geometry = "sighting"
     socket.initialSnapshot.phase = .calibrating
     socket.initialSnapshot.players[0].frameReady = false
     return socket
@@ -436,7 +449,7 @@ final class RealtimeCombatSessionTests: XCTestCase {
     XCTAssertEqual(game.state, .connected)
   }
 
-  func testSuspendingQueuedReadinessClosesSocketUntilExplicitForegroundRetry() async throws {
+  func testSuspendingPendingCommandClosesSocketUntilExplicitForegroundRetry() async throws {
     let client = ControlledTicketClient()
     let first = ScriptedCombatSocket()
     let second = ScriptedCombatSocket()
@@ -448,8 +461,7 @@ final class RealtimeCombatSessionTests: XCTestCase {
     }, localNow: {1000})
     defer {game.stop()}
     game.start(session: Self.playerSession()); try await until {game.clockReady}
-    let id = try XCTUnwrap(game.submit(.frameReady(ready: true, residualMeters: 0.02,
-      residualDegrees: 0.1, clockUncertaintyMs: 1)))
+    let id = try XCTUnwrap(game.submit(.reload))
     try await until {first.commands.count == 1}
     let priorSnapshotRevision = game.snapshotRevision
     let stalePing = try XCTUnwrap(first.lastPing)

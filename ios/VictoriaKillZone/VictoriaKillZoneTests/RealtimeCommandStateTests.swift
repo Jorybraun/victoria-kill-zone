@@ -72,26 +72,4 @@ final class RealtimeCommandStateTests: XCTestCase {
     XCTAssertEqual(commands.notice, "The action was not accepted. Try again when the arena is ready.")
   }
 
-  func testRejectedReadinessRetriesAtBoundedCadenceUntilAuthorityAgrees() {
-    var readiness = RealtimeReadinessState()
-    XCTAssertTrue(readiness.shouldSubmit(ready: true, authoritative: false, at: now))
-    readiness.queued(id: "first", ready: true, at: now)
-    XCTAssertFalse(readiness.shouldSubmit(ready: true, authoritative: false, at: now.addingTimeInterval(0.1)))
-    readiness.resolve(id: "first")
-    XCTAssertFalse(readiness.shouldSubmit(ready: true, authoritative: false, at: now.addingTimeInterval(0.2)))
-    XCTAssertTrue(readiness.shouldSubmit(ready: true, authoritative: false, at: now.addingTimeInterval(0.25)))
-    readiness.queued(id: "retry", ready: true, at: now.addingTimeInterval(0.25))
-    readiness.resolve(id: "retry")
-    XCTAssertFalse(readiness.shouldSubmit(ready: true, authoritative: true, at: now.addingTimeInterval(0.5)))
-  }
-
-  func testTrackingLossOverridesPendingReadyAndOldResultCannotAcknowledgeNewTransition() {
-    var readiness = RealtimeReadinessState()
-    readiness.queued(id: "enable", ready: true, at: now)
-    XCTAssertTrue(readiness.shouldSubmit(ready: false, authoritative: false, at: now.addingTimeInterval(0.01)))
-    readiness.queued(id: "disable", ready: false, at: now.addingTimeInterval(0.01))
-    readiness.resolve(id: "enable")
-    XCTAssertFalse(readiness.shouldSubmit(ready: false, authoritative: true, at: now.addingTimeInterval(0.3)))
-    XCTAssertTrue(readiness.shouldSubmit(ready: false, authoritative: true, at: now.addingTimeInterval(1.02)))
-  }
 }

@@ -22,7 +22,7 @@ struct RootView: View {
           WaitingRoomView(room: room, store: store)
         case .active(let duel):
           if let arena = store.realtimeArena {
-            RealtimeArenaView(controller: arena, onLeave: store.leave, onQuickDuel: store.switchToQuickDuel)
+            RealtimeArenaView(controller: arena, onLeave: store.leave)
               .id(arena.session.matchId)
           } else {
             ActiveDuelView(duel: duel, combat: store.duel, store: store)

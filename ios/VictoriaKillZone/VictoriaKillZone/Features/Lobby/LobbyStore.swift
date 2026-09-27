@@ -291,12 +291,6 @@ final class LobbyStore: ObservableObject {
     performLeave()
   }
 
-  /// Saved-arena dead-ends can fall back to a two-player Quick Duel: tear the
-  /// arena down completely, then create a fresh sighting match from home.
-  func switchToQuickDuel() {
-    performLeave(then: { store in store.createRealtimeArena() })
-  }
-
   private func performLeave(then followUp: (@MainActor (LobbyStore) -> Void)? = nil) {
     guard operation != .leaving else { return }
     if let realtimeArena {
@@ -544,8 +538,7 @@ final class LobbyStore: ObservableObject {
       if snapshot.match.phase != .lobby, realtimeArena == nil {
         duel.reset()
         realtimeArena = RealtimeArenaController(session: expectedSession,
-          client: environment.gameSessionClient, targeting: environment.targetingSession,
-          mode: .select(combatGeometry: snapshot.match.combatGeometry, rosterSize: snapshot.players.count))
+          client: environment.gameSessionClient, targeting: environment.targetingSession)
       }
     } else {
       duel.receive(snapshot)

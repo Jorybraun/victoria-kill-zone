@@ -28,10 +28,6 @@ final class RealtimeCombatSession: ObservableObject {
   @Published private(set) var refusal: String?
   @Published private(set) var connectionIssue: String?
   private(set) var latestAccessTicket: CombatAccessTicket?
-  /// Opaque ARKit collaboration archives, verbatim from peers. Set by the controller.
-  var onCollaboration: ((String, Data) -> Void)?
-  /// Opaque archived NIDiscoveryToken relays, verbatim from peers (ADR 0012).
-  var onNearbyToken: ((String, Data) -> Void)?
   /// Full authority snapshots only; event projection does not advance this.
   /// Kept monotonic across start/stop so observers can distinguish reconciliation.
   private(set) var snapshotRevision = 0
@@ -58,10 +54,6 @@ final class RealtimeCombatSession: ObservableObject {
   private var pings: [String:Double] = [:]
   private var nextSequence = 1
   private var runner: Task<Void,Never>?
-  private var collabBacklog: [Data] = []
-  private var collabDropped = 0
-  private var localNearbyToken: Data?
-  private var nearbyTokenAnnouncedForConnection = false
   private var ticker: Task<Void,Never>?
   private var writer: Task<Void,Never>?
   private var writerGeneration = 0
@@ -221,51 +213,13 @@ final class RealtimeCombatSession: ObservableObject {
     return id
   }
 
-  /// Fire-and-forget opaque relay; not a command envelope, no ack expected.
-  /// Deltas emitted before the socket connects or during a reconnect are
-  /// held in a bounded FIFO and flushed ahead of newer deltas so peer map
-  /// context is not silently lost; overflow drops are logged.
-  func sendCollaboration(_ data: Data) async {
-    while !collabBacklog.isEmpty, let transport {
-      let next = collabBacklog.removeFirst()
-      do {try await transport.send(.collab(next))}
-      catch {collabBacklog.insert(next, at: 0); queueCollab(data); return}
-    }
-    if let transport {
-      do {try await transport.send(.collab(data))} catch {queueCollab(data)}
-    } else {queueCollab(data)}
-  }
-
-  /// Fire-and-forget opaque relay like `sendCollaboration`, but the payload is
-  /// the local NI discovery token: it must reach peers that connect later and
-  /// sockets that reconnect, so the applied-snapshot path re-announces it once
-  /// per connection when a token is already held.
-  func sendNearbyToken(_ data: Data) async {
-    localNearbyToken = data
-    guard let transport else {return}
-    do {
-      try await transport.send(.niToken(data))
-      nearbyTokenAnnouncedForConnection = true
-    } catch {}
-  }
-
-  private func queueCollab(_ data: Data) {
-    if collabBacklog.count >= 32 {
-      collabBacklog.removeFirst(); collabDropped += 1
-      if collabDropped == 1 || collabDropped % 20 == 0 {
-        Self.logger.warning("collab outbound dropped total=\(self.collabDropped)")
-      }
-    } else {collabBacklog.append(data)}
-  }
-
   func stop() {
     generation += 1
     runner?.cancel(); runner=nil
     disconnectTransport()
     pending.removeAll(); replica=nil; snapshot=nil; events=[]; session=nil
     serverRelease=nil; firstServerRelease=nil; authorityEpochHistory=[]
-    latestAccessTicket=nil; onCollaboration=nil; onNearbyToken=nil; localNearbyToken=nil
-    collabBacklog.removeAll(); collabDropped=0
+    latestAccessTicket=nil
     nextSequence=1; refusal=nil; connectionIssue=nil; connectionSuspended=false; state = .disconnected
   }
 
@@ -273,7 +227,6 @@ final class RealtimeCombatSession: ObservableObject {
     ticker?.cancel(); ticker=nil; writerGeneration += 1; writer?.cancel(); writer=nil
     transport?.close(); transport=nil
     outgoing.removeAll(); pings.removeAll(); receivedSnapshot=false
-    nearbyTokenAnnouncedForConnection=false
     clockRecoveryDeadline=nil
     clock.reset(); clockReady=false; clockUncertaintyMs = .infinity
   }
@@ -282,9 +235,7 @@ final class RealtimeCombatSession: ObservableObject {
   /// new socket. No unresolved command may be able to arm or start the player.
   private var canRecoverClock: Bool {
     guard receivedSnapshot, localPlayer?.connected == true else {return false}
-    if snapshot?.rules.geometry == "sighting" {return true}
-    return snapshot?.phase == .calibrating && localPlayer?.frameReady == false
-      && pending.isEmpty && outgoing.isEmpty && writer == nil
+    return true
   }
 
   private func beginClockRecovery(at now: Double) -> Bool {
@@ -301,8 +252,8 @@ final class RealtimeCombatSession: ObservableObject {
 
   private func receive(_ message: CombatWire.ServerMessage) async throws {
     // Relay bytes never depend on replica state and must not throw.
-    if case .collab(let playerId,let data)=message {onCollaboration?(playerId,data); return}
-    if case .niToken(let playerId,let data)=message {onNearbyToken?(playerId,data); return}
+    if case .collab = message {return}
+    if case .niToken = message {return}
     guard var replica else {throw CombatReplicaError.invalidSnapshot}
     guard clockRecoveryIsValid(at: localNow()) else {throw CombatTransportError.disconnected}
     switch message {
@@ -333,10 +284,6 @@ final class RealtimeCombatSession: ObservableObject {
       self.snapshot=replica.snapshot; receivedSnapshot=true; connectionIssue=nil
       state = next.phase == .finished ? .finished : .connected
       startWriter()
-      if !nearbyTokenAnnouncedForConnection, let token = localNearbyToken {
-        nearbyTokenAnnouncedForConnection = true
-        try? await transport?.send(.niToken(token))
-      }
       try await transport?.send(.received(eventSequence:eventSequence))
     case .events(let incoming):
       do {

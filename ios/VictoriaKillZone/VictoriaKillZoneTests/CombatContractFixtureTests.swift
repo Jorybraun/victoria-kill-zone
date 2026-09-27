@@ -51,12 +51,6 @@ final class CombatContractFixtureTests: XCTestCase {
             zone: HitZone(rawValue: c["zone"] as! String)!,
             center: c["center"] as? [Double], a: c["a"] as? [Double], b: c["b"] as? [Double],
             radius: (c["radius"] as! NSNumber).doubleValue)})})
-    case "frameReady":
-      return .frameReady(
-        ready: object["ready"] as! Bool,
-        residualMeters: (object["residualMeters"] as! NSNumber).doubleValue,
-        residualDegrees: (object["residualDegrees"] as! NSNumber).doubleValue,
-        clockUncertaintyMs: (object["clockUncertaintyMs"] as! NSNumber).doubleValue)
     case "shield":
       return .shield(active: object["active"] as! Bool, poseSequence: (object["poseSequence"] as! NSNumber).intValue)
     case "slowField":
@@ -112,13 +106,15 @@ final class CombatContractFixtureTests: XCTestCase {
     for entry in fixture["envelopes"] as! [[String: Any]] {
       let message = try dictionary(entry["message"] as Any)
       let expected = try dictionary(message["envelope"] as Any)
+      let expectedCommand = try dictionary(expected["command"] as Any)
+      guard expectedCommand["kind"] as? String != "frameReady" else {continue}
       let envelope = CombatWire.Envelope(
         commandId: expected["commandId"] as! String,
         clientSequence: (expected["clientSequence"] as! NSNumber).intValue,
         authorityEpoch: (expected["authorityEpoch"] as! NSNumber).intValue,
         frameEpoch: (expected["frameEpoch"] as! NSNumber).intValue,
         sentAtMs: (expected["sentAtMs"] as! NSNumber).doubleValue,
-        command: try command(expected["command"] as! [String: Any]))
+        command: try command(expectedCommand))
       XCTAssertEqual(envelope.v, protocolVersion, "\(entry["id"] ?? "?")")
       let encoded = try JSONEncoder().encode(envelope)
       let actual = try JSONSerialization.jsonObject(with: encoded) as! [String: Any]

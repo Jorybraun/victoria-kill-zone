@@ -75,25 +75,3 @@ struct RealtimeCommandState {
     }
   }
 }
-
-/// Queuing readiness is not acknowledgement. Retry a rejected transition at a
-/// bounded cadence until the authoritative player state agrees with the sensor.
-struct RealtimeReadinessState {
-  private var pendingID: String?
-  private var pendingReady: Bool?
-  private var sentAt = Date.distantPast
-
-  func shouldSubmit(ready: Bool, authoritative: Bool, at now: Date) -> Bool {
-    if let pendingReady, pendingReady != ready {return true}
-    guard ready != authoritative else {return false}
-    let age = now.timeIntervalSince(sentAt)
-    return age >= (pendingID == nil ? 0.25 : 1)
-  }
-  mutating func queued(id: String, ready: Bool, at now: Date) {
-    pendingID = id; pendingReady = ready; sentAt = now
-  }
-  mutating func resolve(id: String) {
-    guard pendingID == id else {return}
-    pendingID = nil; pendingReady = nil
-  }
-}

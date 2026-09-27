@@ -98,9 +98,7 @@ final class CombatSocketTransport: CombatSocketConnecting {
     guard let socket else {throw CombatTransportError.disconnected}
     let current = generation
     let bytes = try JSONEncoder().encode(message)
-    var maximum = CombatWire.maximumClientBytes
-    if case .collab = message {maximum = CombatWire.maximumCollabMessageBytes}
-    guard bytes.count <= maximum, let text = String(data:bytes,encoding:.utf8) else {throw CombatTransportError.oversizedMessage}
+    guard bytes.count <= CombatWire.maximumClientBytes, let text = String(data:bytes,encoding:.utf8) else {throw CombatTransportError.oversizedMessage}
     do {try await socket.send(.string(text))} catch {
       let safeError = Self.safeFailure(error, response: socket.response)
       // A failed send can be the first observable HTTP admission response. End

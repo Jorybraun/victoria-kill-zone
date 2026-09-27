@@ -9,7 +9,6 @@ import UIKit
 struct RealtimeArenaView: View {
   @ObservedObject var controller: RealtimeArenaController
   let onLeave: () -> Void
-  var onQuickDuel: (() -> Void)? = nil
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -21,8 +20,6 @@ struct RealtimeArenaView: View {
   @State private var confirmedZone: TargetingHitZone?
   @State private var menuPresented = false
   @State private var reportPresented = false
-  @State private var setupLogURL: URL?
-  @State private var setupLogFailed = false
 
   var body: some View {
     ZStack {
@@ -48,10 +45,7 @@ struct RealtimeArenaView: View {
     }
     .sheet(isPresented: $reportPresented) {
       ReportProblemView(acquireTicket: {try await controller.combat.acquireAccessTicket()},
-        loadLog: {
-          try JSONDecoder().decode([DuelFrameDiagnosticEvent].self,
-            from: Data(contentsOf: controller.exportSetupLog()))
-        },
+        loadLog: {controller.diagnosticEvents()},
         serverRelease: {controller.combat.serverRelease},
         firstServerRelease: {controller.combat.firstServerRelease},
         authorityEpochs: {controller.combat.authorityEpochHistory},
@@ -209,8 +203,6 @@ struct RealtimeArenaView: View {
     let eligibility = controller.eligibility
     let player = controller.localPlayer
     let time = controller.matchTimeMs ?? controller.snapshot?.matchTimeMs ?? 0
-    let fieldStatus = RealtimeArenaPresentation.slowFieldStatus(fields: controller.snapshot?.slowFields ?? [],
-      localPlayerID: controller.session.playerId, readyAt: player?.slowFieldReadyAtMs ?? 0, now: time)
     let protection = RealtimeArenaPresentation.protectionDetail(until: player?.protectedUntilMs, now: time)
     return VStack(spacing: 8) {
       if let protection {
@@ -221,10 +213,6 @@ struct RealtimeArenaView: View {
       HStack(spacing: 10) {
         abilityButton(title: (player?.shield.activeUntilMs ?? 0) > time ? "Lower shield" : "Shield", icon: "shield.lefthalf.filled",
           detail: shieldDetail(at: time), enabled: eligibility.shield, action: controller.toggleShield)
-        if !controller.usesSighting {
-          abilityButton(title: "Slow field", icon: "clock.arrow.2.circlepath", detail: fieldStatus.detail,
-            enabled: eligibility.slowField, action: controller.activateSlowField)
-        }
       }
       HStack(alignment: .bottom, spacing: 12) {
         HStack(spacing: 8) {
@@ -283,10 +271,7 @@ struct RealtimeArenaView: View {
   private func openMenu() {controller.setTriggerHeld(false); menuPresented = true}
 
   private var matchMenu: some View {
-    let player = controller.localPlayer
     let time = controller.matchTimeMs ?? controller.snapshot?.matchTimeMs ?? 0
-    let fieldStatus = RealtimeArenaPresentation.slowFieldStatus(fields: controller.snapshot?.slowFields ?? [],
-      localPlayerID: controller.session.playerId, readyAt: player?.slowFieldReadyAtMs ?? 0, now: time)
     return VStack(spacing: 0) {
       HStack {
         Text("Match menu").font(.title2.bold())
@@ -302,14 +287,7 @@ struct RealtimeArenaView: View {
           Text("The match continues while this menu is open.")
             .font(.subheadline).foregroundStyle(VKZPalette.textMuted)
           Text(stageTitle).font(.headline)
-          if controller.usesQuickPlayFrame {
-            Text(controller.usesCollaborativeFrame
-              ? (controller.usesNearbyRendezvous ? "Aligned by Nearby Interaction + live peer merge" : "Aligned by live peer merge")
-              : "Aligned by shared scan (approximate)")
-              .font(.caption).foregroundStyle(VKZPalette.textMuted)
-          }
-          RealtimeRosterStrip(players: controller.snapshot?.players ?? [], localPlayerID: controller.session.playerId,
-            sighting: controller.usesSighting)
+          RealtimeRosterStrip(players: controller.snapshot?.players ?? [], localPlayerID: controller.session.playerId)
           VStack(alignment: .leading, spacing: 6) {
             Text(RealtimeArenaPresentation.weaponName(controller.snapshot?.rules.weapon.id)).font(.headline)
             Text(controller.eligibility.reason).font(.subheadline).foregroundStyle(VKZPalette.pending)
@@ -318,26 +296,12 @@ struct RealtimeArenaView: View {
           }
           VStack(alignment: .leading, spacing: 6) {
             Label("Shield · \(shieldDetail(at: time))", systemImage: "shield.lefthalf.filled")
-            if !controller.usesSighting {
-              Label("Slow field · \(fieldStatus.detail)", systemImage: "clock.arrow.2.circlepath")
-            }
           }
           .font(.subheadline).foregroundStyle(VKZPalette.telemetry)
           if controller.stage != .running {Text(guidance).font(.subheadline).foregroundStyle(VKZPalette.textMuted)}
           VStack(alignment: .leading, spacing: 6) {
-            if case .savedArena = controller.mode {
-              if let setupLogURL {
-                ShareLink("Share setup log", item: setupLogURL).frame(minHeight: 44)
-              }
-              Button("Export setup log") {
-                do {setupLogURL = try controller.exportSetupLog()} catch {setupLogFailed = true}
-              }.frame(minHeight: 44)
-            }
             Button("Report a problem") {reportPresented = true}.frame(minHeight: 44)
           }
-          .alert("Export unavailable", isPresented: $setupLogFailed) {
-            Button("OK") {}
-          } message: {Text("The setup log could not be saved. Try again.")}
           Button(role: .destructive, action: leave) {
             Text(controller.stage == .finished ? "Return home" : "Leave match")
               .frame(maxWidth: .infinity, minHeight: 44)
@@ -356,105 +320,37 @@ struct RealtimeArenaView: View {
         Image(systemName: controller.stage == .respawning ? "heart.slash" : "viewfinder").font(.title2).foregroundStyle(VKZPalette.pending)
         Text(stageTitle).font(.title3.bold())
         Spacer(minLength: 0)
-        if [.connecting, .waitingForMap, .transferringMap, .relocalizing, .reconnecting].contains(controller.stage)
-          || (controller.usesQuickPlayFrame && controller.stage == .paused && controller.frame.stage == .degraded)
-          || (controller.usesCollaborativeFrame && collaborativeSetup?.showsProgress == true)
-          || rendezvousSetup?.showsProgress == true {
+        if [.connecting, .reconnecting].contains(controller.stage) {
           ProgressView().tint(.white)
         }
       }
       Text(guidance).font(.subheadline).foregroundStyle(VKZPalette.textMuted).fixedSize(horizontal: false, vertical: true)
-      if controller.stage == .measuringReference, let residual = controller.frame.residual {
-        Text(String(format: "Reference: %.0f cm · %.2f°", residual.translationMeters * 100, residual.yawDegrees))
-          .font(.caption.monospacedDigit()).foregroundStyle(VKZPalette.telemetry)
-      }
       if controller.stage == .respawning {
         Text("\(seconds(until: controller.localPlayer?.respawnAtMs ?? 0))").font(.system(.largeTitle, design: .rounded, weight: .black)).monospacedDigit()
       }
-      if referenceSetup.isVisible {
-        RealtimeReferencePanel(state: controller.referenceState, imageData: controller.referenceImageData,
-          onCapture: controller.captureReference, onShare: controller.captureAndShareMap,
-          captureAvailable: referenceSetup.captureAvailable)
-      } else if !controller.usesQuickPlayFrame,
-        [.relocalizing, .measuringReference, .paused, .awaitingMembers].contains(controller.stage) {
-        RealtimeReferencePanel(state: controller.referenceState, imageData: controller.referenceImageData)
-      }
-      if controller.usesQuickPlayFrame && !controller.usesCollaborativeFrame && controller.isHost
-        && controller.stage == .mapReady {
-        Button("SHARE ARENA", action: controller.captureAndShareMap)
-          .buttonStyle(VKZPrimaryButtonStyle())
-          .accessibilityHint("Sends the scan so the other phones can align with this play area")
-      }
       if controller.eligibility.begin || controller.startPending {
-        // Under sighting the host auto-begins — show the starting state instead
-        // of a second-tap PLAY button while the request is queued.
-        let pending = controller.startPending || controller.usesSighting
         Button(action: controller.beginRound) {
           HStack(spacing: 8) {
-            if pending {ProgressView().tint(VKZPalette.background)}
-            Text(pending ? "Starting match…" : controller.usesQuickPlayFrame ? RealtimeArenaPresentation.Sighting.startTitle : "Begin match")
+            ProgressView().tint(VKZPalette.background)
+            Text("Starting match…")
           }
         }
-        .buttonStyle(VKZPrimaryButtonStyle()).disabled(pending)
-        .accessibilityLabel(pending ? "Starting match" : controller.usesSighting ? "Play" : "Begin match")
-      }
-      if offersQuickDuel, let onQuickDuel {
-        Button("Play Quick Duel instead") {
-          controller.setTriggerHeld(false); clearPresentation(); onQuickDuel()
-        }.buttonStyle(VKZPrimaryButtonStyle())
-      }
-      if controller.stage == .measuringReference && controller.referenceState == .unavailable {
-        if offersQuickDuel {
-          Button("Return home", action: leave).buttonStyle(VKZSecondaryButtonStyle())
-        } else {
-          Button("Return home", action: leave).buttonStyle(VKZPrimaryButtonStyle())
-        }
+        .buttonStyle(VKZPrimaryButtonStyle()).disabled(true)
+        .accessibilityLabel("Starting match")
       }
       if controller.connectionIssue != nil || controller.stage == .reconnecting {
         Button("Retry connection", action: controller.retryConnection).buttonStyle(VKZSecondaryButtonStyle())
       }
-      if rendezvousSetup?.showsRetry == true {
-        Button("Retry", action: controller.retryRendezvous).buttonStyle(VKZSecondaryButtonStyle())
+      if controller.stage == .unavailable && controller.canOpenCameraSettings && !controller.incompatibleRules {
+        Button(RealtimeArenaPresentation.Sighting.retryTrackingTitle, action: controller.retryCamera)
+          .buttonStyle(VKZSecondaryButtonStyle())
       }
       #if os(iOS)
-      if rendezvousSetup?.showsSettings == true {
+      if controller.canOpenCameraSettings && !controller.incompatibleRules {
         Button("Open Settings") {if let url = URL(string: UIApplication.openSettingsURLString) {openURL(url)}}
           .font(.subheadline.bold()).frame(minHeight: 44)
       }
       #endif
-      if case .savedArena = controller.mode,
-        RealtimeArenaPresentation.showsScanControls(isHost: controller.isHost,
-        usesSavedArena: controller.snapshot?.rules.geometry == "trackedBody",
-        usesCollaborativeFrame: controller.usesCollaborativeFrame,
-        stage: controller.stage, scanTimedOut: scanTimedOut) {
-        Button(controller.usesQuickPlayFrame && scanTimedOut ? "Scan again" : "Restart scan",
-          action: controller.retryAlignment).buttonStyle(VKZSecondaryButtonStyle())
-      } else if controller.usesSighting {
-        // retryAlignment under sighting only resets pose/readiness — there is
-        // no map or frame ritual to restart (configureMapIfNeeded no-ops).
-        if controller.connectionIssue == nil && !controller.incompatibleRules
-          && (controller.stage == .unavailable || (controller.stage == .paused && controller.combat.clockReady)) {
-          Button(RealtimeArenaPresentation.Sighting.retryTrackingTitle,
-            action: controller.retryAlignment).buttonStyle(VKZSecondaryButtonStyle())
-        }
-        #if os(iOS)
-        if controller.canOpenCameraSettings {
-          Button("Open Settings") {if let url = URL(string: UIApplication.openSettingsURLString) {openURL(url)}}
-            .font(.subheadline.bold()).frame(minHeight: 44)
-        }
-        #endif
-      } else if !controller.usesSighting && (controller.stage == .paused || controller.stage == .unavailable) {
-        if controller.connectionIssue == nil && !controller.incompatibleRules {
-          Button(controller.usesQuickPlayFrame ? "Re-align" : "Retry alignment",
-            action: controller.retryAlignment).buttonStyle(VKZSecondaryButtonStyle())
-        }
-        #if os(iOS)
-        if controller.canOpenCameraSettings {
-          Button("Open Settings") {if let url = URL(string: UIApplication.openSettingsURLString) {openURL(url)}}
-            .font(.subheadline.bold()).frame(minHeight: 44)
-        }
-        #endif
-      }
     }
     .padding(18).background(.black.opacity(0.84), in: RoundedRectangle(cornerRadius: 24))
   }
@@ -475,119 +371,15 @@ struct RealtimeArenaView: View {
   private var guidance: String {
     if let issue = controller.connectionIssue {return issue}
     if let message = controller.message {return message}
-    if case .failed(let explanation) = controller.mapState {return explanation}
-    if referenceSetup.isVisible && controller.referenceState == .capturing {
-      return "Hold still while the reference is measured."
-    }
-    if controller.usesSighting {
-      return RealtimeArenaPresentation.Sighting.guidance(stage: controller.stage,
-        clockReady: controller.combat.clockReady,
-        roundHasStarted: controller.snapshot?.roundStartedAtMs != nil)
-    }
-    if let rendezvousSetup {return rendezvousSetup.guidance}
-    if let collaborativeSetup {return collaborativeSetup.guidance}
-    if scanTimedOut {
-      return controller.usesQuickPlayFrame
-        ? "Couldn't map this area — try somewhere with more detail"
-        : "The camera couldn't find enough stable detail. Point at a well-lit floor, wall or fixed object, then restart the scan."
-    }
-    switch controller.stage {
-    case .mapping:
-      return controller.usesQuickPlayFrame
-        ? "Walk slowly and look around until the ring fills."
-        : "Move slowly around the play area, keeping the floor, walls and fixed objects in view. Avoid aiming only at a blank wall."
-    case .mapReady:
-      if controller.usesQuickPlayFrame {
-        return "Ready to share. Send the scan so the other phones can align with this play area."
-      }
-      if case .captured = controller.referenceState {return "Reference captured. Share the scan so the other phones can align with this play area."}
-      return "Ready to capture. Choose a reference below so the phones can align with the same play area."
-    case .waitingForMap: return "Waiting for the host’s arena scan. Stay nearby; it will load automatically."
-    case .transferringMap: return "Keep this screen open while the shared arena scan transfers."
-    case .relocalizing:
-      if controller.usesQuickPlayFrame {
-        return controller.isHost ? "Look at the area you scanned" : "Look at the area the host scanned"
-      }
-      return "Point at the same fixed objects the host scanned. Move slowly until the camera recognizes the area."
-    case .measuringReference:
-      return controller.referenceState == .unavailable
-        ? "This older arena scan has no shared reference. Play a Quick Duel instead, or create a new arena to capture one."
-        : "Point at the reference shown below and hold steady. Each phone must recognize it before the match can begin. Keep it in view while playing."
-    case .awaitingMembers:
-      if controller.usesQuickPlayFrame {
-        let counts = controller.alignedPlayers
-        return "Aligned — waiting for players (\(counts.aligned)/\(counts.total))"
-      }
-      return "Keep players and their phones in view. The host begins when everyone has finished alignment."
-    case .paused:
-      if controller.usesQuickPlayFrame {
-        switch controller.frame.stage {
-        case .degraded: return "Hold steady — re-aligning"
-        case .lost:
-          return controller.frame.failure == .relocalizationTimedOut
-            ? "Couldn't align — move closer to where the host scanned"
-            : "Alignment lost. Re-align to rejoin the shared play area."
-        default: break
-        }
-      }
-      return RealtimeArenaPresentation.pauseGuidance(clockReady: controller.combat.clockReady,
+    return RealtimeArenaPresentation.Sighting.guidance(stage: controller.stage,
+      clockReady: controller.combat.clockReady,
       roundHasStarted: controller.snapshot?.roundStartedAtMs != nil)
-    case .reconnecting: return "Your score is retained. Reconnecting and checking the shared arena before input resumes."
-    case .respawning: return "Health and ammunition restore automatically. You can keep looking and moving."
-    case .unavailable: return "Shared body tracking is unavailable on this device or configuration."
-    default: return "Joining the shared arena and synchronizing the match clock."
-    }
   }
   private var stageTitle: String {
     if controller.connectionIssue != nil {return "Connection needs attention"}
-    if referenceSetup.isVisible {return "Set up play area"}
-    if controller.usesSighting {
-      return RealtimeArenaPresentation.Sighting.title(stage: controller.stage,
-        clockReady: controller.combat.clockReady)
-    }
-    if let rendezvousSetup {return rendezvousSetup.title}
-    if let collaborativeSetup {return collaborativeSetup.title}
-    if controller.usesQuickPlayFrame {
-      if controller.stage == .mapping {return "Scan the area"}
-      if controller.stage == .paused {
-        if controller.frame.stage == .degraded {return "Re-aligning"}
-        if controller.frame.stage == .lost {return "Alignment lost"}
-      }
-    }
-    if scanTimedOut {return "Scan needs another try"}
     if controller.stage == .paused && !controller.combat.clockReady {return "Synchronizing match"}
-    return controller.stage.title
-  }
-  private var offersQuickDuel: Bool {
-    RealtimeArenaPresentation.offersQuickDuelFallback(
-      usesSavedArena: controller.snapshot?.rules.geometry == "trackedBody", stage: controller.stage,
-      frameStage: controller.frame.stage, frameFailure: controller.frame.failure,
-      referenceState: controller.referenceState) && onQuickDuel != nil
-  }
-  private var scanTimedOut: Bool {
-    controller.connection == .connected && controller.frame.failure == .mappingTimedOut
-  }
-  private var referenceSetup: RealtimeArenaPresentation.ReferenceSetup {
-    .init(stage: controller.stage, isHost: controller.isHost, usesSavedArena: false,
-      usesQuickPlayFrame: controller.usesQuickPlayFrame)
-  }
-  /// The NI rendezvous ritual owns the same setup stages while its phase is
-  /// live; check it before the co-view fallback copy (ADR 0012 §2).
-  private var rendezvousSetup: RealtimeArenaPresentation.RendezvousSetup? {
-    guard controller.usesNearbyRendezvous,
-      [.mapping, .mapReady, .relocalizing, .awaitingMembers].contains(controller.stage) else {return nil}
-    return RealtimeArenaPresentation.rendezvousSetup(phase: controller.rendezvousPhase)
-  }
-  /// Collaborative Quick Play copy only replaces the setup stages it owns;
-  /// live-match and generic pause/reconnect states keep the shared wording.
-  private var collaborativeSetup: RealtimeArenaPresentation.CollaborativeSetup? {
-    guard controller.usesCollaborativeFrame,
-      [.mapping, .mapReady, .relocalizing, .awaitingMembers, .paused].contains(controller.stage),
-      controller.stage != .paused || [.degraded, .lost].contains(controller.frame.stage)
-    else {return nil}
-    let counts = controller.alignedPlayers
-    return .init(stage: controller.stage, frameStage: controller.frame.stage,
-      aligned: counts.aligned, total: counts.total)
+    return RealtimeArenaPresentation.Sighting.title(stage: controller.stage,
+      clockReady: controller.combat.clockReady)
   }
   private var roundTime: String {
     guard let ms = RealtimeActionEligibility.remainingRoundMs(snapshot: controller.snapshot, now: controller.matchTimeMs ?? controller.snapshot?.matchTimeMs) else {return "—:—"}
@@ -624,27 +416,24 @@ private struct RealtimeRosterStrip: View {
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   let players: [CombatWire.Player]
   let localPlayerID: String
-  var sighting = false
   var body: some View {
     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: dynamicTypeSize.isAccessibilitySize ? 1 : 2), spacing: 7) {
       ForEach(players) {player in
         VStack(alignment: .leading, spacing: 5) {
           HStack(spacing: 5) {
-            Image(systemName: player.connected && (sighting || player.frameReady) ? "checkmark.circle.fill" : "circle.dashed")
-              .foregroundStyle((sighting ? player.connected : player.frameReady) ? VKZPalette.ready : VKZPalette.pending)
+            Image(systemName: player.connected ? "checkmark.circle.fill" : "circle.dashed")
+              .foregroundStyle(player.connected ? VKZPalette.ready : VKZPalette.pending)
             Text(player.displayName + (player.id == localPlayerID ? " · YOU" : "")).font(.caption.bold()).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Text("\(player.kills)/\(player.deaths)").font(.caption2.monospacedDigit())
           }
           ProgressView(value: Double(player.health), total: 100).tint(player.health <= 34 ? VKZPalette.danger : VKZPalette.ready)
-          Text(sighting
-            ? RealtimeArenaPresentation.Sighting.rosterStatus(connected: player.connected, health: player.health)
-            : !player.connected ? "Disconnected" : player.health == 0 ? "Respawning" : player.frameReady ? "\(player.health) health" : "Aligning")
+          Text(RealtimeArenaPresentation.Sighting.rosterStatus(connected: player.connected, health: player.health))
             .font(.caption2).foregroundStyle(VKZPalette.textMuted)
         }
         .padding(9).background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(player.displayName), \(player.health) health, \(player.kills) kills, \(player.deaths) deaths, \(sighting ? RealtimeArenaPresentation.Sighting.rosterAccessibilityStatus(connected: player.connected) : player.connected ? (player.frameReady ? "aligned" : "aligning") : "disconnected")")
+        .accessibilityLabel("\(player.displayName), \(player.health) health, \(player.kills) kills, \(player.deaths) deaths, \(RealtimeArenaPresentation.Sighting.rosterAccessibilityStatus(connected: player.connected))")
       }
     }
   }

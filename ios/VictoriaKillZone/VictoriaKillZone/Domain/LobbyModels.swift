@@ -72,10 +72,7 @@ struct WaitingRoom: Equatable, Sendable {
   var combatGeometry: String? = nil
   var maxPlayers: Int = 2
 
-  /// Quick Duel = durableObject match on sighting. Missing geometry is classified
-  /// conservatively as a Saved Arena so alignment guidance is never dropped.
-  var isQuickDuel: Bool { combatMode == .durableObject && QuickDuel.isQuickDuelGeometry(combatGeometry, rosterSize: players.count) }
-  var isSavedArena: Bool { combatMode == .durableObject && !isQuickDuel }
+  var isQuickDuel: Bool { combatMode == .durableObject && QuickDuel.isQuickDuelGeometry(combatGeometry) }
 
   var localPlayer: LobbyPlayer? {
     players.first { $0.id == localPlayerID }
@@ -206,38 +203,34 @@ extension LobbyTransitionError: LocalizedError {
 }
 
 enum WaitingRoomCopy {
-  enum Mode { case classic, quickDuel, savedArena }
+  enum Mode { case classic, quickDuel }
 
   static func mode(for room: WaitingRoom) -> Mode {
     guard room.combatMode == .durableObject else { return .classic }
-    return room.isQuickDuel ? .quickDuel : .savedArena
+    return .quickDuel
   }
 
   static func matchName(_ mode: Mode) -> String {
     switch mode {
     case .classic: "Classic duel"
     case .quickDuel: "Quick Duel"
-    case .savedArena: "Arena"
     }
   }
 
   static func hostStartTitle(_ mode: Mode) -> String {
     switch mode {
-    case .savedArena: "Align arena"
     case .classic, .quickDuel: "Start duel"
     }
   }
 
   static func allReadyGuidance(_ mode: Mode) -> String {
     switch mode {
-    case .savedArena: "All players ready. Next, align your shared play area."
     case .classic, .quickDuel: "Both players ready. Start when you are."
     }
   }
 
   static func waitingForHostGuidance(_ mode: Mode) -> String {
     switch mode {
-    case .savedArena: "You’re ready. Waiting for the host to begin alignment."
     case .classic, .quickDuel: "You’re ready. Waiting for the host to start."
     }
   }
@@ -246,14 +239,9 @@ enum WaitingRoomCopy {
 enum QuickDuel {
   static let maxPlayers = 2
   static let geometry = "sighting"
-  /// Single product-decision copy for a blocked third joiner; change here only.
-  static let rosterFullMessage = "Quick Duel is 2 players; use a Saved Arena for 3–4"
+  static let rosterFullMessage = "Quick Duel is limited to two players."
 
-  /// Mirrors Convex's `selectCombatGeometry` normalization: sighting, or a
-  /// two-player phoneProxy roster the authority will upgrade. Missing geometry
-  /// is conservative — the match keeps the saved-arena path so alignment
-  /// guidance is never dropped.
-  static func isQuickDuelGeometry(_ geometry: String?, rosterSize: Int) -> Bool {
-    geometry == QuickDuel.geometry || (geometry == "phoneProxy" && rosterSize <= QuickDuel.maxPlayers)
+  static func isQuickDuelGeometry(_ geometry: String?) -> Bool {
+    geometry == QuickDuel.geometry
   }
 }
