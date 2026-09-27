@@ -432,7 +432,7 @@ struct RealtimeArenaView: View {
       } else if controller.usesSighting {
         // retryAlignment under sighting only resets pose/readiness — there is
         // no map or frame ritual to restart (configureMapIfNeeded no-ops).
-        if controller.connectionIssue == nil
+        if controller.connectionIssue == nil && !controller.incompatibleRules
           && (controller.stage == .unavailable || (controller.stage == .paused && controller.combat.clockReady)) {
           Button(RealtimeArenaPresentation.Sighting.retryTrackingTitle,
             action: controller.retryAlignment).buttonStyle(VKZSecondaryButtonStyle())
@@ -444,7 +444,7 @@ struct RealtimeArenaView: View {
         }
         #endif
       } else if !controller.usesSighting && (controller.stage == .paused || controller.stage == .unavailable) {
-        if controller.connectionIssue == nil {
+        if controller.connectionIssue == nil && !controller.incompatibleRules {
           Button(controller.usesQuickPlayFrame ? "Re-align" : "Retry alignment",
             action: controller.retryAlignment).buttonStyle(VKZSecondaryButtonStyle())
         }

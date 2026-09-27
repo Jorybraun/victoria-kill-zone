@@ -74,7 +74,7 @@ struct WaitingRoom: Equatable, Sendable {
 
   /// Quick Duel = durableObject match on sighting. Missing geometry is classified
   /// conservatively as a Saved Arena so alignment guidance is never dropped.
-  var isQuickDuel: Bool { combatMode == .durableObject && combatGeometry == QuickDuel.geometry }
+  var isQuickDuel: Bool { combatMode == .durableObject && QuickDuel.isQuickDuelGeometry(combatGeometry, rosterSize: players.count) }
   var isSavedArena: Bool { combatMode == .durableObject && !isQuickDuel }
 
   var localPlayer: LobbyPlayer? {
@@ -248,4 +248,12 @@ enum QuickDuel {
   static let geometry = "sighting"
   /// Single product-decision copy for a blocked third joiner; change here only.
   static let rosterFullMessage = "Quick Duel is 2 players; use a Saved Arena for 3–4"
+
+  /// Mirrors Convex's `selectCombatGeometry` normalization: sighting, or a
+  /// two-player phoneProxy roster the authority will upgrade. Missing geometry
+  /// is conservative — the match keeps the saved-arena path so alignment
+  /// guidance is never dropped.
+  static func isQuickDuelGeometry(_ geometry: String?, rosterSize: Int) -> Bool {
+    geometry == QuickDuel.geometry || (geometry == "phoneProxy" && rosterSize <= QuickDuel.maxPlayers)
+  }
 }

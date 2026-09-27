@@ -24,11 +24,10 @@ enum RealtimeArenaMode: Equatable {
   /// was prepared by a server that predates ADR 0013.
   var expectsSighting: Bool {self == .quickDuel}
 
-  /// Quick Duel = durableObject match on sighting (same rule as
-  /// `WaitingRoom.isQuickDuel`). Missing geometry is conservative: the match
-  /// keeps the saved-arena path so alignment guidance is never dropped.
-  static func select(combatGeometry: String?, savedArena: SavedArenaBundle?) -> Self {
-    combatGeometry == QuickDuel.geometry ? .quickDuel : .savedArena(savedArena)
+  /// Quick Duel = durableObject match on sighting — decided by the same
+  /// classifier as `WaitingRoom.isQuickDuel` (`QuickDuel.isQuickDuelGeometry`).
+  static func select(combatGeometry: String?, rosterSize: Int, savedArena: SavedArenaBundle?) -> Self {
+    QuickDuel.isQuickDuelGeometry(combatGeometry, rosterSize: rosterSize) ? .quickDuel : .savedArena(savedArena)
   }
 }
 
@@ -54,6 +53,9 @@ final class RealtimeArenaController: ObservableObject {
   @Published private(set) var triggerHeld = false
   @Published private(set) var localShotSequence = 0
   @Published private(set) var message: String?
+  /// Set when the authority's rules contradict the lobby's chosen mode; the
+  /// match cannot continue and no retry control may reopen it.
+  @Published private(set) var incompatibleRules = false
   @Published private(set) var actionFeedback: String?
   @Published private(set) var connectionIssue: String?
   @Published private(set) var now = Date()
@@ -178,6 +180,7 @@ final class RealtimeArenaController: ObservableObject {
     return result
   }
   var stage: RealtimeArenaStage {
+    if incompatibleRules {return .unavailable}
     if snapshot?.phase == .finished || connection == .finished {return .finished}
     if case .savedArena = mode, frameProvider == nil {return .unavailable}
     if message != nil || (connectionIssue != nil && connection == .disconnected) {return .unavailable}
@@ -208,7 +211,7 @@ final class RealtimeArenaController: ObservableObject {
   func start() async {
     if let stopTask {await stopTask.value}
     if started {await startTask?.value; return}
-    started = true; message = nil; generation += 1; let token = generation
+    started = true; message = nil; incompatibleRules = false; generation += 1; let token = generation
     let task = Task { [weak self] in
       guard let self else {return}
       await self.performStart(token: token)
@@ -356,7 +359,7 @@ final class RealtimeArenaController: ObservableObject {
     mapCoordinator?.captureAndShare()
   }
   func retryAlignment() {
-    guard started else {return}
+    guard started, !incompatibleRules else {return}
     if !cameraReady {
       Task { [weak self] in
         guard let self else {return}
@@ -456,7 +459,16 @@ final class RealtimeArenaController: ObservableObject {
       // The lobby chose Quick Duel but the authority prepared another geometry:
       // the match cannot run this mode, so stop instead of silently taking a
       // shared-frame path (or looping a reconnect that would say the same).
+      incompatibleRules = true
       message = RealtimeArenaPresentation.Sighting.incompatibleServerMessage
+      combat.stop()
+      return
+    }
+    if case .savedArena = mode, value.rules.geometry == "sighting" {
+      // Symmetric guard: a saved-arena match that reports sighting rules was
+      // not prepared for the frame path this client must run.
+      incompatibleRules = true
+      message = RealtimeArenaPresentation.incompatibleRulesMessage
       combat.stop()
       return
     }
