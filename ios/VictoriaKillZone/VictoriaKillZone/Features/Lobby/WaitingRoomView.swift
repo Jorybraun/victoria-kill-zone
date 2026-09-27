@@ -157,7 +157,8 @@ struct WaitingRoomView: View {
         .accessibilityLabel(localPlayer.isReady ? "Ready. Mark me not ready" : "Mark me ready")
       }
       if room.localRole == .host || allowsShellStart {
-        let canStart = room.localRole == .host ? room.canLocalPlayerStart : room.allPlayersReady
+        let canStart = !room.needsMatchUpdate
+          && (room.localRole == .host ? room.canLocalPlayerStart : room.allPlayersReady)
         Button {store.startDuel(as: room.localRole ?? .guest)} label: {
           HStack(spacing: 8) {
             if store.operation == .starting {ProgressView().tint(VKZPalette.background)}
@@ -172,6 +173,7 @@ struct WaitingRoomView: View {
   }
 
   private var readinessGuidance: String {
+    if room.needsMatchUpdate {return QuickDuel.updateRequiredMessage}
     if store.isMatchInputLocked {return "Waiting for the lobby connection to recover."}
     if room.players.count < 2 {return "Invite at least one more player to begin."}
     if room.players.contains(where: {!$0.isConnected}) {return "Waiting for disconnected players to return."}

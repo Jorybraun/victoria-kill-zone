@@ -193,6 +193,7 @@ final class LobbyStore: ObservableObject {
   func createRealtimeArena() {
     schedule { store in
       await store.waitForTargetingTeardown()
+      guard !Task.isCancelled, store.route == .home, store.session == nil, store.operation == nil else { return }
       await store.performCreateDuel(combatMode: .durableObject)
     }
   }
@@ -429,11 +430,17 @@ final class LobbyStore: ObservableObject {
 
   func performStartDuel() async {
     guard operation == nil, let session, let snapshot = latestSnapshot else { return }
+    let isRealtime = snapshot.match.combatMode == .durableObject
+    guard !isRealtime || QuickDuel.startsAsSighting(
+      geometry: snapshot.match.combatGeometry, rosterSize: snapshot.players.count)
+    else {
+      errorMessage = QuickDuel.updateRequiredMessage
+      return
+    }
     guard !isMatchInputLocked else {
       errorMessage = "RECONNECTING — INPUT LOCKED"
       return
     }
-    let isRealtime = snapshot.match.combatMode == .durableObject
     let capacity = isRealtime ? (snapshot.match.maxPlayers ?? 4) : 2
     guard (2...capacity).contains(snapshot.players.count), snapshot.players.allSatisfy({ $0.ready }) else {
       errorMessage = isRealtime ? "AT LEAST TWO PLAYERS, ALL READY" : "BOTH PLAYERS MUST BE READY"

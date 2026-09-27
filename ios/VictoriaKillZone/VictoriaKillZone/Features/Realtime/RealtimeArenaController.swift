@@ -199,7 +199,14 @@ final class RealtimeArenaController: ObservableObject {
   }
   func retryConnection() {setTriggerHeld(false); combat.retryConnection()}
   func diagnosticEvents() -> [MatchDiagnosticEvent] {
-    diagnostics.events + ((targeting as? any LocalSurfaceDiagnosticsProviding)?.localSurfaceDiagnosticEvents() ?? [])
+    let surfaces = targeting as? any LocalSurfaceDiagnosticsProviding
+    let surfaceEvents = surfaces?.localSurfaceDiagnosticEvents() ?? []
+    var events = diagnostics.events + surfaceEvents
+    if let csv = surfaces?.localSurfaceTelemetryCSV() {
+      events.append(MatchDiagnosticEvent(
+        elapsedMs: surfaceEvents.last?.elapsedMs ?? 0, kind: "telemetryCsv", detail: csv))
+    }
+    return events
   }
   func beginRound() {
     guard eligibility.begin, let id = combat.submit(.start) else {return}

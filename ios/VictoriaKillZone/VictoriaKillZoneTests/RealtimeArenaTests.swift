@@ -146,6 +146,21 @@ final class RealtimeArenaTests: XCTestCase {
   }
 
   @MainActor
+  func testDiagnosticEventsAppendLocalSurfaceCSVLast() {
+    let csv = "elapsed_ms,frames\n12,4"
+    let controller = RealtimeArenaController(
+      session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: "secret"),
+      client: UnavailableGameSessionClient(),
+      targeting: CSVTargetingSession(csv: csv)
+    )
+
+    let events = controller.diagnosticEvents()
+
+    XCTAssertEqual(Array(events.suffix(2).map(\.kind)), ["surface", "telemetryCsv"])
+    XCTAssertEqual(events.last, MatchDiagnosticEvent(elapsedMs: 42, kind: "telemetryCsv", detail: csv))
+  }
+
+  @MainActor
   private func makeController(_ camera: ArenaLifecycleCamera) -> RealtimeArenaController {
     .init(session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
       client: UnavailableGameSessionClient(), targeting: camera)
@@ -276,6 +291,31 @@ final class RealtimeArenaTests: XCTestCase {
     for index in 3...4 {var player = players[1]; player.playerId = "p\(index)"; player.displayName = "Player \(index)"; players.append(player)}
     return players
   }
+}
+
+private struct CSVTargetingSession: TargetingSession, LocalSurfaceDiagnosticsProviding {
+  let csv: String
+  let availability = TargetingAvailability.notConfigured
+  let currentSnapshot = TargetingSnapshot.unavailable()
+
+  func snapshots() -> AsyncStream<TargetingSnapshot> {
+    AsyncStream { continuation in
+      continuation.yield(currentSnapshot)
+      continuation.finish()
+    }
+  }
+
+  func start() async throws {}
+
+  func stop() async {}
+
+  func localSurfaceDiagnosticEvents() -> [MatchDiagnosticEvent] {
+    [MatchDiagnosticEvent(elapsedMs: 42, kind: "surface", detail: "surface-event")]
+  }
+
+  func localSurfaceTelemetryCSV() -> String? { csv }
+
+  func recordSightingFire(ray: TargetingCameraRay, skeleton: TargetingSkeleton?) {}
 }
 
 private actor ArenaLifecycleCamera: TargetingSession {
