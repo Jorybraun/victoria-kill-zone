@@ -27,7 +27,7 @@ struct IncomingShot: Equatable, Sendable {
   let zone: String?
   let timestamp: Double
   let source: Source
-  /// An authoritative hit still presents damage when its peer tracer was shown.
+  /// An authoritative hit still presents damage when its shot tracer was shown.
   let renderTracer: Bool
 
   init(
@@ -48,7 +48,6 @@ struct IncomingShot: Equatable, Sendable {
 
   enum Source: Equatable, Sendable {
     case convex
-    case peer
   }
 }
 
@@ -106,11 +105,9 @@ final class DuelSession: ObservableObject {
   private var renderedTracerIDs = Set<TracerIdentity>()
   private var renderedTracerOrder: [TracerIdentity] = []
   private var snapshotSubscriptionStartedAt: Double?
-  private var duelPeerLink: (any DuelPeerLink)?
   private let now: @Sendable () -> Date
   private let makeShotId: @Sendable () -> String
   private let gameSessionClient: any GameSessionClient
-  private let makePeerLink: (@MainActor (_ serviceName: String) -> (any DuelPeerLink)?)?
   private var fireTask: Task<Void, Never>?
   private var repeatFireTask: Task<Void, Never>?
   private var reloadTask: Task<Void, Never>?
@@ -128,19 +125,11 @@ final class DuelSession: ObservableObject {
   init(
     gameSessionClient: any GameSessionClient,
     now: @escaping @Sendable () -> Date = { Date() },
-    makeShotId: @escaping @Sendable () -> String = { UUID().uuidString },
-    makePeerLink: (@MainActor (_ serviceName: String) -> (any DuelPeerLink)?)? = nil
+    makeShotId: @escaping @Sendable () -> String = { UUID().uuidString }
   ) {
     self.gameSessionClient = gameSessionClient
     self.now = now
     self.makeShotId = makeShotId
-    self.makePeerLink = makePeerLink
-  }
-
-  static func defaultPeerLink(
-    matchId: String, playerId: String, joinSecret: String
-  ) -> any DuelPeerLink {
-    ArenaPeerLinkFactory.make(matchId: matchId, playerId: playerId, joinSecret: joinSecret)
   }
 
   func attach(session: PlayerSession) {
@@ -157,8 +146,6 @@ final class DuelSession: ObservableObject {
     killBannerTask?.cancel()
     pendingShotReplayTask?.cancel()
     pendingShotReplayTask = nil
-    duelPeerLink?.stop()
-    duelPeerLink = nil
     self.session = session
     latestSnapshot = nil
     pendingShotId = nil
@@ -182,7 +169,6 @@ final class DuelSession: ObservableObject {
   }
 
   func receive(_ snapshot: MatchSnapshot) {
-    let previousSnapshot = latestSnapshot
     if snapshotSubscriptionStartedAt == nil {
       snapshotSubscriptionStartedAt = snapshot.serverNow
     }
@@ -198,7 +184,6 @@ final class DuelSession: ObservableObject {
     }
     updateKillBanner(from: snapshot)
     updateIncomingShot(from: snapshot)
-    updateDuelPeerLink(for: snapshot, previous: previousSnapshot)
     reconcilePendingShot()
   }
 
@@ -221,8 +206,6 @@ final class DuelSession: ObservableObject {
     killBannerTask = nil
     pendingShotReplayTask?.cancel()
     pendingShotReplayTask = nil
-    duelPeerLink?.stop()
-    duelPeerLink = nil
     session = nil
     latestSnapshot = nil
     pendingShotId = nil
@@ -534,7 +517,6 @@ final class DuelSession: ObservableObject {
     onErrorMessage?(nil)
     if outgoingShot?.id != request.clientShotId {
       outgoingShot = OutgoingShot(id: request.clientShotId, ray: targetingSnapshot.cameraRay)
-      sendPeerTracer(for: request)
     }
 
     do {
@@ -627,7 +609,7 @@ final class DuelSession: ObservableObject {
       guard event.createdAt >= startedAt else { continue }
       let renderTracer = rememberIncomingTracer(shooterID: opponentID, shotID: event.clientShotId)
       let hit = event.type != .shot
-      // A matching peer frame replaces only the cosmetic tracer. Health and
+      // A matching shot ID suppresses only the duplicate tracer. Health and
       // damage feedback always come from the distinct authoritative event.
       guard renderTracer || hit else { continue }
       batch.append(IncomingShot(
@@ -642,7 +624,7 @@ final class DuelSession: ObservableObject {
     publishIncomingShots(batch)
   }
 
-  /// Legacy events without a shot ID cannot safely match an earlier peer frame.
+  /// Legacy events without a shot ID cannot safely match an earlier shot event.
   private func rememberIncomingTracer(shooterID: String, shotID: String?) -> Bool {
     guard let shotID, !shotID.isEmpty else { return true }
     let identity = TracerIdentity(shooterID: shooterID, shotID: shotID)
@@ -672,74 +654,6 @@ final class DuelSession: ObservableObject {
     guard let ray else { return nil }
     let point = ray.origin + ray.direction * 25
     return [point.x, point.y, point.z]
-  }
-
-  private func sendPeerTracer(for request: FireShotRequest) {
-    guard let link = duelPeerLink,
-      let origin = request.origin, origin.count == 3,
-      let direction = request.direction, direction.count == 3,
-      let ray = try? ArenaShotRay(
-        origin: ArenaVector3(x: origin[0], y: origin[1], z: origin[2]),
-        direction: ArenaVector3(x: direction[0], y: direction[1], z: direction[2]),
-        firedAtMs: ArenaClock.nowMs()
-      )
-    else { return }
-    link.send(.shotTracer(ArenaShotTracer(
-      shotId: request.clientShotId,
-      shooterPlayerId: session?.playerId ?? "",
-      ray: ray
-    )))
-  }
-
-  private func updateDuelPeerLink(for snapshot: MatchSnapshot, previous: MatchSnapshot?) {
-    if snapshot.match.phase == .running, duelPeerLink == nil,
-      let role = snapshot.players.first(where: { $0.id == snapshot.localPlayerId })?.role,
-      let link = makePeerLink(for: snapshot)
-    {
-      let expectedMatchID = snapshot.match.id
-      link.onMessage = { [weak self] message, _ in
-        guard case .shotTracer(let tracer) = message else { return }
-        Task { @MainActor [weak self] in
-          guard let self,
-            let latestSnapshot = self.latestSnapshot,
-            latestSnapshot.match.id == expectedMatchID,
-            latestSnapshot.match.phase == .running,
-            let opponentID = latestSnapshot.players
-              .first(where: { $0.id != latestSnapshot.localPlayerId })?.id,
-            tracer.shooterPlayerId == opponentID,
-            !tracer.shotId.isEmpty,
-            self.rememberIncomingTracer(shooterID: opponentID, shotID: tracer.shotId)
-          else { return }
-          self.publishIncomingShots([IncomingShot(
-            eventID: "peer:" + tracer.shotId,
-            hit: false,
-            zone: nil,
-            timestamp: self.now().timeIntervalSince1970 * 1_000,
-            source: .peer
-          )])
-        }
-      }
-      duelPeerLink = link
-      link.start(role: role == .host ? .host : .guest)
-    } else if snapshot.match.phase != .running, previous?.match.phase == .running {
-      duelPeerLink?.stop()
-      duelPeerLink = nil
-    }
-  }
-
-  private func makePeerLink(for snapshot: MatchSnapshot) -> (any DuelPeerLink)? {
-    if let makePeerLink {
-      return makePeerLink(Self.peerServiceName(forMatchID: snapshot.match.id))
-    }
-    return Self.defaultPeerLink(
-      matchId: snapshot.match.id,
-      playerId: snapshot.localPlayerId,
-      joinSecret: session?.code ?? ""
-    )
-  }
-
-  static func peerServiceName(forMatchID matchID: String) -> String {
-    "vkz-" + String(matchID.prefix(48))
   }
 
   private func makeKillBanner(for event: EventSnapshot, in snapshot: MatchSnapshot)

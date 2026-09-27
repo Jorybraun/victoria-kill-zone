@@ -148,49 +148,7 @@ final class DuelSessionTests: XCTestCase {
     XCTAssertEqual(duel.killBanner?.text, "YOU ELIMINATED Guest")
   }
 
-  func testPeerTracerAcceptedOnlyFromOpponent() async throws {
-    let link = FakeDuelPeerLink()
-    let duel = makeDuel(link: link)
-    duel.receive(snapshot(phase: .running))
-    guard case .host? = link.startedRole else {
-      return XCTFail("Expected the host peer link role")
-    }
-
-    let ray = try ArenaShotRay(
-      origin: ArenaVector3(x: 0, y: 0, z: 0),
-      direction: ArenaVector3(x: 0, y: 0, z: -1),
-      firedAtMs: 1
-    )
-    for shooter in ["host-1", "stranger-9"] {
-      link.receive(.shotTracer(ArenaShotTracer(
-        shotId: shooter,
-        shooterPlayerId: shooter,
-        ray: ray
-      )))
-      await settle()
-      XCTAssertNil(duel.incomingShot)
-    }
-
-    link.receive(.shotTracer(ArenaShotTracer(
-      shotId: "guest-shot",
-      shooterPlayerId: "guest-1",
-      ray: ray
-    )))
-    await settle()
-    XCTAssertEqual(
-      duel.incomingShot,
-      IncomingShot(
-        eventID: "peer:guest-shot",
-        hit: false,
-        zone: nil,
-        timestamp: 1_750_000_000_000,
-        source: .peer
-      )
-    )
-  }
-
-  func testTracerNotSentWhenAmmoIsZero() async throws {
-    let link = FakeDuelPeerLink()
+  func testMarkerlessFireRequiresAmmo() async throws {
     let client = FakeGameSessionClient()
     client.fireResult = FireShotResult(
       accepted: true,
@@ -204,40 +162,24 @@ final class DuelSessionTests: XCTestCase {
       eventId: "hit-1",
       rejectReason: nil
     )
-    let duel = makeDuel(client: client, link: link)
+    let duel = makeDuel(client: client)
+    defer { duel.reset() }
     duel.updateTargeting(aimedSnapshot())
     duel.receive(snapshot(phase: .running, hostAmmo: 0))
     await duel.performMarkerlessFire()
-    XCTAssertTrue(link.sent.isEmpty)
     XCTAssertEqual(duel.markerlessShotState, .idle)
     XCTAssertTrue(client.fireRequests.isEmpty)
 
     duel.receive(snapshot(phase: .running, hostAmmo: 8))
     await duel.performMarkerlessFire()
-    XCTAssertEqual(link.sent.count, 1)
-    guard case .shotTracer(let tracer) = link.sent[0] else {
-      return XCTFail("Expected a shot tracer")
-    }
-    XCTAssertEqual(tracer.shooterPlayerId, "host-1")
+    XCTAssertEqual(client.fireRequests.count, 1)
   }
 
-  func testMatchingShotIDSuppressesOnlyTheTracerAndPreservesConfirmedHit()
+  func testMatchingShotIDPreservesConfirmedHitAndDeduplicatesTracer()
     async throws
   {
-    let link = FakeDuelPeerLink()
-    let duel = makeDuel(link: link)
+    let duel = makeDuel()
     duel.receive(snapshot(phase: .running))
-    let ray = try ArenaShotRay(
-      origin: .zero,
-      direction: ArenaVector3(x: 0, y: 0, z: -1),
-      firedAtMs: 1
-    )
-    link.receive(.shotTracer(ArenaShotTracer(
-      shotId: "guest-shot",
-      shooterPlayerId: "guest-1",
-      ray: ray
-    )))
-    await settle()
 
     duel.receive(snapshot(phase: .running, events: [
       EventSnapshot(
@@ -252,8 +194,8 @@ final class DuelSessionTests: XCTestCase {
         clientShotId: "guest-shot"
       )
     ]))
-    XCTAssertEqual(duel.incomingShot?.eventID, "peer:guest-shot")
-    XCTAssertTrue(duel.incomingShots.isEmpty)
+    XCTAssertEqual(duel.incomingShot?.eventID, "opponent-shot")
+    XCTAssertTrue(duel.incomingShot?.renderTracer == true)
 
     duel.receive(snapshot(phase: .running, events: [
       EventSnapshot(
@@ -298,13 +240,10 @@ final class DuelSessionTests: XCTestCase {
     XCTAssertEqual(duel.incomingShot?.eventID, "third")
   }
 
-  func testUnrelatedAndLegacyMissesAreNotSuppressedByANearbyPeerShot() async throws {
-    let link = FakeDuelPeerLink()
-    let duel = makeDuel(link: link)
+  func testUnrelatedAndLegacyMissesArePublished() async throws {
+    let duel = makeDuel()
     defer { duel.reset() }
     duel.receive(snapshot(phase: .running))
-    link.receive(.shotTracer(try incomingTracer(id: "peer-shot")))
-    await settle()
 
     duel.receive(snapshot(phase: .running, events: [
       incomingEvent(id: "unrelated-miss", shotID: "another-shot", at: 100),
@@ -312,69 +251,6 @@ final class DuelSessionTests: XCTestCase {
     ]))
     XCTAssertEqual(duel.incomingShots.map(\.eventID), ["unrelated-miss", "legacy-miss"])
     XCTAssertTrue(duel.incomingShots.allSatisfy(\.renderTracer))
-  }
-
-  func testDuplicatePeerAndConvexDeliveriesDoNotRepublishAndHitStillPublishes() async throws {
-    let link = FakeDuelPeerLink()
-    let duel = makeDuel(link: link)
-    defer { duel.reset() }
-    duel.receive(snapshot(phase: .running))
-    var delivered: [IncomingShot] = []
-    let subscription = duel.$incomingShots.dropFirst().sink { delivered.append(contentsOf: $0) }
-    defer { subscription.cancel() }
-
-    let tracer = try incomingTracer(id: "same-shot")
-    link.receive(.shotTracer(tracer))
-    link.receive(.shotTracer(tracer))
-    await settle()
-    let hit = incomingEvent(id: "durable-hit", shotID: "same-shot", at: 100, hit: true)
-    duel.receive(snapshot(phase: .running, events: [hit]))
-    duel.receive(snapshot(phase: .running, events: [hit]))
-    link.receive(.shotTracer(tracer))
-    await settle()
-
-    XCTAssertEqual(delivered.map(\.eventID), ["peer:same-shot", "durable-hit"])
-    XCTAssertEqual(delivered.map(\.renderTracer), [true, false])
-    XCTAssertEqual(delivered.map(\.hit), [false, true])
-  }
-
-  func testTwoPeerShotsInOneUIFrameBothReachTheBatchPublisher() async throws {
-    let link = FakeDuelPeerLink()
-    let duel = makeDuel(link: link)
-    defer { duel.reset() }
-    duel.receive(snapshot(phase: .running))
-    var delivered: [String] = []
-    let subscription = duel.$incomingShots.dropFirst().sink { delivered.append(contentsOf: $0.map(\.eventID)) }
-    defer { subscription.cancel() }
-    link.receive(.shotTracer(try incomingTracer(id: "first")))
-    link.receive(.shotTracer(try incomingTracer(id: "second")))
-    await settle()
-
-    XCTAssertEqual(delivered, ["peer:first", "peer:second"])
-  }
-
-  func testConvexFirstDeliverySuppressesALatePeerDuplicateAndResetClearsDedup() async throws {
-    let link = FakeDuelPeerLink()
-    let duel = makeDuel(link: link)
-    defer { duel.reset() }
-    duel.receive(snapshot(phase: .running))
-    duel.receive(snapshot(phase: .running, events: [
-      incomingEvent(id: "durable-miss", shotID: "same-shot", at: 100)
-    ]))
-    var delivered: [String] = []
-    let subscription = duel.$incomingShots.dropFirst().sink { delivered.append(contentsOf: $0.map(\.eventID)) }
-    defer { subscription.cancel() }
-    let tracer = try incomingTracer(id: "same-shot")
-    link.receive(.shotTracer(tracer))
-    await settle()
-    XCTAssertTrue(delivered.isEmpty)
-
-    duel.reset()
-    duel.attach(session: makeSession())
-    duel.receive(snapshot(phase: .running))
-    link.receive(.shotTracer(tracer))
-    await settle()
-    XCTAssertEqual(delivered, ["peer:same-shot"])
   }
 
   func testIncomingShotDedupSetIsCapped() async throws {
@@ -412,46 +288,6 @@ final class DuelSessionTests: XCTestCase {
       damage: hit ? 34 : nil,
       clientShotId: shotID
     )
-  }
-
-  private func incomingTracer(id: String) throws -> ArenaShotTracer {
-    ArenaShotTracer(
-      shotId: id,
-      shooterPlayerId: "guest-1",
-      ray: try ArenaShotRay(
-        origin: .zero,
-        direction: ArenaVector3(x: 0, y: 0, z: -1),
-        firedAtMs: 1
-      )
-    )
-  }
-
-  func testPeerLinkStoppedWhenPhaseLeavesRunningAndOnReset() async throws {
-    let link = FakeDuelPeerLink()
-    var makeLinkCount = 0
-    let duel = DuelSession(
-      gameSessionClient: FakeGameSessionClient(),
-      now: { Date(timeIntervalSince1970: 1_750_000_000) },
-      makeShotId: { "shot-1" },
-      makePeerLink: { serviceName in
-        XCTAssertEqual(serviceName, "vkz-match-1")
-        makeLinkCount += 1
-        return link
-      }
-    )
-    duel.attach(session: makeSession())
-    duel.receive(snapshot(phase: .running))
-    XCTAssertEqual(link.stopCount, 0)
-    duel.receive(snapshot(phase: .finished))
-    XCTAssertEqual(link.stopCount, 1)
-    duel.receive(snapshot(phase: .finished))
-    XCTAssertEqual(makeLinkCount, 1)
-
-    let resetLink = FakeDuelPeerLink()
-    let resetDuel = makeDuel(link: resetLink)
-    resetDuel.receive(snapshot(phase: .running))
-    resetDuel.reset()
-    XCTAssertEqual(resetLink.stopCount, 1)
   }
 
   func testNewHoldCanRecoverFromAPreviousCooldownRejection() async throws {
@@ -623,7 +459,6 @@ final class DuelSessionTests: XCTestCase {
 
   private func makeDuel(
     client: FakeGameSessionClient = FakeGameSessionClient(),
-    link: FakeDuelPeerLink = FakeDuelPeerLink(),
     now: @escaping @Sendable () -> Date = {
       Date(timeIntervalSince1970: 1_750_000_000)
     }
@@ -631,8 +466,7 @@ final class DuelSessionTests: XCTestCase {
     let duel = DuelSession(
       gameSessionClient: client,
       now: now,
-      makeShotId: { "shot-1" },
-      makePeerLink: { _ in link }
+      makeShotId: { "shot-1" }
     )
     duel.attach(session: makeSession())
     return duel
@@ -756,10 +590,6 @@ final class DuelSessionTests: XCTestCase {
     )
   }
 
-  private func settle() async {
-    for _ in 0..<10 { await Task.yield() }
-  }
-
   private func waitFor(
     file: StaticString = #filePath,
     line: UInt = #line,
@@ -771,28 +601,9 @@ final class DuelSessionTests: XCTestCase {
     }
     XCTFail("Expected asynchronous state transition", file: file, line: line)
   }
-}
 
-private final class FakeDuelPeerLink: DuelPeerLink {
-  var onMessage: ((ArenaLinkMessage, Int64) -> Void)?
-  var sent: [ArenaLinkMessage] = []
-  var startedRole: ArenaRole?
-  var stopCount = 0
-
-  func start(role: ArenaRole) {
-    startedRole = role
-  }
-
-  func stop() {
-    stopCount += 1
-  }
-
-  func send(_ message: ArenaLinkMessage) {
-    sent.append(message)
-  }
-
-  func receive(_ message: ArenaLinkMessage) {
-    onMessage?(message, 0)
+  private func settle() async {
+    for _ in 0..<10 { await Task.yield() }
   }
 }
 

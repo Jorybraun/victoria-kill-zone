@@ -50,6 +50,8 @@ final class RealtimeArenaController: ObservableObject {
   private var lastPoseDate: Date?
   private var poseSequence = 0
   private var lastLocalFireAtMs: Double?
+  private var diagnostics = MatchDiagnostics(startedAt: Date())
+  private var lastDiagnosticStage: RealtimeArenaStage?
 
   init(session: PlayerSession, client: any GameSessionClient, targeting: any TargetingSession,
        makeTransport: @escaping @MainActor () -> any CombatSocketConnecting = {CombatSocketTransport()},
@@ -62,7 +64,13 @@ final class RealtimeArenaController: ObservableObject {
     combat.$events.sink { [weak self] in self?.receiveEvents($0) }.store(in: &subscriptions)
     combat.$state.sink { [weak self] state in
       guard let self else {return}
+      let previous = self.connection
       self.connection = state
+      if previous != state {
+        self.diagnostics.record("connection",
+          "\(Self.connectionName(previous)) -> \(Self.connectionName(state))", at: Date())
+      }
+      self.recordStageTransition()
       if state != .connected {
         self.setTriggerHeld(false); self.associatedBody = nil
       }
@@ -110,6 +118,8 @@ final class RealtimeArenaController: ObservableObject {
     if let stopTask {await stopTask.value}
     if started {await startTask?.value; return}
     started = true; message = nil; incompatibleRules = false; generation += 1; let token = generation
+    diagnostics.reset(at: Date()); lastDiagnosticStage = nil
+    recordStageTransition()
     let task = Task { [weak self] in
       guard let self else {return}
       await self.performStart(token: token)
@@ -135,10 +145,14 @@ final class RealtimeArenaController: ObservableObject {
     }
     do {try await targeting.start()} catch {
       guard token == generation else {return}
-      message = "Camera access is required. Allow the camera in Settings, then retry."; return
+      diagnostics.record("camera", "start=failed reason=\(Self.cameraFailureReason(error))", at: Date())
+      message = "Camera access is required. Allow the camera in Settings, then retry."
+      recordStageTransition()
+      return
     }
     guard token == generation else {return}
     cameraReady = true
+    diagnostics.record("camera", "start=ok", at: Date())
     pumpTask = Task { [weak self] in
       while !Task.isCancelled {
         self?.tick()
@@ -168,6 +182,7 @@ final class RealtimeArenaController: ObservableObject {
 
   func setSceneActive(_ active: Bool) {
     sceneActive = active
+    recordStageTransition()
     if !active {
       setTriggerHeld(false); associatedBody = nil
       combat.suspendConnection()
@@ -183,8 +198,8 @@ final class RealtimeArenaController: ObservableObject {
     }
   }
   func retryConnection() {setTriggerHeld(false); combat.retryConnection()}
-  func diagnosticEvents() -> [DuelFrameDiagnosticEvent] {
-    (targeting as? any LocalSurfaceDiagnosticsProviding)?.localSurfaceDiagnosticEvents() ?? []
+  func diagnosticEvents() -> [MatchDiagnosticEvent] {
+    diagnostics.events + ((targeting as? any LocalSurfaceDiagnosticsProviding)?.localSurfaceDiagnosticEvents() ?? [])
   }
   func beginRound() {
     guard eligibility.begin, let id = combat.submit(.start) else {return}
@@ -221,6 +236,7 @@ final class RealtimeArenaController: ObservableObject {
     }
     guard let id = combat.submit(.fire(shotId: shotID, poseSequence: pose.sequence, origin: origin, direction: direction,
       observation: observation)) else {return}
+    diagnostics.record("fire", "observation=\(observation != nil)", at: Date())
     commands.queued(.fire, id: id, shotID: shotID)
     (targeting as? any LocalSurfaceDiagnosticsProviding)?.recordSightingFire(ray: ray, skeleton: associatedBody?.skeleton)
     lastLocalFireAtMs = time; localShotSequence += 1
@@ -243,10 +259,17 @@ final class RealtimeArenaController: ObservableObject {
 
   private func receiveSnapshot(_ value: CombatWire.Snapshot?) {
     snapshot = value
-    guard let value else {return}
+    guard let value else {
+      recordStageTransition()
+      return
+    }
     if value.rules.geometry != "sighting" {
+      if !incompatibleRules {
+        diagnostics.record("rules", "incompatible geometry=\(Self.geometryName(value.rules.geometry))", at: Date())
+      }
       incompatibleRules = true
       message = RealtimeArenaPresentation.Sighting.incompatibleServerMessage
+      recordStageTransition()
       combat.stop()
       return
     }
@@ -260,6 +283,7 @@ final class RealtimeArenaController: ObservableObject {
       associatedBody = nil
     }
     authorityEpoch = value.authorityEpoch
+    recordStageTransition()
   }
   /// ADR 0013 zero-step Quick Duel: the host starts the round the moment the
   /// sighting gate opens — no second tap after the lobby start. `eligibility`
@@ -276,6 +300,7 @@ final class RealtimeArenaController: ObservableObject {
   private func tick() {
     guard started else {return}
     let date = Date(); now = date
+    recordStageTransition(at: date)
     commands.tick(at: date); actionFeedback = commands.notice
     refreshAssociation(at: date)
     autoBeginIfReady()
@@ -307,6 +332,9 @@ final class RealtimeArenaController: ObservableObject {
         if player.playerId == session.playerId {commands.playerChanged(lastFireAtMs: player.lastFireAtMs)}
       case .commandResult(let commandID, _, let playerID, let accepted, let reason):
         guard playerID == session.playerId else {continue}
+        if !accepted {
+          diagnostics.record("command", "refused reason=\(Self.commandRefusalReason(reason))", at: Date())
+        }
         commands.resolve(id: commandID, accepted: accepted, reason: reason, at: Date())
         actionFeedback = commands.notice
         objectWillChange.send()
@@ -323,5 +351,50 @@ final class RealtimeArenaController: ObservableObject {
       }
     }
     if !hits.isEmpty {confirmedHits = hits}
+  }
+
+  private func recordStageTransition(at date: Date = Date()) {
+    let next = stage
+    guard next != lastDiagnosticStage else {return}
+    let previous = lastDiagnosticStage.map {String(describing: $0)} ?? "initial"
+    diagnostics.record("stage", "\(previous) -> \(String(describing: next))", at: date)
+    lastDiagnosticStage = next
+  }
+
+  private static func connectionName(_ state: RealtimeConnectionState) -> String {
+    switch state {
+    case .disconnected: "disconnected"
+    case .connecting: "connecting"
+    case .synchronizing: "synchronizing"
+    case .connected: "connected"
+    case .retrying: "retrying"
+    case .finished: "finished"
+    }
+  }
+
+  private static func cameraFailureReason(_ error: Error) -> String {
+    switch error as? TargetingSessionError {
+    case .cameraPermissionDenied: "permissionDenied"
+    case .notConfigured: "notConfigured"
+    case nil: "other"
+    }
+  }
+
+  private static func geometryName(_ geometry: String) -> String {
+    switch geometry {
+    case "sighting", "trackedBody", "phoneProxy": geometry
+    default: "other"
+    }
+  }
+
+  private static func commandRefusalReason(_ reason: String?) -> String {
+    switch reason {
+    case "notReady", "trackingLost", "poseStale", "poseMismatch", "notAlive", "protected",
+      "cooldown", "reloading", "outOfAmmo", "shieldActive", "abilityCooldown", "projectileLimit",
+      "tooLate", "futureInput", "noSighting", "ambiguousTarget", "notHost", "notRunning":
+      reason ?? "other"
+    default:
+      "other"
+    }
   }
 }

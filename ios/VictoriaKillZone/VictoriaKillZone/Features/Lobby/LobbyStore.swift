@@ -84,16 +84,14 @@ final class LobbyStore: ObservableObject {
   init(
     environment: AppEnvironment = .phaseZeroShell,
     now: @escaping @Sendable () -> Date = { Date() },
-    makeShotId: @escaping @Sendable () -> String = { UUID().uuidString },
-    makePeerLink: (@MainActor (_ serviceName: String) -> (any DuelPeerLink)?)? = nil
+    makeShotId: @escaping @Sendable () -> String = { UUID().uuidString }
   ) {
     self.environment = environment
     self.now = now
     duel = DuelSession(
       gameSessionClient: environment.gameSessionClient,
       now: now,
-      makeShotId: makeShotId,
-      makePeerLink: makePeerLink
+      makeShotId: makeShotId
     )
     let stateMachine = LobbyStateMachine()
     self.stateMachine = stateMachine

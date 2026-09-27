@@ -44,7 +44,7 @@ struct LocalSurfaceTelemetry: Equatable, Sendable {
   private(set) var planeRemoves = 0
   private(set) var timeToFirstFloorMs: Int64?
   private(set) var timeToFirstWallMs: Int64?
-  private(set) var events: [DuelFrameDiagnosticEvent] = []
+  private(set) var events: [MatchDiagnosticEvent] = []
 
   private var framesInCurrentSecond = 0
   private var currentSecondIndex = -1
@@ -117,7 +117,7 @@ struct LocalSurfaceTelemetry: Equatable, Sendable {
   }
 
   mutating func recordEvent(_ kind: String, _ detail: String, at: Date) {
-    events.append(DuelFrameDiagnosticEvent(
+    events.append(MatchDiagnosticEvent(
       elapsedMs: Self.elapsedMs(since: startedAt, at: at), kind: kind, detail: detail))
     if events.count > Self.maximumEvents { events.removeFirst(events.count - Self.maximumEvents) }
   }
