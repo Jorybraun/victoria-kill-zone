@@ -64,13 +64,28 @@ final class RealtimeCombatSessionTests: XCTestCase {
     try await until {game.serverRelease != nil}
     XCTAssertEqual(game.authorityEpochHistory.count,1)
     XCTAssertEqual(game.serverRelease?.worker.versionId,"v-abc")
+    XCTAssertEqual(game.firstServerRelease?.worker.versionId,"v-abc")
+    // An ignored-stale snapshot (same authority epoch, older eventSequence) must
+    // not touch release tracking even when it carries different release data.
+    let staleRelease=CombatWire.Release(manifest: ReleaseManifest.summary,
+      worker: CombatWire.WorkerIdentity(versionId:"v-stale",versionTag:"deploy-0",releaseSha:ReleaseManifest.releaseSha,
+        workerVersionTag:ReleaseManifest.workerVersionTag,doMigrationTag:ReleaseManifest.doMigrationTag))
+    socket.output?.yield(.snapshot(socket.initialSnapshot,eventSequence:0,clientSequence:0,release:staleRelease))
+    try await Task.sleep(nanoseconds:50_000_000)
+    XCTAssertEqual(game.serverRelease?.worker.versionId,"v-abc")
+    XCTAssertEqual(game.firstServerRelease?.worker.versionId,"v-abc")
+    // A release change on an accepted snapshot updates serverRelease but not
+    // the first-observed release.
+    let upgraded=CombatWire.Release(manifest: ReleaseManifest.summary,
+      worker: CombatWire.WorkerIdentity(versionId:"v-def",versionTag:"deploy-10",releaseSha:ReleaseManifest.releaseSha,
+        workerVersionTag:ReleaseManifest.workerVersionTag,doMigrationTag:ReleaseManifest.doMigrationTag))
     var recovered=RealtimeCombatTests.snapshot(); recovered.authorityEpoch=2; recovered.phase = .paused
-    socket.output?.yield(.snapshot(recovered,eventSequence:4,clientSequence:0,release:release))
+    socket.output?.yield(.snapshot(recovered,eventSequence:4,clientSequence:0,release:upgraded))
     try await until {game.snapshot?.authorityEpoch == 2}
     XCTAssertEqual(game.authorityEpochHistory.count,2)
     XCTAssertEqual(game.authorityEpochHistory.last?.authorityEpoch,2)
-    // The first observed server release is retained across epoch changes.
-    XCTAssertEqual(game.serverRelease?.worker.versionId,"v-abc")
+    XCTAssertEqual(game.serverRelease?.worker.versionId,"v-def")
+    XCTAssertEqual(game.firstServerRelease?.worker.versionId,"v-abc")
   }
 
   func testMatchReportEncodesReleaseEvidenceKeys() throws {
@@ -79,10 +94,14 @@ final class RealtimeCombatSessionTests: XCTestCase {
       serverRelease:CombatWire.Release(manifest:ReleaseManifest.summary,
         worker:CombatWire.WorkerIdentity(versionId:nil,versionTag:nil,releaseSha:ReleaseManifest.releaseSha,
           workerVersionTag:ReleaseManifest.workerVersionTag,doMigrationTag:ReleaseManifest.doMigrationTag)),
+      firstServerRelease:CombatWire.Release(manifest:ReleaseManifest.summary,
+        worker:CombatWire.WorkerIdentity(versionId:"v-first",versionTag:nil,releaseSha:ReleaseManifest.releaseSha,
+          workerVersionTag:ReleaseManifest.workerVersionTag,doMigrationTag:ReleaseManifest.doMigrationTag)),
       authorityEpochs:[AuthorityEpochRecord(authorityEpoch:1,frameEpoch:1,eventSequence:0,observedAtMs:1000)])
     let object=try XCTUnwrap(try JSONSerialization.jsonObject(with:JSONEncoder().encode(report)) as? [String:Any])
     XCTAssertEqual((object["release"] as? [String:Any])?["protocolVersion"] as? Int,ReleaseManifest.protocolVersion)
     XCTAssertNotNil(object["serverRelease"])
+    XCTAssertNotNil(object["firstServerRelease"])
     XCTAssertEqual((object["authorityEpochs"] as? [[String:Any]])?.count,1)
   }
 

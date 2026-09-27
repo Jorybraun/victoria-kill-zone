@@ -15,6 +15,7 @@ struct ReportProblemView: View {
   let loadLog: () throws -> [DuelFrameDiagnosticEvent]
   /// Release evidence captured at send time so the worker can correlate the report.
   var serverRelease: () -> CombatWire.Release? = {nil}
+  var firstServerRelease: () -> CombatWire.Release? = {nil}
   var authorityEpochs: () -> [AuthorityEpochRecord] = {[]}
   var onDismiss: () -> Void = {}
 
@@ -158,6 +159,7 @@ struct ReportProblemView: View {
         log: (try? loadLog()) ?? [],
         release: ReleaseManifest.summary,
         serverRelease: serverRelease(),
+        firstServerRelease: firstServerRelease(),
         authorityEpochs: authorityEpochs())
       issueURL = try await MatchReportClient().send(report, ticket: ticket)
       state = .sent

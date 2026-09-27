@@ -12,6 +12,7 @@ struct MatchReport: Encodable, Sendable {
   var log: [DuelFrameDiagnosticEvent]
   var release: ReleaseManifest.Summary
   var serverRelease: CombatWire.Release?
+  var firstServerRelease: CombatWire.Release?
   var authorityEpochs: [AuthorityEpochRecord]
 }
 

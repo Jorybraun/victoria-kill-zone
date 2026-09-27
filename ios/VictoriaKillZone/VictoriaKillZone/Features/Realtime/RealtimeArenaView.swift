@@ -53,6 +53,7 @@ struct RealtimeArenaView: View {
             from: Data(contentsOf: controller.exportSetupLog()))
         },
         serverRelease: {controller.combat.serverRelease},
+        firstServerRelease: {controller.combat.firstServerRelease},
         authorityEpochs: {controller.combat.authorityEpochHistory},
         onDismiss: {reportPresented = false})
     }

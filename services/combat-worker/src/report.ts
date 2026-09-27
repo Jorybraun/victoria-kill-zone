@@ -23,7 +23,8 @@ export type MatchReport = {
   release?: { protocolVersion?: number; rulesSchemaHash?: string; doClass?: string; doMigrationTag?: string;
     iosMinProtocol?: number; iosMaxProtocol?: number; convexMinProtocol?: number; workerVersionTag?: string; releaseSha?: string };
   serverRelease?: { manifest?: MatchReport["release"];
-    worker?: { versionId?: string | null; versionTag?: string | null; releaseSha?: string; workerVersionTag?: string; doMigrationTag?: string } };
+    worker?: { versionId?: string | null; versionTag?: string | null; releaseSha?: string; workerVersionTag?: string; doMigrationTag?: string } } | null;
+  firstServerRelease?: MatchReport["serverRelease"];
   authorityEpochs?: { authorityEpoch?: number; frameEpoch?: number; eventSequence?: number; observedAtMs?: number }[];
 };
 
@@ -164,6 +165,20 @@ function text(value: unknown, limit: number): string {
   return typeof value === "string" ? value.slice(0, limit) : "";
 }
 
+/** Inline-code identifiers get a strict allowlist so backticks/newlines can never break rendering. */
+const IDENTIFIER = /^[A-Za-z0-9._:/-]{1,64}$/;
+function identifier(value: unknown): string {
+  return typeof value === "string" && IDENTIFIER.test(value) ? value : "unknown";
+}
+
+function asObject(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+function protocolNumber(value: unknown): string {
+  return Number.isSafeInteger(value) ? String(value) : "unknown";
+}
+
 /** Fences untrusted text so it renders as data; the fence outruns any backtick run inside. */
 function fence(content: string, info = ""): string[] {
   const longest = Math.max(0, ...Array.from(content.matchAll(/`+/g), (run) => run[0].length));
@@ -173,20 +188,38 @@ function fence(content: string, info = ""): string[] {
 
 function releaseSection(report: MatchReport): string[] {
   const section: string[] = [];
-  const manifest = report.release;
-  const worker = report.serverRelease?.worker;
-  if (manifest !== undefined || worker !== undefined) {
+  const manifest = asObject(report.release);
+  const serverRelease = asObject(report.serverRelease);
+  const serverManifest = asObject(serverRelease?.manifest);
+  const worker = asObject(serverRelease?.worker);
+  const firstWorker = asObject(asObject(report.firstServerRelease)?.worker);
+  if (manifest !== undefined || serverManifest !== undefined || worker !== undefined) {
     section.push("### Release (untrusted)", "");
     if (manifest !== undefined) {
-      const protocol = Number.isSafeInteger(manifest.protocolVersion) ? String(manifest.protocolVersion) : "unknown";
-      section.push(`- Client manifest: protocol ${protocol}, releaseSha \`${text(manifest.releaseSha, 64) || "unknown"}\`, workerTag \`${text(manifest.workerVersionTag, 64) || "unknown"}\``);
+      section.push(`- Client manifest: protocol ${protocolNumber(manifest.protocolVersion)}, rulesSchemaHash \`${identifier(manifest.rulesSchemaHash)}\`, doMigrationTag \`${identifier(manifest.doMigrationTag)}\`, workerTag \`${identifier(manifest.workerVersionTag)}\`, releaseSha \`${identifier(manifest.releaseSha)}\``);
+    }
+    if (serverManifest !== undefined) {
+      section.push(`- Server manifest: protocol ${protocolNumber(serverManifest.protocolVersion)}, rulesSchemaHash \`${identifier(serverManifest.rulesSchemaHash)}\`, doMigrationTag \`${identifier(serverManifest.doMigrationTag)}\`, workerTag \`${identifier(serverManifest.workerVersionTag)}\``);
     }
     if (worker !== undefined) {
-      section.push(`- Server worker: versionId \`${text(worker.versionId, 64) || "unknown"}\`, versionTag \`${text(worker.versionTag, 64) || "unknown"}\`, releaseSha \`${text(worker.releaseSha, 64) || "unknown"}\``);
+      section.push(`- Server worker: versionId \`${identifier(worker.versionId)}\`, versionTag \`${identifier(worker.versionTag)}\`, releaseSha \`${identifier(worker.releaseSha)}\``);
+    }
+    if (manifest !== undefined && serverManifest !== undefined) {
+      const fields: [string, unknown, unknown][] = [
+        ["protocolVersion", manifest.protocolVersion, serverManifest.protocolVersion],
+        ["rulesSchemaHash", manifest.rulesSchemaHash, serverManifest.rulesSchemaHash],
+        ["doMigrationTag", manifest.doMigrationTag, serverManifest.doMigrationTag],
+        ["workerVersionTag", manifest.workerVersionTag, serverManifest.workerVersionTag],
+      ];
+      const mismatched = fields.filter(([, client, server]) => client !== server).map(([name]) => name);
+      if (mismatched.length > 0) section.push(`- Mismatch: ${mismatched.join(", ")}`);
+    }
+    if (firstWorker !== undefined && firstWorker.versionId !== worker?.versionId) {
+      section.push(`- First server worker: versionId \`${identifier(firstWorker.versionId)}\``);
     }
     section.push("");
   }
-  const epochs = (report.authorityEpochs ?? [])
+  const epochs = (Array.isArray(report.authorityEpochs) ? report.authorityEpochs : [])
     .filter((e) => typeof e === "object" && e !== null)
     .map((e) => ({ authorityEpoch: Math.max(0, Math.floor(Number(e.authorityEpoch) || 0)), frameEpoch: Math.max(0, Math.floor(Number(e.frameEpoch) || 0)),
       eventSequence: Math.max(0, Math.floor(Number(e.eventSequence) || 0)), observedAtMs: Math.max(0, Math.floor(Number(e.observedAtMs) || 0)) }))

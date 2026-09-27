@@ -35,7 +35,9 @@ final class RealtimeCombatSession: ObservableObject {
   /// Full authority snapshots only; event projection does not advance this.
   /// Kept monotonic across start/stop so observers can distinguish reconciliation.
   private(set) var snapshotRevision = 0
-  /// First release identity the authority reported on this connection's snapshots.
+  /// First release identity the authority reported on an accepted snapshot.
+  private(set) var firstServerRelease: CombatWire.Release?
+  /// Latest release identity carried by an accepted snapshot; updated when it changes.
   private(set) var serverRelease: CombatWire.Release?
   /// Append-only record of (authorityEpoch, frameEpoch) pairs as snapshots announce them.
   private(set) var authorityEpochHistory: [AuthorityEpochRecord] = []
@@ -261,7 +263,7 @@ final class RealtimeCombatSession: ObservableObject {
     runner?.cancel(); runner=nil
     disconnectTransport()
     pending.removeAll(); replica=nil; snapshot=nil; events=[]; session=nil
-    serverRelease=nil; authorityEpochHistory=[]
+    serverRelease=nil; firstServerRelease=nil; authorityEpochHistory=[]
     latestAccessTicket=nil; onCollaboration=nil; onNearbyToken=nil; localNearbyToken=nil
     collabBacklog.removeAll(); collabDropped=0
     nextSequence=1; refusal=nil; connectionIssue=nil; connectionSuspended=false; state = .disconnected
@@ -305,11 +307,18 @@ final class RealtimeCombatSession: ObservableObject {
     guard clockRecoveryIsValid(at: localNow()) else {throw CombatTransportError.disconnected}
     switch message {
     case .snapshot(let next,let eventSequence,let clientSequence,let release):
-      if serverRelease == nil {serverRelease = release}
-      if authorityEpochHistory.last?.authorityEpoch != next.authorityEpoch || authorityEpochHistory.last?.frameEpoch != next.frameEpoch {
-        authorityEpochHistory.append(AuthorityEpochRecord(authorityEpoch: next.authorityEpoch, frameEpoch: next.frameEpoch, eventSequence: eventSequence, observedAtMs: Date().timeIntervalSince1970 * 1000))
-      }
+      // Mirrors CombatReplica.replace's ignored-stale path: same-epoch snapshots
+      // with an older eventSequence are dropped, so they must not record release
+      // evidence or epoch history.
+      let ignoredStale = replica.snapshot != nil && next.authorityEpoch == replica.snapshot!.authorityEpoch && eventSequence < replica.eventSequence
       let changedEpoch=try replica.replace(next,eventSequence:eventSequence,clientSequence:clientSequence)
+      if !ignoredStale {
+        if firstServerRelease == nil {firstServerRelease = release}
+        if serverRelease != release {serverRelease = release}
+        if authorityEpochHistory.last?.authorityEpoch != next.authorityEpoch || authorityEpochHistory.last?.frameEpoch != next.frameEpoch {
+          authorityEpochHistory.append(AuthorityEpochRecord(authorityEpoch: next.authorityEpoch, frameEpoch: next.frameEpoch, eventSequence: eventSequence, observedAtMs: Date().timeIntervalSince1970 * 1000))
+        }
+      }
       if changedEpoch && clockRecoveryDeadline != nil {throw CombatTransportError.disconnected}
       if changedEpoch {pending.removeAll(); outgoing.removeAll(); clock.reset(); clockReady=false}
       pending=pending.filter {$0.key > clientSequence && $0.value.authorityEpoch == next.authorityEpoch && $0.value.frameEpoch == next.frameEpoch}
