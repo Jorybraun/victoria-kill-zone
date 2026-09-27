@@ -4,8 +4,8 @@ import Foundation
 /// when the flag is off.
 protocol LocalSurfaceDiagnosticsProviding: Sendable {
   /// Sanitized events (capability probe, plane add/remove, fire queries,
-  /// summary) for the setup-log export.
-  func localSurfaceDiagnosticEvents() -> [DuelFrameDiagnosticEvent]
+  /// summary) for the match report.
+  func localSurfaceDiagnosticEvents() -> [MatchDiagnosticEvent]
   /// Telemetry CSV for BIO-36 rows B1/B3, or nil when the flag is off / nothing
   /// recorded.
   func localSurfaceTelemetryCSV() -> String?

@@ -72,7 +72,17 @@ struct WaitingRoom: Equatable, Sendable {
   var combatGeometry: String? = nil
   var maxPlayers: Int = 2
 
-  var isQuickDuel: Bool { combatMode == .durableObject && QuickDuel.isQuickDuelGeometry(combatGeometry) }
+  var isQuickDuel: Bool {
+    combatMode == .durableObject
+      && QuickDuel.startsAsSighting(geometry: combatGeometry, rosterSize: players.count)
+  }
+  var effectiveMaxPlayers: Int {
+    isQuickDuel ? min(maxPlayers, QuickDuel.maxPlayers) : maxPlayers
+  }
+  var needsMatchUpdate: Bool {
+    combatMode == .durableObject
+      && !QuickDuel.startsAsSighting(geometry: combatGeometry, rosterSize: players.count)
+  }
 
   var localPlayer: LobbyPlayer? {
     players.first { $0.id == localPlayerID }
@@ -240,8 +250,13 @@ enum QuickDuel {
   static let maxPlayers = 2
   static let geometry = "sighting"
   static let rosterFullMessage = "Quick Duel is limited to two players."
+  static let updateRequiredMessage = "THIS MATCH NEEDS AN UPDATE — LEAVE AND START A QUICK DUEL"
 
   static func isQuickDuelGeometry(_ geometry: String?) -> Bool {
     geometry == QuickDuel.geometry
+  }
+
+  static func startsAsSighting(geometry: String?, rosterSize: Int) -> Bool {
+    geometry == QuickDuel.geometry || (geometry == "phoneProxy" && rosterSize <= 2)
   }
 }

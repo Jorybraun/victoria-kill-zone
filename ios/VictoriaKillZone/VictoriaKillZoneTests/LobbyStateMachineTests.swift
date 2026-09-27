@@ -124,6 +124,100 @@ final class LobbyStoreTests: XCTestCase {
     XCTAssertFalse(session.debugDescription.contains(secret))
   }
 
+  func testQueuedQuickDuelCreateDoesNotReplaceJoinAfterTargetingTeardown() async throws {
+    let client = MockGameSessionClient()
+    let targeting = GatedStopTargetingSession()
+    let store = makeStore(client: client, targetingSession: targeting)
+    await store.startTargeting()
+
+    let stopping = Task { await store.stopTargeting() }
+    await targeting.waitForStop()
+    store.createRealtimeArena()
+    await settle()
+
+    store.showJoin()
+    store.displayName = "Guest"
+    store.joinCode = "ABC123"
+    store.joinDuel()
+    let joining = await wait(until: { store.operation == .joining })
+    XCTAssertTrue(joining)
+    client.send(snapshot(phase: .lobby))
+    let joined = await wait(until: {
+      if case .waiting = store.route { return true }
+      return false
+    })
+    XCTAssertTrue(joined)
+
+    await targeting.releaseStop()
+    await stopping.value
+    await settle()
+    try await Task.sleep(for: .milliseconds(20))
+
+    XCTAssertTrue(client.createRequests.isEmpty)
+    guard case .waiting(let room) = store.route else {
+      return XCTFail("The joined session must remain in its waiting room")
+    }
+    XCTAssertEqual(room.matchID, client.playerSession.matchId)
+    XCTAssertEqual(room.localPlayerID, client.playerSession.playerId)
+  }
+
+  func testThreePlayerPhoneProxyMatchRequiresQuickDuelUpdate() async throws {
+    let client = MockGameSessionClient()
+    let store = makeStore(client: client)
+    store.displayName = "Host"
+    await store.performCreateDuel(combatMode: .durableObject)
+    client.send(snapshot(phase: .lobby, combatMode: .durableObject,
+      combatGeometry: "phoneProxy", maxPlayers: 4, rosterSize: 3))
+    let waiting = await wait(until: {
+      if case .waiting = store.route { return true }
+      return false
+    })
+    XCTAssertTrue(waiting)
+
+    await store.performStartDuel()
+
+    XCTAssertEqual(client.prepareRealtimeCombatCount, 0)
+    XCTAssertEqual(store.errorMessage, QuickDuel.updateRequiredMessage)
+  }
+
+  func testTwoPlayerPhoneProxyMatchPreparesRealtimeCombat() async throws {
+    let client = MockGameSessionClient()
+    let store = makeStore(client: client)
+    store.displayName = "Host"
+    await store.performCreateDuel(combatMode: .durableObject)
+    client.send(snapshot(phase: .lobby, combatMode: .durableObject,
+      combatGeometry: "phoneProxy", maxPlayers: 4))
+    let waiting = await wait(until: {
+      if case .waiting = store.route { return true }
+      return false
+    })
+    XCTAssertTrue(waiting)
+
+    await store.performStartDuel()
+
+    XCTAssertEqual(client.prepareRealtimeCombatCount, 1)
+    XCTAssertNil(store.errorMessage)
+  }
+
+  func testTrackedBodyMatchRequiresQuickDuelUpdate() async throws {
+    let client = MockGameSessionClient()
+    let store = makeStore(client: client)
+    store.displayName = "Host"
+    await store.performCreateDuel(combatMode: .durableObject)
+    client.send(snapshot(phase: .lobby, combatMode: .durableObject,
+      combatGeometry: "trackedBody", maxPlayers: 4))
+    let waiting = await wait(until: {
+      if case .waiting = store.route { return true }
+      return false
+    })
+    XCTAssertTrue(waiting)
+
+    await store.performStartDuel()
+
+    XCTAssertEqual(client.prepareRealtimeCombatCount, 0)
+    XCTAssertEqual(store.errorMessage, QuickDuel.updateRequiredMessage)
+  }
+
   func testLiveCreateAndReadyRenderOnlyAuthoritativeSnapshots() async throws {
     let client = MockGameSessionClient()
     let store = makeStore(client: client)
@@ -1177,9 +1271,42 @@ final class LobbyStoreTests: XCTestCase {
     hostAmmo: Int = 8,
     guestHealth: Int = 100,
     events: [EventSnapshot] = [],
-    serverNow: Double = 1_750_000_000_000
+    serverNow: Double = 1_750_000_000_000,
+    combatMode: CombatMode? = nil,
+    combatGeometry: String? = nil,
+    maxPlayers: Int? = nil,
+    rosterSize: Int = 2
   ) -> MatchSnapshot {
-    MatchSnapshot(
+    let players = [
+      PlayerSnapshot(
+        id: "host-1",
+        displayName: "Host",
+        role: .host,
+        ready: hostReady,
+        connected: true,
+        health: 100,
+        ammo: hostAmmo
+      ),
+      PlayerSnapshot(
+        id: "guest-1",
+        displayName: "Guest",
+        role: .guest,
+        ready: true,
+        connected: true,
+        health: guestHealth,
+        ammo: 8
+      ),
+      PlayerSnapshot(
+        id: "guest-2",
+        displayName: "Guest 2",
+        role: .guest,
+        ready: true,
+        connected: true,
+        health: 100,
+        ammo: 8
+      ),
+    ]
+    return MatchSnapshot(
       serverNow: serverNow,
       match: MatchSummary(
         id: "match-1",
@@ -1187,29 +1314,13 @@ final class LobbyStoreTests: XCTestCase {
         phase: phase,
         durationMs: 180_000,
         startsAt: phase == .countdown ? 1_750_000_003_000 : nil,
-        endsAt: phase == .running ? 1_750_000_180_000 : nil
+        endsAt: phase == .running ? 1_750_000_180_000 : nil,
+        combatMode: combatMode,
+        combatGeometry: combatGeometry,
+        maxPlayers: maxPlayers
       ),
       localPlayerId: "host-1",
-      players: [
-        PlayerSnapshot(
-          id: "host-1",
-          displayName: "Host",
-          role: .host,
-          ready: hostReady,
-          connected: true,
-          health: 100,
-          ammo: hostAmmo
-        ),
-        PlayerSnapshot(
-          id: "guest-1",
-          displayName: "Guest",
-          role: .guest,
-          ready: true,
-          connected: true,
-          health: guestHealth,
-          ammo: 8
-        ),
-      ],
+      players: Array(players.prefix(rosterSize)),
       events: events
     )
   }
@@ -1293,6 +1404,7 @@ private final class MockGameSessionClient: GameSessionClient, @unchecked Sendabl
   private var storedFireResults: [Result<FireShotResult, Error>] = []
   private var storedDebugShotIDs: [String] = []
   private var storedDebugResults: [Result<DebugFireResult, Error>] = []
+  private var storedPrepareRealtimeCombatCount = 0
   private var storedDebugFireGate: DebugFireGate?
 
   init() {
@@ -1316,6 +1428,10 @@ private final class MockGameSessionClient: GameSessionClient, @unchecked Sendabl
 
   var debugShotIDs: [String] {
     lock.withLock { storedDebugShotIDs }
+  }
+
+  var prepareRealtimeCombatCount: Int {
+    lock.withLock { storedPrepareRealtimeCombatCount }
   }
 
   var snapshotSubscriptionCount: Int {
@@ -1356,6 +1472,10 @@ private final class MockGameSessionClient: GameSessionClient, @unchecked Sendabl
   }
 
   func startDuel(session: PlayerSession) async throws {}
+
+  func prepareRealtimeCombat(session: PlayerSession) async throws {
+    lock.withLock { storedPrepareRealtimeCombatCount += 1 }
+  }
 
   func fire(session: PlayerSession, request: FireShotRequest) async throws -> FireShotResult {
     try lock.withLock {
@@ -2127,6 +2247,43 @@ private final class ScriptedTargetingSession: TargetingSession, @unchecked Senda
   }
 }
 
+private actor GatedStopTargetingSession: TargetingSession {
+  nonisolated let availability = TargetingAvailability.available
+  nonisolated let currentSnapshot = TargetingSnapshot.unavailable()
+  private var stopStarted = false
+  private var stopReleased = false
+  private var stopStartedContinuation: CheckedContinuation<Void, Never>?
+  private var stopContinuation: CheckedContinuation<Void, Never>?
+
+  nonisolated func snapshots() -> AsyncStream<TargetingSnapshot> {
+    AsyncStream { continuation in
+      continuation.yield(currentSnapshot)
+      continuation.finish()
+    }
+  }
+
+  func start() async throws {}
+
+  func stop() async {
+    stopStarted = true
+    stopStartedContinuation?.resume()
+    stopStartedContinuation = nil
+    guard !stopReleased else { return }
+    await withCheckedContinuation { stopContinuation = $0 }
+  }
+
+  func waitForStop() async {
+    guard !stopStarted else { return }
+    await withCheckedContinuation { stopStartedContinuation = $0 }
+  }
+
+  func releaseStop() {
+    stopReleased = true
+    stopContinuation?.resume()
+    stopContinuation = nil
+  }
+}
+
 /// One authoritative match plus two independent `LobbyStore` clients, each with
 /// its own session, snapshot subscription, transport and shot-ID sequence.
 @MainActor
@@ -2664,7 +2821,7 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
     }
 
     XCTAssertTrue(room(combatGeometry: "sighting", maxPlayers: 2).isQuickDuel)
-    XCTAssertFalse(room(combatGeometry: "phoneProxy", maxPlayers: 4, players: roster(2)).isQuickDuel)
+    XCTAssertTrue(room(combatGeometry: "phoneProxy", maxPlayers: 4, players: roster(2)).isQuickDuel)
     XCTAssertFalse(room(combatGeometry: "phoneProxy", maxPlayers: 4, players: roster(3)).isQuickDuel)
     XCTAssertFalse(room(maxPlayers: 2).isQuickDuel)
     XCTAssertFalse(room(combatGeometry: "trackedBody", maxPlayers: 4).isQuickDuel)
@@ -2674,6 +2831,21 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
     XCTAssertEqual(WaitingRoomCopy.mode(for: room(combatGeometry: "trackedBody", maxPlayers: 4)), .quickDuel)
     XCTAssertEqual(WaitingRoomCopy.mode(for: room(maxPlayers: 2)), .quickDuel)
     XCTAssertEqual(WaitingRoomCopy.mode(for: room(combatMode: nil, maxPlayers: 2)), .classic)
+  }
+
+  func testTwoPlayerPhoneProxyRoomUsesQuickDuelEffectiveCapacity() {
+    let room = WaitingRoom(
+      matchID: "m", code: "ABC123", arenaRadiusMeters: 0,
+      localPlayerID: "p0", hostPlayerID: "p0",
+      players: [
+        LobbyPlayer(id: "p0", displayName: "Host", role: .host, isReady: true),
+        LobbyPlayer(id: "p1", displayName: "Guest", role: .guest, isReady: true),
+      ],
+      combatMode: .durableObject, combatGeometry: "phoneProxy", maxPlayers: 4
+    )
+
+    XCTAssertTrue(room.isQuickDuel)
+    XCTAssertEqual(room.effectiveMaxPlayers, 2)
   }
 
   func testQuickDuelAndClassicCopyNeverMentionsArenaCeremony() {

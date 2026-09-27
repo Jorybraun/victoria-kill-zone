@@ -18,10 +18,9 @@ sanitize_xcode_output() {
     -e 's/(Development Team: )[A-Z0-9]+/\1<redacted>/g'
 }
 
-# Every pure Swift package that feeds the app: the deterministic simulation
-# core, the combat transport, and the iOS domain package that links both.
+# Standalone Swift packages that feed the app: simulation core and iOS domain.
 swift_packages=()
-for candidate in shared/simulation ios/VictoriaKillZone/Transport/CombatTransport; do
+for candidate in shared/simulation; do
   [[ -f "$candidate/Package.swift" ]] && swift_packages+=("$candidate")
 done
 swift_package="$(find ios -maxdepth 3 -name 'Package.swift' -print -quit 2>/dev/null || true)"

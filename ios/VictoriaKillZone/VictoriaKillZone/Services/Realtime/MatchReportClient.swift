@@ -9,7 +9,7 @@ struct MatchReport: Encodable, Sendable {
   }
   var device: Device
   var transcript: String
-  var log: [DuelFrameDiagnosticEvent]
+  var log: [MatchDiagnosticEvent]
   var release: ReleaseManifest.Summary
   var serverRelease: CombatWire.Release?
   var firstServerRelease: CombatWire.Release?

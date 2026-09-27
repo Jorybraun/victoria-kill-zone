@@ -44,14 +44,6 @@ struct WaitingRoomView: View {
             .fixedSize(horizontal: false, vertical: true)
         }
 
-        #if canImport(UIKit) && canImport(Network)
-        if store.isLiveNetworking && room.combatMode != .durableObject {
-          Label("Allow Local Network access when prompted so nearby players can connect.", systemImage: "wifi")
-            .font(.footnote).foregroundStyle(VKZPalette.textMuted)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-        #endif
-
         if dynamicTypeSize.isAccessibilitySize {readyControls}
 
         #if canImport(UIKit)
@@ -76,18 +68,13 @@ struct WaitingRoomView: View {
           .overlay(alignment: .top) {VKZPalette.border.frame(height: 1)}
       }
     }
-    .onAppear {
-      #if canImport(Network)
-      if store.isLiveNetworking && room.combatMode != .durableObject {
-        ArenaPeerLink.primeLocalNetworkPermission()
-      }
-      #endif
-    }
   }
 
   private var rulesSummary: some View {
     VStack(alignment: .leading, spacing: 4) {
-      Text(mode == .quickDuel ? "\(room.maxPlayers) players · Quick Duel" : "\(room.maxPlayers) players · Classic mode")
+      Text(mode == .quickDuel
+        ? "\(room.effectiveMaxPlayers) players · Quick Duel"
+        : "\(room.effectiveMaxPlayers) players · Classic mode")
       if let duration = store.lobbyRoundDurationMs {
         let seconds = max(0, duration / 1000)
         Text(String(format: "%d:%02d per round", seconds / 60, seconds % 60))
@@ -123,7 +110,7 @@ struct WaitingRoomView: View {
         }
         if room.localRole == .host {
           ShareLink(item: DuelInviteLink.url(for: room.code), subject: Text("Pew Pew \(matchName.lowercased())"),
-            message: Text("Join my Pew Pew \(matchName.lowercased()) — code \(room.code)")) {
+            message: Text("Join my Pew Pew \(matchName.lowercased()) for up to \(room.effectiveMaxPlayers) players — code \(room.code)")) {
             Label("Share invite", systemImage: "square.and.arrow.up")
               .font(.subheadline.weight(.semibold)).frame(minHeight: 44)
           }
@@ -139,14 +126,14 @@ struct WaitingRoomView: View {
       HStack {
         Text("PLAYERS").font(.caption.weight(.semibold).monospaced())
         Spacer()
-        Text("\(room.players.count) / \(room.maxPlayers)").font(.subheadline.bold().monospacedDigit())
+        Text("\(room.players.count) / \(room.effectiveMaxPlayers)").font(.subheadline.bold().monospacedDigit())
       }
       .foregroundStyle(VKZPalette.textMuted)
       .accessibilityElement(children: .ignore)
-      .accessibilityLabel("\(room.players.count) of \(room.maxPlayers) player slots filled")
+      .accessibilityLabel("\(room.players.count) of \(room.effectiveMaxPlayers) player slots filled")
       ForEach(room.players) {player in playerRow(player)}
-      if !room.isFull {
-        let available = room.maxPlayers - room.players.count
+      if room.players.count < room.effectiveMaxPlayers {
+        let available = room.effectiveMaxPlayers - room.players.count
         Label("\(available) open \(available == 1 ? "slot" : "slots")", systemImage: "person.badge.plus")
           .font(.subheadline).foregroundStyle(VKZPalette.textMuted)
           .padding(.horizontal, 14).padding(.vertical, 6)
@@ -172,7 +159,8 @@ struct WaitingRoomView: View {
         .accessibilityLabel(localPlayer.isReady ? "Ready. Mark me not ready" : "Mark me ready")
       }
       if room.localRole == .host || allowsShellStart {
-        let canStart = room.localRole == .host ? room.canLocalPlayerStart : room.allPlayersReady
+        let canStart = !room.needsMatchUpdate
+          && (room.localRole == .host ? room.canLocalPlayerStart : room.allPlayersReady)
         Button {store.startDuel(as: room.localRole ?? .guest)} label: {
           HStack(spacing: 8) {
             if store.operation == .starting {ProgressView().tint(VKZPalette.background)}
@@ -187,6 +175,7 @@ struct WaitingRoomView: View {
   }
 
   private var readinessGuidance: String {
+    if room.needsMatchUpdate {return QuickDuel.updateRequiredMessage}
     if store.isMatchInputLocked {return "Waiting for the lobby connection to recover."}
     if room.players.count < 2 {return "Invite at least one more player to begin."}
     if room.players.contains(where: {!$0.isConnected}) {return "Waiting for disconnected players to return."}
