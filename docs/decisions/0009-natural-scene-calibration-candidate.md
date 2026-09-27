@@ -1,6 +1,6 @@
 # ADR 0009 — Natural scene reference for the calibration candidate
 
-Status: accepted implementation scope, 2026-09-05, under the owner's full-review authorization and direction to finish the native game before further server work. Physical acceptance and unrestricted arena movement remain open. Integration owns the native bundle contract and player-facing composition; targeting owns capture and measurement.
+Status: **Superseded in part by [ADR 0014](0014-quick-duel-only.md)** (2026-09-27): everything here that relies on a shared frame or on the `trackedBody` / `phoneProxy` geometries is removed; Quick Duel camera sighting is the only mode. Original status: accepted implementation scope, 2026-09-05, under the owner's full-review authorization and direction to finish the native game before further server work. Physical acceptance and unrestricted arena movement remain open. Integration owns the native bundle contract and player-facing composition; targeting owns capture and measurement.
 
 The existing map-seeded frame provider could never finish setup: it required three fresh independent residual measurements but had no measurement source. A saved map anchor only repeats stored coordinates. A player's phone is independently movable relative to their head, so the head-to-phone offset proposed in ADR 0006 cannot establish translation or orientation accuracy.
 
