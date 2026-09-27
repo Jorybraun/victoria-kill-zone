@@ -94,7 +94,7 @@ final class CombatPresentationPolicyTests: XCTestCase {
     }
   }
 
-  func testIncomingCueUsesObservedOriginAndHonorsPeerReconciliation() throws {
+  func testIncomingCueUsesObservedOriginAndHonorsTracerDeduplication() throws {
     let observed = SIMD3<Float>(1, 1.7, -8)
     func path(_ origin: SIMD3<Float>?, render: Bool = true) -> (start: SIMD3<Float>, end: SIMD3<Float>)? {
       CombatPresentationPolicy.incomingTracerPath(
@@ -103,7 +103,7 @@ final class CombatPresentationPolicyTests: XCTestCase {
       )
     }
     XCTAssertEqual(try XCTUnwrap(path(observed)).start, observed)
-    XCTAssertNil(path(nil, render: false), "A later confirmed hit must not replay a peer tracer")
+    XCTAssertNil(path(nil, render: false), "A later confirmed hit must not replay a shot tracer")
     XCTAssertNil(path(observed, render: false))
     let fallback = try XCTUnwrap(path(nil)).start
     XCTAssertEqual(try XCTUnwrap(path([.nan, 0, 0])).start, fallback)

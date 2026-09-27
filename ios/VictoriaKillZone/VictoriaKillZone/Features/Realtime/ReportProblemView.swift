@@ -6,13 +6,13 @@ import UIKit
 #endif
 
 /// Match-menu problem report: record or type what went wrong and upload it with
-/// the persisted setup log and device metadata. Creates a labeled GitHub issue
+/// the match log and device metadata. Creates a labeled GitHub issue
 /// via the combat worker, which a Devin session then triages.
 struct ReportProblemView: View {
   /// Mints a fresh combat ticket at send time. Reports must not depend on the
   /// socket's transient ticket, which is cleared on suspend/disconnect.
   let acquireTicket: () async throws -> CombatAccessTicket?
-  let loadLog: () throws -> [DuelFrameDiagnosticEvent]
+  let loadLog: () throws -> [MatchDiagnosticEvent]
   /// Release evidence captured at send time so the worker can correlate the report.
   var serverRelease: () -> CombatWire.Release? = {nil}
   var firstServerRelease: () -> CombatWire.Release? = {nil}
@@ -30,7 +30,7 @@ struct ReportProblemView: View {
   var body: some View {
     NavigationStack {
       VStack(alignment: .leading, spacing: 16) {
-        Text("Describe what went wrong. The match setup log is attached automatically — no player names or locations are included.")
+        Text("Describe what went wrong. The match log is attached automatically — no player names or locations are included.")
           .font(.subheadline).foregroundStyle(VKZPalette.textMuted)
         TextEditor(text: $transcript)
           .frame(minHeight: 120)

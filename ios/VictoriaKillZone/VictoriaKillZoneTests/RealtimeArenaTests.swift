@@ -97,8 +97,12 @@ final class RealtimeArenaTests: XCTestCase {
   func testSightingMatchStartsRunsAndFiresWithoutSharedFrameTraffic() async throws {
     let socket = ArenaSightingSocket()
     let camera = ArenaSightingCamera()
+    let session = PlayerSession(matchId: "private-match-9", code: "PRIVATE-CODE-9",
+      playerId: "private-player-9", sessionSecret: "private-session-secret-9")
+    socket.initialSnapshot.matchId = session.matchId
+    socket.initialSnapshot.players[0].playerId = session.playerId
     let controller = RealtimeArenaController(
-      session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
+      session: session,
       client: ArenaTestTicketClient(), targeting: camera,
       makeTransport: {socket}, localNow: {1000})
     defer {Task {await controller.stop()}}
@@ -133,7 +137,27 @@ final class RealtimeArenaTests: XCTestCase {
     XCTAssertFalse(commands.contains("frameReady"))
     XCTAssertFalse(commands.contains("collab"))
     XCTAssertFalse(commands.contains("niToken"))
-    XCTAssertEqual(camera.frameServiceCallCount, 0)
+    let diagnostics = controller.diagnosticEvents()
+    XCTAssertFalse(diagnostics.isEmpty)
+    XCTAssertTrue(diagnostics.contains { $0.kind == "stage" && $0.detail.contains("running") })
+    for privateValue in [session.matchId, session.code, session.playerId, session.sessionSecret] {
+      XCTAssertFalse(diagnostics.contains { $0.detail.contains(privateValue) })
+    }
+  }
+
+  @MainActor
+  func testDiagnosticEventsAppendLocalSurfaceCSVLast() {
+    let csv = "elapsed_ms,frames\n12,4"
+    let controller = RealtimeArenaController(
+      session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: "secret"),
+      client: UnavailableGameSessionClient(),
+      targeting: CSVTargetingSession(csv: csv)
+    )
+
+    let events = controller.diagnosticEvents()
+
+    XCTAssertEqual(Array(events.suffix(2).map(\.kind)), ["surface", "telemetryCsv"])
+    XCTAssertEqual(events.last, MatchDiagnosticEvent(elapsedMs: 42, kind: "telemetryCsv", detail: csv))
   }
 
   @MainActor
@@ -269,6 +293,31 @@ final class RealtimeArenaTests: XCTestCase {
   }
 }
 
+private struct CSVTargetingSession: TargetingSession, LocalSurfaceDiagnosticsProviding {
+  let csv: String
+  let availability = TargetingAvailability.notConfigured
+  let currentSnapshot = TargetingSnapshot.unavailable()
+
+  func snapshots() -> AsyncStream<TargetingSnapshot> {
+    AsyncStream { continuation in
+      continuation.yield(currentSnapshot)
+      continuation.finish()
+    }
+  }
+
+  func start() async throws {}
+
+  func stop() async {}
+
+  func localSurfaceDiagnosticEvents() -> [MatchDiagnosticEvent] {
+    [MatchDiagnosticEvent(elapsedMs: 42, kind: "surface", detail: "surface-event")]
+  }
+
+  func localSurfaceTelemetryCSV() -> String? { csv }
+
+  func recordSightingFire(ray: TargetingCameraRay, skeleton: TargetingSkeleton?) {}
+}
+
 private actor ArenaLifecycleCamera: TargetingSession {
   nonisolated let availability = TargetingAvailability.available
   nonisolated let currentSnapshot = TargetingSnapshot.unavailable()
@@ -296,24 +345,13 @@ private actor ArenaLifecycleCamera: TargetingSession {
   func disableStopGate() {gateStop = false; releaseStop()}
 }
 
-private actor ArenaSightingCamera: TargetingSession, DuelFrameSessionDriving {
+private actor ArenaSightingCamera: TargetingSession {
   nonisolated let availability = TargetingAvailability.available
   nonisolated let currentSnapshot = TargetingSnapshot.unavailable()
   private nonisolated let streamPair = AsyncStream<TargetingSnapshot>.makeStream()
-  private nonisolated let frameServiceCalls = FrameServiceCallCounter()
   private var cameraTask: Task<Void, Never>?
 
   nonisolated func snapshots() -> AsyncStream<TargetingSnapshot> {streamPair.stream}
-  nonisolated var frameServiceCallCount: Int {frameServiceCalls.count}
-  nonisolated func duelFrameObservations() -> AsyncStream<DuelFrameObservation> {
-    frameServiceCalls.record()
-    return AsyncStream {$0.finish()}
-  }
-  nonisolated func duelFrameCollaboration() -> AsyncStream<Data> {
-    frameServiceCalls.record()
-    return AsyncStream {$0.finish()}
-  }
-  nonisolated func applyFrameCollaboration(_ data: Data) async throws {frameServiceCalls.record()}
   func start() async throws {
     let continuation = streamPair.continuation
     cameraTask = Task {
@@ -333,20 +371,6 @@ private actor ArenaSightingCamera: TargetingSession, DuelFrameSessionDriving {
     cameraTask?.cancel(); cameraTask = nil
     streamPair.continuation.finish()
   }
-  func beginFrameMapping(epoch: UInt16, mode: DuelFrameAlignmentMode) async throws {frameServiceCalls.record()}
-  func captureFrameMap(epoch: UInt16) async throws -> Data {
-    frameServiceCalls.record()
-    return Data()
-  }
-  func installFrameMap(_ map: DuelFrameMap, phase: DuelFrameSessionPhase) async throws {frameServiceCalls.record()}
-  func endFrameMapping() async {frameServiceCalls.record()}
-}
-
-private final class FrameServiceCallCounter: @unchecked Sendable {
-  private let lock = NSLock()
-  private var storedCount = 0
-  var count: Int {lock.withLock {storedCount}}
-  func record() {lock.withLock {storedCount += 1}}
 }
 
 @MainActor
@@ -418,7 +442,7 @@ private final class ArenaSightingSocket: CombatSocketConnecting {
 private struct ArenaTestTicketClient: GameSessionClient {
   let availability = GameSessionAvailability.available
   func combatTicket(session: PlayerSession) async throws -> CombatAccessTicket {
-    try CombatAccessTicket(endpoint: XCTUnwrap(URL(string: "https://combat.example.test/v1/matches/match/connect")),
+    try CombatAccessTicket(endpoint: XCTUnwrap(URL(string: "https://combat.example.test/v1/matches/\(session.matchId)/connect")),
       token: UUID().uuidString, expiresAt: Date().addingTimeInterval(120), authorityEpoch: 1, frameEpoch: 1)
   }
   func createDuel(_ request: CreateDuelRequest) async throws -> PlayerSession {throw GameSessionClientError.notConfigured}

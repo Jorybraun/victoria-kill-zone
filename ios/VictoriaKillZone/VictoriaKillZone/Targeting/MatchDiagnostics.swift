@@ -1,26 +1,42 @@
 import Foundation
 import os
 
-struct DuelFrameDiagnosticEvent: Codable, Equatable, Sendable {
+struct MatchDiagnosticEvent: Codable, Equatable, Sendable {
   let elapsedMs: Int64
   let kind: String
   let detail: String
 }
 
-/// Sanitized bounded setup log: no frame IDs, peer IDs, codes, images or AR archives.
+/// Sanitized bounded match log.
 /// Every record also mirrors to unified logging in all builds so a phone on a
-/// cable (or wireless debugging) streams live trials in Console.app — filter
-/// subsystem com.victoriakillzone.duelFrame.
-struct DuelFrameDiagnostics: Sendable {
+/// cable (or wireless debugging) streams live trials in Console.app.
+struct MatchDiagnostics: Sendable {
   static let capacity = 256
-  private static let logger = Logger(subsystem: "com.victoriakillzone.duelFrame", category: "setup")
+  static func boundedTelemetryCSV(_ csv: String, limit: Int = 512) -> String {
+    guard limit > 0 else {return ""}
+    guard csv.count > limit else {return csv}
+    let lines = csv.components(separatedBy: "\n")
+    guard let header = lines.first, header.count <= limit else {return ""}
+    var retainedRows: [String] = []
+    var length = header.count
+    for row in lines.dropFirst().reversed() {
+      guard !row.isEmpty else {continue}
+      let nextLength = length + 1 + row.count
+      guard nextLength <= limit else {break}
+      retainedRows.append(row)
+      length = nextLength
+    }
+    return ([header] + Array(retainedRows.reversed())).joined(separator: "\n")
+  }
+
+  private static let logger = Logger(subsystem: "com.victoriakillzone.match", category: "match")
   /// Survives relaunch and crash so the previous session's log stays
   /// exportable; overwritten by the next session's first record.
   static let persistedURL: URL = {
     let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-    return base.appendingPathComponent("com.victoriakillzone/duel-frame-setup.json")
+    return base.appendingPathComponent("com.victoriakillzone/match-diagnostics.json")
   }()
-  private(set) var events: [DuelFrameDiagnosticEvent] = []
+  private(set) var events: [MatchDiagnosticEvent] = []
   private var startedAt: Date
   private var lastPersistedAt: Date?
 
@@ -29,10 +45,11 @@ struct DuelFrameDiagnostics: Sendable {
   mutating func reset(at: Date) {
     events = []
     startedAt = at
+    lastPersistedAt = nil
   }
 
   mutating func record(_ kind: String, _ detail: String, at: Date) {
-    let event = DuelFrameDiagnosticEvent(elapsedMs: Int64(at.timeIntervalSince(startedAt) * 1000),
+    let event = MatchDiagnosticEvent(elapsedMs: Int64(at.timeIntervalSince(startedAt) * 1000),
       kind: kind, detail: detail)
     events.append(event)
     if events.count > Self.capacity { events.removeFirst(events.count - Self.capacity) }
@@ -60,7 +77,7 @@ struct DuelFrameDiagnostics: Sendable {
   /// Current session events plus `extra` events appended (e.g. the flagged
   /// local-surfaces log), or the persisted previous session when both are
   /// empty.
-  func export(merging extra: [DuelFrameDiagnosticEvent]) throws -> URL {
+  func export(merging extra: [MatchDiagnosticEvent]) throws -> URL {
     let data: Data
     if events.isEmpty, extra.isEmpty, let persisted = try? Data(contentsOf: Self.persistedURL) {
       data = persisted
@@ -70,7 +87,7 @@ struct DuelFrameDiagnostics: Sendable {
       data = try encoder.encode(events + extra)
     }
     let url = FileManager.default.temporaryDirectory
-      .appendingPathComponent("duel-frame-setup-\(UUID().uuidString).json")
+      .appendingPathComponent("match-diagnostics-\(UUID().uuidString).json")
     try data.write(to: url, options: .atomic)
     try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     return url

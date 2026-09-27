@@ -89,7 +89,8 @@ final class RealtimeCombatSessionTests: XCTestCase {
   }
 
   func testMatchReportEncodesReleaseEvidenceKeys() throws {
-    let report=MatchReport(device: MatchReport.Device(model:"iPhone",ios:"26",build:"1"),transcript:"t",log:[],
+    let report=MatchReport(device: MatchReport.Device(model:"iPhone",ios:"26",build:"1"),transcript:"t",
+      log:[MatchDiagnosticEvent(elapsedMs: 42, kind: "stage", detail: "connecting -> running")],
       release:ReleaseManifest.summary,
       serverRelease:CombatWire.Release(manifest:ReleaseManifest.summary,
         worker:CombatWire.WorkerIdentity(versionId:nil,versionTag:nil,releaseSha:ReleaseManifest.releaseSha,
@@ -103,6 +104,8 @@ final class RealtimeCombatSessionTests: XCTestCase {
     XCTAssertNotNil(object["serverRelease"])
     XCTAssertNotNil(object["firstServerRelease"])
     XCTAssertEqual((object["authorityEpochs"] as? [[String:Any]])?.count,1)
+    let log = try XCTUnwrap(object["log"] as? [[String: Any]])
+    XCTAssertEqual(Set(try XCTUnwrap(log.first).keys), Set(["elapsedMs", "kind", "detail"]))
   }
 
   func testClockDiscontinuityRecoversWithoutFrameReadiness() async throws {

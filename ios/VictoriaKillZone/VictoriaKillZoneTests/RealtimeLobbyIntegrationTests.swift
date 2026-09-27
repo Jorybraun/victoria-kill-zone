@@ -31,7 +31,7 @@ final class RealtimeLobbyIntegrationTests: XCTestCase {
     store.leave()
   }
 
-  func testThreeReadyMembersPrepareAuthorityWithoutCallingLegacyStart() async throws {
+  func testThreeReadyMembersWithMissingGeometryCannotPrepareAuthority() async throws {
     let client = ArenaLobbyClient()
     let store = makeStore(client)
     await store.performCreateDuel(combatMode: .durableObject)
@@ -40,10 +40,12 @@ final class RealtimeLobbyIntegrationTests: XCTestCase {
     guard case .waiting(let room) = store.route else { return XCTFail("Missing lobby") }
     XCTAssertEqual(room.maxPlayers, 4)
     XCTAssertFalse(room.isFull)
+    XCTAssertTrue(room.needsMatchUpdate)
     XCTAssertTrue(room.canLocalPlayerStart)
     await store.performStartDuel()
-    XCTAssertEqual(client.prepares, 1)
+    XCTAssertEqual(client.prepares, 0)
     XCTAssertEqual(client.legacyStarts, 0)
+    XCTAssertEqual(store.errorMessage, QuickDuel.updateRequiredMessage)
     store.leave()
   }
 
