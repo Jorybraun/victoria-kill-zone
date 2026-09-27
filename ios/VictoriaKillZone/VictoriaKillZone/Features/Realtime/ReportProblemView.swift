@@ -13,6 +13,10 @@ struct ReportProblemView: View {
   /// socket's transient ticket, which is cleared on suspend/disconnect.
   let acquireTicket: () async throws -> CombatAccessTicket?
   let loadLog: () throws -> [DuelFrameDiagnosticEvent]
+  /// Release evidence captured at send time so the worker can correlate the report.
+  var serverRelease: () -> CombatWire.Release? = {nil}
+  var firstServerRelease: () -> CombatWire.Release? = {nil}
+  var authorityEpochs: () -> [AuthorityEpochRecord] = {[]}
   var onDismiss: () -> Void = {}
 
   @State private var transcript = ""
@@ -152,7 +156,11 @@ struct ReportProblemView: View {
       }
       let report = MatchReport(device: device,
         transcript: transcript.trimmingCharacters(in: .whitespacesAndNewlines),
-        log: (try? loadLog()) ?? [])
+        log: (try? loadLog()) ?? [],
+        release: ReleaseManifest.summary,
+        serverRelease: serverRelease(),
+        firstServerRelease: firstServerRelease(),
+        authorityEpochs: authorityEpochs())
       issueURL = try await MatchReportClient().send(report, ticket: ticket)
       state = .sent
     } catch {

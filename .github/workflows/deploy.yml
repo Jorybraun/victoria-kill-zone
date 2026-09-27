@@ -140,6 +140,7 @@ jobs:
       - ios-gate
     outputs:
       pages_artifact_id: ${{ steps.pages_artifact.outputs.artifact_id }}
+      worker_version: ${{ steps.worker_health.outputs.worker_version }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -185,6 +186,14 @@ jobs:
             --cmd "bash ../scripts/release/build-spectator.sh" \
             --cmd-url-env-var-name VITE_CONVEX_URL \
             --message "GitHub Actions ${DEPLOY_SHA}"
+
+      # The combat Worker is deployed manually; an unset URL only warns.
+      - name: Check combat Worker health
+        id: worker_health
+        env:
+          VKZ_COMBAT_WORKER_URL: ${{ vars.VKZ_COMBAT_WORKER_URL }}
+          VKZ_WORKER_HEALTH_OUTPUT: ${{ runner.temp }}/vkz-worker-health.json
+        run: node scripts/release/check-worker-health.mjs
 
       - name: Smoke the sanitized production spectator query
         env:
@@ -237,6 +246,7 @@ jobs:
           VKZ_RELEASE_ENVIRONMENT: production
           VKZ_SOURCE_RUN_ID: ${{ github.event.workflow_run.id || '' }}
           VKZ_PAGES_ARTIFACT_ID: ${{ needs.release-build.outputs.pages_artifact_id }}
+          VKZ_COMBAT_WORKER_VERSION: ${{ needs.release-build.outputs.worker_version }}
           VKZ_EVIDENCE_PATH: ${{ runner.temp }}/release-evidence/release-evidence.json
         run: node scripts/release/write-evidence.mjs
 

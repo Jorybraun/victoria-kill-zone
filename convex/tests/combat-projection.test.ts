@@ -66,6 +66,26 @@ describe("ordered authority projection",()=>{
     await expect(handler(b.ctx,signed({...p,authorityEpoch:1,fromEventSequence:1501,throughEventSequence:1502}))).rejects.toMatchObject({data:{code:"IDEMPOTENCY_CONFLICT"}});
     expect(b.writes).toHaveLength(count);
   });
+  it("records the worker identity when a projection carries it",async()=>{
+    const b=setup(),handler=mutationHandler(publishProjection);
+    const worker={versionId:"v-abc",versionTag:"deploy-9",releaseSha:"f".repeat(40),workerVersionTag:"vkz-combat-2026.09",doMigrationTag:"v1"};
+    expect(await handler(b.ctx,signed({...b.projection,worker}))).toEqual({eventSequence:5,replayed:false});
+    const patch=b.writes.find(w=>w.kind === "patch" && w.table === "matches" && w.doc.combatWorkerTag !== undefined);
+    expect(patch?.doc).toMatchObject({combatWorkerVersionId:"v-abc",combatWorkerVersionTag:"deploy-9",combatWorkerReleaseSha:"f".repeat(40),
+      combatWorkerTag:"vkz-combat-2026.09",combatWorkerDoMigrationTag:"v1",combatWorkerObservedAt:T0+1000});
+  });
+  it("accepts a projection without a worker and leaves worker fields untouched",async()=>{
+    const b=setup(),handler=mutationHandler(publishProjection);
+    expect(await handler(b.ctx,signed(b.projection))).toEqual({eventSequence:5,replayed:false});
+    expect(b.writes.find(w=>w.kind === "patch" && w.doc.combatWorkerTag !== undefined)).toBeUndefined();
+  });
+  it("rejects a projection with a malformed worker identity",async()=>{
+    const b=setup(),handler=mutationHandler(publishProjection);
+    await expect(handler(b.ctx,signed({...b.projection,worker:{versionId:1,versionTag:null,releaseSha:"x",workerVersionTag:"y",doMigrationTag:"z"} as never})))
+      .rejects.toMatchObject({data:{code:"INVALID_SESSION"}});
+    await expect(handler(b.ctx,signed({...b.projection,worker:{versionId:null,versionTag:null,releaseSha:"x",workerVersionTag:"y",doMigrationTag:"z",extra:true} as never})))
+      .rejects.toMatchObject({data:{code:"INVALID_SESSION"}});
+  });
   it("does not let the lobby heartbeat overwrite a realtime life/connection projection",async()=>{
     const b=setup(); b.seed("players",{...b.host.doc,connected:false,lifeState:"disconnected"});
     await mutationHandler(heartbeat)(b.ctx,{matchId:testIds.match,playerId:testIds.host,sessionSecret:b.host.sessionSecret});

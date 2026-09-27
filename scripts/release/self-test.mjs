@@ -60,6 +60,7 @@ assert.equal(evidence.workflow.runId, "987654321");
 assert.equal(evidence.workflow.runAttempt, "3");
 assert.equal(evidence.workflow.sourceRunId, "12345");
 assert.equal(evidence.deploymentIdentifiers.pagesArtifactId, "123456789");
+assert.equal(evidence.combatWorker, null);
 assert.equal(evidence.smokeResults.convexSpectatorSnapshotUnknownCode.status, "passed");
 assert.equal(evidence.smokeResults.pagesHttp.status, "passed");
 
@@ -76,6 +77,29 @@ assert.throws(() =>
 assert.throws(() =>
   createEvidence({ ...evidenceEnvironment, GITHUB_WORKFLOW: "Deploy\nunsafe" }),
 );
+
+// Optional combat Worker evidence is validated and recorded additively.
+const workerRecord = { versionId: "2c8c3a6a-1f0a-4e4f-9e0b-2b5f7d2a1c3d", versionTag: null,
+  workerVersionTag: "vkz-combat-2026.09", releaseSha: "0".repeat(40), protocolVersion: 1, doMigrationTag: "v1" };
+{
+  const withWorker = createEvidence(
+    { ...evidenceEnvironment, VKZ_COMBAT_WORKER_VERSION: JSON.stringify(workerRecord) }, evidenceTime);
+  assert.deepEqual(withWorker.combatWorker, workerRecord);
+  const notConfigured = createEvidence(
+    { ...evidenceEnvironment, VKZ_COMBAT_WORKER_VERSION: JSON.stringify({ status: "not-configured" }) }, evidenceTime);
+  assert.deepEqual(notConfigured.combatWorker, { status: "not-configured" });
+  for (const bad of ["not-json", JSON.stringify("x"), JSON.stringify([1]),
+    JSON.stringify({ ...workerRecord, protocolVersion: "1" }),
+    JSON.stringify({ ...workerRecord, protocolVersion: 0 }),
+    JSON.stringify({ ...workerRecord, versionId: 5 }),
+    JSON.stringify({ ...workerRecord, doMigrationTag: "v1\n" }),
+    JSON.stringify({ ...workerRecord, workerVersionTag: "x".repeat(129) }),
+  ]) {
+    assert.throws(() =>
+      createEvidence({ ...evidenceEnvironment, VKZ_COMBAT_WORKER_VERSION: bad }),
+      /combat worker evidence/iu);
+  }
+}
 
 const evidenceDirectory = await mkdtemp(join(tmpdir(), "vkz-release-evidence-test-"));
 try {

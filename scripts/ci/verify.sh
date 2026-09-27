@@ -14,6 +14,7 @@ node scripts/combat-replay/generate.mjs --check
 node scripts/release/self-test.mjs
 node scripts/release/testflight-self-test.mjs
 node scripts/release/combat-deploy-self-test.mjs
+node scripts/release/check-worker-health-self-test.mjs
 pnpm -r --if-present build
 
 echo "Workspace verification: PASS"

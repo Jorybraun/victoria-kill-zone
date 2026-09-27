@@ -40,11 +40,69 @@ final class RealtimeCombatSessionTests: XCTestCase {
     game.start(session:Self.playerSession()); try await until {game.clockReady}
     _ = game.submit(.reload); try await until {socket.commands.count == 1}
     var recovered=RealtimeCombatTests.snapshot(); recovered.authorityEpoch=2; recovered.phase = .paused
-    socket.output?.yield(.snapshot(recovered,eventSequence:4,clientSequence:0))
+    socket.output?.yield(.snapshot(recovered,eventSequence:4,clientSequence:0,release:nil))
     try await until {game.snapshot?.authorityEpoch == 2}
     XCTAssertFalse(game.clockReady)
     XCTAssertNil(game.submit(.reload))
     XCTAssertEqual(socket.commands.count,1)
+  }
+
+  func testSnapshotReleaseAndAuthorityEpochHistoryAreRecorded() async throws {
+    let socket=ScriptedCombatSocket()
+    let release=CombatWire.Release(manifest: ReleaseManifest.summary,
+      worker: CombatWire.WorkerIdentity(versionId:"v-abc",versionTag:"deploy-9",releaseSha:ReleaseManifest.releaseSha,
+        workerVersionTag:ReleaseManifest.workerVersionTag,doMigrationTag:ReleaseManifest.doMigrationTag))
+    let game=RealtimeCombatSession(gameClient:TicketOnlyClient(),makeTransport:{socket},localNow:{1000})
+    defer {game.stop()}
+    game.start(session:Self.playerSession())
+    try await until {game.snapshot != nil}
+    XCTAssertNil(game.serverRelease)
+    XCTAssertEqual(game.authorityEpochHistory.count,1)
+    XCTAssertEqual(game.authorityEpochHistory.last?.authorityEpoch,socket.initialSnapshot.authorityEpoch)
+    // A same-epoch snapshot does not append; a release attaches once observed.
+    socket.output?.yield(.snapshot(socket.initialSnapshot,eventSequence:1,clientSequence:0,release:release))
+    try await until {game.serverRelease != nil}
+    XCTAssertEqual(game.authorityEpochHistory.count,1)
+    XCTAssertEqual(game.serverRelease?.worker.versionId,"v-abc")
+    XCTAssertEqual(game.firstServerRelease?.worker.versionId,"v-abc")
+    // An ignored-stale snapshot (same authority epoch, older eventSequence) must
+    // not touch release tracking even when it carries different release data.
+    let staleRelease=CombatWire.Release(manifest: ReleaseManifest.summary,
+      worker: CombatWire.WorkerIdentity(versionId:"v-stale",versionTag:"deploy-0",releaseSha:ReleaseManifest.releaseSha,
+        workerVersionTag:ReleaseManifest.workerVersionTag,doMigrationTag:ReleaseManifest.doMigrationTag))
+    socket.output?.yield(.snapshot(socket.initialSnapshot,eventSequence:0,clientSequence:0,release:staleRelease))
+    try await Task.sleep(nanoseconds:50_000_000)
+    XCTAssertEqual(game.serverRelease?.worker.versionId,"v-abc")
+    XCTAssertEqual(game.firstServerRelease?.worker.versionId,"v-abc")
+    // A release change on an accepted snapshot updates serverRelease but not
+    // the first-observed release.
+    let upgraded=CombatWire.Release(manifest: ReleaseManifest.summary,
+      worker: CombatWire.WorkerIdentity(versionId:"v-def",versionTag:"deploy-10",releaseSha:ReleaseManifest.releaseSha,
+        workerVersionTag:ReleaseManifest.workerVersionTag,doMigrationTag:ReleaseManifest.doMigrationTag))
+    var recovered=RealtimeCombatTests.snapshot(); recovered.authorityEpoch=2; recovered.phase = .paused
+    socket.output?.yield(.snapshot(recovered,eventSequence:4,clientSequence:0,release:upgraded))
+    try await until {game.snapshot?.authorityEpoch == 2}
+    XCTAssertEqual(game.authorityEpochHistory.count,2)
+    XCTAssertEqual(game.authorityEpochHistory.last?.authorityEpoch,2)
+    XCTAssertEqual(game.serverRelease?.worker.versionId,"v-def")
+    XCTAssertEqual(game.firstServerRelease?.worker.versionId,"v-abc")
+  }
+
+  func testMatchReportEncodesReleaseEvidenceKeys() throws {
+    let report=MatchReport(device: MatchReport.Device(model:"iPhone",ios:"26",build:"1"),transcript:"t",log:[],
+      release:ReleaseManifest.summary,
+      serverRelease:CombatWire.Release(manifest:ReleaseManifest.summary,
+        worker:CombatWire.WorkerIdentity(versionId:nil,versionTag:nil,releaseSha:ReleaseManifest.releaseSha,
+          workerVersionTag:ReleaseManifest.workerVersionTag,doMigrationTag:ReleaseManifest.doMigrationTag)),
+      firstServerRelease:CombatWire.Release(manifest:ReleaseManifest.summary,
+        worker:CombatWire.WorkerIdentity(versionId:"v-first",versionTag:nil,releaseSha:ReleaseManifest.releaseSha,
+          workerVersionTag:ReleaseManifest.workerVersionTag,doMigrationTag:ReleaseManifest.doMigrationTag)),
+      authorityEpochs:[AuthorityEpochRecord(authorityEpoch:1,frameEpoch:1,eventSequence:0,observedAtMs:1000)])
+    let object=try XCTUnwrap(try JSONSerialization.jsonObject(with:JSONEncoder().encode(report)) as? [String:Any])
+    XCTAssertEqual((object["release"] as? [String:Any])?["protocolVersion"] as? Int,ReleaseManifest.protocolVersion)
+    XCTAssertNotNil(object["serverRelease"])
+    XCTAssertNotNil(object["firstServerRelease"])
+    XCTAssertEqual((object["authorityEpochs"] as? [[String:Any]])?.count,1)
   }
 
   func testMapTransferPathNeverCarriesCredentialsAndRejectsWrongEpoch() throws {
@@ -126,7 +184,7 @@ final class RealtimeCombatSessionTests: XCTestCase {
     try await until { !game.clockReady }
     XCTAssertEqual(socket.closeCount, 0)
     now.advance(by: 2500)
-    socket.output?.yield(.snapshot(socket.initialSnapshot, eventSequence: 0, clientSequence: 0))
+    socket.output?.yield(.snapshot(socket.initialSnapshot, eventSequence: 0, clientSequence: 0, release: nil))
     socket.replyToLastPing()
     for _ in 0..<10 {await Task.yield()}
     XCTAssertFalse(game.clockReady)
@@ -202,7 +260,7 @@ final class RealtimeCombatSessionTests: XCTestCase {
         if scenario == "epoch" {changed.authorityEpoch = 2}
         if scenario == "armed" {changed.players[0].frameReady = true}
         if scenario == "running" {changed.phase = .running}
-        socket.output?.yield(.snapshot(changed, eventSequence: 1, clientSequence: 0))
+        socket.output?.yield(.snapshot(changed, eventSequence: 1, clientSequence: 0, release: nil))
       }
       try await until(context: "\(scenario): changed authority closes socket") {socket.closeCount > 0}
       XCTAssertNil(game.submit(.reload), scenario)
@@ -221,7 +279,7 @@ final class RealtimeCombatSessionTests: XCTestCase {
     let revision = game.snapshotRevision
     // The stream is FIFO. Observing this baseline proves every pong already
     // yielded by bootstrap has been consumed before the fake clock advances.
-    socket.output?.yield(.snapshot(socket.initialSnapshot, eventSequence: 0, clientSequence: 0))
+    socket.output?.yield(.snapshot(socket.initialSnapshot, eventSequence: 0, clientSequence: 0, release: nil))
     try await until(context: "\(context): queued pong receive barrier") {game.snapshotRevision > revision}
     XCTAssertTrue(game.clockReady, context)
   }
@@ -500,7 +558,7 @@ private final class ScriptedCombatSocket: CombatSocketConnecting {
     if let connectError {throw connectError}
     let pair=AsyncThrowingStream<CombatWire.ServerMessage,Error>.makeStream()
     output=pair.continuation
-    output?.yield(.snapshot(initialSnapshot,eventSequence:0,clientSequence:0))
+    output?.yield(.snapshot(initialSnapshot,eventSequence:0,clientSequence:0,release:nil))
     return pair.stream
   }
   func send(_ message: CombatWire.ClientMessage) async throws {

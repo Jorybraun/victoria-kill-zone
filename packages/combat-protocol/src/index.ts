@@ -51,6 +51,19 @@ export interface CombatRules {
   shield: {radius: number; offsetMeters: number; durationMs: number; cooldownMs: number; energy: number};
   slowField: {radius: number; durationMs: number; cooldownMs: number; scale: number};
 }
+/** Sorted dotted key paths of every leaf in a rules document; structure only, no values. */
+export function rulesSchemaKeyPaths(rules: CombatRules): readonly string[] {
+  const paths: string[] = [];
+  const walk = (value: unknown, prefix: string): void => {
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      for (const key of Object.keys(value)) walk((value as Record<string, unknown>)[key], prefix === "" ? key : `${prefix}.${key}`);
+      return;
+    }
+    paths.push(prefix);
+  };
+  walk(rules, "");
+  return paths.sort();
+}
 export const DEFAULT_RULES: CombatRules = {
   durationMs: 180_000, geometry: "trackedBody", respawnMs: 5000, protectionMs: 2000,
   weapon: {id: "pulse", kind: "projectile", damage: {head:75,torso:34,limbs:20},
@@ -95,11 +108,13 @@ export interface SlowFieldState {
   fieldId: string; ownerId: string; center: Vec3; radius: number;
   startsAtMs: number; endsAtMs: number; scale: number;
 }
-export type RefusalReason =
-  | "notRunning" | "notReady" | "notAlive" | "protected" | "cooldown" | "reloading"
-  | "outOfAmmo" | "trackingLost" | "poseStale" | "poseMismatch" | "invalidRay"
-  | "shieldActive" | "abilityCooldown" | "projectileLimit" | "tooLate" | "futureInput"
-  | "notHost" | "unknownPlayer" | "invalidInput" | "noSighting" | "ambiguousTarget";
+export const REFUSAL_REASONS = [
+  "notRunning", "notReady", "notAlive", "protected", "cooldown", "reloading",
+  "outOfAmmo", "trackingLost", "poseStale", "poseMismatch", "invalidRay",
+  "shieldActive", "abilityCooldown", "projectileLimit", "tooLate", "futureInput",
+  "notHost", "unknownPlayer", "invalidInput", "noSighting", "ambiguousTarget",
+] as const;
+export type RefusalReason = typeof REFUSAL_REASONS[number];
 export type CombatEvent =
   | {kind: "poseChanged"; playerId: string; pose: PhonePose}
   | {kind: "commandResult"; commandId: string; clientSequence: number; playerId: string; accepted: boolean; reason: RefusalReason | null}
@@ -132,7 +147,8 @@ export type ClientMessage =
   | {type: "collab"; data: string}
   | {type: "niToken"; token: string};
 export type ServerMessage =
-  | {type: "snapshot"; snapshot: CombatSnapshot; eventSequence: number; clientSequence: number}
+  | {type: "snapshot"; snapshot: CombatSnapshot; eventSequence: number; clientSequence: number;
+    release?: {manifest: ReleaseManifestSummary; worker: WorkerIdentity}}
   | {type: "events"; events: readonly ServerEvent[]}
   | {type: "ack"; commandId: string; clientSequence: number; replayed: boolean; eventSequence: number}
   | {type: "pong"; nonce: string; clientSentAtMs: number; serverReceivedAtMs: number; serverSentAtMs: number}
@@ -154,5 +170,17 @@ export interface CombatProjection {
   matchTimeMs: number; roundStartedAtMs: number | null; phase: CombatPhase;
   players: readonly CombatPlayerState[];
   terminals: readonly {eventSequence: number; event: Extract<CombatEvent, {kind: "projectileTerminal"}>}[];
+  worker?: WorkerIdentity;
 }
-export {parseClientMessage, validateCombatRules, validateTicketClaims, validateCombatProjection} from "./validation.js";
+/** release-manifest.json minus its envelope metadata; what clients and reports see. */
+export interface ReleaseManifestSummary {
+  protocolVersion: number; rulesSchemaHash: string; doClass: string; doMigrationTag: string;
+  iosMinProtocol: number; iosMaxProtocol: number; convexMinProtocol: number; workerVersionTag: string;
+  releaseSha: string;
+}
+/** Identity the combat worker reports about the code it is actually running. */
+export interface WorkerIdentity {
+  versionId: string | null; versionTag: string | null; releaseSha: string; workerVersionTag: string; doMigrationTag: string;
+}
+export {parseClientMessage, validateCombatRules, validateTicketClaims, validateCombatProjection,
+  validateReleaseManifestSummary, validateWorkerIdentity} from "./validation.js";

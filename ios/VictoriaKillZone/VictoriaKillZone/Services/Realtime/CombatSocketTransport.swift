@@ -144,7 +144,7 @@ final class CombatSocketTransport: CombatSocketConnecting {
 enum CombatWireValidation {
   static func valid(_ message: CombatWire.ServerMessage) -> Bool {
     switch message {
-    case .snapshot(let s,let eventSequence,let clientSequence):
+    case .snapshot(let s,let eventSequence,let clientSequence,_):
       return eventSequence >= 0 && clientSequence >= 0 && valid(s)
     case .events(let events):
       return events.count <= 64 && events.allSatisfy {

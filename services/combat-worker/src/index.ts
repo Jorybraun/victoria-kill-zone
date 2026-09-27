@@ -2,13 +2,16 @@ import { verifyBearerTicket } from "./auth.js";
 import { combatRoute } from "./routes.js";
 import { projectionConfigured } from "./projection-delivery.js";
 import { reportHandler } from "./report.js";
+import { releaseManifestSummary, workerIdentity } from "./manifest.js";
+import releaseManifest from "../../../release-manifest.json";
 export { CombatRoom } from "./room.js";
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/health" && url.search === "") {
-      return Response.json({ service: "vkz-combat", protocol: 1, projection: { configured: projectionConfigured(env) } });
+      return Response.json({ service: "vkz-combat", protocol: releaseManifest.protocolVersion, projection: { configured: projectionConfigured(env) },
+        manifest: releaseManifestSummary(), worker: workerIdentity(env) });
     }
     const route = combatRoute(url);
     if (route === null) return new Response(null, { status: 404 });

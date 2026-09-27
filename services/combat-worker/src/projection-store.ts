@@ -1,11 +1,11 @@
-import { validateCombatProjection, type CombatProjection, type CombatSnapshot, type ServerEvent } from "@vkz/combat-protocol";
+import { validateCombatProjection, type CombatProjection, type CombatSnapshot, type ServerEvent, type WorkerIdentity } from "@vkz/combat-protocol";
 
 export type OutboxRow = { from_sequence: number; through_sequence: number; payload: string };
 const TERMINALS_PER_PROJECTION = 64;
 
 /** A sealed retry is immutable; only the last unsent row can coalesce. */
 export class ProjectionStore {
-  constructor(private readonly storage: DurableObjectStorage) {}
+  constructor(private readonly storage: DurableObjectStorage, private readonly worker: WorkerIdentity | null = null) {}
 
   initialize(): void {
     this.storage.sql.exec(`
@@ -81,6 +81,7 @@ export class ProjectionStore {
   private make(snapshot: CombatSnapshot, from: number, through: number, terminals: CombatProjection["terminals"]): CombatProjection {
     return { v: 1, matchId: snapshot.matchId, authorityEpoch: snapshot.authorityEpoch, frameEpoch: snapshot.frameEpoch,
       fromEventSequence: from, throughEventSequence: through, matchTimeMs: snapshot.matchTimeMs,
-      roundStartedAtMs: snapshot.roundStartedAtMs, phase: snapshot.phase, players: snapshot.players, terminals };
+      roundStartedAtMs: snapshot.roundStartedAtMs, phase: snapshot.phase, players: snapshot.players, terminals,
+      ...(this.worker === null ? {} : { worker: this.worker }) };
   }
 }
