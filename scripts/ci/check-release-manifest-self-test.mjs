@@ -33,6 +33,7 @@ const requiredPaths = [
   'services/combat-worker/src/room.ts',
   'services/combat-worker/src/projection-store.ts',
   'ios/VictoriaKillZone/VictoriaKillZone/Services/Realtime/CombatWire.swift',
+  'ios/VictoriaKillZone/VictoriaKillZone/Services/Realtime/ReleaseManifest.swift',
   'convex/functions/combat.ts',
   'spectator/package.json',
 ];
