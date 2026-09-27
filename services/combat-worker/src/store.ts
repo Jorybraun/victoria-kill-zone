@@ -38,16 +38,13 @@ export class RoomStore {
   initialize(): void {
     this.storage.transactionSync(() => {
       this.storage.sql.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY)");
+      this.storage.sql.exec("INSERT OR IGNORE INTO schema_migrations(version) VALUES (1)");
       const stored = this.storage.sql.exec<{ version: number | null }>("SELECT MAX(version) AS version FROM schema_migrations").one().version;
-      if (stored === 1) {
-        // v1 → v2: the AR map transfer tables are gone for good.
-        this.storage.sql.exec("DROP TABLE IF EXISTS shared_maps; DROP TABLE IF EXISTS map_chunks;");
-        this.storage.sql.exec("INSERT OR IGNORE INTO schema_migrations(version) VALUES (2)");
-      } else if (stored === null) {
-        this.storage.sql.exec("INSERT OR IGNORE INTO schema_migrations(version) VALUES (2)");
-      } else if (stored !== 2) {
+      if (stored !== 1) {
         throw new Error("Unsupported room storage version");
       }
+      // The AR map transfer tables are dropped every init: a rolled-back Worker simply recreates them.
+      this.storage.sql.exec("DROP TABLE IF EXISTS shared_maps; DROP TABLE IF EXISTS map_chunks;");
       this.storage.sql.exec(`
         CREATE TABLE IF NOT EXISTS room (
           singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
