@@ -60,14 +60,13 @@ describe("untrusted combat messages", () => {
 });
 
 describe("combat rules", () => {
-  it("accepts every combat geometry including sighting", () => {
-    for (const geometry of ["trackedBody", "phoneProxy", "sighting"] as const) {
-      const rules = structuredClone(DEFAULT_RULES); rules.geometry = geometry;
-      expect(validateCombatRules(rules)).toBe(true);
-    }
+  it("accepts only the sighting combat geometry", () => {
+    expect(validateCombatRules(structuredClone(DEFAULT_RULES))).toBe(true);
     const rules = structuredClone(DEFAULT_RULES) as {geometry: string};
-    rules.geometry = "other";
-    expect(validateCombatRules(rules)).toBe(false);
+    for (const geometry of ["trackedBody", "phoneProxy", "other"]) {
+      rules.geometry = geometry;
+      expect(validateCombatRules(rules)).toBe(false);
+    }
   });
 });
 

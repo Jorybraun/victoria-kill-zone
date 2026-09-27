@@ -2,7 +2,7 @@ import {describe, expect, it} from "vitest";
 import {type BodyObservation, type CombatEvent} from "@vkz/combat-protocol";
 import {Fixture, rules, sphere} from "./fixtures.js";
 
-const sighting = () => rules({geometry: "sighting"});
+const sighting = () => rules();
 const observation = (f: Fixture, overrides: Partial<BodyObservation> = {}): BodyObservation => ({
   targetPlayerId: "b", capturedAtMs: f.now, associationConfidence: 1, uncertaintyMeters: 0.01,
   colliders: [sphere([3, 0, 0], 0.35)], ...overrides});
@@ -106,14 +106,5 @@ describe("sighting geometry", () => {
     f.tick([fire(f, observation(f))]);
     f.tick();
     expect(f.simulation.snapshot().projectiles).toHaveLength(0);
-  });
-});
-
-describe("non-sighting geometries unchanged", () => {
-  it("accepts a phoneProxy fire without the observation key", () => {
-    const f = new Fixture(rules({geometry: "phoneProxy"})).ready();
-    const events = f.tick([f.fire("a")]);
-    expect(refusal(events)).toBeUndefined();
-    expect(events.some(e => e.kind === "projectileSpawn")).toBe(true);
   });
 });

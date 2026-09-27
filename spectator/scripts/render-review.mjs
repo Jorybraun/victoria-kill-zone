@@ -12,7 +12,7 @@ try {
   const errors=[];page.on("pageerror",e=>errors.push(e.message));
   for (const [name,fixture,width,textScale] of [
     ["arena-desktop","arena",1280,1], ["arena-phone","arena",375,1],
-    ["aligning-phone","arena-calibrating",375,1], ["paused-phone","arena-paused",375,1],
+    ["paused-phone","arena-paused",375,1],
     ["results-desktop","arena-ended",1280,1],
     ["interrupted-phone","arena-degraded",375,1], ["restored-phone","arena-recovery",375,1], ["arena-phone-text-200","arena",375,2],
   ]) {

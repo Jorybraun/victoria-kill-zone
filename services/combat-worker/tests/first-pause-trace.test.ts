@@ -12,7 +12,7 @@ function command(playerId: string, clientSequence: number, payload: CommandEnvel
 }
 function fixture() {
   const simulation = CombatSimulation.create({matchId: "trace-test", authorityEpoch: 1, frameEpoch: 1,
-    rules: {...DEFAULT_RULES, geometry: "phoneProxy"}, players: [
+    rules: DEFAULT_RULES, players: [
       {playerId: "host", displayName: "Host", role: "host"}, {playerId: "guest", displayName: "Guest", role: "player"},
     ]});
   for (const id of ["host", "guest"]) simulation.setConnected(id, true);
@@ -60,14 +60,19 @@ describe("benchmark first-pause observer", () => {
       expect(room.simulation.snapshot()).toEqual(baseline.simulation.snapshot());
       expect(reports).toEqual([]);
       vi.spyOn(performance, "now").mockReturnValue(151);
+      const leave = command("guest", 3, {kind: "leave"});
+      room.admitCommand(null, leave, 120);
+      baseline.admitCommand(null, leave, 120);
       await room.tick(); await baseline.tick();
       expect(room.simulation.snapshot()).toEqual(baseline.simulation.snapshot());
       expect(reports).toHaveLength(1);
-      expect(reports[0]).toMatchObject({tick: 3, matchTimeMs: 150, commitSucceeded: true,
-        coverage: {fromMs: 100, toMs: 150, interval: false},
+      expect(reports[0]).toMatchObject({tick: 3, matchTimeMs: 150, commitSucceeded: true, reason: "playerDisconnected",
+        coverage: {fromMs: 150, toMs: 150, interval: false},
         inputs: [{receivedAtMs: 70, queueEnteredAtMs: 91, admittedAtMs: 94, queueDelayMs: 21,
-          plannedTick: 2, consumedTick: 2, accepted: false}],
-        failedPlayers: [{playerId: "guest", phoneAtEnd: false}, {playerId: "host", phoneAtEnd: false}]});
+          plannedTick: 2, consumedTick: 2, accepted: false},
+          {playerId: "guest", kind: "leave", receivedAtMs: 120, queueEnteredAtMs: 151, admittedAtMs: 151, queueDelayMs: 31,
+            plannedTick: 3, consumedTick: 3, accepted: true}],
+        failedPlayers: [{playerId: "guest", connected: false, phoneAtEnd: false}]});
       expect(reports[0]!.acceptedPoses.every(pose => pose.ageMs === 150)).toBe(true);
       const serialized = JSON.stringify(reports);
       expect(serialized).not.toContain('"position"');
@@ -90,10 +95,11 @@ describe("benchmark first-pause observer", () => {
       for (let sequence = 4; sequence < 44; sequence++) room.admitCommand(null, command("host", sequence, {kind: "reload"}), 70);
       await room.tick();
       for (let sequence = 44; sequence < 84; sequence++) room.admitCommand(null, command("host", sequence, {kind: "reload"}), 120);
+      room.admitCommand(null, command("guest", 3, {kind: "leave"}), 120);
       await room.tick();
       expect(reports).toHaveLength(1);
       expect(reports[0]!.inputs).toHaveLength(64);
-      expect(reports[0]!.droppedInputs).toBe(16);
+      expect(reports[0]!.droppedInputs).toBe(17);
       expect(new TextEncoder().encode(JSON.stringify(reports[0])).byteLength).toBeLessThanOrEqual(32_768);
     } finally {observer.stop();}
   });
@@ -112,7 +118,11 @@ describe("benchmark first-pause observer", () => {
         }
         await room.tick();
       }
-      await room.tick(); await room.tick();
+      await room.tick();
+      const leave = command("guest", 14, {kind: "leave"});
+      leave.sentAtMs = 550;
+      room.admitCommand(null, leave, 550);
+      await room.tick();
       expect(reports).toHaveLength(1);
       expect(reports[0]!.ticks).toHaveLength(8);
       expect(reports[0]!.droppedTicks).toBe(4);
@@ -129,7 +139,7 @@ describe("benchmark first-pause observer", () => {
       observer.begin();
       const candidate = room.simulation.fork();
       candidate.advance([]);
-      const events = candidate.advance([]);
+      const events = candidate.advance([command("guest", 3, {kind: "leave"})]);
       const actual = room.commitCandidate(candidate, events, []);
       expect(actual).toBe(commit);
       const failure = new Error("fixture commit failed");

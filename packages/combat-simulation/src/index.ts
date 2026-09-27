@@ -1,8 +1,8 @@
 import {LIMITS, type AuthenticatedCommand, type BodyObservation, type CombatEvent, type CombatPlayerState, type CombatSnapshot, type PhonePose,
   type ProjectileState, type RefusalReason} from "@vkz/combat-protocol";
-import {add, distance, dot, finiteVector, length, mul, phoneForward} from "./geometry.js";
-import {COVER_OBSERVATION_MS, anchoredToPhone, bodyMovementValid, colliderPairs, phoneAt, phoneMovementValid, sampleBoundaries} from "./history.js";
-import {integrateFlight, resolveFlights, resolveSighting, terminal, timeScaleAt, type FlightPath} from "./flight.js";
+import {distance, dot, finiteVector, length, phoneForward} from "./geometry.js";
+import {COVER_OBSERVATION_MS, phoneAt, phoneMovementValid} from "./history.js";
+import {resolveSighting, terminal, timeScaleAt} from "./flight.js";
 import {clone, parseCheckpoint, validateConfiguration, validObservation, validPhone, type SimulationCheckpoint, type SimulationConfiguration} from "./state.js";
 
 export type {SimulationCheckpoint, SimulationConfiguration} from "./state.js";
@@ -28,7 +28,7 @@ export class CombatSimulation {
         health: 100, ammo: config.rules.weapon.magazine, kills: 0, deaths: 0, connected: false, frameReady: false,
         lastFireAtMs: null, reloadEndsAtMs: null, respawnAtMs: null, protectedUntilMs: null,
         shield: {activeUntilMs: null, cooldownUntilMs: 0, energy: config.rules.shield.energy}, slowFieldReadyAtMs: 0}))};
-    return new CombatSimulation({version: 1, snapshot, startedAtMs: null, phones: [], bodies: []});
+    return new CombatSimulation({version: 1, snapshot, startedAtMs: null, phones: []});
   }
   static restore(checkpoint: unknown, epochs: {authorityEpoch: number; frameEpoch: number}): CombatSimulation {
     const state = parseCheckpoint(checkpoint);
@@ -38,7 +38,7 @@ export class CombatSimulation {
     state.snapshot.authorityEpoch = epochs.authorityEpoch; state.snapshot.frameEpoch = epochs.frameEpoch;
     simulation.cancelFlight(simulation.recoveryEvents);
     simulation.expireAbilities(simulation.recoveryEvents);
-    state.phones = []; state.bodies = []; state.snapshot.phonePoses = [];
+    state.phones = []; state.snapshot.phonePoses = [];
     for (const player of state.snapshot.players) {
       player.connected = false; player.frameReady = false;
       simulation.recoveryEvents.push(changed(player));
@@ -50,13 +50,12 @@ export class CombatSimulation {
     // Stored samples are immutable after admission. Share those values while
     // copying history containers; accepting a sample replaces its array.
     return new CombatSimulation({...this.state, snapshot: clone(this.state.snapshot),
-      phones: this.state.phones.map(h => ({...h, samples: [...h.samples]})),
-      bodies: this.state.bodies.map(h => ({...h, samples: [...h.samples]}))});
+      phones: this.state.phones.map(h => ({...h, samples: [...h.samples]}))});
   }
   snapshot(): CombatSnapshot { return clone(this.state.snapshot); }
   checkpoint(options: {includeTracking?: boolean} = {}): SimulationCheckpoint {
     if (options.includeTracking === false) return clone({...this.state,
-      snapshot: {...this.state.snapshot, phonePoses: []}, phones: [], bodies: []});
+      snapshot: {...this.state.snapshot, phonePoses: []}, phones: []});
     return clone(this.state);
   }
   takeRecoveryEvents(): CombatEvent[] { const events = this.recoveryEvents; this.recoveryEvents = []; return clone(events); }
@@ -76,7 +75,6 @@ export class CombatSimulation {
   advance(commands: readonly AuthenticatedCommand[]): CombatEvent[] {
     if (commands.length > LIMITS.commandsPerTick) throw new Error("Command tick limit exceeded");
     const batch = clone([...commands]).sort(ordered), events: CombatEvent[] = [];
-    const previousMs = this.now;
     this.state.snapshot.tick++; this.state.snapshot.matchTimeMs = this.state.snapshot.tick * LIMITS.tickMs;
     const controls: AuthenticatedCommand[] = [];
     // Current samples are available before sweeping the just-finished interval.
@@ -88,19 +86,12 @@ export class CombatSimulation {
       else controls.push(envelope);
     }
     const running = this.state.snapshot.phase === "running";
-    if (running && !this.coverage(previousMs, this.now, this.state.snapshot.projectiles.length > 0)) this.pause("spatialCoverageLost", events);
-    if (this.state.snapshot.phase === "paused" && this.state.startedAtMs !== null && this.coverage(this.now, this.now)) this.setPhase("running", "spatialCoverageRestored", events);
-    // No advancement through unobserved paused intervals or new-shot retroactive flight.
-    if (running && this.state.snapshot.phase === "running" && this.state.snapshot.projectiles.length) {
-      const end = Math.min(this.now, this.state.startedAtMs! + this.state.snapshot.rules.durationMs);
-      if (end > previousMs) {
-        const paths = this.state.snapshot.projectiles.map(p => integrateFlight(this.state, p, previousMs, end));
-        const resolved = resolveFlights(this.state, paths);
-        this.state.snapshot.projectiles = resolved.survivors; events.push(...resolved.events);
-      }
-    }
+    if (running && !this.coverage()) this.pause("spatialCoverageLost", events);
+    if (this.state.snapshot.phase === "paused" && this.state.startedAtMs !== null && this.coverage()) this.setPhase("running", "spatialCoverageRestored", events);
+    // Sighting resolves fire instantly; checkpoint-restored projectiles are only
+    // emptied by cancelFlight on pause/finish/recovery.
     this.settleTimers(events);
-    if (this.state.snapshot.phase === "running" && !this.coverage(this.now, this.now)) this.pause("spatialCoverageLost", events);
+    if (this.state.snapshot.phase === "running" && !this.coverage()) this.pause("spatialCoverageLost", events);
     if (this.state.startedAtMs !== null && this.now >= this.state.startedAtMs + this.state.snapshot.rules.durationMs && this.state.snapshot.phase !== "finished") {
       this.cancelFlight(events); this.expireAbilities(events); this.setPhase("finished", "durationElapsed", events);
     }
@@ -116,7 +107,6 @@ export class CombatSimulation {
   private clearHistory(playerId: string): void {
     this.state.phones = this.state.phones.filter(h => h.playerId !== playerId);
     this.state.snapshot.phonePoses = this.state.snapshot.phonePoses.filter(p => p.playerId !== playerId);
-    this.state.bodies = this.state.bodies.filter(h => h.observerId !== playerId && h.targetId !== playerId);
   }
   private cancelFlight(events: CombatEvent[]): void {
     events.push(...this.state.snapshot.projectiles.map(p => terminal(p, "cancelled", this.now, p.position)));
@@ -130,13 +120,9 @@ export class CombatSimulation {
   private pause(reason: string, events: CombatEvent[]): void {
     this.cancelFlight(events); this.expireAbilities(events); this.setPhase("paused", reason, events);
   }
-  private get sighting(): boolean { return this.state.snapshot.rules.geometry === "sighting"; }
-  private coverage(fromMs: number, toMs: number, interval = false): boolean {
+  private coverage(): boolean {
     // ADR 0013: sighting needs no shared frame; connected is the whole gate.
-    if (this.sighting) return this.state.snapshot.players.every(p => p.connected);
-    const times = interval ? [fromMs, ...sampleBoundaries(this.state, fromMs, toMs), toMs] : [toMs, toMs];
-    return this.state.snapshot.players.every(p => p.connected && p.frameReady && (p.health <= 0 || (
-      phoneAt(this.state, p.playerId, toMs) !== null && times.slice(1).every((end, i) => colliderPairs(this.state, p.playerId, times[i]!, end) !== null))));
+    return this.state.snapshot.players.every(p => p.connected);
   }
   private envelopeRefusal(e: AuthenticatedCommand): RefusalReason | null {
     if (!this.player(e.playerId)) return "unknownPlayer";
@@ -157,48 +143,19 @@ export class CombatSimulation {
     const {pose} = e.command;
     // Sighting carries its observation on the fire command; pose observations
     // are ignored entirely (no body history, anchor or cover bookkeeping).
-    const observations = this.sighting ? [] : e.command.observations;
-    if (!validPhone(pose) || !Array.isArray(observations) || observations.length > 3 || !observations.every(validObservation)) return "invalidInput";
-    if (pose.capturedAtMs > this.now || observations.some(o => o.capturedAtMs > this.now)) return "futureInput";
-    if (this.now - pose.capturedAtMs > LIMITS.poseAgeMs || observations.some(o => this.now - o.capturedAtMs > LIMITS.poseAgeMs)) return "poseStale";
+    if (!validPhone(pose)) return "invalidInput";
+    if (pose.capturedAtMs > this.now) return "futureInput";
+    if (this.now - pose.capturedAtMs > LIMITS.poseAgeMs) return "poseStale";
     const quaternionLength = Math.sqrt(pose.orientation.reduce((n, v) => n + v * v, 0));
     pose.orientation = [pose.orientation[0] / quaternionLength, pose.orientation[1] / quaternionLength, pose.orientation[2] / quaternionLength, pose.orientation[3] / quaternionLength];
     const history = this.state.phones.find(h => h.playerId === e.playerId);
     if (!phoneMovementValid(history?.samples.at(-1), pose)) return "poseMismatch";
-    if (new Set(observations.map(o => o.targetPlayerId)).size !== observations.length
-      || observations.some(o => o.targetPlayerId === e.playerId || !this.player(o.targetPlayerId))) return "invalidInput";
-    // Whole-packet validation avoids a rejected command partially mutating poses.
-    for (const observation of observations) {
-      const h = this.state.bodies.find(b => b.observerId === e.playerId && b.targetId === observation.targetPlayerId);
-      const previous = h?.samples.at(-1);
-      if (previous?.capturedAtMs === observation.capturedAtMs && JSON.stringify(previous) === JSON.stringify(observation)) continue;
-      if (!bodyMovementValid(previous, observation)) return "poseMismatch";
-      if (this.anchorRefusal(previous, observation) === "poseMismatch") return "poseMismatch";
-    }
     if (history) history.samples = [...history.samples, clone(pose)].slice(-16);
     else this.state.phones.push({playerId: e.playerId, samples: [clone(pose)]});
     this.state.snapshot.phonePoses = [...this.state.snapshot.phonePoses.filter(p => p.playerId !== e.playerId), {playerId: e.playerId, pose: clone(pose)}]
       .sort((a, b) => a.playerId.localeCompare(b.playerId));
     events.push({kind: "poseChanged", playerId: e.playerId, pose: clone(pose)});
-    for (const observation of observations) {
-      const h = this.state.bodies.find(b => b.observerId === e.playerId && b.targetId === observation.targetPlayerId);
-      if (observation.associationConfidence < 0.8 || observation.uncertaintyMeters > 0.1 || pose.tracking !== "normal") {
-        this.state.bodies = this.state.bodies.filter(b => b !== h); continue;
-      }
-      if (h?.samples.at(-1)?.capturedAtMs === observation.capturedAtMs) continue;
-      if (this.anchorRefusal(h?.samples.at(-1), observation) === "unanchored") continue;
-      if (h) h.samples = [...h.samples, clone(observation)].slice(-16);
-      else this.state.bodies.push({observerId: e.playerId, targetId: observation.targetPlayerId, samples: [clone(observation)]});
-    }
     return null;
-  }
-  private anchorRefusal(previous: BodyObservation | undefined, observation: BodyObservation): "poseMismatch" | "unanchored" | null {
-    const newTrack = observation.colliders.some(c => !previous?.colliders.some(x => x.id === c.id));
-    if (!newTrack) return null;
-    const anchor = phoneAt(this.state, observation.targetPlayerId, observation.capturedAtMs);
-    if (!anchor) return "unanchored";
-    return observation.colliders.some(c => !previous?.colliders.some(x => x.id === c.id) && !anchoredToPhone(anchor.position, c))
-      ? "poseMismatch" : null;
   }
   private acceptFrame(e: AuthenticatedCommand, events: CombatEvent[]): RefusalReason | null {
     const command = e.command;
@@ -213,7 +170,7 @@ export class CombatSimulation {
   }
   private actionRefusal(player: CombatPlayerState): RefusalReason | null {
     if (this.state.snapshot.phase !== "running") return "notRunning";
-    if (!player.connected || (!player.frameReady && !this.sighting)) return "notReady";
+    if (!player.connected) return "notReady";
     if (player.health <= 0) return "notAlive";
     if (player.protectedUntilMs !== null && player.protectedUntilMs > this.now) return "protected";
     if (!phoneAt(this.state, player.playerId, this.now)) return "trackingLost";
@@ -232,7 +189,7 @@ export class CombatSimulation {
     if (command.kind === "start") {
       if (p.role !== "host") return "notHost";
       if (this.state.snapshot.phase === "finished") return "notRunning";
-      if (!this.coverage(this.now, this.now)) return "notReady";
+      if (!this.coverage()) return "notReady";
       if (this.state.startedAtMs === null) { this.state.startedAtMs = this.now; this.state.snapshot.roundStartedAtMs = this.now; }
       this.setPhase("running", "hostStarted", events); return null;
     }
@@ -248,7 +205,7 @@ export class CombatSimulation {
       p.reloadEndsAtMs = this.now + rules.weapon.reloadMs; events.push(changed(p)); return null;
     }
     if (command.kind !== "fire" && command.kind !== "shield" && command.kind !== "slowField") return "invalidInput";
-    if (this.sighting && command.kind === "slowField") return "invalidInput";
+    if (command.kind === "slowField") return "invalidInput";
     const pose = this.firingPose(p.playerId, command.poseSequence);
     if (typeof pose === "string") return pose;
     if (command.kind === "shield") {
@@ -256,14 +213,6 @@ export class CombatSimulation {
       if (p.shield.activeUntilMs !== null || p.shield.cooldownUntilMs > this.now) return "abilityCooldown";
       p.shield = {energy: rules.shield.energy, activeUntilMs: this.now + rules.shield.durationMs, cooldownUntilMs: this.now + rules.shield.cooldownMs};
       events.push(changed(p)); return null;
-    }
-    if (command.kind === "slowField") {
-      if (p.slowFieldReadyAtMs > this.now) return "abilityCooldown";
-      const field = {fieldId: `f:${this.state.snapshot.authorityEpoch}:${this.state.snapshot.players.indexOf(p)}:${e.clientSequence}`, ownerId: p.playerId, center: pose.position, radius: rules.slowField.radius,
-        startsAtMs: this.now, endsAtMs: this.now + rules.slowField.durationMs, scale: rules.slowField.scale};
-      this.state.snapshot.slowFields = [...this.state.snapshot.slowFields, field];
-      p.slowFieldReadyAtMs = this.now + rules.slowField.cooldownMs;
-      events.push({kind: "slowFieldChanged", field: clone(field)}, changed(p)); return null;
     }
     if (!finiteVector(command.origin) || !finiteVector(command.direction) || Math.abs(length(command.direction) - 1) > 0.001
       || distance(command.origin, pose.position) > 0.5 || dot(command.direction, phoneForward(pose.orientation)) < Math.cos(Math.PI / 12)) return "invalidRay";
@@ -275,37 +224,22 @@ export class CombatSimulation {
     if (this.state.snapshot.projectiles.length >= LIMITS.projectiles) return "projectileLimit";
     const projectileId = `p:${this.state.snapshot.authorityEpoch}:${this.state.snapshot.players.indexOf(p)}:${e.clientSequence}`;
     if (this.state.snapshot.projectiles.some(projectile => projectile.shooterId === p.playerId && projectile.shotId === command.shotId)) return "invalidInput";
-    if (rules.weapon.kind === "hitscan" && !this.coverage(e.sentAtMs, e.sentAtMs)) return "poseStale";
-    let sightingTarget: CombatPlayerState | null = null;
-    let sightingObservation: BodyObservation | null = null;
-    if (this.sighting) {
-      const opponents = this.state.snapshot.players.filter(other => other.playerId !== p.playerId);
-      if (opponents.length !== 1) return "ambiguousTarget";
-      const observation = command.observation;
-      if (observation === undefined || observation === null || !validObservation(observation)) return "noSighting";
-      if (observation.targetPlayerId !== opponents[0]!.playerId) return "invalidInput";
-      if (observation.capturedAtMs > this.now) return "futureInput";
-      if (this.now - observation.capturedAtMs > COVER_OBSERVATION_MS || observation.associationConfidence < 0.8
-        || observation.uncertaintyMeters > 0.1 || observation.colliders.length === 0) return "noSighting";
-      sightingTarget = opponents[0]!; sightingObservation = observation;
-    }
+    const opponents = this.state.snapshot.players.filter(other => other.playerId !== p.playerId);
+    if (opponents.length !== 1) return "ambiguousTarget";
+    const observation = command.observation;
+    if (observation === undefined || observation === null || !validObservation(observation)) return "noSighting";
+    if (observation.targetPlayerId !== opponents[0]!.playerId) return "invalidInput";
+    if (observation.capturedAtMs > this.now) return "futureInput";
+    if (this.now - observation.capturedAtMs > COVER_OBSERVATION_MS || observation.associationConfidence < 0.8
+      || observation.uncertaintyMeters > 0.1 || observation.colliders.length === 0) return "noSighting";
+    const sightingTarget = opponents[0]!;
     p.ammo--; p.lastFireAtMs = this.now;
     const projectile: ProjectileState = {projectileId, shotId: command.shotId, shooterId: p.playerId, spawnedAtMs: this.now, position: command.origin,
       direction: command.direction, speed: rules.weapon.speed, segmentStartedAtMs: this.now, segmentOrigin: command.origin,
       timeScale: rules.weapon.kind === "hitscan" ? 1 : timeScaleAt(this.state, command.origin, command.direction, this.now), radius: rules.weapon.projectileRadius,
       expiresAtMs: this.now + rules.weapon.lifetimeMs, distanceTravelled: 0};
     events.push({kind: "projectileSpawn", projectile: clone(projectile)}, changed(p));
-    if (sightingTarget !== null && sightingObservation !== null) {
-      events.push(...resolveSighting(this.state, projectile, sightingTarget, sightingObservation, this.now));
-      return null;
-    }
-    if (rules.weapon.kind === "projectile") this.state.snapshot.projectiles = [...this.state.snapshot.projectiles, projectile];
-    else {
-      const end = add(command.origin, mul(command.direction, rules.weapon.rangeMeters));
-      const path: FlightPath = {projectile: {...projectile, position: end, distanceTravelled: rules.weapon.rangeMeters}, changes: [], expires: true, endTimeMs: this.now,
-        segments: [{fromMs: this.now, toMs: this.now, geometryFromMs: e.sentAtMs, geometryToMs: e.sentAtMs, start: command.origin, end, scale: 1}]};
-      events.push(...resolveFlights(this.state, [path]).events);
-    }
+    events.push(...resolveSighting(this.state, projectile, sightingTarget, observation, this.now));
     return null;
   }
   private settleTimers(events: CombatEvent[]): void {

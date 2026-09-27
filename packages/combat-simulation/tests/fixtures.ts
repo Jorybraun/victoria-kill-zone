@@ -11,8 +11,6 @@ export class Fixture {
   phone: Record<string, Vec3> = {};
   body: Record<string, BodyCollider[]> = {};
   orientation: Record<string, Quaternion> = {};
-  observed = true;
-  blind = new Set<string>();
   private sequence = 0;
   constructor(public config = rules(), count = 2) {
     this.ids = ["a", "b", "c", "d"].slice(0, count);
@@ -31,19 +29,23 @@ export class Fixture {
   poseCommands(): AuthenticatedCommand[] {
     const at = this.now + 50;
     return this.ids.map(id => this.envelope(id, {kind: "pose", pose: {sequence: at / 50, capturedAtMs: at,
-      position: this.phone[id]!, orientation: this.orientation[id]!, tracking: "normal"}, observations: this.observed && !this.blind.has(id) ? this.ids.filter(other => other !== id)
-      .map(other => ({targetPlayerId: other, capturedAtMs: at, associationConfidence: 1, uncertaintyMeters: 0.01, colliders: this.body[other]!})) : []}));
+      position: this.phone[id]!, orientation: this.orientation[id]!, tracking: "normal"}, observations: []}));
   }
   tick(extra: AuthenticatedCommand[] = []): CombatEvent[] { return this.simulation.advance([...this.poseCommands(), ...extra]); }
+  /** Sighting needs no shared frame: one tick for coverage, then the host starts. */
   ready(): this {
-    this.tick(this.ids.map(id => this.envelope(id, {kind: "frameReady", ready: true, residualMeters: 0.01, residualDegrees: 0.1, clockUncertaintyMs: 5})));
     this.tick();
     this.tick([this.envelope("a", {kind: "start"})]);
     if (this.simulation.snapshot().phase !== "running") throw new Error("Fixture did not start");
     return this;
   }
-  fire(id = "a", shotId = `shot-${this.now}`, sentAtMs = this.now + 50): AuthenticatedCommand {
-    return this.envelope(id, {kind: "fire", shotId, poseSequence: (this.now + 50) / 50, origin: this.phone[id]!, direction: [1, 0, 0]}, sentAtMs);
+  /** Default sighting verdict targets the single opponent's fixture body. */
+  fire(id = "a", shotId = `shot-${this.now}`, sentAtMs = this.now + 50, withObservation = true): AuthenticatedCommand {
+    const target = this.ids.find(other => other !== id)!;
+    const observation = withObservation ? {targetPlayerId: target, capturedAtMs: this.now,
+      associationConfidence: 1, uncertaintyMeters: 0.01, colliders: this.body[target]!} : undefined;
+    return this.envelope(id, {kind: "fire", shotId, poseSequence: (this.now + 50) / 50, origin: this.phone[id]!, direction: [1, 0, 0],
+      ...(observation === undefined ? {} : {observation})}, sentAtMs);
   }
   ability(kind: "shield" | "slowField", id = "b"): AuthenticatedCommand {
     return this.envelope(id, kind === "shield" ? {kind, active: true, poseSequence: (this.now + 50) / 50}

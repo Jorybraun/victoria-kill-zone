@@ -18,7 +18,7 @@ beforeEach(() => {
 });
 afterEach(() => {vi.restoreAllMocks(); vi.unstubAllEnvs();});
 
-function room(combatGeometry?: "trackedBody" | "phoneProxy" | "sighting", roster = 2) {
+function room(combatGeometry?: "sighting", roster = 2) {
   const b=mutationContext(), host=storedPlayer(testIds.host,{ready:true}), guest=storedPlayer(testIds.guest,{ready:true}), third=storedPlayer(testIds.third,{ready:true});
   b.seed("players",host.doc); b.seed("players",guest.doc);
   if (roster > 2) b.seed("players",third.doc);
@@ -27,43 +27,36 @@ function room(combatGeometry?: "trackedBody" | "phoneProxy" | "sighting", roster
 }
 
 describe("realtime room admission", () => {
-  it("creates a four-slot lobby, accepts slots three/four and rejects five", async () => {
+  it("caps a durableObject lobby at two players regardless of maxPlayers", async () => {
     const b=mutationContext();
     const host=await mutationHandler(create)(b.ctx,{displayName:"Host",arenaRadiusMeters:30,combatMode:"durableObject",maxPlayers:4});
-    for (const displayName of ["Second","Third","Fourth"]) await mutationHandler(join)(b.ctx,{code:host.code,displayName});
-    await expect(mutationHandler(join)(b.ctx,{code:host.code,displayName:"Fifth"})).rejects.toMatchObject({data:{code:"MATCH_FULL"}});
-    expect(b.writes.filter(w=>w.kind==="insert" && w.table==="players")).toHaveLength(4);
+    expect(b.writes.find(w=>w.kind==="insert" && w.table==="matches")?.doc).toMatchObject({maxPlayers:2});
+    await mutationHandler(join)(b.ctx,{code:host.code,displayName:"Second"});
+    await expect(mutationHandler(join)(b.ctx,{code:host.code,displayName:"Third"})).rejects.toMatchObject({data:{code:"MATCH_FULL"}});
+    expect(b.writes.filter(w=>w.kind==="insert" && w.table==="players")).toHaveLength(2);
   });
   it("accepts combatGeometry only on durableObject creates and persists the selection", async () => {
     const b=mutationContext();
-    await expect(mutationHandler(create)(b.ctx,{displayName:"Host",arenaRadiusMeters:30,combatGeometry:"phoneProxy"})).rejects.toMatchObject({data:{code:"INVALID_ARENA"}});
-    await mutationHandler(create)(b.ctx,{displayName:"Host",arenaRadiusMeters:30,combatMode:"durableObject",combatGeometry:"phoneProxy"});
+    await expect(mutationHandler(create)(b.ctx,{displayName:"Host",arenaRadiusMeters:30,combatGeometry:"sighting"})).rejects.toMatchObject({data:{code:"INVALID_ARENA"}});
+    await mutationHandler(create)(b.ctx,{displayName:"Host",arenaRadiusMeters:30,combatMode:"durableObject",combatGeometry:"sighting"});
     const insert=b.writes.find(w=>w.kind==="insert" && w.table==="matches");
-    expect(insert?.doc).toMatchObject({combatMode:"durableObject",combatGeometry:"phoneProxy"});
+    expect(insert?.doc).toMatchObject({combatMode:"durableObject",combatGeometry:"sighting"});
   });
-  it("keeps trackedBody as the default geometry when the match selects none", async () => {
+  it("keeps sighting rules when the match selects no geometry", async () => {
     const b=room(); await mutationHandler(prepare)(b.ctx,b.auth);
-    const patch=b.writes.find(w=>w.kind==="patch" && w.doc.combatRulesJson!==undefined);
-    expect(JSON.parse(String(patch?.doc.combatRulesJson))).toMatchObject({geometry:"trackedBody"});
-    const issued=await mutationHandler(ticket)(b.ctx,b.auth);
-    const claims: unknown=JSON.parse(new TextDecoder().decode(decode(issued.ticket.split(".")[1] ?? "")));
-    expect(validateTicketClaims(claims,Math.floor(Date.now()/1000))).toMatchObject({rules:{geometry:"trackedBody"}});
-  });
-  it("upgrades a stored phoneProxy selection to sighting for a two-player roster", async () => {
-    const b=room("phoneProxy"); await mutationHandler(prepare)(b.ctx,b.auth);
     const patch=b.writes.find(w=>w.kind==="patch" && w.doc.combatRulesJson!==undefined);
     expect(JSON.parse(String(patch?.doc.combatRulesJson))).toMatchObject({geometry:"sighting"});
     const issued=await mutationHandler(ticket)(b.ctx,b.auth);
     const claims: unknown=JSON.parse(new TextDecoder().decode(decode(issued.ticket.split(".")[1] ?? "")));
     expect(validateTicketClaims(claims,Math.floor(Date.now()/1000))).toMatchObject({rules:{geometry:"sighting"}});
   });
-  it("keeps phoneProxy for a three-player roster and trackedBody unchanged", async () => {
-    const b=room("phoneProxy",3); await mutationHandler(prepare)(b.ctx,b.auth);
+  it("issues sighting rules for an explicit sighting selection", async () => {
+    const b=room("sighting"); await mutationHandler(prepare)(b.ctx,b.auth);
     const patch=b.writes.find(w=>w.kind==="patch" && w.doc.combatRulesJson!==undefined);
-    expect(JSON.parse(String(patch?.doc.combatRulesJson))).toMatchObject({geometry:"phoneProxy"});
-    const tracked=room("trackedBody"); await mutationHandler(prepare)(tracked.ctx,tracked.auth);
-    const trackedPatch=tracked.writes.find(w=>w.kind==="patch" && w.doc.combatRulesJson!==undefined);
-    expect(JSON.parse(String(trackedPatch?.doc.combatRulesJson))).toMatchObject({geometry:"trackedBody"});
+    expect(JSON.parse(String(patch?.doc.combatRulesJson))).toMatchObject({geometry:"sighting"});
+    const issued=await mutationHandler(ticket)(b.ctx,b.auth);
+    const claims: unknown=JSON.parse(new TextDecoder().decode(decode(issued.ticket.split(".")[1] ?? "")));
+    expect(validateTicketClaims(claims,Math.floor(Date.now()/1000))).toMatchObject({rules:{geometry:"sighting"}});
   });
   it("accepts sighting at create, forces a two-player cap and rejects a third join", async () => {
     const b=mutationContext();

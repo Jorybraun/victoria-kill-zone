@@ -26,17 +26,15 @@ function configuration(): {secret: string; endpoint: string} {
 
 export const QUICK_DUEL_MAX_PLAYERS = 2;
 
-type CombatGeometry = "trackedBody" | "phoneProxy" | "sighting";
-/** A Quick Duel is a durableObject match that requests `sighting`: exactly two
- * players, and the sighting selection is never downgraded. ADR 0013: a
- * two-player phoneProxy roster still upgrades to sighting; anything larger
- * keeps the shared-frame geometries until a target-identity rule ships.
+type CombatGeometry = "sighting";
+type StoredCombatGeometry = "trackedBody" | "phoneProxy" | "sighting";
+/** ADR 0013 / BIO-37: sighting is the only combat geometry. Stored rows from
+ * earlier releases may name a shared-frame geometry; issued rules are always
+ * sighting regardless of the stored selection or roster size.
  */
-export function selectCombatGeometry(requested: CombatGeometry | undefined, rosterSize: number): CombatGeometry {
-  const geometry = requested ?? DEFAULT_RULES.geometry;
-  if (geometry === "sighting") return "sighting";
-  if (geometry === "phoneProxy" && rosterSize <= 2) return "sighting";
-  return geometry;
+export function selectCombatGeometry(requested: StoredCombatGeometry | undefined, rosterSize: number): CombatGeometry {
+  void requested; void rosterSize;
+  return "sighting";
 }
 
 /** Host freezes membership before issuing any capability; this starts calibration. */
