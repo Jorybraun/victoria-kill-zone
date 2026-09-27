@@ -14,41 +14,16 @@ struct RealtimeHitFeedback: Identifiable {
   let skeleton: TargetingSkeleton?
 }
 
-/// Decided in the lobby from Convex's match record, before the combat socket exists.
-enum RealtimeArenaMode: Equatable {
-  case quickDuel                       // ADR 0013 sighting: no shared frame, ever
-  case savedArena                      // measured/collaborative frame path
-
-  /// The combat authority's rules must agree with the lobby's decision: a
-  /// Quick Duel only ever runs sighting rules. Anything else means the match
-  /// was prepared by a server that predates ADR 0013.
-  var expectsSighting: Bool {self == .quickDuel}
-
-  /// Quick Duel = durableObject match on sighting — decided by the same
-  /// classifier as `WaitingRoom.isQuickDuel` (`QuickDuel.isQuickDuelGeometry`).
-  static func select(combatGeometry: String?, rosterSize: Int) -> Self {
-    QuickDuel.isQuickDuelGeometry(combatGeometry, rosterSize: rosterSize) ? .quickDuel : .savedArena
-  }
-}
-
 @MainActor
 final class RealtimeArenaController: ObservableObject {
   let session: PlayerSession
   let targeting: any TargetingSession
   let combat: RealtimeCombatSession
-  let mode: RealtimeArenaMode
-  let frameProvider: DuelFrameProvider?
-  let rendezvous: NearbyRendezvousCoordinator
   @Published private(set) var snapshot: CombatWire.Snapshot?
-  @Published private(set) var frame = DuelFrameSnapshot()
   @Published private(set) var targetingSnapshot = TargetingSnapshot.unavailable()
   @Published private(set) var associatedBody: RealtimeAssociatedBody?
   @Published private(set) var confirmedHits: [RealtimeHitFeedback] = []
   @Published private(set) var connection: RealtimeConnectionState = .disconnected
-  @Published private(set) var rendezvousPhase: NearbyRendezvousPhase = .inactive
-  @Published private(set) var mapState: RealtimeMapState = .idle
-  @Published private(set) var referenceState: DuelFrameReferenceState = .unavailable
-  @Published private(set) var referenceImageData: Data?
   @Published private(set) var triggerHeld = false
   @Published private(set) var localShotSequence = 0
   @Published private(set) var message: String?
@@ -58,49 +33,30 @@ final class RealtimeArenaController: ObservableObject {
   @Published private(set) var actionFeedback: String?
   @Published private(set) var connectionIssue: String?
   @Published private(set) var now = Date()
-  private let mapCoordinator: RealtimeMapCoordinator?
   private var subscriptions: Set<AnyCancellable> = []
   private var cameraTask: Task<Void, Never>?
   private var pumpTask: Task<Void, Never>?
   private var triggerTask: Task<Void, Never>?
-  private var referenceTask: Task<Void, Never>?
-  private var collabTask: Task<Void, Never>?
   private var startTask: Task<Void, Never>?
   private var stopTask: Task<Void, Never>?
   private var started = false
   private var cameraReady = false
-  private var rendezvousStarted = false
-  private var rendezvousTask: Task<Void, Never>?
   private var sceneActive = true
   private var generation = 0
-  private var configuredEpoch: Int?
   private var authorityEpoch: Int?
   private var reconciledSnapshotRevision: Int?
-  private var readiness = RealtimeReadinessState()
   private var commands = RealtimeCommandState()
   private var lastSubmittedPose: CombatWire.Pose?
   private var lastPoseDate: Date?
   private var poseSequence = 0
   private var lastLocalFireAtMs: Double?
-  private var lastBodyDate: Date?
-  private var lastBodyMatchTimeMs: Double?
-  private var alignedSince: Date?
 
   init(session: PlayerSession, client: any GameSessionClient, targeting: any TargetingSession,
-       mode: RealtimeArenaMode, nearby: (any NearbyRendezvousDriving)? = nil,
        makeTransport: @escaping @MainActor () -> any CombatSocketConnecting = {CombatSocketTransport()},
        localNow: @escaping @Sendable () -> Double = {ProcessInfo.processInfo.systemUptime * 1000}) {
-    self.session = session; self.targeting = targeting; self.mode = mode
+    self.session = session; self.targeting = targeting
     let combat = RealtimeCombatSession(gameClient: client, makeTransport: makeTransport, localNow: localNow)
     self.combat = combat
-    self.rendezvous = NearbyRendezvousCoordinator(driver: nearby)
-    // Shared-frame services exist only for the saved-arena path. Quick Duel
-    // never constructs them, so no scan/align/relocalize code can run there.
-    if case .savedArena = mode, let driver = targeting as? any DuelFrameSessionDriving {
-      let provider = DuelFrameProvider(targeting: driver)
-      frameProvider = provider
-      mapCoordinator = RealtimeMapCoordinator(session: session, client: client, combat: combat, frame: provider)
-    } else {frameProvider = nil; mapCoordinator = nil}
     combat.$connectionIssue.sink { [weak self] in self?.connectionIssue = $0 }.store(in: &subscriptions)
     combat.$snapshot.sink { [weak self] in self?.receiveSnapshot($0) }.store(in: &subscriptions)
     combat.$events.sink { [weak self] in self?.receiveEvents($0) }.store(in: &subscriptions)
@@ -108,61 +64,25 @@ final class RealtimeArenaController: ObservableObject {
       guard let self else {return}
       self.connection = state
       if state != .connected {
-        self.readiness = RealtimeReadinessState(); self.setTriggerHeld(false); self.associatedBody = nil
+        self.setTriggerHeld(false); self.associatedBody = nil
       }
     }.store(in: &subscriptions)
-    frameProvider?.$snapshot.sink { [weak self] value in
-      guard let self else {return}
-      let newlyAligned = value.stage == .aligned && self.frame.stage != .aligned
-      self.frame = value
-      if newlyAligned {self.alignedSince = Date()}
-      if value.stage != .aligned {self.alignedSince = nil; self.associatedBody = nil; self.setTriggerHeld(false)}
-    }.store(in: &subscriptions)
-    frameProvider?.$referenceState.sink { [weak self] value in
-      guard let self else {return}
-      self.referenceState = value
-      self.referenceImageData = self.frameProvider?.referenceImageData
-    }.store(in: &subscriptions)
-    mapCoordinator?.$state.sink { [weak self] in self?.mapState = $0 }.store(in: &subscriptions)
-    rendezvous.$phase.sink { [weak self] in self?.rendezvousPhase = $0 }.store(in: &subscriptions)
   }
 
-  deinit {cameraTask?.cancel(); pumpTask?.cancel(); triggerTask?.cancel(); referenceTask?.cancel()}
+  deinit {cameraTask?.cancel(); pumpTask?.cancel(); triggerTask?.cancel()}
 
   var startPending: Bool {commands.contains(.start)}
   var displayAmmo: Int {commands.availableAmmo(localPlayer?.ammo ?? 0)}
   var canOpenCameraSettings: Bool {message != nil && !cameraReady}
   var localPlayer: CombatWire.Player? {snapshot?.players.first {$0.playerId == session.playerId}}
   var isHost: Bool {localPlayer?.role == "host"}
-  /// Quick Play saved arenas share one live frame: ARKit collaboration merges
-  /// peers continuously (ADR 0011), with the frozen-map relocalized flow kept
-  /// as a fallback for trials. Saved arenas stay measured. Quick Duel never
-  /// takes this path regardless of what the snapshot claims.
-  var usesQuickPlayFrame: Bool {
-    mode != .quickDuel && snapshot?.rules.geometry == "phoneProxy"
-  }
-  /// ADR 0013: Quick Duel never creates a shared frame — no map,
-  /// no rendezvous, no frameReady. Connected + camera is the whole gate.
-  var usesSighting: Bool {mode == .quickDuel}
-  var usesCollaborativeFrame: Bool {frameAlignmentMode == .collaborative}
-  var frameAlignmentMode: DuelFrameAlignmentMode {
-    guard usesQuickPlayFrame else {return .measured}
-    return ProcessInfo.processInfo.environment["VKZ_QUICKPLAY_MAP_FALLBACK"] != nil ? .relocalized : .collaborative
-  }
-  /// Connected roster members whose phones report an aligned shared frame.
-  var alignedPlayers: (aligned: Int, total: Int) {
-    let connected = (snapshot?.players ?? []).filter {$0.connected}
-    return (connected.filter {$0.frameReady}.count, connected.count)
-  }
   var matchTimeMs: Double? {combat.matchTimeMs}
-  var worldReady: Bool {
-    sceneActive && connection == .connected && combat.clockReady && (usesSighting || frame.permitsSpatialFire(at: Date()))
-  }
+  var worldReady: Bool {sceneActive && connection == .connected && combat.clockReady}
   var eligibility: RealtimeActionEligibility {
     let fresh = lastSubmittedPose.map {pose in matchTimeMs.map {$0 >= pose.capturedAtMs && $0 - pose.capturedAtMs <= 100} ?? false} ?? false
     var result = RealtimeActionEligibility.evaluate(snapshot: snapshot, localPlayerID: session.playerId, clockReady: combat.clockReady,
-      frameReady: frame.permitsSpatialFire(at: Date()), sceneActive: sceneActive, canSubmit: combat.canSubmitSpatialInput,
-      poseFresh: fresh, localFireAtMs: lastLocalFireAtMs, matchTimeMs: matchTimeMs, sighting: usesSighting)
+      sceneActive: sceneActive, canSubmit: combat.canSubmitSpatialInput, poseFresh: fresh,
+      localFireAtMs: lastLocalFireAtMs, matchTimeMs: matchTimeMs)
     if commands.contains(.reload) || commands.contains(.shield) {
       result.fire = false; result.reload = false; result.shield = false; result.reason = "Confirming action"
     }
@@ -177,26 +97,9 @@ final class RealtimeArenaController: ObservableObject {
   var stage: RealtimeArenaStage {
     if incompatibleRules {return .unavailable}
     if snapshot?.phase == .finished || connection == .finished {return .finished}
-    if case .savedArena = mode, frameProvider == nil {return .unavailable}
     if message != nil || (connectionIssue != nil && connection == .disconnected) {return .unavailable}
     if connection == .retrying {return .reconnecting}
     if connection != .connected {return .connecting}
-    if case .savedArena = mode {
-      switch mapState {
-      case .waitingForHost: return .waitingForMap
-      case .transferring: return .transferringMap
-      case .failed: return .unavailable
-      default: break
-      }
-      switch frame.stage {
-      case .unaligned, .mapping: return .mapping
-      case .mapReady: return .mapReady
-      case .relocalizingWorld, .relocalizingBody: return .relocalizing
-      case .awaitingResidual: return .measuringReference
-      case .degraded, .lost: return .paused
-      case .aligned: break
-      }
-    }
     if !combat.clockReady || !sceneActive {return .paused}
     if localPlayer?.health == 0 {return .respawning}
     if snapshot?.phase == .running {return .running}
@@ -222,7 +125,6 @@ final class RealtimeArenaController: ObservableObject {
     guard started, generation == token else {return}
     combat.start(session: session)
     if !sceneActive {combat.suspendConnection()}
-    if case .savedArena = mode {wireCollaboration()}
     let stream = targeting.snapshots()
     cameraTask = Task { [weak self] in
       for await value in stream {
@@ -237,8 +139,6 @@ final class RealtimeArenaController: ObservableObject {
     }
     guard token == generation else {return}
     cameraReady = true
-    configureMapIfNeeded()
-    startRendezvousIfNeeded()
     pumpTask = Task { [weak self] in
       while !Task.isCancelled {
         self?.tick()
@@ -251,9 +151,7 @@ final class RealtimeArenaController: ObservableObject {
     if let stopTask {await stopTask.value; return}
     guard started else {return}; started = false; cameraReady = false; generation += 1
     setTriggerHeld(false); cameraTask?.cancel(); cameraTask = nil; pumpTask?.cancel(); pumpTask = nil
-    referenceTask?.cancel(); referenceTask = nil; collabTask?.cancel(); collabTask = nil
-    combat.stop(); configuredEpoch = nil; authorityEpoch = nil; readiness = RealtimeReadinessState()
-    rendezvousStarted = false; rendezvousTask?.cancel(); rendezvousTask = nil
+    combat.stop(); authorityEpoch = nil
     associatedBody = nil; confirmedHits = []; lastSubmittedPose = nil; lastPoseDate = nil
     commands = RealtimeCommandState(); actionFeedback = nil; lastLocalFireAtMs = nil
     let pendingStart = startTask
@@ -261,7 +159,7 @@ final class RealtimeArenaController: ObservableObject {
       // An AR start may ignore cancellation while awaiting camera permission.
       // Wait for it, then stop; otherwise it can turn the camera on after leave.
       await pendingStart?.value
-      await rendezvous.stop(); await mapCoordinator?.stop(); await targeting.stop()
+      await targeting.stop()
       startTask = nil; stopTask = nil
     }
     stopTask = teardown
@@ -271,118 +169,23 @@ final class RealtimeArenaController: ObservableObject {
   func setSceneActive(_ active: Bool) {
     sceneActive = active
     if !active {
-      setTriggerHeld(false); frameProvider?.invalidate(reason: .backgrounded)
-      associatedBody = nil; readiness = RealtimeReadinessState()
+      setTriggerHeld(false); associatedBody = nil
       combat.suspendConnection()
     } else if started {
       if combat.connectionSuspended {combat.retryConnection()}
-      if case .savedArena = mode, frame.stage == .lost {retryAlignment()}
     }
   }
-  /// ARKit collaboration deltas are transport bytes, not combat commands:
-  /// outbound archives ride the combat socket verbatim, chunked by
-  /// CollabChunkCodec when they exceed the relay's single-message bound;
-  /// inbound frames reassemble per sender and apply to the AR session in
-  /// receipt order through a single consumer. Other modes get a finished
-  /// stream and an apply path that fails closed, so the wiring needs no
-  /// mode check.
-  private func wireCollaboration() {
-    var inbound: AsyncStream<(playerId: String, data: Data)>.Continuation!
-    // Deltas must apply in order; a dropping policy can lose the critical map
-    // data a merge needs. The worker already bounds the byte rate upstream.
-    let inboundStream = AsyncStream<(playerId: String, data: Data)>(bufferingPolicy: .unbounded) { inbound = $0 }
-    combat.onCollaboration = { playerId, data in inbound.yield((playerId: playerId, data: data)) }
-    combat.onNearbyToken = { [weak self] id, data in
-      self?.rendezvous.receivePeerToken(playerID: id, data: data)
+  func retryCamera() {
+    guard started, !cameraReady, !incompatibleRules else {return}
+    Task { [weak self] in
+      guard let self else {return}
+      await self.stop(); await self.start()
     }
-    rendezvous.onLocalToken = { [weak self] data in
-      Task { await self?.combat.sendNearbyToken(data) }
-    }
-    let outbound = frameProvider?.collaborationOutputs()
-    collabTask = Task { [weak self] in
-      await withTaskGroup(of: Void.self) { group in
-        group.addTask {
-          var assembler = CollabTransferAssembler()
-          for await element in inboundStream {
-            if Task.isCancelled {return}
-            switch assembler.ingest(element.data, from: element.playerId) {
-            case .passthrough(let payload), .completed(let payload):
-              await self?.frameProvider?.applyCollaboration(payload)
-            case .pending, .dropped:
-              continue
-            }
-          }
-        }
-        if let outbound {
-          group.addTask {
-            var transferID: UInt32 = 0
-            for await data in outbound {
-              if Task.isCancelled {return}
-              transferID &+= 1
-              let frames = CollabChunkCodec.frames(data, transferID: transferID)
-              for (index, frame) in frames.enumerated() {
-                if Task.isCancelled {return}
-                await self?.combat.sendCollaboration(frame)
-                if frames.count > 1, index < frames.count - 1 {
-                  try? await Task.sleep(for: CollabChunkCodec.interChunkDelay)
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  func captureReference() {
-    guard isHost, frameAlignmentMode == .measured, frame.stage == .mapReady, referenceTask == nil, let frameProvider else {return}
-    let token = generation
-    referenceTask = Task { [weak self] in
-      do {_ = try await frameProvider.captureReference()} catch {
-        // The provider publishes a typed, recoverable capture failure beside
-        // the capture control; it does not make the whole match unavailable.
-      }
-      if self?.generation == token {self?.referenceTask = nil}
-    }
-  }
-  func captureAndShareMap() {
-    // Relocalized Quick Play shares the raw world map; measured arenas still
-    // require the captured reference before the scan may be shared.
-    guard isHost, frame.stage == .mapReady else {return}
-    if frameAlignmentMode == .measured {
-      guard case .captured = referenceState else {return}
-    }
-    mapCoordinator?.captureAndShare()
-  }
-  func retryAlignment() {
-    guard started, !incompatibleRules else {return}
-    if !cameraReady {
-      Task { [weak self] in
-        guard let self else {return}
-        await self.stop(); await self.start()
-      }
-      return
-    }
-    setTriggerHeld(false); message = nil; configuredEpoch = nil; readiness = RealtimeReadinessState(); lastSubmittedPose = nil; lastPoseDate = nil
-    if case .savedArena = mode {configureMapIfNeeded()}
-  }
-  func recordResidual(frameID: String, epoch: UInt16, translationMeters: Double, yawDegrees: Double, observedAt: Date) throws {
-    guard let frameProvider else {throw DuelFrameFailure.unsupported}
-    try frameProvider.recordResidual(frameID: frameID, epoch: epoch, translationMeters: translationMeters, yawDegrees: yawDegrees, observedAt: observedAt)
-  }
-  func exportSetupLog() throws -> URL {
-    guard let frameProvider else {throw DuelFrameFailure.unsupported}
-    let frameLog = try frameProvider.exportDiagnostics()
-    if rendezvous.diagnostics.isEmpty {return frameLog}
-    return try rendezvous.exportSetupLog(merging: frameLog)
-  }
-  func retryRendezvous() {Task {await rendezvous.retry()}}
-  var canOpenNearbySettings: Bool {rendezvous.needsSettings}
-  /// NI rendezvous only runs the collaborative Quick Play path (ADR 0012);
-  /// unsupported hardware keeps the ADR 0011 co-view copy unchanged.
-  var usesNearbyRendezvous: Bool {
-    usesCollaborativeFrame && rendezvousPhase != .inactive && rendezvousPhase != .unsupported
   }
   func retryConnection() {setTriggerHeld(false); combat.retryConnection()}
+  func diagnosticEvents() -> [DuelFrameDiagnosticEvent] {
+    (targeting as? any LocalSurfaceDiagnosticsProviding)?.localSurfaceDiagnosticEvents() ?? []
+  }
   func beginRound() {
     guard eligibility.begin, let id = combat.submit(.start) else {return}
     commands.queued(.start, id: id); objectWillChange.send()
@@ -404,31 +207,22 @@ final class RealtimeArenaController: ObservableObject {
   func fireOnce() {
     guard eligibility.fire, let pose = lastSubmittedPose, let time = matchTimeMs else {return}
     let shotID = UUID().uuidString
-    var origin = pose.position, observation: CombatWire.Observation?
-    var direction: [Double], sightingRay: TargetingCameraRay?
-    if usesSighting {
-      // The verdict ray and the sighting are both camera-space facts: the
-      // fire command carries the shooter's own body observation (ADR 0013).
-      guard let ray = targetingSnapshot.cameraRay, RealtimeAssociationPolicy.fresh(ray.capturedAt, at: Date()) else {return}
-      sightingRay = ray
-      origin = [ray.origin.x, ray.origin.y, ray.origin.z]
-      direction = [ray.direction.x, ray.direction.y, ray.direction.z]
-      if let body = associatedBody {
-        let colliders = RealtimeAssociationPolicy.colliders(body.skeleton)
-        let captured = time - Date().timeIntervalSince(body.skeleton.capturedAt) * 1000
-        if !colliders.isEmpty, captured >= 0 {
-          observation = .init(targetPlayerId: body.association.playerID, capturedAtMs: captured,
-            associationConfidence: body.association.confidence, uncertaintyMeters: 0.08, colliders: colliders)
-        }
+    guard let ray = targetingSnapshot.cameraRay, RealtimeAssociationPolicy.fresh(ray.capturedAt, at: Date()) else {return}
+    let origin = [ray.origin.x, ray.origin.y, ray.origin.z]
+    let direction = [ray.direction.x, ray.direction.y, ray.direction.z]
+    var observation: CombatWire.Observation?
+    if let body = associatedBody {
+      let colliders = RealtimeAssociationPolicy.colliders(body.skeleton)
+      let captured = time - Date().timeIntervalSince(body.skeleton.capturedAt) * 1000
+      if !colliders.isEmpty, captured >= 0 {
+        observation = .init(targetPlayerId: body.association.playerID, capturedAtMs: captured,
+          associationConfidence: body.association.confidence, uncertaintyMeters: 0.08, colliders: colliders)
       }
-    } else {
-      let q = pose.orientation, x = q[0], y = q[1], z = q[2], w = q[3]
-      direction = [-2 * (x * z + w * y), -2 * (y * z - w * x), -(1 - 2 * (x * x + y * y))]
     }
     guard let id = combat.submit(.fire(shotId: shotID, poseSequence: pose.sequence, origin: origin, direction: direction,
       observation: observation)) else {return}
     commands.queued(.fire, id: id, shotID: shotID)
-    if let sightingRay {(targeting as? any LocalSurfaceDiagnosticsProviding)?.recordSightingFire(ray: sightingRay, skeleton: associatedBody?.skeleton)}
+    (targeting as? any LocalSurfaceDiagnosticsProviding)?.recordSightingFire(ray: ray, skeleton: associatedBody?.skeleton)
     lastLocalFireAtMs = time; localShotSequence += 1
   }
   func setTriggerHeld(_ held: Bool) {
@@ -450,20 +244,9 @@ final class RealtimeArenaController: ObservableObject {
   private func receiveSnapshot(_ value: CombatWire.Snapshot?) {
     snapshot = value
     guard let value else {return}
-    if mode.expectsSighting, value.rules.geometry != "sighting" {
-      // The lobby chose Quick Duel but the authority prepared another geometry:
-      // the match cannot run this mode, so stop instead of silently taking a
-      // shared-frame path (or looping a reconnect that would say the same).
+    if value.rules.geometry != "sighting" {
       incompatibleRules = true
       message = RealtimeArenaPresentation.Sighting.incompatibleServerMessage
-      combat.stop()
-      return
-    }
-    if case .savedArena = mode, value.rules.geometry == "sighting" {
-      // Symmetric guard: a saved-arena match that reports sighting rules was
-      // not prepared for the frame path this client must run.
-      incompatibleRules = true
-      message = RealtimeArenaPresentation.incompatibleRulesMessage
       combat.stop()
       return
     }
@@ -472,35 +255,11 @@ final class RealtimeArenaController: ObservableObject {
       reconciledSnapshotRevision = combat.snapshotRevision
     }
     if let authorityEpoch, authorityEpoch != value.authorityEpoch {
-      // Authority recovery keeps the frame epoch, so the installed map and any
-      // scan in progress stay valid; only server-side readiness must be reacquired.
-      readiness = RealtimeReadinessState(); lastSubmittedPose = nil; lastPoseDate = nil
+      lastSubmittedPose = nil; lastPoseDate = nil
       commands = RealtimeCommandState(); actionFeedback = nil; lastLocalFireAtMs = nil; setTriggerHeld(false)
       associatedBody = nil
     }
     authorityEpoch = value.authorityEpoch
-    configureMapIfNeeded()
-    startRendezvousIfNeeded()
-  }
-  /// Rendezvous starts once the camera and the collaborative frame mode are
-  /// both confirmed by the roster snapshot; roster drift keeps sessions in
-  /// step for peers that join or leave mid-setup. Called from both the
-  /// camera-ready and snapshot paths so neither arrival order can strand it.
-  private func startRendezvousIfNeeded() {
-    guard case .savedArena = mode else {return}
-    guard started, usesCollaborativeFrame, cameraReady, let snapshot else {return}
-    let peerIDs = Set(snapshot.players.map(\.playerId)).subtracting([session.playerId])
-    if rendezvousStarted {rendezvous.updatePeers(peerIDs)}
-    else {
-      rendezvousStarted = true
-      rendezvousTask = Task {await rendezvous.start(peerIDs: peerIDs)}
-    }
-  }
-  private func configureMapIfNeeded() {
-    guard case .savedArena = mode else {return}
-    guard started, cameraReady, sceneActive, let snapshot, configuredEpoch != snapshot.frameEpoch, let epoch = UInt16(exactly: snapshot.frameEpoch), epoch > 0 else {return}
-    configuredEpoch = snapshot.frameEpoch
-    mapCoordinator?.configure(epoch: epoch, isHost: isHost, mode: frameAlignmentMode)
   }
   /// ADR 0013 zero-step Quick Duel: the host starts the round the moment the
   /// sighting gate opens — no second tap after the lobby start. `eligibility`
@@ -509,7 +268,7 @@ final class RealtimeArenaController: ObservableObject {
   /// `roundStartedAtMs` is set.
   private var lastAutoBegin: Date?
   private func autoBeginIfReady() {
-    guard mode == .quickDuel, eligibility.begin else {return}
+    guard eligibility.begin else {return}
     if let last = lastAutoBegin, now.timeIntervalSince(last) < 2 {return}
     lastAutoBegin = now
     beginRound()
@@ -521,63 +280,20 @@ final class RealtimeArenaController: ObservableObject {
     refreshAssociation(at: date)
     autoBeginIfReady()
     guard sceneActive, combat.canSubmitSpatialInput, let matchTimeMs else {return}
-    if usesSighting {
-      // Poses stream the local camera ray in the device's own AR frame; the
-      // authority only checks self-consistency and pose freshness (ADR 0013).
-      guard let ray = targetingSnapshot.cameraRay, ray.capturedAt != lastPoseDate,
-        let pose = RealtimePoseBuilder.pose(ray: ray, sequence: poseSequence + 1, matchTimeMs: matchTimeMs, now: date),
-        combat.submit(.pose(pose, observations: [])) != nil else {return}
-      poseSequence = pose.sequence; lastSubmittedPose = pose; lastPoseDate = ray.capturedAt
-      return
-    }
-    let ready = frame.permitsSpatialFire(at: date)
-    if readiness.shouldSubmit(ready: ready, authoritative: localPlayer?.frameReady ?? false, at: date) {
-      let residual = frame.residual
-      if let id = combat.submit(.frameReady(ready: ready, residualMeters: residual?.translationMeters ?? 0,
-        residualDegrees: residual?.yawDegrees ?? 0, clockUncertaintyMs: combat.clockUncertaintyMs)) {
-        readiness.queued(id: id, ready: ready, at: date)
-      }
-    }
-    guard let sample = frame.localPose, sample.capturedAt != lastPoseDate,
-      let pose = RealtimePoseBuilder.pose(sample, sequence: poseSequence + 1, matchTimeMs: matchTimeMs, now: date) else {return}
-    var observations: [CombatWire.Observation] = []
-    if let body = associatedBody {
-      // Measured frames scale sighting uncertainty with the live residual;
-      // shared frames carry none, so a fixed value under the wire's 0.1 m gate
-      // reports the real sighting the cover verdict needs (ADR 0011).
-      let uncertainty = frame.mode == .measured
-        ? (frame.residual?.translationMeters ?? 1) + 0.05 : 0.08
-      if uncertainty <= 0.1 {
-        if lastBodyDate != body.skeleton.capturedAt {
-          lastBodyDate = body.skeleton.capturedAt
-          lastBodyMatchTimeMs = matchTimeMs - date.timeIntervalSince(body.skeleton.capturedAt) * 1000
-        }
-        let colliders = RealtimeAssociationPolicy.colliders(body.skeleton)
-        if let captured = lastBodyMatchTimeMs, captured >= 0, matchTimeMs - captured <= 100, !colliders.isEmpty {
-          observations = [.init(targetPlayerId: body.association.playerID, capturedAtMs: captured,
-            associationConfidence: body.association.confidence, uncertaintyMeters: uncertainty, colliders: colliders)]
-        }
-      }
-    }
-    if combat.submit(.pose(pose, observations: observations)) != nil {
-      poseSequence = pose.sequence; lastSubmittedPose = pose; lastPoseDate = sample.capturedAt
-    }
+    guard let ray = targetingSnapshot.cameraRay, ray.capturedAt != lastPoseDate,
+      let pose = RealtimePoseBuilder.pose(ray: ray, sequence: poseSequence + 1, matchTimeMs: matchTimeMs, now: date),
+      combat.submit(.pose(pose, observations: [])) != nil else {return}
+    poseSequence = pose.sequence; lastSubmittedPose = pose; lastPoseDate = ray.capturedAt
   }
   private func refreshAssociation(at date: Date) {
-    if usesSighting, let snapshot, let skeleton = targetingSnapshot.skeleton,
+    if let snapshot, let skeleton = targetingSnapshot.skeleton,
       let association = RealtimeAssociationPolicy.associateSighting(skeleton: skeleton,
         observationConfidence: targetingSnapshot.confidence, players: snapshot.players,
         localPlayerID: session.playerId, now: date) {
       associatedBody = .init(association: association, skeleton: skeleton)
       return
     }
-    if usesSighting {associatedBody = nil; return}
-    guard let snapshot, let time = matchTimeMs, let skeleton = targetingSnapshot.skeleton,
-      let alignedSince, skeleton.capturedAt >= alignedSince,
-      let association = RealtimeAssociationPolicy.associate(skeleton: skeleton, observationConfidence: targetingSnapshot.confidence,
-        phonePoses: snapshot.phonePoses, players: snapshot.players, localPlayerID: session.playerId,
-        matchTimeMs: time, now: date, frameReady: worldReady) else {associatedBody = nil; return}
-    associatedBody = .init(association: association, skeleton: skeleton)
+    associatedBody = nil
   }
   private func receiveEvents(_ values: [CombatWire.ServerEvent]) {
     var hits: [RealtimeHitFeedback] = []
@@ -591,7 +307,6 @@ final class RealtimeArenaController: ObservableObject {
         if player.playerId == session.playerId {commands.playerChanged(lastFireAtMs: player.lastFireAtMs)}
       case .commandResult(let commandID, _, let playerID, let accepted, let reason):
         guard playerID == session.playerId else {continue}
-        readiness.resolve(id: commandID)
         commands.resolve(id: commandID, accepted: accepted, reason: reason, at: Date())
         actionFeedback = commands.notice
         objectWillChange.send()

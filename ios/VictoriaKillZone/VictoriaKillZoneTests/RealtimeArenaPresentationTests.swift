@@ -4,98 +4,6 @@ import XCTest
 @testable import VictoriaKillZone
 
 final class RealtimeArenaPresentationTests: XCTestCase {
-  func testReferenceControlsRemainVisibleThroughRecordedMappingReadinessDips() throws {
-    let start = Date(timeIntervalSince1970: 1_000)
-    var policy = DuelFramePolicy()
-    try policy.beginCalibration(epoch: 1, at: start)
-    let samples: [(DuelFrameTracking, Bool)] = [
-      (.normal, false), (.normal, true), (.limited, true),
-      (.normal, true), (.normal, false), (.normal, true),
-    ]
-    for (index, sample) in samples.enumerated() {
-      let time = start.addingTimeInterval(Double(index) / 10)
-      _ = policy.ingest(.init(epoch: 1, frameID: nil, phase: .mapping, tracking: sample.0,
-        isMapped: sample.1, pose: nil, observedAt: time, failure: nil), at: time)
-      let stage: RealtimeArenaStage = policy.snapshot.stage == .mapReady ? .mapReady : .mapping
-      let controls = RealtimeArenaPresentation.ReferenceSetup(stage: stage, isHost: true, usesSavedArena: false)
-      XCTAssertTrue(controls.isVisible, "Capture must not disappear when tracking quality changes")
-      XCTAssertEqual(controls.captureAvailable, sample.0 == .normal && sample.1)
-      XCTAssertFalse(policy.snapshot.permitsSpatialFire(at: time))
-    }
-  }
-
-  func testReferenceCaptureControlsDoNotLeakIntoGuestSavedOrInterruptedFlows() {
-    for stage in [RealtimeArenaStage.mapping, .mapReady] {
-      XCTAssertFalse(RealtimeArenaPresentation.ReferenceSetup(stage: stage, isHost: false, usesSavedArena: false).isVisible)
-      XCTAssertFalse(RealtimeArenaPresentation.ReferenceSetup(stage: stage, isHost: true, usesSavedArena: true).isVisible)
-    }
-    for stage in [RealtimeArenaStage.reconnecting, .paused, .unavailable, .transferringMap, .relocalizing, .running] {
-      let controls = RealtimeArenaPresentation.ReferenceSetup(stage: stage, isHost: true, usesSavedArena: false)
-      XCTAssertFalse(controls.isVisible)
-      XCTAssertFalse(controls.captureAvailable)
-    }
-  }
-
-  func testRelocalizedFrameNeverShowsReferenceControls() {
-    for stage in [RealtimeArenaStage.mapping, .mapReady] {
-      let controls = RealtimeArenaPresentation.ReferenceSetup(stage: stage, isHost: true,
-        usesSavedArena: false, usesQuickPlayFrame: true)
-      XCTAssertFalse(controls.isVisible, "Quick Play shares the raw map; there is no reference step")
-      XCTAssertFalse(controls.captureAvailable)
-    }
-  }
-
-  func testCollaborativeSetupNamesLinkingWithoutLegacyScanCopy() {
-    for stage in [RealtimeArenaStage.mapping, .relocalizing] {
-      let setup = RealtimeArenaPresentation.CollaborativeSetup(stage: stage,
-        frameStage: .mapping, aligned: 0, total: 2)
-      XCTAssertEqual(setup.title, "Linking play area")
-      XCTAssertFalse(setup.guidance.lowercased().contains("scan"))
-      XCTAssertFalse(setup.guidance.lowercased().contains("share"))
-      XCTAssertFalse(setup.guidance.lowercased().contains("host"))
-      XCTAssertTrue(setup.showsProgress)
-    }
-    let relocalizingFrame = RealtimeArenaPresentation.CollaborativeSetup(stage: .awaitingMembers,
-      frameStage: .relocalizingWorld, aligned: 1, total: 3)
-    XCTAssertEqual(relocalizingFrame.title, "Linking play area")
-
-    let awaiting = RealtimeArenaPresentation.CollaborativeSetup(stage: .awaitingMembers,
-      frameStage: .aligned, aligned: 1, total: 3)
-    XCTAssertEqual(awaiting.title, "Aligned")
-    XCTAssertTrue(awaiting.guidance.contains("(1/3)"))
-    XCTAssertFalse(awaiting.showsProgress)
-
-    let degraded = RealtimeArenaPresentation.CollaborativeSetup(stage: .paused,
-      frameStage: .degraded, aligned: 1, total: 3)
-    XCTAssertEqual(degraded.title, "Re-aligning")
-    XCTAssertEqual(degraded.guidance, "Hold steady — re-aligning")
-    XCTAssertTrue(degraded.showsProgress)
-
-    let lost = RealtimeArenaPresentation.CollaborativeSetup(stage: .paused,
-      frameStage: .lost, aligned: 1, total: 3)
-    XCTAssertEqual(lost.title, "Alignment lost")
-    XCTAssertFalse(lost.guidance.lowercased().contains("host"))
-    XCTAssertFalse(lost.showsProgress)
-
-    let running = RealtimeArenaPresentation.CollaborativeSetup(stage: .running,
-      frameStage: .aligned, aligned: 2, total: 2)
-    XCTAssertEqual(running.title, RealtimeArenaStage.running.title)
-    XCTAssertFalse(running.showsProgress)
-  }
-
-  func testCollaborativeModeHidesScanControls() {
-    XCTAssertFalse(RealtimeArenaPresentation.showsScanControls(isHost: true,
-      usesSavedArena: false, usesCollaborativeFrame: true, stage: .mapping, scanTimedOut: false))
-    XCTAssertFalse(RealtimeArenaPresentation.showsScanControls(isHost: true,
-      usesSavedArena: false, usesCollaborativeFrame: true, stage: .running, scanTimedOut: true))
-    XCTAssertTrue(RealtimeArenaPresentation.showsScanControls(isHost: true,
-      usesSavedArena: false, usesCollaborativeFrame: false, stage: .mapping, scanTimedOut: false))
-    XCTAssertTrue(RealtimeArenaPresentation.showsScanControls(isHost: true,
-      usesSavedArena: false, usesCollaborativeFrame: false, stage: .paused, scanTimedOut: true))
-    XCTAssertFalse(RealtimeArenaPresentation.showsScanControls(isHost: false,
-      usesSavedArena: false, usesCollaborativeFrame: false, stage: .mapping, scanTimedOut: false))
-  }
-
   func testOnlyCurrentLocalFieldOverridesCooldownAndExpiresAtBoundary() {
     let fields = [field(owner: "local", start: 1000, end: 3000), field(owner: "remote", start: 1000, end: 9000)]
     XCTAssertEqual(RealtimeArenaPresentation.slowFieldStatus(fields: fields, localPlayerID: "local", readyAt: 11000, now: 1000), .active(seconds: 2))
@@ -125,41 +33,8 @@ final class RealtimeArenaPresentationTests: XCTestCase {
     XCTAssertEqual(RealtimeArenaPresentation.reloadProgress(until: 2000, duration: 1250, now: .nan), 0)
   }
 
-  func testRendezvousCopyNamesTheRitualWithoutLegacySetupWords() {
-    let phases: [NearbyRendezvousPhase] = [
-      .awaitingTokens(received: 1, expected: 3), .pointing(solved: 0, expected: 3),
-      .retryFacing(pending: 2), .solved(count: 3), .permissionDenied,
-    ]
-    for phase in phases {
-      let setup = RealtimeArenaPresentation.RendezvousSetup(phase: phase)
-      XCTAssertFalse(setup.guidance.lowercased().contains("share"), "\(phase)")
-      XCTAssertFalse(setup.guidance.lowercased().contains("host"), "\(phase)")
-    }
-    for phase in [NearbyRendezvousPhase.pointing(solved: 0, expected: 2), .solved(count: 2),
-      .retryFacing(pending: 1), .awaitingTokens(received: 0, expected: 2)] {
-      let setup = RealtimeArenaPresentation.RendezvousSetup(phase: phase)
-      XCTAssertFalse(setup.guidance.lowercased().contains("scan"), "\(phase)")
-    }
-  }
-
-  func testRendezvousProgressAndRecoveryFlags() {
-    XCTAssertTrue(RealtimeArenaPresentation.RendezvousSetup(phase: .awaitingTokens(received: 1, expected: 2)).showsProgress)
-    XCTAssertTrue(RealtimeArenaPresentation.RendezvousSetup(phase: .pointing(solved: 0, expected: 2)).showsProgress)
-    XCTAssertTrue(RealtimeArenaPresentation.RendezvousSetup(phase: .retryFacing(pending: 1)).showsRetry)
-    let denied = RealtimeArenaPresentation.RendezvousSetup(phase: .permissionDenied)
-    XCTAssertTrue(denied.showsRetry); XCTAssertTrue(denied.showsSettings)
-    XCTAssertNil(RealtimeArenaPresentation.rendezvousSetup(phase: .inactive))
-    XCTAssertNil(RealtimeArenaPresentation.rendezvousSetup(phase: .unsupported))
-    XCTAssertNotNil(RealtimeArenaPresentation.rendezvousSetup(phase: .solved(count: 2)))
-    let lost = RealtimeArenaPresentation.RendezvousSetup(phase: .sessionLost)
-    XCTAssertEqual(lost.title, "Nearby Interaction dropped")
-    XCTAssertTrue(lost.showsRetry); XCTAssertFalse(lost.showsSettings)
-    XCTAssertFalse(lost.guidance.lowercased().contains("scan"))
-    XCTAssertFalse(lost.guidance.lowercased().contains("host"))
-  }
-
   func testSightingCopyNeverMentionsSharedFrameCeremony() {
-    let forbidden = ["align", "scan", "share arena", "linking", "relocaliz", "calibrat"]
+    let forbidden = ["align", "scan", "share arena", "shared arena", "linking", "relocaliz", "calibrat"]
     var copies = [
       RealtimeArenaPresentation.Sighting.startTitle,
       RealtimeArenaPresentation.Sighting.retryTrackingTitle,
@@ -216,18 +91,18 @@ final class RealtimeArenaPresentationTests: XCTestCase {
         for connected in [true, false] {
           snapshot.players[1].connected = connected
           reasons.append(RealtimeActionEligibility.evaluate(
-            snapshot: snapshot, localPlayerID: "p1", clockReady: clock, frameReady: false,
+          snapshot: snapshot, localPlayerID: "p1", clockReady: clock,
             sceneActive: true, canSubmit: true, poseFresh: pose, localFireAtMs: nil,
-            matchTimeMs: 5000, sighting: true).reason)
+            matchTimeMs: 5000).reason)
         }
       }
     }
     snapshot.players[1].connected = true
     snapshot.phase = .running
     reasons.append(RealtimeActionEligibility.evaluate(
-      snapshot: snapshot, localPlayerID: "p1", clockReady: true, frameReady: false,
+      snapshot: snapshot, localPlayerID: "p1", clockReady: true,
       sceneActive: true, canSubmit: true, poseFresh: true, localFireAtMs: nil,
-      matchTimeMs: 5000, sighting: true).reason)
+      matchTimeMs: 5000).reason)
     let forbidden = ["align", "scan", "share arena", "linking", "relocaliz", "calibrat"]
     for reason in reasons {
       for term in forbidden {
@@ -235,30 +110,6 @@ final class RealtimeArenaPresentationTests: XCTestCase {
           "Sighting eligibility reason must not contain \(term): \(reason)")
       }
     }
-  }
-
-  func testQuickDuelFallbackOnlyOffersOnSavedArenaDeadEnds() {
-    XCTAssertTrue(RealtimeArenaPresentation.offersQuickDuelFallback(
-      usesSavedArena: true, stage: .measuringReference, frameStage: .awaitingResidual,
-      frameFailure: .referenceUnavailable, referenceState: .unavailable))
-    XCTAssertTrue(RealtimeArenaPresentation.offersQuickDuelFallback(
-      usesSavedArena: true, stage: .paused, frameStage: .lost,
-      frameFailure: .relocalizationTimedOut, referenceState: .unavailable))
-    XCTAssertTrue(RealtimeArenaPresentation.offersQuickDuelFallback(
-      usesSavedArena: true, stage: .unavailable, frameStage: .unaligned,
-      frameFailure: nil, referenceState: .unavailable))
-    XCTAssertFalse(RealtimeArenaPresentation.offersQuickDuelFallback(
-      usesSavedArena: false, stage: .unavailable, frameStage: .unaligned,
-      frameFailure: nil, referenceState: .unavailable))
-    XCTAssertFalse(RealtimeArenaPresentation.offersQuickDuelFallback(
-      usesSavedArena: true, stage: .paused, frameStage: .lost,
-      frameFailure: .trackingLost, referenceState: .unavailable))
-    XCTAssertFalse(RealtimeArenaPresentation.offersQuickDuelFallback(
-      usesSavedArena: true, stage: .relocalizing, frameStage: .relocalizingWorld,
-      frameFailure: nil, referenceState: .unavailable))
-    XCTAssertFalse(RealtimeArenaPresentation.offersQuickDuelFallback(
-      usesSavedArena: true, stage: .running, frameStage: .aligned,
-      frameFailure: nil, referenceState: .unavailable))
   }
 
   private func field(owner: String, start: Double, end: Double) -> CombatWire.SlowField {

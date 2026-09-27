@@ -97,7 +97,7 @@ final class RealtimeLobbyIntegrationTests: XCTestCase {
 
     let nextArena = RealtimeArenaController(
       session: .init(matchId: "next-match", code: "DEF456", playerId: "p0", sessionSecret: UUID().uuidString),
-      client: client, targeting: camera, mode: .quickDuel)
+      client: client, targeting: camera)
     await nextArena.start()
     // Drain any old unstructured cleanup task before inspecting the new camera.
     for _ in 0..<10 {await Task.yield()}
@@ -132,49 +132,47 @@ final class RealtimeLobbyIntegrationTests: XCTestCase {
     await camera.stop()
   }
 
-  func testQuickDuelMatchBuildsQuickDuelController() async throws {
+  func testQuickDuelMatchBuildsRealtimeController() async throws {
     let client = ArenaLobbyClient()
     let store = makeStore(client)
     await store.performCreateDuel(combatMode: .durableObject)
     client.emit(Self.snapshot(count: 2, phase: .running, geometry: QuickDuel.geometry))
     try await until {store.realtimeArena != nil}
-    XCTAssertEqual(store.realtimeArena?.mode, .quickDuel)
-    XCTAssertNil(store.realtimeArena?.frameProvider, "Quick Duel never constructs shared-frame services")
+    XCTAssertNotNil(store.realtimeArena)
+    XCTAssertNil(store.duel.session)
     store.leave()
   }
 
-  func testTwoPlayerPhoneProxyMatchBuildsQuickDuelController() async throws {
+  func testLegacyPhoneProxyRoomStillUsesRealtimeController() async throws {
     let client = ArenaLobbyClient()
     let store = makeStore(client)
     await store.performCreateDuel(combatMode: .durableObject)
     client.emit(Self.snapshot(count: 2, phase: .running, geometry: "phoneProxy"))
     try await until {store.realtimeArena != nil}
-    XCTAssertEqual(store.realtimeArena?.mode, .quickDuel,
-      "Convex upgrades a two-player phoneProxy roster to sighting")
+    XCTAssertNotNil(store.realtimeArena)
+    XCTAssertNil(store.duel.session)
     store.leave()
   }
 
-  func testThreePlayerPhoneProxyMatchBuildsSavedArenaController() async throws {
+  func testThreePlayerPhoneProxyRoomUsesOnlyRealtimeController() async throws {
     let client = ArenaLobbyClient()
     let store = makeStore(client)
     await store.performCreateDuel(combatMode: .durableObject)
     client.emit(Self.snapshot(count: 3, phase: .running, geometry: "phoneProxy"))
     try await until {store.realtimeArena != nil}
-    guard case .savedArena = store.realtimeArena?.mode else {
-      return XCTFail("A three-player phoneProxy roster keeps the shared-frame path")
-    }
+    XCTAssertNotNil(store.realtimeArena)
+    XCTAssertNil(store.duel.session)
     store.leave()
   }
 
-  func testMissingGeometryBuildsSavedArenaController() async throws {
+  func testMissingGeometryRoomUsesOnlyRealtimeController() async throws {
     let client = ArenaLobbyClient()
     let store = makeStore(client)
     await store.performCreateDuel(combatMode: .durableObject)
     client.emit(Self.snapshot(count: 2, phase: .running))
     try await until {store.realtimeArena != nil}
-    guard case .savedArena = store.realtimeArena?.mode else {
-      return XCTFail("Missing geometry must stay on the saved-arena path")
-    }
+    XCTAssertNotNil(store.realtimeArena)
+    XCTAssertNil(store.duel.session)
     store.leave()
   }
 

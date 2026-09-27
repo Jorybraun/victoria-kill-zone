@@ -87,7 +87,7 @@ struct WaitingRoomView: View {
 
   private var rulesSummary: some View {
     VStack(alignment: .leading, spacing: 4) {
-      Text(mode == .savedArena ? "\(room.maxPlayers == 2 ? "2" : "2–\(room.maxPlayers)") players · Shared play area" : mode == .quickDuel ? "\(room.maxPlayers) players · Quick Duel" : "\(room.maxPlayers) players · Classic mode")
+      Text(mode == .quickDuel ? "\(room.maxPlayers) players · Quick Duel" : "\(room.maxPlayers) players · Classic mode")
       if let duration = store.lobbyRoundDurationMs {
         let seconds = max(0, duration / 1000)
         Text(String(format: "%d:%02d per round", seconds / 60, seconds % 60))
