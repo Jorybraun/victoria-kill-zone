@@ -15,7 +15,7 @@ Only one active owner may write a path at a time.
 
 | Workstream | Exclusive write boundary |
 |---|---|
-| Integration | repository-root configuration, shared contracts/models, Xcode project/workspace files, integration docs, merge and release wiring |
+| Integration | repository-root configuration, shared contracts/models, Xcode project/workspace files, integration docs, merge and release wiring, `packages/**`, `services/**`, `ios/**/Features/**`, `ios/**/Services/**`, `ios/**/Domain/**` (ADR 0014, BIO-37 O8) |
 | Backend | `convex/**` and backend tests |
 | Spectator | `spectator/**` and spectator tests |
 | iOS targeting | `ios/**/Targeting/**` and targeting-specific tests |

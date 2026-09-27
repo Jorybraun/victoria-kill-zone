@@ -1,6 +1,6 @@
 # ADR 0010 — Quick Play: relocalized shared frame and phone-proxy verdicts
 
-Status: **accepted**, 2026-09-16. Owner accepted this record; the targeting, backend and client lanes in [design/slices/010-quick-play-setup.md](../../design/slices/010-quick-play-setup.md) are implemented under PRs #89, #90 and #91. Integration owns this record, the per-match geometry contract and the client flow; targeting owns the frame policy and provider; backend owns the Convex change; design owns the slice freeze. Nothing in this record is physical-device evidence.
+Status: **Superseded by [ADR 0014](0014-quick-duel-only.md)** (2026-09-27): the shared frame is removed and Quick Duel camera sighting is the only mode. Original status: **accepted**, 2026-09-16. Owner accepted this record; the targeting, backend and client lanes in [design/slices/010-quick-play-setup.md](../../design/slices/010-quick-play-setup.md) are implemented under PRs #89, #90 and #91. Integration owns this record, the per-match geometry contract and the client flow; targeting owns the frame policy and provider; backend owns the Convex change; design owns the slice freeze. Nothing in this record is physical-device evidence.
 
 ## Context
 

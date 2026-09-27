@@ -4,7 +4,7 @@ Implementation correction, 2026-09-05: this historical proposal's head/neck-to-p
 
 | Field | Value |
 |---|---|
-| Status | **Proposed** (2026-09-04). Becomes Accepted only with the two-phone evidence in §7 recorded in `docs/build-log.md`. |
+| Status | **Superseded in part by [ADR 0014](0014-quick-duel-only.md)** (2026-09-27): everything here that relies on a shared frame or on the `trackedBody` / `phoneProxy` geometries is removed; Quick Duel camera sighting is the only mode. Original status: **Proposed** (2026-09-04). Becomes Accepted only with the two-phone evidence in §7 recorded in `docs/build-log.md`. |
 | Owner | Integration (decision, contracts, sequencing); iOS targeting (calibration + frame provider); iOS game (duel UX + beams); Backend (ledger fields); Hardware/Operator (evidence). |
 | Supersedes | The "body tracking cannot coexist with world-map sessions" consequence in [ADR 0005](0005-duel-body-tracking-and-visible-shots.md) (corrected below). Narrows the collaborative-session preference in [docs/research/shared-arena-frame-options.md](../research/shared-arena-frame-options.md) for the duel. |
 | Does not change | [ADR 0004](0004-realtime-combat-authority-and-transport.md) host authority, `CombatTransport`, Convex as the durable ledger. `shots:debugFire` and the `DEBUG TORSO FALLBACK` button stay until physical-device evidence exists. `archive/` untouched. |
