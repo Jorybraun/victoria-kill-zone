@@ -83,6 +83,29 @@ final class RealtimeArenaTests: XCTestCase {
       makeTransport: {socket})
     await controller.start()
     try await waitFor {controller.message == RealtimeArenaPresentation.Sighting.incompatibleServerMessage}
+    XCTAssertTrue(controller.incompatibleRules)
+    XCTAssertEqual(controller.stage, .unavailable)
+    try await waitFor {socket.closeCount > 0}
+    try await Task.sleep(for: .milliseconds(50))
+    XCTAssertEqual(socket.connectCount, 1, "An incompatible server must not be retried")
+    // Incompatibility is terminal: retry controls cannot reopen the match.
+    controller.retryAlignment()
+    XCTAssertEqual(controller.message, RealtimeArenaPresentation.Sighting.incompatibleServerMessage)
+    XCTAssertEqual(controller.stage, .unavailable)
+  }
+
+  @MainActor
+  func testSavedArenaRejectsSightingRules() async throws {
+    let socket = ArenaModeSocket()
+    var snapshot = RealtimeCombatTests.snapshot(); snapshot.rules.geometry = "sighting"
+    socket.initialSnapshot = snapshot
+    let controller = RealtimeArenaController(
+      session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
+      client: ArenaModeTicketClient(), targeting: ArenaModeFrameCamera(), mode: .savedArena(nil),
+      makeTransport: {socket})
+    await controller.start()
+    try await waitFor {controller.message == RealtimeArenaPresentation.incompatibleRulesMessage}
+    XCTAssertTrue(controller.incompatibleRules)
     XCTAssertEqual(controller.stage, .unavailable)
     try await waitFor {socket.closeCount > 0}
     try await Task.sleep(for: .milliseconds(50))

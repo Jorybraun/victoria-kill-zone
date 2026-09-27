@@ -189,6 +189,29 @@ final class RealtimeLobbyIntegrationTests: XCTestCase {
     store.leave()
   }
 
+  func testTwoPlayerPhoneProxyMatchBuildsQuickDuelController() async throws {
+    let client = ArenaLobbyClient()
+    let store = makeStore(client)
+    await store.performCreateDuel(combatMode: .durableObject)
+    client.emit(Self.snapshot(count: 2, phase: .running, geometry: "phoneProxy"))
+    try await until {store.realtimeArena != nil}
+    XCTAssertEqual(store.realtimeArena?.mode, .quickDuel,
+      "Convex upgrades a two-player phoneProxy roster to sighting")
+    store.leave()
+  }
+
+  func testThreePlayerPhoneProxyMatchBuildsSavedArenaController() async throws {
+    let client = ArenaLobbyClient()
+    let store = makeStore(client)
+    await store.performCreateDuel(combatMode: .durableObject)
+    client.emit(Self.snapshot(count: 3, phase: .running, geometry: "phoneProxy"))
+    try await until {store.realtimeArena != nil}
+    guard case .savedArena = store.realtimeArena?.mode else {
+      return XCTFail("A three-player phoneProxy roster keeps the shared-frame path")
+    }
+    store.leave()
+  }
+
   func testMissingGeometryBuildsSavedArenaController() async throws {
     let client = ArenaLobbyClient()
     let store = makeStore(client)

@@ -3,6 +3,11 @@ import Foundation
 /// Player-facing descriptions derived from accepted state. These helpers never
 /// change authority eligibility, cooldowns, damage, or projectile timing.
 enum RealtimeArenaPresentation {
+  /// The authority's rules contradict the lobby's chosen arena mode; the match
+  /// cannot continue regardless of which direction mismatched.
+  static let incompatibleRulesMessage =
+    "This match's combat rules don't match this mode. Leave and start a new match."
+
   struct ReferenceSetup: Equatable {
     let isVisible: Bool
     let captureAvailable: Bool
