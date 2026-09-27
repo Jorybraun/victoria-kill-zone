@@ -9,6 +9,15 @@ on:
     types:
       - completed
   workflow_dispatch:
+    inputs:
+      combat_worker_override:
+        description: "Promote without combat Worker admission evidence for this SHA"
+        type: boolean
+        default: false
+      combat_worker_override_reason:
+        description: "Reason recorded in the promotion decision when overriding"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -31,6 +40,8 @@ jobs:
     outputs:
       promote: ${{ steps.gate.outputs.promote }}
       sha: ${{ steps.gate.outputs.sha }}
+      overrides: ${{ steps.gate.outputs.overrides }}
+      override_reason: ${{ steps.gate.outputs.override_reason }}
     if: >-
       ${{
         vars.VKZ_TESTFLIGHT_ENABLED == 'true' &&
@@ -81,6 +92,11 @@ jobs:
           VKZ_DEPLOY_RUN_ID: ${{ github.event.workflow_run.id }}
           VKZ_DEPLOY_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
           VKZ_CANDIDATE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          # Set by an operator after a green combat-deploy --deploy/--verify run
+          # for the exact candidate SHA. Overrides are manual-dispatch only.
+          VKZ_COMBAT_WORKER_VERIFIED_SHA: ${{ vars.VKZ_COMBAT_WORKER_VERIFIED_SHA }}
+          VKZ_COMBAT_WORKER_OVERRIDE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.combat_worker_override || '' }}
+          VKZ_COMBAT_WORKER_OVERRIDE_REASON: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.combat_worker_override_reason || '' }}
         run: node scripts/release/promotion-gate.mjs
 
       - name: Verify the promotion lane self-tests
@@ -128,6 +144,11 @@ jobs:
           VKZ_SLACK_WEBHOOK_URL: ${{ secrets.VKZ_SLACK_WEBHOOK_URL }}
           VKZ_SLACK_CHANNEL_ID: ${{ vars.VKZ_SLACK_CHANNEL_ID }}
           VKZ_EVIDENCE_PATH: ${{ runner.temp }}/testflight-evidence/testflight-evidence.json
+          # Fresh repo-variable read at Outpost time; the gate's recorded
+          # overrides are re-applied by the combat admission re-check.
+          VKZ_COMBAT_WORKER_VERIFIED_SHA: ${{ vars.VKZ_COMBAT_WORKER_VERIFIED_SHA }}
+          VKZ_PROMOTION_OVERRIDES: ${{ needs.gate.outputs.overrides }}
+          VKZ_PROMOTION_OVERRIDE_REASON: ${{ needs.gate.outputs.override_reason }}
         run: node scripts/release/promote-testflight.mjs
 
       - name: Upload sanitized promotion evidence
