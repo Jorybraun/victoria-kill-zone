@@ -24,8 +24,6 @@
 		B0010000000000000000000F /* ConvexGameSessionClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000012 /* ConvexGameSessionClient.swift */; };
 		B00100000000000000000010 /* ConvexMobile in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000001 /* ConvexMobile */; };
 		B0010000000000000000001B /* PewPewSimulation in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000002 /* PewPewSimulation */; };
-		B00100000000000000000017 /* CombatTransport in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000003 /* CombatTransport */; };
-		B0010000000000000000001C /* CombatTransport in Frameworks */ = {isa = PBXBuildFile; productRef = PP0100000000000000000003 /* CombatTransport */; };
 		B00100000000000000000011 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000013 /* RootView.swift */; };
 		B00100000000000000000012 /* LaserFX.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000014 /* LaserFX.swift */; };
 		B00100000000000000000013 /* VoiceFireController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00100000000000000000015 /* VoiceFireController.swift */; };
@@ -214,7 +212,6 @@
 			files = (
 				B00100000000000000000010 /* ConvexMobile in Frameworks */,
 				B0010000000000000000001B /* PewPewSimulation in Frameworks */,
-				B00100000000000000000017 /* CombatTransport in Frameworks */,
 				B00100000000000000000014 /* AVFoundation.framework in Frameworks */,
 				B00100000000000000000015 /* Speech.framework in Frameworks */,
 			);
@@ -224,7 +221,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B0010000000000000000001C /* CombatTransport in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -452,7 +448,6 @@
 			packageProductDependencies = (
 				PP0100000000000000000001 /* ConvexMobile */,
 				PP0100000000000000000002 /* PewPewSimulation */,
-				PP0100000000000000000003 /* CombatTransport */,
 			);
 			productName = VictoriaKillZone;
 			productReference = F0010000000000000000000F /* VictoriaKillZone.app */;
@@ -473,7 +468,6 @@
 			);
 			name = VictoriaKillZoneTests;
 			packageProductDependencies = (
-				PP0100000000000000000003 /* CombatTransport */,
 			);
 			productName = VictoriaKillZoneTests;
 			productReference = F00100000000000000000010 /* VictoriaKillZoneTests.xctest */;
@@ -510,7 +504,6 @@
 			packageReferences = (
 				PKG010000000000000000001 /* XCRemoteSwiftPackageReference "convex-swift" */,
 				PKG010000000000000000002 /* XCLocalSwiftPackageReference "../../shared/simulation" */,
-				PKG010000000000000000003 /* XCLocalSwiftPackageReference "Transport/CombatTransport" */,
 			);
 			productRefGroup = G0010000000000000000000D /* Products */;
 			projectDirPath = "";
@@ -896,10 +889,6 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../../shared/simulation;
 		};
-		PKG010000000000000000003 /* XCLocalSwiftPackageReference "Transport/CombatTransport" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = Transport/CombatTransport;
-		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -922,10 +911,6 @@
 		PP0100000000000000000002 /* PewPewSimulation */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = PewPewSimulation;
-		};
-		PP0100000000000000000003 /* CombatTransport */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = CombatTransport;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

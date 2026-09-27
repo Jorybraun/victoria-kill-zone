@@ -17,7 +17,6 @@ let package = Package(
       exact: "0.8.1"
     ),
     .package(path: "../../shared/simulation"),
-    .package(path: "Transport/CombatTransport"),
   ],
   targets: [
     .target(
@@ -25,7 +24,6 @@ let package = Package(
       dependencies: [
         .product(name: "ConvexMobile", package: "convex-swift"),
         .product(name: "PewPewSimulation", package: "simulation"),
-        .product(name: "CombatTransport", package: "CombatTransport"),
       ],
       path: "VictoriaKillZone",
       exclude: [
