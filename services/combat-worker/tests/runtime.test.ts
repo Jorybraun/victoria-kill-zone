@@ -273,6 +273,19 @@ describe("bounded transport and idle lifecycle", () => {
     expect(receipts).toEqual([]);
   });
 
+  it("refuses removed collab and niToken relay messages as unknown types", async () => {
+    for (const message of [
+      JSON.stringify({ type: "collab", data: "QUJD" }),
+      JSON.stringify({ type: "niToken", token: "QUJD" }),
+    ]) {
+      const socket = await connect(claims());
+      await socket.next("snapshot");
+      socket.socket.send(message);
+      expect(await socket.next("error")).toMatchObject({ code: "invalidMessage" });
+      expect(await socket.closed).toBe(1008);
+    }
+  });
+
   it("closes oversized, malformed, and binary frames", async () => {
     for (const message of ["x".repeat(LIMITS.messageBytes + 1), "not-json", new ArrayBuffer(4)]) {
       const socket = await connect(claims());
