@@ -373,6 +373,14 @@ function probeFixture(overrides = {}) {
   assert.equal(result.acceptance.authenticatedWebSocket, "failed");
   assert.ok(result.errors.includes("websocket-rejected-401"));
 }
+// Any other handshake or transport failure is not key-parity evidence.
+for (const rejected of ["websocket-rejected-503", "websocket-rejected", "ECONNREFUSED"]) {
+  const f = probeFixture({ openWebSocket: async () => { throw new Error(rejected); } });
+  const result = await runAdmissionProbe({ config }, f.deps);
+  assert.equal(result.status, "verify-failed");
+  assert.equal(result.acceptance.ticketKeyParity, "not-tested");
+  assert.equal(result.acceptance.authenticatedWebSocket, "failed");
+}
 // A projection that never lands fails the receipt check on timeout.
 {
   const f = probeFixture({ convexQuery: async () => ({ match: { combatProjectionSequence: 0 } }) });

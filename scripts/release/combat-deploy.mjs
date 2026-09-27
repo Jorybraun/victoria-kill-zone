@@ -185,9 +185,12 @@ export async function runAdmissionProbe({ config }, deps) {
           let socket;
           try { socket = await deps.openWebSocket(issued.endpoint, issued.ticket); }
           catch (error) {
-            acceptance.ticketKeyParity = "failed";
+            // Only a 401 proves the ticket was rejected for wrong keys; other
+            // handshake failures and transport errors are not key-parity evidence.
+            const code = classify(error);
+            if (code === "websocket-rejected-401") acceptance.ticketKeyParity = "failed";
             acceptance.authenticatedWebSocket = "failed";
-            errors.push(classify(error));
+            errors.push(code);
           }
           if (socket !== undefined) {
             try {
@@ -396,9 +399,17 @@ function probeDependencies(config) {
     const workerRequire = createRequire(join(ROOT, "services/combat-worker/package.json"));
     const wranglerRequire = createRequire(workerRequire.resolve("wrangler/package.json"));
     const { WebSocket } = wranglerRequire("ws");
+    const ws = new WebSocket(endpoint, {
+      headers: { Authorization: `Bearer ${ticket}` }, handshakeTimeout: 10000 });
+    // Buffer frames from the instant the socket exists: the first snapshot can
+    // arrive before the open handshake resolves on the caller's await chain.
+    const queue = [];
+    let closed = false;
+    ws.on("message", (data) => {
+      try { if (data.byteLength <= 16384) queue.push(JSON.parse(data.toString("utf8"))); } catch { /* non-JSON frame */ }
+    });
+    ws.on("close", () => { closed = true; });
     const socket = await new Promise((resolvePromise, rejectPromise) => {
-      const ws = new WebSocket(endpoint, {
-        headers: { Authorization: `Bearer ${ticket}` }, handshakeTimeout: 10000 });
       ws.once("open", () => resolvePromise(ws));
       ws.once("unexpected-response", (_request, response) => {
         response.destroy();
@@ -406,12 +417,6 @@ function probeDependencies(config) {
       });
       ws.once("error", () => rejectPromise(new CombatDeployError("websocket-rejected")));
     });
-    const queue = [];
-    let closed = false;
-    socket.on("message", (data) => {
-      try { if (data.byteLength <= 16384) queue.push(JSON.parse(data.toString("utf8"))); } catch { /* non-JSON frame */ }
-    });
-    socket.on("close", () => { closed = true; });
     return {
       receive: (timeoutMs) => new Promise((resolvePromise) => {
         const timer = setTimeout(() => resolvePromise(null), Math.max(0, timeoutMs));
