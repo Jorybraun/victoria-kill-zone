@@ -10,14 +10,12 @@ struct CombatReplayFixture: Decodable, Sendable {
   static let maximumDurationMs: Double = 30_000
 
   enum ScenarioID: String, CaseIterable, Decodable, Identifiable, Sendable {
-    case hit, miss, slow, cancel
+    case hit, miss
     var id: String { rawValue }
     var title: String {
       switch self {
       case .hit: "Hit"
       case .miss: "Miss"
-      case .slow: "Slow field"
-      case .cancel: "Cancel"
       }
     }
   }

@@ -262,7 +262,7 @@ function issueBody(report: MatchReport, matchId: string): string {
     "",
     ...fence(text(report.transcript, TRANSCRIPT_CHARS) || "(none)", "text"),
     "",
-    "### Setup log (untrusted)",
+    "### Diagnostic log (untrusted)",
     "",
     ...fence(JSON.stringify(log), "json"),
   ].join("\n");

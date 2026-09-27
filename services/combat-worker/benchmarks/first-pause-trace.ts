@@ -1,6 +1,6 @@
 import {LIMITS, type AuthenticatedCommand, type CombatEvent, type CombatSnapshot} from "@vkz/combat-protocol";
 import {CombatSimulation, type SimulationCheckpoint} from "@vkz/combat-simulation";
-import {bodyAt, colliderPairs, phoneAt} from "../../../packages/combat-simulation/src/history.js";
+import {phoneAt} from "../../../packages/combat-simulation/src/history.js";
 import type {SerialQueue} from "../src/serial-queue.js";
 
 export const TRACE_PREFIX = "VKZ_FIRST_PAUSE_V1 ";
@@ -26,12 +26,10 @@ type TickTiming = {
 export type FirstPauseTrace = {
   version: 1; units: "workerd monotonic milliseconds; client captures are logical match milliseconds";
   authorityEpoch: number; tick: number; matchTimeMs: number;
-  reason: "spatialCoverageLost"; coverage: {fromMs: number; toMs: number; interval: boolean};
+  reason: "playerDisconnected" | "spatialCoverageLost"; coverage: {fromMs: number; toMs: number; interval: boolean};
   failedPlayers: {playerId: string; connected: boolean; frameReady: boolean; health: number;
-    phoneAtEnd: boolean; collidersCoverInterval: boolean;
+    phoneAtEnd: boolean;
     phoneSamples: {sequence: number; capturedAtMs: number; tracking: string}[];
-    bodyHistories: {observerId: string; observerReady: boolean; observerPhoneAtEnd: boolean;
-      coversFrom: boolean; coversTo: boolean; sampleTimesMs: number[]}[];
   }[];
   acceptedPoses: ReturnType<typeof acceptedPoses>;
   inputs: InputTiming[]; ticks: TickTiming[];
@@ -126,42 +124,33 @@ export function installFirstPauseTrace(room: ObservedRoom, emit: (record: FirstP
     if (ticks.length > TICK_LIMIT) {ticks.shift(); droppedTicks++;}
   }});
   // Capture the exact failed invocation, before pause() clears projectiles.
-  const coverageOriginal: unknown = Reflect.get(prototype, "coverage");
-  if (typeof coverageOriginal !== "function") throw new Error("Trace coverage method unavailable");
-  const coverageDescriptor = Object.getOwnPropertyDescriptor(prototype, "coverage");
-  const coverage = coverageOriginal as Method;
-  Object.defineProperty(prototype, "coverage", {configurable: true, writable: true, value: function (this: CombatSimulation, ...args: unknown[]) {
-    const result = coverage.apply(this, args);
-    if (!armed || frozen || first || result !== false || !eligible(this)) return result;
+  // ADR 0013: coverage is just connectivity, so a pause means a phone left.
+  const pauseOriginal: unknown = Reflect.get(prototype, "pause");
+  if (typeof pauseOriginal !== "function") throw new Error("Trace pause method unavailable");
+  const pauseDescriptor = Object.getOwnPropertyDescriptor(prototype, "pause");
+  const pauseMethod = pauseOriginal as Method;
+  Object.defineProperty(prototype, "pause", {configurable: true, writable: true, value: function (this: CombatSimulation, ...args: unknown[]) {
+    const reason = args[0] as FirstPauseTrace["reason"];
+    const result = pauseMethod.apply(this, args);
+    if (!armed || frozen || first || !eligible(this)) return result;
     const state = stateOf(this), snapshot = state.snapshot;
-    if (snapshot.phase !== "running") return result;
-    const [fromMs, toMs] = args as [number, number];
-    const interval = args[2] === true, start = interval ? fromMs : toMs;
+    if (snapshot.phase !== "paused") return result;
     const failedPlayers = snapshot.players.slice(0, LIMITS.players).flatMap(player => {
-      const phoneAtEnd = phoneAt(state, player.playerId, toMs) !== null;
-      const collidersCoverInterval = colliderPairs(state, player.playerId, start, toMs) !== null;
-      if (player.connected && player.frameReady && (player.health <= 0 || (phoneAtEnd && collidersCoverInterval))) return [];
+      if (player.connected) return [];
       return [{playerId: player.playerId, connected: player.connected, frameReady: player.frameReady, health: player.health,
-        phoneAtEnd, collidersCoverInterval,
+        phoneAtEnd: phoneAt(state, player.playerId, snapshot.matchTimeMs) !== null,
         phoneSamples: (state.phones.find(item => item.playerId === player.playerId)?.samples ?? []).slice(-16)
-          .map(pose => ({sequence: pose.sequence, capturedAtMs: pose.capturedAtMs, tracking: pose.tracking})),
-        bodyHistories: state.bodies.filter(history => history.targetId === player.playerId).slice(0, LIMITS.players - 1).map(history => {
-          const observer = snapshot.players.find(item => item.playerId === history.observerId);
-          return {observerId: history.observerId, observerReady: Boolean(observer?.connected && observer.frameReady),
-            observerPhoneAtEnd: phoneAt(state, history.observerId, snapshot.matchTimeMs) !== null,
-            coversFrom: bodyAt(history, start) !== null, coversTo: bodyAt(history, toMs) !== null,
-            sampleTimesMs: history.samples.slice(-16).map(sample => sample.capturedAtMs)};
-        })}];
+          .map(pose => ({sequence: pose.sequence, capturedAtMs: pose.capturedAtMs, tracking: pose.tracking}))}];
     });
     first = {version: 1, units: "workerd monotonic milliseconds; client captures are logical match milliseconds",
       authorityEpoch: snapshot.authorityEpoch, tick: snapshot.tick, matchTimeMs: snapshot.matchTimeMs,
-      reason: "spatialCoverageLost", coverage: {fromMs, toMs, interval}, failedPlayers,
+      reason, coverage: {fromMs: snapshot.matchTimeMs, toMs: snapshot.matchTimeMs, interval: false}, failedPlayers,
       acceptedPoses: acceptedPoses(snapshot), inputs: [], ticks: [], commitSucceeded: null,
       droppedInputs, droppedTicks, limits: {inputs: INPUT_LIMIT, ticks: TICK_LIMIT, logBytes: LOG_BYTES}};
     return result;
   }});
   restorers.push(() => {
-    if (coverageDescriptor) Object.defineProperty(prototype, "coverage", coverageDescriptor);
+    if (pauseDescriptor) Object.defineProperty(prototype, "pause", pauseDescriptor);
   });
   wrap(room, "commitCandidate", {before: args => {
     const candidate = args[0] as CombatSimulation, events = args[1] as readonly CombatEvent[];
@@ -173,7 +162,7 @@ export function installFirstPauseTrace(room: ObservedRoom, emit: (record: FirstP
   }, after: (args, _result, failed) => {
     if (!first || first.tick !== stateOf(args[0] as CombatSimulation).snapshot.tick) return;
     const events = args[1] as readonly CombatEvent[];
-    if (!events.some(event => event.kind === "phaseChanged" && event.phase === "paused" && event.reason === "spatialCoverageLost")) return;
+    if (!events.some(event => event.kind === "phaseChanged" && event.phase === "paused")) return;
     first.inputs = structuredClone(inputs); first.ticks = structuredClone(ticks); first.commitSucceeded = !failed;
     first.droppedInputs = droppedInputs; first.droppedTicks = droppedTicks;
     // A single bounded log record cannot contain geometry, envelopes or credentials.
@@ -203,7 +192,7 @@ export function collectTraceLogs(logs: readonly {message: string}[]): TraceDiagn
       if (new TextEncoder().encode(message.slice(TRACE_PREFIX.length)).byteLength > LOG_BYTES) throw new Error("Trace too large");
       const value: unknown = JSON.parse(message.slice(TRACE_PREFIX.length));
       if (!value || typeof value !== "object" || !("version" in value) || value.version !== 1
-        || !("reason" in value) || value.reason !== "spatialCoverageLost") throw new Error("Invalid trace");
+        || !("reason" in value) || (value.reason !== "spatialCoverageLost" && value.reason !== "playerDisconnected")) throw new Error("Invalid trace");
       if (traces.length < 1) traces.push(value as FirstPauseTrace);
     } catch {malformedRecords++;}
   }

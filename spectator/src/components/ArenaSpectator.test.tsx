@@ -24,7 +24,6 @@ describe("arena spectator", () => {
     expect(screen.queryByText("READY")).not.toBeInTheDocument();
   });
   it.each([
-    ["arena-calibrating", "ALIGNING ARENA", "waiting"],
     ["arena-paused", "ARENA PAUSED", "active"],
   ] as const)("shows %s without claiming live combat", (fixture,title,kind) => {
     const snapshot=createDemoSnapshot("ARENA4",fixture);

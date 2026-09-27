@@ -8,13 +8,11 @@ export interface SimulationConfiguration {
   rules: CombatRules;
 }
 export interface PhoneHistory {playerId: string; samples: PhonePose[]}
-export interface BodyHistory {observerId: string; targetId: string; samples: BodyObservation[]}
 export interface SimulationCheckpoint {
   version: 1;
   snapshot: CombatSnapshot;
   startedAtMs: number | null;
   phones: PhoneHistory[];
-  bodies: BodyHistory[];
 }
 export const clone = <T>(value: T): T => structuredClone(value);
 const object = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
@@ -28,7 +26,7 @@ const zone = (x: unknown): boolean => x === "head" || x === "torso" || x === "li
 export function validRules(x: unknown): x is CombatRules {
   if (!object(x) || !object(x.weapon) || !object(x.weapon.damage) || !object(x.shield) || !object(x.slowField)) return false;
   const w = x.weapon, damage = x.weapon.damage, s = x.shield, f = x.slowField;
-  return number(x.durationMs, 50, 3_600_000) && (x.geometry === "trackedBody" || x.geometry === "phoneProxy" || x.geometry === "sighting")
+  return number(x.durationMs, 50, 3_600_000) && x.geometry === "sighting"
     && number(x.respawnMs, 50, 60_000) && number(x.protectionMs, 0, 30_000)
     && (w.id === "sidearm" || w.id === "pulse") && (w.kind === "hitscan" || w.kind === "projectile")
     && [damage.head, damage.torso, damage.limbs].every(v => integer(v, 1) && v <= 100)
@@ -117,7 +115,7 @@ export function parseCheckpoint(input: unknown): SimulationCheckpoint {
       || f.endsAtMs - f.startsAtMs > s.rules.slowField.durationMs) throw new Error("Invalid checkpoint field");
     fieldIds.add(f.fieldId);
   }
-  if (!Array.isArray(input.phones) || input.phones.length > 4 || !Array.isArray(input.bodies) || input.bodies.length > 12) throw new Error("Invalid checkpoint histories");
+  if (!Array.isArray(input.phones) || input.phones.length > 4) throw new Error("Invalid checkpoint histories");
   const phoneIds = new Set<string>();
   for (const h of input.phones) {
     if (!object(h) || !ids.has(h.playerId as string) || phoneIds.has(h.playerId as string)
@@ -131,17 +129,5 @@ export function parseCheckpoint(input: unknown): SimulationCheckpoint {
     if (!publicPose || JSON.stringify(publicPose.pose) !== JSON.stringify(h.samples.at(-1))) throw new Error("Checkpoint pose history mismatch");
   }
   if (phoneIds.size !== publicPoseIds.size) throw new Error("Checkpoint public pose history mismatch");
-  const bodyIds = new Set<string>();
-  for (const h of input.bodies) {
-    if (!object(h) || !ids.has(h.observerId as string) || !ids.has(h.targetId as string) || h.observerId === h.targetId
-      || bodyIds.has(JSON.stringify([h.observerId, h.targetId])) || !Array.isArray(h.samples)
-      || h.samples.length > 16 || !h.samples.every(validObservation)) throw new Error("Invalid checkpoint body history");
-    for (let i = 0; i < h.samples.length; i++) {
-      const body = h.samples[i] as BodyObservation;
-      if (body.targetPlayerId !== h.targetId || body.capturedAtMs > (s.matchTimeMs as number)
-        || (i > 0 && body.capturedAtMs <= (h.samples[i - 1] as BodyObservation).capturedAtMs)) throw new Error("Nonmonotonic checkpoint bodies");
-    }
-    bodyIds.add(JSON.stringify([h.observerId, h.targetId]));
-  }
   return clone(input as unknown as SimulationCheckpoint);
 }

@@ -18,7 +18,7 @@ final class CombatReplayTests: XCTestCase {
       XCTAssertEqual(session.snapshot.players.first(where: { $0.id == "a" })?.ammo, 7)
       XCTAssertEqual(session.snapshot.players.first(where: { $0.id == "b" })?.health, scenario.id == .hit ? 66 : 100)
       XCTAssertEqual(session.terminals.first?.reason,
-        scenario.id == .hit ? "bodyHit" : scenario.id == .cancel ? "cancelled" : "missExpired")
+        scenario.id == .hit ? "bodyHit" : "missExpired")
       XCTAssertEqual(session.terminals.first?.damage, scenario.id == .hit ? 34 : 0)
     }
   }
@@ -36,40 +36,6 @@ final class CombatReplayTests: XCTestCase {
     XCTAssertEqual(session.terminals.count, 1)
     XCTAssertEqual(session.terminals.first?.damage, 34)
     XCTAssertEqual(session.duplicateEventsIgnored, ignored)
-  }
-
-  func testRecordedSlowSegmentsUseTheirOwnOriginsAndAuthoritySpeed() throws {
-    var session = try makeSession(.slow)
-    try session.advance(to: 350)
-    XCTAssertEqual(session.snapshot.projectiles.first?.timeScale, 0.25)
-    XCTAssertEqual(session.acceptedSegments, 1)
-    let slowStart = try point(session)
-    try session.advance(to: 400)
-    XCTAssertEqual(try point(session).x - slowStart.x, 0.1, accuracy: 0.000001)
-    try session.advance(to: 2200)
-    XCTAssertEqual(session.acceptedSegments, 2)
-    XCTAssertEqual(session.snapshot.projectiles.first?.timeScale, 1)
-    XCTAssertEqual(try point(session).x, 4.75, accuracy: 0.000001)
-    try session.advance(to: 2250)
-    XCTAssertEqual(try point(session).x, 5.15, accuracy: 0.000001)
-  }
-
-  func testStoppedPacketsFreezeThenHideUntilFreshAcceptedEventsResume() throws {
-    var session = try makeSession(.miss)
-    try session.advance(to: 200)
-    let sequence = session.replica.eventSequence
-    try session.advance(to: 300, deliverPackets: false)
-    let frozen = try point(session)
-    try session.advance(to: 400, deliverPackets: false)
-    XCTAssertEqual(try point(session), frozen)
-    XCTAssertEqual(session.replica.eventSequence, sequence)
-    try session.advance(to: 451, deliverPackets: false)
-    XCTAssertTrue(session.presentation.projectiles.isEmpty)
-    XCTAssertNil(session.presentation.timing(at: 0.451))
-    try session.advance(to: 500)
-    XCTAssertGreaterThan(session.replica.eventSequence, sequence)
-    XCTAssertEqual(session.acceptedSpawns, 1)
-    XCTAssertEqual(session.presentation.projectiles.count, 1)
   }
 
   func testClearBlocksLateFramesAndRestartResetsAllEventIdentities() throws {
@@ -144,12 +110,6 @@ final class CombatReplayTests: XCTestCase {
     try CombatReplaySession(scenario: XCTUnwrap(CombatReplayFixture.bundled().scenarios.first(where: { $0.id == id })))
   }
 
-  private func point(_ session: CombatReplaySession) throws -> SIMD3<Double> {
-    try XCTUnwrap(RealtimeCombatPresentation.position(
-      XCTUnwrap(session.presentation.projectiles.first),
-      timing: XCTUnwrap(session.presentation.timing(at: session.matchTimeMs / 1000))))
-  }
-
   private func assertInvalidFixture(_ mutate: (inout [String: Any]) -> Void) throws {
     var object = try XCTUnwrap(JSONSerialization.jsonObject(with: CombatReplayFixture.bundledData()) as? [String: Any])
     mutate(&object)
@@ -157,39 +117,4 @@ final class CombatReplayTests: XCTestCase {
   }
 }
 
-#if os(iOS) && canImport(SceneKit)
-import SceneKit
-
-@MainActor
-final class CombatReplaySceneTests: XCTestCase {
-  func testAcceptedCoordinatesReceiveOneTransformAndThePoolNeverGrows() async throws {
-    let fixture = try CombatReplayFixture.bundled()
-    var session = try CombatReplaySession(scenario: XCTUnwrap(fixture.scenarios.first(where: { $0.id == .miss })))
-    let stage = CombatReplayScene()
-    let count = stage.effects.root.childNodes.count
-    XCTAssertEqual(count, 128 + 4 + 4)
-    try session.advance(to: 150)
-    stage.update(session)
-    let projectile = try XCTUnwrap(stage.effects.root.childNodes.first(where: { $0.name == "finite-projectile" && !$0.isHidden }))
-    // The source origin is zero. A renderer which also applies the root transform
-    // to its vertex coordinates fails this assertion before the world assertion.
-    XCTAssertEqual(projectile.simdPosition.y, 0, accuracy: 0.000001)
-    XCTAssertEqual(projectile.simdPosition.z, 0, accuracy: 0.000001)
-    XCTAssertEqual(projectile.simdPosition.x, 0, accuracy: 0.05)
-    let expected = stage.localFromArena * SIMD4<Float>(projectile.simdPosition, 1)
-    XCTAssertEqual(projectile.simdWorldPosition.x, expected.x, accuracy: 0.000001)
-    XCTAssertEqual(projectile.simdWorldPosition.y, expected.y, accuracy: 0.000001)
-    XCTAssertEqual(projectile.simdWorldPosition.z, expected.z, accuracy: 0.000001)
-    for _ in 0..<100 { stage.update(session) }
-    XCTAssertEqual(stage.effects.root.childNodes.count, count)
-    stage.clear()
-    XCTAssertTrue(stage.effects.root.childNodes.allSatisfy(\.isHidden))
-    stage.reset()
-    stage.update(session)
-    XCTAssertEqual(stage.effects.root.childNodes.count, count)
-    XCTAssertEqual(stage.effects.root.childNodes.filter { $0.name == "finite-projectile" && !$0.isHidden }.count, 1)
-    stage.clear()
-  }
-}
-#endif
 #endif
