@@ -66,7 +66,6 @@ final class LobbyStore: ObservableObject {
 
   private var stateMachine: LobbyStateMachine
   private var session: PlayerSession?
-  private var selectedArena: SavedArenaBundle?
   private var latestSnapshot: MatchSnapshot?
   private var actionTask: Task<Void, Never>?
   private var snapshotTask: Task<Void, Never>?
@@ -194,11 +193,10 @@ final class LobbyStore: ObservableObject {
   }
 
   func createRealtimeArena() {
-    schedule { store in await store.performCreateDuel(combatMode: .durableObject) }
-  }
-
-  func createRealtimeArena(using arena: SavedArenaBundle) {
-    schedule { store in await store.performCreateDuel(combatMode: .durableObject, savedArena: arena) }
+    schedule { store in
+      await store.waitForTargetingTeardown()
+      await store.performCreateDuel(combatMode: .durableObject)
+    }
   }
 
   func waitForTargetingTeardown() async { await targetingTeardown?.value }
@@ -334,7 +332,6 @@ final class LobbyStore: ObservableObject {
       beginTargetingTeardown()
     }
     session = nil
-    selectedArena = nil
     latestSnapshot = nil
     duel.reset()
     operation = nil
@@ -355,7 +352,7 @@ final class LobbyStore: ObservableObject {
     errorMessage = nil
   }
 
-  func performCreateDuel(combatMode: CombatMode? = nil, savedArena: SavedArenaBundle? = nil) async {
+  func performCreateDuel(combatMode: CombatMode? = nil) async {
     guard operation == nil else { return }
     let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !name.isEmpty else {
@@ -371,17 +368,14 @@ final class LobbyStore: ObservableObject {
     operation = .creating
     errorMessage = nil
     do {
-      // A Quick Duel (a durableObject duel with no saved arena) is exactly
-      // two players on sighting verdicts; saved arenas keep the measured
-      // reference flow, trackedBody geometry, and the 2–4 player cap.
-      let geometry: String? = combatMode == .durableObject ? (savedArena == nil ? QuickDuel.geometry : "trackedBody") : nil
       let newSession = try await environment.gameSessionClient.createDuel(
         CreateDuelRequest(displayName: name, arenaRadiusMeters: 30,
-          combatMode: combatMode, combatGeometry: geometry,
-          maxPlayers: combatMode == .durableObject ? (savedArena == nil ? QuickDuel.maxPlayers : 4) : nil)
+          combatMode: combatMode,
+          combatGeometry: combatMode == .durableObject ? QuickDuel.geometry : nil,
+          maxPlayers: combatMode == .durableObject ? QuickDuel.maxPlayers : nil)
       )
       guard !Task.isCancelled else { return }
-      beginSession(newSession, savedArena: combatMode == .durableObject ? savedArena : nil)
+      beginSession(newSession)
     } catch {
       guard !Task.isCancelled else { return }
       operation = nil
@@ -479,12 +473,11 @@ final class LobbyStore: ObservableObject {
     }
   }
 
-  private func beginSession(_ newSession: PlayerSession, savedArena: SavedArenaBundle? = nil) {
+  private func beginSession(_ newSession: PlayerSession) {
     snapshotTask?.cancel()
     snapshotRetryTask?.cancel()
     recoveryTask?.cancel()
     session = newSession
-    selectedArena = savedArena
     latestSnapshot = nil
     lastSyncAt = nil
     duel.attach(session: newSession)
@@ -552,8 +545,7 @@ final class LobbyStore: ObservableObject {
         duel.reset()
         realtimeArena = RealtimeArenaController(session: expectedSession,
           client: environment.gameSessionClient, targeting: environment.targetingSession,
-          mode: .select(combatGeometry: snapshot.match.combatGeometry, rosterSize: snapshot.players.count,
-            savedArena: selectedArena))
+          mode: .select(combatGeometry: snapshot.match.combatGeometry, rosterSize: snapshot.players.count))
       }
     } else {
       duel.receive(snapshot)

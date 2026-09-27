@@ -11,7 +11,6 @@ final class RealtimeMapCoordinator: ObservableObject {
   private let combat: RealtimeCombatSession
   private let frame: DuelFrameProvider
   private let maps: any CombatMapTransferring
-  private let savedArena: SavedArenaBundle?
   private var task: Task<Void, Never>?
   private var installedMap: DuelFrameMap?
   private var generation = 0
@@ -19,9 +18,9 @@ final class RealtimeMapCoordinator: ObservableObject {
   private var cachedTicket: CombatAccessTicket?
 
   init(session: PlayerSession, client: any GameSessionClient, combat: RealtimeCombatSession, frame: DuelFrameProvider,
-       savedArena: SavedArenaBundle? = nil, maps: any CombatMapTransferring = CombatMapClient()) {
+       maps: any CombatMapTransferring = CombatMapClient()) {
     self.session = session; self.client = client; self.combat = combat; self.frame = frame
-    self.savedArena = savedArena; self.maps = maps
+    self.maps = maps
   }
 
   func configure(epoch: UInt16, isHost: Bool, mode: DuelFrameAlignmentMode = .measured) {
@@ -34,7 +33,7 @@ final class RealtimeMapCoordinator: ObservableObject {
         guard self.current(token) else {return}
         await self.frame.stop()
         guard self.current(token) else {return}
-        try await self.frame.beginCalibration(epoch: epoch, captureRequired: isHost && self.savedArena == nil,
+        try await self.frame.beginCalibration(epoch: epoch, captureRequired: isHost,
           mode: mode)
         guard self.current(token) else {return}
         // Collaborative sessions merge continuously through the combat relay;
@@ -54,18 +53,6 @@ final class RealtimeMapCoordinator: ObservableObject {
             ticket = try await self.accessTicket(epoch: epoch)
             map = try await self.maps.download(epoch: epoch, ticket: ticket)
           } catch CombatMapError.unavailable {
-            if isHost, let savedArena = self.savedArena {
-              // Hashing/decoding up to 8 MiB must not stall the camera or clock.
-              let map = try await Task.detached(priority: .userInitiated) {
-                try savedArena.map(epoch: epoch)
-              }.value
-              guard self.current(token) else {return}
-              try await self.maps.upload(map, ticket: ticket)
-              guard self.current(token) else {return}
-              try await self.frame.installMap(map)
-              guard self.current(token) else {return}
-              self.installedMap = map; self.state = .installed; return
-            }
             if isHost {self.state = .mapping; return}
             self.state = .waitingForHost
             try await Task.sleep(for: .seconds(2))
@@ -81,9 +68,6 @@ final class RealtimeMapCoordinator: ObservableObject {
             continue
           }
           guard self.current(token) else {return}
-          if isHost, let savedArena = self.savedArena, map.frameID != savedArena.summary.frameID {
-            throw CombatMapError.conflict
-          }
           try await self.frame.installMap(map)
           guard self.current(token) else {return}
           self.installedMap = map; self.state = .installed; return
@@ -93,14 +77,14 @@ final class RealtimeMapCoordinator: ObservableObject {
         if error as? CombatMapError == .conflict {
           self.state = .failed("This match already uses a different arena. Leave and create a new match to change it.")
         } else {
-          self.state = .failed("The arena scan could not be loaded. Check your connection and retry. If the saved scan is unreadable, scan a new arena.")
+          self.state = .failed("The arena scan could not be loaded. Check your connection and retry.")
         }
       }
     }
   }
 
   func captureAndShare() {
-    guard savedArena == nil, task == nil, frame.snapshot.stage == .mapReady, let epoch = frame.snapshot.epoch else {return}
+    guard task == nil, frame.snapshot.stage == .mapReady, let epoch = frame.snapshot.epoch else {return}
     generation += 1; let token = generation
     state = .transferring
     task = Task { [weak self] in

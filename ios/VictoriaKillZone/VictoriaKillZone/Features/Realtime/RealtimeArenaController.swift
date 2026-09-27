@@ -17,7 +17,7 @@ struct RealtimeHitFeedback: Identifiable {
 /// Decided in the lobby from Convex's match record, before the combat socket exists.
 enum RealtimeArenaMode: Equatable {
   case quickDuel                       // ADR 0013 sighting: no shared frame, ever
-  case savedArena(SavedArenaBundle?)   // measured/collaborative frame path (host has bundle; guests nil)
+  case savedArena                      // measured/collaborative frame path
 
   /// The combat authority's rules must agree with the lobby's decision: a
   /// Quick Duel only ever runs sighting rules. Anything else means the match
@@ -26,8 +26,8 @@ enum RealtimeArenaMode: Equatable {
 
   /// Quick Duel = durableObject match on sighting — decided by the same
   /// classifier as `WaitingRoom.isQuickDuel` (`QuickDuel.isQuickDuelGeometry`).
-  static func select(combatGeometry: String?, rosterSize: Int, savedArena: SavedArenaBundle?) -> Self {
-    QuickDuel.isQuickDuelGeometry(combatGeometry, rosterSize: rosterSize) ? .quickDuel : .savedArena(savedArena)
+  static func select(combatGeometry: String?, rosterSize: Int) -> Self {
+    QuickDuel.isQuickDuelGeometry(combatGeometry, rosterSize: rosterSize) ? .quickDuel : .savedArena
   }
 }
 
@@ -38,7 +38,6 @@ final class RealtimeArenaController: ObservableObject {
   let combat: RealtimeCombatSession
   let mode: RealtimeArenaMode
   let frameProvider: DuelFrameProvider?
-  let savedArenaName: String?
   let rendezvous: NearbyRendezvousCoordinator
   @Published private(set) var snapshot: CombatWire.Snapshot?
   @Published private(set) var frame = DuelFrameSnapshot()
@@ -92,9 +91,6 @@ final class RealtimeArenaController: ObservableObject {
        makeTransport: @escaping @MainActor () -> any CombatSocketConnecting = {CombatSocketTransport()},
        localNow: @escaping @Sendable () -> Double = {ProcessInfo.processInfo.systemUptime * 1000}) {
     self.session = session; self.targeting = targeting; self.mode = mode
-    var bundle: SavedArenaBundle?
-    if case .savedArena(let saved) = mode {bundle = saved}
-    savedArenaName = bundle?.summary.name
     let combat = RealtimeCombatSession(gameClient: client, makeTransport: makeTransport, localNow: localNow)
     self.combat = combat
     self.rendezvous = NearbyRendezvousCoordinator(driver: nearby)
@@ -103,8 +99,7 @@ final class RealtimeArenaController: ObservableObject {
     if case .savedArena = mode, let driver = targeting as? any DuelFrameSessionDriving {
       let provider = DuelFrameProvider(targeting: driver)
       frameProvider = provider
-      mapCoordinator = RealtimeMapCoordinator(session: session, client: client, combat: combat, frame: provider,
-        savedArena: bundle)
+      mapCoordinator = RealtimeMapCoordinator(session: session, client: client, combat: combat, frame: provider)
     } else {frameProvider = nil; mapCoordinator = nil}
     combat.$connectionIssue.sink { [weak self] in self?.connectionIssue = $0 }.store(in: &subscriptions)
     combat.$snapshot.sink { [weak self] in self?.receiveSnapshot($0) }.store(in: &subscriptions)

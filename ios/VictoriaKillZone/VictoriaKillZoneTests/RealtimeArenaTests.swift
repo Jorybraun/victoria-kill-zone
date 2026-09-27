@@ -68,7 +68,7 @@ final class RealtimeArenaTests: XCTestCase {
   func testSavedArenaStillBuildsFrameProvider() {
     let controller = RealtimeArenaController(
       session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
-      client: UnavailableGameSessionClient(), targeting: ArenaModeFrameCamera(), mode: .savedArena(nil))
+      client: UnavailableGameSessionClient(), targeting: ArenaModeFrameCamera(), mode: .savedArena)
     XCTAssertNotNil(controller.frameProvider)
     XCTAssertFalse(controller.usesSighting)
   }
@@ -101,7 +101,7 @@ final class RealtimeArenaTests: XCTestCase {
     socket.initialSnapshot = snapshot
     let controller = RealtimeArenaController(
       session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
-      client: ArenaModeTicketClient(), targeting: ArenaModeFrameCamera(), mode: .savedArena(nil),
+      client: ArenaModeTicketClient(), targeting: ArenaModeFrameCamera(), mode: .savedArena,
       makeTransport: {socket})
     await controller.start()
     try await waitFor {controller.message == RealtimeArenaPresentation.incompatibleRulesMessage}
@@ -119,7 +119,7 @@ final class RealtimeArenaTests: XCTestCase {
     socket.initialSnapshot = snapshot
     let controller = RealtimeArenaController(
       session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
-      client: ArenaModeTicketClient(), targeting: ArenaModeFrameCamera(), mode: .savedArena(nil),
+      client: ArenaModeTicketClient(), targeting: ArenaModeFrameCamera(), mode: .savedArena,
       makeTransport: {socket})
     await controller.start()
     try await waitFor {controller.message == RealtimeArenaPresentation.incompatibleRulesMessage}

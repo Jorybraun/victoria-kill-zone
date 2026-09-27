@@ -2,9 +2,6 @@ import SwiftUI
 
 struct HomeView: View {
   @ObservedObject var store: LobbyStore
-  var onCreateArena: () -> Void
-  var onSavedArenas: () -> Void
-  var onUseSavedArena: (() -> Void)? = nil
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   var body: some View {
@@ -27,7 +24,7 @@ struct HomeView: View {
         Text("Your world. The arena.")
           .font(.title2.bold())
           .foregroundStyle(VKZPalette.pending)
-        Text("Two players, one room. Start a Quick Duel or join a friend’s code. Saved Arenas are the 2–4 player mode.")
+        Text("Two players, one room. Start a Quick Duel or join a friend’s code.")
           .font(.body)
           .fixedSize(horizontal: false, vertical: true)
           .foregroundStyle(VKZPalette.textMuted)
@@ -58,7 +55,7 @@ struct HomeView: View {
 
       VStack(spacing: 12) {
         Button {
-          onCreateArena()
+          store.createRealtimeArena()
         } label: {
           HStack(spacing: 10) {
             if store.operation == .creating {ProgressView().tint(VKZPalette.background)}
@@ -77,21 +74,6 @@ struct HomeView: View {
         .accessibilityLabel("Join duel")
         .accessibilityHint("Enter a friend’s duel code.")
 
-        Button(action: onUseSavedArena ?? onSavedArenas) {
-          Label("SAVED ARENAS", systemImage: "map")
-            .frame(minHeight: 44)
-        }
-        .disabled(store.isBusy)
-        .accessibilityHint("Create a 2–4 player match in a saved arena.")
-
-        DisclosureGroup("Saved Arena tools") {
-          Button("SCAN & SAVE A PLAY AREA", action: onSavedArenas)
-            .frame(minHeight: 44)
-            .accessibilityHint("Save your surroundings and test recognition later. Works offline without a game.")
-        }
-        .font(.subheadline)
-        .foregroundStyle(VKZPalette.textMuted)
-        .disabled(store.isBusy)
       }
 
       #if VKZ_DEBUG_FIRE || DEBUG
@@ -117,12 +99,6 @@ struct HomeView: View {
       #endif
 
       #if DEBUG
-      NavigationLink("SHARED ORIGIN EXPERIMENT") {
-        SharedArenaHarnessView()
-      }
-      .font(.caption.weight(.semibold).monospaced())
-      .foregroundStyle(VKZPalette.telemetry)
-
       #if os(iOS) && canImport(SceneKit)
       NavigationLink("PROJECTILE REPLAY · SYNTHETIC") {
         CombatReplayView()
