@@ -11,17 +11,17 @@ const tables = (storage: DurableObjectStorage): string[] =>
 const version = (storage: DurableObjectStorage): number | null =>
   storage.sql.exec<{ version: number | null }>("SELECT MAX(version) AS version FROM schema_migrations").one().version;
 
-describe("room storage schema v2", () => {
-  it("initializes fresh storage directly at version 2 without map tables", async () => {
+describe("room storage schema", () => {
+  it("initializes fresh storage at version 1 without map tables", async () => {
     await runInDurableObject(env.COMBAT_ROOMS.getByName(crypto.randomUUID()), (_instance, state) => {
       new RoomStore(state.storage).initialize();
-      expect(version(state.storage)).toBe(2);
+      expect(version(state.storage)).toBe(1);
       expect(tables(state.storage)).not.toContain("shared_maps");
       expect(tables(state.storage)).not.toContain("map_chunks");
     });
   });
 
-  it("migrates version-1 storage by dropping map tables and keeping surviving rows", async () => {
+  it("drops map tables on every init while keeping surviving rows and version 1", async () => {
     await runInDurableObject(env.COMBAT_ROOMS.getByName(crypto.randomUUID()), (_instance, state) => {
       state.storage.sql.exec(`
         DELETE FROM schema_migrations;
@@ -38,16 +38,16 @@ describe("room storage schema v2", () => {
         INSERT INTO map_chunks VALUES (1, 0, X'0102');
       `);
       new RoomStore(state.storage).initialize();
-      expect(version(state.storage)).toBe(2);
+      expect(version(state.storage)).toBe(1);
       expect(tables(state.storage)).not.toContain("shared_maps");
       expect(tables(state.storage)).not.toContain("map_chunks");
       expect(state.storage.sql.exec<{ payload: string }>("SELECT payload FROM events WHERE sequence = 7").one().payload).toBe('{"kept":true}');
     });
   });
 
-  it("refuses storage written by an unknown newer schema version", async () => {
+  it("refuses storage written by a newer schema version", async () => {
     await runInDurableObject(env.COMBAT_ROOMS.getByName(crypto.randomUUID()), (_instance, state) => {
-      state.storage.sql.exec("DELETE FROM schema_migrations; INSERT INTO schema_migrations(version) VALUES (3)");
+      state.storage.sql.exec("DELETE FROM schema_migrations; INSERT INTO schema_migrations(version) VALUES (2)");
       expect(() => new RoomStore(state.storage).initialize()).toThrow("Unsupported room storage version");
     });
   });
