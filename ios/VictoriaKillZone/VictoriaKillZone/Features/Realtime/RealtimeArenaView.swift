@@ -486,10 +486,6 @@ struct RealtimeArenaView: View {
     }
     if let rendezvousSetup {return rendezvousSetup.guidance}
     if let collaborativeSetup {return collaborativeSetup.guidance}
-    if let initialScan {return initialScan.guidance}
-    if let name = controller.savedArenaName, [.mapping, .mapReady, .relocalizing].contains(controller.stage) {
-      return "Loading \(name). Point at the fixed objects you scanned so your phone can recognize this arena."
-    }
     if scanTimedOut {
       return controller.usesQuickPlayFrame
         ? "Couldn't map this area — try somewhere with more detail"
@@ -534,11 +530,6 @@ struct RealtimeArenaView: View {
         default: break
         }
       }
-      if controller.frame.stage == .lost, controller.frame.failure == .relocalizationTimedOut {
-        // Guests never receive the arena bundle, so savedArenaName is host-only.
-        let name = controller.savedArenaName ?? "the saved arena"
-        return "Couldn't recognize \(name). Try pointing at the objects you scanned, or play a Quick Duel instead."
-      }
       return RealtimeArenaPresentation.pauseGuidance(clockReady: controller.combat.clockReady,
       roundHasStarted: controller.snapshot?.roundStartedAtMs != nil)
     case .reconnecting: return "Your score is retained. Reconnecting and checking the shared arena before input resumes."
@@ -563,12 +554,8 @@ struct RealtimeArenaView: View {
         if controller.frame.stage == .lost {return "Alignment lost"}
       }
     }
-    if let initialScan {return initialScan.title}
     if scanTimedOut {return "Scan needs another try"}
     if controller.stage == .paused && !controller.combat.clockReady {return "Synchronizing match"}
-    if controller.savedArenaName != nil && [.mapping, .mapReady, .relocalizing].contains(controller.stage) {
-      return "Align with saved arena"
-    }
     return controller.stage.title
   }
   private var offersQuickDuel: Bool {
@@ -581,7 +568,7 @@ struct RealtimeArenaView: View {
     controller.connection == .connected && controller.frame.failure == .mappingTimedOut
   }
   private var referenceSetup: RealtimeArenaPresentation.ReferenceSetup {
-    .init(stage: controller.stage, isHost: controller.isHost, usesSavedArena: controller.savedArenaName != nil,
+    .init(stage: controller.stage, isHost: controller.isHost, usesSavedArena: false,
       usesQuickPlayFrame: controller.usesQuickPlayFrame)
   }
   /// The NI rendezvous ritual owns the same setup stages while its phase is
@@ -601,15 +588,6 @@ struct RealtimeArenaView: View {
     let counts = controller.alignedPlayers
     return .init(stage: controller.stage, frameStage: controller.frame.stage,
       aligned: counts.aligned, total: counts.total)
-  }
-  private var initialScan: ArenaScanPresentation? {
-    guard controller.connection == .connected, controller.isHost, controller.savedArenaName == nil,
-      !controller.usesCollaborativeFrame,
-      controller.frame.frameID == nil, controller.frame.epoch != nil,
-      [.mapping, .lost].contains(controller.frame.stage),
-      controller.mapState == .mapping
-    else {return nil}
-    return ArenaScanPresentation(frame: controller.frame)
   }
   private var roundTime: String {
     guard let ms = RealtimeActionEligibility.remainingRoundMs(snapshot: controller.snapshot, now: controller.matchTimeMs ?? controller.snapshot?.matchTimeMs) else {return "—:—"}
