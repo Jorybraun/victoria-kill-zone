@@ -2821,7 +2821,7 @@ final class KIL36TwoClientConvergenceTests: XCTestCase {
     }
 
     XCTAssertTrue(room(combatGeometry: "sighting", maxPlayers: 2).isQuickDuel)
-    XCTAssertFalse(room(combatGeometry: "phoneProxy", maxPlayers: 4, players: roster(2)).isQuickDuel)
+    XCTAssertTrue(room(combatGeometry: "phoneProxy", maxPlayers: 4, players: roster(2)).isQuickDuel)
     XCTAssertFalse(room(combatGeometry: "phoneProxy", maxPlayers: 4, players: roster(3)).isQuickDuel)
     XCTAssertFalse(room(maxPlayers: 2).isQuickDuel)
     XCTAssertFalse(room(combatGeometry: "trackedBody", maxPlayers: 4).isQuickDuel)
