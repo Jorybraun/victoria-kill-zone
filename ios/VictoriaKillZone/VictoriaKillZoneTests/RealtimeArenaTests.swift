@@ -55,9 +55,44 @@ final class RealtimeArenaTests: XCTestCase {
   }
 
   @MainActor
+  func testQuickDuelNeverBuildsFrameProviderEvenWhenTargetingSupportsIt() {
+    let controller = RealtimeArenaController(
+      session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
+      client: UnavailableGameSessionClient(), targeting: ArenaModeFrameCamera(), mode: .quickDuel)
+    XCTAssertNil(controller.frameProvider)
+    XCTAssertTrue(controller.usesSighting)
+    XCTAssertEqual(controller.stage, .connecting,
+      "Quick Duel reaches the connected-only gate without any frame service")
+  }
+  @MainActor
+  func testSavedArenaStillBuildsFrameProvider() {
+    let controller = RealtimeArenaController(
+      session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
+      client: UnavailableGameSessionClient(), targeting: ArenaModeFrameCamera(), mode: .savedArena(nil))
+    XCTAssertNotNil(controller.frameProvider)
+    XCTAssertFalse(controller.usesSighting)
+  }
+  @MainActor
+  func testQuickDuelRejectsNonSightingRules() async throws {
+    let socket = ArenaModeSocket()
+    var snapshot = RealtimeCombatTests.snapshot(); snapshot.rules.geometry = "phoneProxy"
+    socket.initialSnapshot = snapshot
+    let controller = RealtimeArenaController(
+      session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
+      client: ArenaModeTicketClient(), targeting: ArenaLifecycleCamera(), mode: .quickDuel,
+      makeTransport: {socket})
+    await controller.start()
+    try await waitFor {controller.message == RealtimeArenaPresentation.Sighting.incompatibleServerMessage}
+    XCTAssertEqual(controller.stage, .unavailable)
+    try await waitFor {socket.closeCount > 0}
+    try await Task.sleep(for: .milliseconds(50))
+    XCTAssertEqual(socket.connectCount, 1, "An incompatible server must not be retried")
+  }
+
+  @MainActor
   private func makeController(_ camera: ArenaLifecycleCamera) -> RealtimeArenaController {
     .init(session: .init(matchId: "match", code: "ABC123", playerId: "p1", sessionSecret: UUID().uuidString),
-      client: UnavailableGameSessionClient(), targeting: camera)
+      client: UnavailableGameSessionClient(), targeting: camera, mode: .quickDuel)
   }
   @MainActor
   private func waitFor(_ condition: () async -> Bool) async throws {
@@ -263,4 +298,52 @@ private actor ArenaLifecycleCamera: TargetingSession {
   func releaseStart() {startContinuation?.resume(); startContinuation = nil}
   func releaseStop() {stopContinuation?.resume(); stopContinuation = nil}
   func disableStopGate() {gateStop = false; releaseStop()}
+}
+
+/// A targeting double that supports the shared-frame protocol — used to prove
+/// Quick Duel still refuses to construct frame services.
+private actor ArenaModeFrameCamera: TargetingSession, DuelFrameSessionDriving {
+  nonisolated let availability = TargetingAvailability.available
+  nonisolated let currentSnapshot = TargetingSnapshot.unavailable()
+  nonisolated func snapshots() -> AsyncStream<TargetingSnapshot> {AsyncStream {$0.finish()}}
+  func start() async throws {}
+  func stop() async {}
+  nonisolated func duelFrameObservations() -> AsyncStream<DuelFrameObservation> {AsyncStream {$0.finish()}}
+  nonisolated func applyFrameCollaboration(_ data: Data) async throws {}
+  func beginFrameMapping(epoch: UInt16, mode: DuelFrameAlignmentMode) async throws {}
+  func captureFrameMap(epoch: UInt16) async throws -> Data {Data()}
+  func installFrameMap(_ map: DuelFrameMap, phase: DuelFrameSessionPhase) async throws {}
+  func endFrameMapping() async {}
+}
+
+@MainActor
+private final class ArenaModeSocket: CombatSocketConnecting {
+  var output: AsyncThrowingStream<CombatWire.ServerMessage, Error>.Continuation?
+  var closeCount = 0
+  var connectCount = 0
+  var initialSnapshot = RealtimeCombatTests.snapshot()
+  func connect(ticket: CombatAccessTicket) throws -> AsyncThrowingStream<CombatWire.ServerMessage, Error> {
+    connectCount += 1
+    let pair = AsyncThrowingStream<CombatWire.ServerMessage, Error>.makeStream()
+    output = pair.continuation
+    output?.yield(.snapshot(initialSnapshot, eventSequence: 0, clientSequence: 0))
+    return pair.stream
+  }
+  func send(_ message: CombatWire.ClientMessage) async throws {}
+  func close() {closeCount += 1; output?.finish(); output = nil}
+}
+
+private struct ArenaModeTicketClient: GameSessionClient {
+  let availability = GameSessionAvailability.available
+  func combatTicket(session: PlayerSession) async throws -> CombatAccessTicket {
+    try CombatAccessTicket(endpoint: XCTUnwrap(URL(string: "https://combat.example.test/v1/matches/match/connect")),
+      token: UUID().uuidString, expiresAt: Date().addingTimeInterval(120), authorityEpoch: 1, frameEpoch: 1)
+  }
+  func createDuel(_ request: CreateDuelRequest) async throws -> PlayerSession {throw GameSessionClientError.notConfigured}
+  func joinDuel(_ request: JoinDuelRequest) async throws -> PlayerSession {throw GameSessionClientError.notConfigured}
+  func setReady(session: PlayerSession, isReady: Bool) async throws {}
+  func startDuel(session: PlayerSession) async throws {}
+  func debugFire(session: PlayerSession, clientShotId: String) async throws -> DebugFireResult {throw GameSessionClientError.notConfigured}
+  nonisolated func snapshots(for session: PlayerSession) -> AsyncThrowingStream<MatchSnapshot, Error> {AsyncThrowingStream {$0.finish()}}
+  nonisolated func connectionStates() -> AsyncStream<GameSessionConnectionState> {AsyncStream {$0.finish()}}
 }

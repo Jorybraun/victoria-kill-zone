@@ -138,6 +138,30 @@ final class RealtimeCombatSessionTests: XCTestCase {
     XCTAssertNil(game.submit(.reload))
   }
 
+  func testSightingRecoversClockWithoutReconnectingDuringGameplay() async throws {
+    let socket = ScriptedCombatSocket(), now = ControlledCombatTime()
+    socket.initialSnapshot.rules.geometry = "sighting"
+    let game = RealtimeCombatSession(gameClient: TicketOnlyClient(), makeTransport: {socket}, localNow: {now.read()})
+    defer {game.stop()}
+    game.start(session: Self.playerSession())
+    try await until {game.clockReady}
+    try await drainClockReplies(socket, game: game, context: "sighting recovery")
+    XCTAssertNotNil(game.submit(.reload))
+    try await until {socket.commands.count == 1}
+
+    now.advance(by: 3100)
+    try await until { !game.clockReady }
+    XCTAssertEqual(socket.closeCount, 0)
+    XCTAssertEqual(game.state, .connected)
+    XCTAssertNil(game.submit(.reload))
+
+    socket.automaticallyRepliesToPings = true
+    try await until {game.clockReady}
+    XCTAssertEqual(socket.connectCount, 1)
+    XCTAssertEqual(socket.closeCount, 0)
+    XCTAssertEqual(game.state, .connected)
+  }
+
   func testArmedOrPendingCalibrationStillClosesOnClockLoss() async throws {
     for scenario in ["armed", "queuedReady", "start", "gameplay"] {
       let socket = Self.scanningSocket(), now = ControlledCombatTime()

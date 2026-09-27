@@ -187,7 +187,7 @@ enum RealtimeArenaPresentation {
       case .connecting: "Connecting to match"
       case .awaitingMembers: "Waiting for opponent"
       case .running: "Live match"
-      case .paused: clockReady ? "Tracking paused" : "Synchronizing match"
+      case .paused: clockReady ? "Camera paused" : "Stabilizing connection"
       case .reconnecting: "Reconnecting"
       case .respawning: "Eliminated"
       case .finished: "Match complete"
@@ -205,7 +205,7 @@ enum RealtimeArenaPresentation {
         return "Waiting for opponent"
       case .paused:
         if !clockReady {
-          return "Synchronizing match timing. Keep this screen open; controls return when the connection is stable."
+          return "Rechecking match timing. Controls return automatically when the connection is stable."
         }
         if roundHasStarted {
           return "Keep your opponent in view. The match resumes automatically when camera tracking recovers."
@@ -220,7 +220,7 @@ enum RealtimeArenaPresentation {
       case .unavailable:
         return "Body tracking is unavailable on this device or configuration."
       default:
-        return "Connecting to the match and synchronizing the clock."
+        return "Connecting to the match."
       }
     }
 
@@ -237,6 +237,10 @@ enum RealtimeArenaPresentation {
     }
 
     static let startTitle = "PLAY"
+    /// The lobby promised Quick Duel but the authority spoke pre-ADR 0013
+    /// rules — nothing to retry, the match itself is the wrong kind.
+    static let incompatibleServerMessage =
+      "This match was created by an outdated combat server. Leave and start a new Quick Duel."
     static let retryTrackingTitle = "Retry camera"
     static let allStages: [RealtimeArenaStage] = [
       .connecting, .mapping, .mapReady, .waitingForMap, .transferringMap, .relocalizing,

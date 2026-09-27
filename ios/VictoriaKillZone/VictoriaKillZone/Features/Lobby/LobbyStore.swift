@@ -552,7 +552,7 @@ final class LobbyStore: ObservableObject {
         duel.reset()
         realtimeArena = RealtimeArenaController(session: expectedSession,
           client: environment.gameSessionClient, targeting: environment.targetingSession,
-          savedArena: selectedArena)
+          mode: .select(combatGeometry: snapshot.match.combatGeometry, savedArena: selectedArena))
       }
     } else {
       duel.receive(snapshot)

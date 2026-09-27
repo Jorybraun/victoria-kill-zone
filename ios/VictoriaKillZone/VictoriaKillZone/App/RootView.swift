@@ -105,8 +105,8 @@ struct RootView: View {
     Task {
       await store.waitForTargetingTeardown()
       guard store.route == .home, !store.isBusy, arenaLibrary == nil else { return }
-      // Match creation no longer depends on opening or creating a saved scan.
-      // The existing fresh calibration gate remains until Quick Play is proven.
+      // Match creation no longer depends on opening or creating a saved scan;
+      // the lobby decides Quick Duel vs Saved Arena (ADR 0013).
       store.createRealtimeArena()
     }
   }

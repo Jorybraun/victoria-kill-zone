@@ -195,7 +195,7 @@ final class RealtimeArenaPresentationTests: XCTestCase {
     XCTAssertEqual(RealtimeArenaPresentation.Sighting.title(stage: .unavailable, clockReady: true),
       "Body tracking unavailable")
     XCTAssertEqual(RealtimeArenaPresentation.Sighting.title(stage: .paused, clockReady: false),
-      "Synchronizing match")
+      "Stabilizing connection")
     XCTAssertEqual(RealtimeArenaPresentation.Sighting.guidance(
       stage: .paused, clockReady: true, roundHasStarted: false),
       "Point your camera at your opponent. The host can start once both players are ready.")
