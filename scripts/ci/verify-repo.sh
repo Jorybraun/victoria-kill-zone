@@ -37,6 +37,7 @@ fi
 git diff --check
 python3 scripts/ci/check-convex-modules.py
 node scripts/ci/check-release-manifest.mjs
+node scripts/ci/check-release-manifest-self-test.mjs
 
 secret_pattern='cog_[A-Za-z0-9]{32,}|gh[pousr]_[A-Za-z0-9]{36,}|-----BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY-----'
 secret_files="$(git ls-files -co --exclude-standard -z \
