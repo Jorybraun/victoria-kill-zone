@@ -1,6 +1,6 @@
 # ADR 0008 — Execute the complete production-combat review
 
-Status: accepted implementation scope, 2026-09-05, from the owner's repeated instruction to complete everything in the review. Production authority selection and physical promotion remain evidence-gated.
+Status: **Superseded in part by [ADR 0014](0014-quick-duel-only.md)** (2026-09-27): everything here that relies on a shared frame or on the `trackedBody` / `phoneProxy` geometries is removed; Quick Duel camera sighting is the only mode. Original status: accepted implementation scope, 2026-09-05, from the owner's repeated instruction to complete everything in the review. Production authority selection and physical promotion remain evidence-gated.
 
 The full [review](../research/production-combat-review.md) is the deliverable: M0 feedback, M1 shared frame, M2 one authority, M3 projectiles, M4 shield/slow fields, M5 host/DO comparison, M6 release evidence. No milestone is complete merely because its design or an unlinked package exists. All existing safety/device gates remain.
 

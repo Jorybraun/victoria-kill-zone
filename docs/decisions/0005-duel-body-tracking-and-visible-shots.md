@@ -1,6 +1,6 @@
 # ADR 0005: Duel view — ARKit body tracking, skeleton lock overlay, and shots visible on every phone
 
-- **Status:** Proposed (2026-09-04). Acceptance requires the two-phone physical-device evidence named below.
+- **Status:** **Superseded in part by [ADR 0014](0014-quick-duel-only.md)** (2026-09-27): everything here that relies on a shared frame or on the `trackedBody` / `phoneProxy` geometries is removed; Quick Duel camera sighting is the only mode. Original status: Proposed (2026-09-04). Acceptance requires the two-phone physical-device evidence named below.
 - **Date:** 2026-09-04
 - **Decision owners:** Product and integration
 
