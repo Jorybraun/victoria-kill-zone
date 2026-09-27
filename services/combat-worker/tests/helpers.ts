@@ -10,7 +10,7 @@ export function claims(overrides: Partial<CombatTicketClaims> = {}): CombatTicke
     v: 1, iss: "vkz-lobby", aud: "vkz-combat", matchId: crypto.randomUUID(), playerId: "host",
     roster: [{ playerId: "host", displayName: "Host", role: "host" }, { playerId: "guest", displayName: "Guest", role: "player" }],
     authorityEpoch: 1, frameEpoch: 1,
-    rules: { ...DEFAULT_RULES, geometry: "phoneProxy" }, iat: now, exp: now + 120, nonce: crypto.randomUUID(),
+    rules: DEFAULT_RULES, iat: now, exp: now + 120, nonce: crypto.randomUUID(),
     ...overrides,
   };
 }

@@ -21,7 +21,7 @@ function titleFor(snapshot: SpectatorSnapshot): string {
   switch (displayPhase(snapshot.match)) {
     case "lobby":
       return isArena ? "ARENA LOBBY" : "WAITING FOR DUEL";
-    case "calibrating": return "ALIGNING ARENA";
+    case "calibrating": return "WAITING FOR HOST";
     case "paused": return "ARENA PAUSED";
     case "unavailable": return "MATCH STATE UNAVAILABLE";
     case "countdown":
@@ -77,9 +77,9 @@ export function MatchHeader({
     );
     return () => window.clearInterval(interval);
   }, [phase, receivedAt]);
-  const phaseLabel = phase === "calibrating" ? "ALIGNING" : phase === "paused" ? "PAUSED" : phase === "unavailable" ? "UNAVAILABLE" : formatPhase(phase);
+  const phaseLabel = phase === "calibrating" ? "WAITING" : phase === "paused" ? "PAUSED" : phase === "unavailable" ? "UNAVAILABLE" : formatPhase(phase);
   const guidance = phase === "calibrating"
-    ? "Players are aligning their shared play area."
+    ? "The host has not started the duel yet."
     : phase === "paused" ? "Combat is paused while players restore tracking or connection."
     : phase === "unavailable" ? "Waiting for an arena state update." : null;
   return (

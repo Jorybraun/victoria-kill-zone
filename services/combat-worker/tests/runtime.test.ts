@@ -199,7 +199,9 @@ describe("durable command processing", () => {
       const [, , started] = await Promise.all([accepted(host, startingHostPose), accepted(guest, startingGuestPose), accepted(host, start)]);
       const firingPose = hostInput.sample();
       const targetPose = guestInput.sample();
-      const fire = hostInput.send({ kind: "fire", shotId: "projectile-first", poseSequence: hostInput.poseSequence, origin: [0, 0, 0], direction: [0, 0, -1] });
+      const fire = hostInput.send({ kind: "fire", shotId: "projectile-first", poseSequence: hostInput.poseSequence, origin: [0, 0, 0], direction: [0, 0, -1],
+        observation: { targetPlayerId: "guest", capturedAtMs: room.matchTimeMs, associationConfidence: 1, uncertaintyMeters: 0.01,
+          colliders: [{ id: "torso", kind: "sphere", zone: "torso", center: [0, 0, -6], radius: 0.3 }] } });
       await room.tick([host, guest], [firingPose, targetPose, fire]);
       const [, , fired, acknowledged] = await Promise.all([
         accepted(host, firingPose), accepted(guest, targetPose), accepted(host, fire), host.next("ack", (ack) => ack.commandId === fire.commandId),
@@ -226,7 +228,7 @@ describe("durable command processing", () => {
     }
   });
 
-  it("still refuses a single fire when the other phone's pose expires under controlled ticks", async () => {
+  it("still refuses a single fire that carries no sighting observation", async () => {
     const payload = claims();
     const room = await manuallyScheduledRoom(payload.matchId);
     const host = await connect(payload), guest = await connect({ ...payload, playerId: "guest" });
@@ -247,9 +249,26 @@ describe("durable command processing", () => {
       const fire = hostInput.send({ kind: "fire", shotId: "stale-target", poseSequence: hostInput.poseSequence, origin: [0, 0, 0], direction: [0, 0, -1] });
       await room.tick([host], [freshHost, fire]);
       expect((await host.result(freshHost)).event).toMatchObject({ accepted: true, reason: null });
-      expect((await host.result(fire)).event).toMatchObject({ accepted: false, reason: "notRunning" });
+      expect((await host.result(fire)).event).toMatchObject({ accepted: false, reason: "noSighting" });
       const spawns = await runInDurableObject(env.COMBAT_ROOMS.getByName(payload.matchId), (_instance, state) => state.storage.sql.exec("SELECT payload FROM bullet_events WHERE kind = 'projectileSpawn'").toArray());
       expect(spawns).toHaveLength(0);
+    } finally { host.close(); guest.close(); }
+  });
+
+  it("reaches running on host start with no frameReady command ever sent", async () => {
+    const payload = claims();
+    const room = await manuallyScheduledRoom(payload.matchId);
+    const host = await connect(payload);
+    const hostState = await host.next("snapshot");
+    const guest = await connect({ ...payload, playerId: "guest" });
+    await guest.next("snapshot");
+    try {
+      const hostInput = phoneInput(host, hostState, [0, 0, 0], () => room.matchTimeMs);
+      const start = hostInput.send({ kind: "start" });
+      const snapshot = await room.tick([host, guest], [start]);
+      expect((await host.result(start)).event).toMatchObject({ accepted: true, reason: null });
+      expect(snapshot.phase).toBe("running");
+      expect(snapshot.players.every((player) => !player.frameReady)).toBe(true);
     } finally { host.close(); guest.close(); }
   });
 });

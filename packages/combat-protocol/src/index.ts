@@ -44,7 +44,7 @@ export interface WeaponRules {
 }
 export interface CombatRules {
   durationMs: number;
-  geometry: "trackedBody" | "phoneProxy" | "sighting";
+  geometry: "sighting";
   respawnMs: number;
   protectionMs: number;
   weapon: WeaponRules;
@@ -65,7 +65,7 @@ export function rulesSchemaKeyPaths(rules: CombatRules): readonly string[] {
   return paths.sort();
 }
 export const DEFAULT_RULES: CombatRules = {
-  durationMs: 180_000, geometry: "trackedBody", respawnMs: 5000, protectionMs: 2000,
+  durationMs: 180_000, geometry: "sighting", respawnMs: 5000, protectionMs: 2000,
   weapon: {id: "pulse", kind: "projectile", damage: {head:75,torso:34,limbs:20},
     cooldownMs:150,magazine:8,reloadMs:1250,speed:8,projectileRadius:0.015,lifetimeMs:4000,rangeMeters:25},
   shield:{radius:0.40,offsetMeters:0.15,durationMs:2000,cooldownMs:8000,energy:100},

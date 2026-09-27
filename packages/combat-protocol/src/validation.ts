@@ -90,7 +90,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
 
 export function validateCombatRules(x: unknown): x is CombatRules {
   if (!record(x) || !keys(x, "durationMs geometry respawnMs protectionMs weapon shield slowField") ||
-    !integer(x.durationMs, 10_000, 3_600_000) || !["trackedBody", "phoneProxy", "sighting"].includes(String(x.geometry)) ||
+    !integer(x.durationMs, 10_000, 3_600_000) || x.geometry !== "sighting" ||
     !integer(x.respawnMs, 100, 60_000) || !integer(x.protectionMs, 0, 30_000)) return false;
   const w = x.weapon, s = x.shield, f = x.slowField;
   return record(w) && keys(w, "id kind damage cooldownMs magazine reloadMs speed projectileRadius lifetimeMs rangeMeters") &&

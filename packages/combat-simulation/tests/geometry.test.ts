@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest";
 import type {BodyCollider, Vec3} from "@vkz/combat-protocol";
-import {sweepCollider, sweepShield, unitIntervalRoots} from "../src/geometry.js";
+import {sweepCollider, unitIntervalRoots} from "../src/geometry.js";
 
 const sphere = (center: Vec3, radius = 0.1): BodyCollider => ({id: "body", kind: "sphere", zone: "torso", center, radius});
 const capsule = (a: Vec3, b: Vec3, radius = 0.1): BodyCollider => ({id: "body", kind: "capsule", zone: "torso", a, b, radius});
@@ -32,11 +32,6 @@ describe("continuous collision geometry", () => {
   });
   it("ignores a missing ending collider", () => {
     expect(sweepCollider([0, 0, 0], [2, 0, 0], sphere([1, 0, 0]), undefined, 0)).toBeNull();
-  });
-  it("blocks only front-to-back oriented shield crossings, including a moving phone", () => {
-    expect(sweepShield([0, 0, 0], [2, 0, 0], [1, 0, 0], [1.1, 0, 0], [-1, 0, 0], [-1, 0, 0], 0.4, 0.01)).toBeCloseTo(1 / 1.9);
-    expect(sweepShield([2, 0, 0], [0, 0, 0], [1, 0, 0], [1, 0, 0], [-1, 0, 0], [-1, 0, 0], 0.4, 0.01)).toBeNull();
-    expect(sweepShield([0, 0.42, 0], [2, 0.42, 0], [1, 0, 0], [1, 0, 0], [-1, 0, 0], [-1, 0, 0], 0.4, 0.01)).toBeNull();
   });
   it("isolates repeated quartic roots without relying on a sign change", () => {
     // (t-.25)^2(t-.75)^2

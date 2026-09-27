@@ -19,7 +19,6 @@ export type DemoSnapshotKind =
   | "ended"
   | "cancelled"
   | "arena"
-  | "arena-calibrating"
   | "arena-paused"
   | "arena-ended";
 
@@ -89,10 +88,9 @@ export function createDemoSnapshot(
 ): SpectatorSnapshot {
   switch (kind) {
     case "arena":
-    case "arena-calibrating":
     case "arena-paused":
     case "arena-ended": {
-      const combatPhase = kind === "arena-calibrating" ? "calibrating" : kind === "arena-paused" ? "paused" : kind === "arena-ended" ? "finished" : "running";
+      const combatPhase = kind === "arena-paused" ? "paused" : kind === "arena-ended" ? "finished" : "running";
       return {
         serverNow: DEMO_NOW,
         match: {...match(code, {phase: combatPhase === "finished" ? "finished" : "running"}),
@@ -223,7 +221,6 @@ export function createDemoSpectatorAdapter(
         case "ended":
         case "cancelled":
         case "arena":
-        case "arena-calibrating":
         case "arena-paused":
         case "arena-ended":
           observer.next(createDemoSnapshot(request.code, fixture));

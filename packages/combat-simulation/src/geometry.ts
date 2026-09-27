@@ -9,23 +9,11 @@ export const length = (a: Vec3): number => Math.sqrt(dot(a, a));
 export const distance = (a: Vec3, b: Vec3): number => length(sub(a, b));
 export const lerp = (a: Vec3, b: Vec3, t: number): Vec3 => add(a, mul(sub(b, a), t));
 export const finiteVector = (v: Vec3): boolean => v.length === 3 && v.every(Number.isFinite);
-export function normalized(v: Vec3): Vec3 | null {
-  const size = length(v);
-  return finiteVector(v) && size > EPSILON ? mul(v, 1 / size) : null;
-}
 
 /** ARKit's rear camera looks down local -Z. Returned normal faces that side. */
 export function phoneForward(q: Quaternion): Vec3 {
   const [x, y, z, w] = q;
   return [-2 * (x * z + w * y), -2 * (y * z - w * x), -(1 - 2 * (x * x + y * y))];
-}
-
-export function interpolateCollider(a: BodyCollider, b: BodyCollider, u: number): BodyCollider | null {
-  if (a.id !== b.id || a.kind !== b.kind || a.zone !== b.zone) return null;
-  const radius = a.radius + (b.radius - a.radius) * u;
-  if (a.kind === "sphere" && b.kind === "sphere") return {...a, radius, center: lerp(a.center, b.center, u)};
-  if (a.kind === "capsule" && b.kind === "capsule") return {...a, radius, a: lerp(a.a, b.a, u), b: lerp(a.b, b.b, u)};
-  return null;
 }
 
 type Polynomial = readonly number[];
@@ -104,8 +92,8 @@ function broadPhase(start: Vec3, end: Vec3, a: BodyCollider, b: BodyCollider, ra
   return true;
 }
 
-/** Sweeps a finite-radius bullet against independently moving capsule endpoints.
- * Body positions and radii interpolate between two validated observations.
+/** Sweeps a finite-radius bullet against a collider's two endpoint states. A
+ * sighting verdict passes the same observed collider twice for a static check.
  */
 export function sweepCollider(start: Vec3, end: Vec3, a: BodyCollider, b: BodyCollider | undefined, bulletRadius: number): number | null {
   if (!b) return null;
@@ -139,37 +127,4 @@ export function sweepCollider(start: Vec3, end: Vec3, a: BodyCollider, b: BodyCo
     if (fraction >= -EPSILON && fraction <= 1 + EPSILON) candidates.push(u);
   }
   return candidates.length ? Math.min(...candidates) : null;
-}
-
-/** Earliest front-to-back crossing of an oriented thin shield. The centre and
- * normal interpolate during the sample interval. Rim includes bullet radius.
- */
-export function sweepShield(
-  start: Vec3, end: Vec3, center0: Vec3, center1: Vec3, normal0: Vec3, normal1: Vec3,
-  shieldRadius: number, bulletRadius: number,
-): number | null {
-  const offset = sub(start, center0);
-  const velocity = sub(sub(end, start), sub(center1, center0));
-  const normalDelta = sub(normal1, normal0);
-  const polynomial = linearDot(offset, velocity, normal0, normalDelta);
-  for (const u of unitIntervalRoots(polynomial)) {
-    const derivative = polynomial[1]! + 2 * polynomial[2]! * u;
-    if (derivative >= -EPSILON) continue;
-    const normal = normalized(lerp(normal0, normal1, u));
-    if (!normal) continue;
-    const point = sub(lerp(start, end, u), lerp(center0, center1, u));
-    const radial = sub(point, mul(normal, dot(point, normal)));
-    if (length(radial) <= shieldRadius + bulletRadius + EPSILON) return u;
-  }
-  return null;
-}
-
-/** Positive forward distances to a sphere boundary; used to split field travel. */
-export function sphereBoundaries(origin: Vec3, direction: Vec3, center: Vec3, radius: number): number[] {
-  const offset = sub(origin, center);
-  const halfB = dot(offset, direction);
-  const discriminant = halfB * halfB - (dot(offset, offset) - radius * radius);
-  if (discriminant < 0) return [];
-  const root = Math.sqrt(discriminant);
-  return [-halfB - root, -halfB + root].filter(t => t > EPSILON);
 }
