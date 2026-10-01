@@ -75,11 +75,15 @@ extension must prove spatial accuracy before removing that readiness gate.
 into the host's raw world map as the alignment gate and `phoneProxy` verdicts,
 with the measured mode retained for saved arenas. It trades the 10 cm / 0.5°
 proof for playability and says so; its two-phone evidence table is the gate.
-[ADR 0011](decisions/0011-quick-play-continuous-collaboration.md) (proposed
+[ADR 0011](decisions/0011-quick-play-continuous-collaboration.md) (accepted
 2026-09-17) then replaces 0010's one-shot map share with continuous
 `ARSession.CollaborationData` exchange for Quick Play, after the first
 physical trial showed a joiner in another room cannot relocalize into a map
 that never covered it. Verdict geometry is unchanged.
+[ADR 0012](decisions/0012-quick-play-ni-rendezvous.md) (accepted 2026-09-18)
+adds a UWB Nearby Interaction rendezvous phase: NI seeds pairwise frame
+transforms and streams live peer positions, so alignment no longer depends on
+the collab map merge completing — collaboration stays as refinement.
 
 Current observed deployment evidence: the server snapshot-ordering repair at
 2929fd69 passed the recorded live native-transport and Node probes; the creator's
@@ -243,7 +247,8 @@ Phases are gates, not dates. Every phase ends with physical-device evidence. B-t
 | 0008 (accepted implementation scope) | Complete M0–M6 review, cloud authority candidate and single-writer migration | [Realtime implementation decision](decisions/0008-realtime-combat-implementation.md) |
 | 0009 (accepted implementation scope) | Natural-scene reference as the calibration candidate; continuous visibility, fresh residuals | [Natural-scene calibration](decisions/0009-natural-scene-calibration-candidate.md) |
 | 0010 (accepted) | Quick Play: relocalized shared frame (raw map, no reference) + `phoneProxy` verdicts; measured mode kept for saved arenas | 2026-09-12 playability assessment, 09-08 phone recording ([0010](decisions/0010-quick-play-relocalized-frame-and-phone-proxy.md), [slice 010](../design/slices/010-quick-play-setup.md)) |
-| 0011 (proposed) | Quick Play: continuous `ARSession.CollaborationData` exchange replaces the one-shot map share; multi-room free-roaming | 2026-09-17 physical trial finding ([0011](decisions/0011-quick-play-continuous-collaboration.md), [slice 011](../design/slices/011-quick-play-collaborative-setup.md)) |
+| 0011 (accepted) | Quick Play: continuous `ARSession.CollaborationData` exchange replaces the one-shot map share; multi-room free-roaming | 2026-09-17 physical trial finding ([0011](decisions/0011-quick-play-continuous-collaboration.md), [slice 011](../design/slices/011-quick-play-collaborative-setup.md)) |
+| 0012 (accepted) | Quick Play: UWB Nearby Interaction rendezvous seeds pairwise frame transforms and streams live peer positions; collab stays as refinement | Alignment-without-scanning research ([0012](decisions/0012-quick-play-ni-rendezvous.md), [synthesis](../outputs/alignment-without-scanning.md)) |
 | Future ADR | Spatial provider for street scale | R5 research + Phase 3 spike; remains outside the current commitment |
 
 ## 7. Risks and honest unknowns
